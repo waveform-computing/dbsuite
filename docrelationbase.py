@@ -29,7 +29,7 @@ class DocConstraint(DocRelationObject):
 		return "Constraint"
 
 	def getIdentifier(self):
-		return "constraint_%s_%s" % (self.relation.name, self.schema.name, self.name)
+		return "constraint_%s_%s_%s" % (self.relation.name, self.schema.name, self.name)
 
 	def getFields(self):
 		raise NotImplementedError
