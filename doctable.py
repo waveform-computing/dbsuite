@@ -40,7 +40,9 @@ class DocTable(DocRelation):
 		self.__activeBlocks = row['activeBlocks']
 		self.__description = row['description']
 		self.__fields = {}
-		for field in [cache.fields[(schemaName, tableName, fieldName)] for (schemaName, tableName, fieldName) in cache.fields if schemaName == schema.name and tableName == self.name]:
+		for field in [cache.fields[(schemaName, tableName, fieldName)]
+			for (schemaName, tableName, fieldName) in cache.fields
+			if schemaName == schema.name and tableName == self.name]:
 			self.__fields[field['name']] = DocField(self, cache, **field)
 		self.__fieldList = [x for x in self.__fields.itervalues()]
 		self.__fieldList.sort(key=lambda field:field.position)
@@ -51,7 +53,9 @@ class DocTable(DocRelation):
 		self.__constraints = {}
 		self.__uniqueKeys = {}
 		self.__primaryKey = None
-		for key in [cache.uniqueKeys[(schemaName, tableName, constName)] for (schemaName, tableName, constName) in cache.uniqueKeys if schemaName == schema.name and tableName == self.name]:
+		for key in [cache.uniqueKeys[(schemaName, tableName, constName)]
+			for (schemaName, tableName, constName) in cache.uniqueKeys
+			if schemaName == schema.name and tableName == self.name]:
 			if key['type'] == 'P':
 				constraint = DocPrimaryKey(self, cache, **key)
 				self.__primaryKey = constraint
@@ -60,12 +64,16 @@ class DocTable(DocRelation):
 			self.__constraints[key['name']] = constraint
 			self.__uniqueKeys[key['name']] = constraint
 		self.__foreignKeys = {}
-		for key in [cache.foreignKeys[(schemaName, tableName, constName)] for (schemaName, tableName, constName) in cache.foreignKeys if schemaName == schema.name and tableName == self.name]:
+		for key in [cache.foreignKeys[(schemaName, tableName, constName)]
+			for (schemaName, tableName, constName) in cache.foreignKeys
+			if schemaName == schema.name and tableName == self.name]:
 			constraint = DocForeignKey(self, cache, **key)
 			self.__constraints[key['name']] = constraint
 			self.__foreignKeys[key['name']] = constraint
 		self.__checks = {}
-		for check in [cache.checks[(schemaName, tableName, constName)] for (schemaName, tableName, constName) in cache.checks if schemaName == schema.name and tableName == self.name]:
+		for check in [cache.checks[(schemaName, tableName, constName)]
+			for (schemaName, tableName, constName) in cache.checks
+			if schemaName == schema.name and tableName == self.name]:
 			constraint = DocCheck(self, cache, **check)
 			self.__constraints[check['name']] = constraint
 			self.__checks[check['name']] = constraint
