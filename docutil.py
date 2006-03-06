@@ -5,6 +5,7 @@
 import re
 import time
 import datetime
+import math
 
 __all__ = ['makeDateTime', 'makeBoolean']
 
@@ -28,6 +29,20 @@ def makeBoolean(value, trueValue='Y', falseValue='N', noneValue=' ', unknownErro
 			raise
 		else:
 			return unknownResult
+
+def formatSize(value, precisePowers=True):
+	"""Formats sizes with standard K/M/G/T/etc. suffixes"""
+	power = math.log(value, 2)
+	if not precisePowers or (power == int(power)):
+		suffix = ['', 'K', 'M', 'G', 'T', 'E', 'P'][int(power / 10)]
+		size = value / (2 ** ((int(power) / 10) * 10))
+		if precisePowers:
+			return "%d%s" % (int(size), suffix)
+		else:
+			return "%f%s" % (size, suffix)
+	else:
+		return str(value)
+	
 
 def main():
 	pass
