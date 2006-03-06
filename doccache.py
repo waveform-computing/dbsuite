@@ -151,7 +151,7 @@ class DocCache(object):
 			row['statsUpdated'] = makeDateTime(row['statsUpdated'])
 			row['checkPending'] = makeBoolean(row['checkPending'], 'C')
 			row['append'] = makeBoolean(row['append'])
-			row['volatile'] = makeBoolean(row['volatile'], 'C')
+			row['volatile'] = makeBoolean(row['volatile'], 'C', ' ', None)
 			row['compression'] = makeBoolean(row['compression'], 'V')
 			row['clustered'] = makeBoolean(row['clustered'])
 			row['lockSize'] = {
@@ -197,6 +197,7 @@ class DocCache(object):
 				'L': 'Local Check',
 				'C': 'Cascaded Check'
 			}[row['check']]
+			row['sql'] = str(row['sql'])
 
 	def getAliases(self, cursor):
 		# XXX Query aliases
@@ -355,6 +356,7 @@ class DocCache(object):
 				'A': 'Always',
 				' ': 'Never'
 			}[row['generated']]
+			row['generateExpression'] = str(row['generateExpression'])
 
 	def getUniqueKeys(self, cursor):
 		logging.info("Retrieving unique keys")
@@ -519,6 +521,7 @@ class DocCache(object):
 				'F': 'Functional Dependency',
 				'O': 'Object Property'
 			}[row['type']]
+			row['sql'] = str(row['sql'])
 
 	def getCheckFields(self, cursor):
 		logging.info("Retrieving check fields")
@@ -602,6 +605,7 @@ class DocCache(object):
 				'R': 'Reads SQL',
 				' ': None
 			}[row['sqlAccess']]
+			row['sql'] = str(row['sql'])
 
 	def getFunctionParams(self, cursor):
 		logging.info("Retrieving parameters")
