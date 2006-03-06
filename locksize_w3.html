@@ -5,8 +5,8 @@
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
 <head>
 	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-	<meta name="Description" content="Description of last statistics" />
-	<meta name="Keywords" scheme="iso8601" content="last statistics" />
+	<meta name="Description" content="Description of Lock Size" />
+	<meta name="Keywords" scheme="iso8601" content="lock size" />
 	<meta name="Owner" content=$owneremail />
 	<meta name="Feedback" content=$owneremail />
 	<meta name="Robots" content="index,follow" />
@@ -16,7 +16,7 @@
 	<meta name="DC.Rights" content="Copyright (c) 2001,2006 by IBM corporation" />
 	<meta name="IBM.Country" content="US" />
 	<meta name="IBM.Effective" content=$updated />
-	<title>Last Statistics</title>
+	<title>Lock Size</title>
 	<script language="JavaScript" type="text/javaScript" src="//w3.ibm.com/ui/v8/scripts/scripts.js"></script>
 	<link rel="stylesheet" type="text/css" href="//w3.ibm.com/ui/v8/css/v4-screen.css" />
 	<link rel="stylesheet" type="text/css" href="//w3.ibm.com/ui/v8/css/v4-interior.css" />
@@ -42,11 +42,14 @@
 <div id="content">
 	<!-- start main content -->
 	<div id="content-main">
-		<h1>Last Statistics</h1>
-		<p>The date on which statistics were last gathered for this object
-		(with the RUNSTATS command). Most attributes of the object will only
-		be valid as of this date. If statistics have never been gathered, this
-		will be n/a.</p>
+		<div id="fourth-level">
+			<h1>Lock Size</h1>
+		</div>
+		<p>Indicates the preferred lock granularity for the table when accessed
+		by DML statements. Possible values are <q>Row</q> (the default, 
+		indicating that individual row locks are preferred) and <q>Table</q>
+		(indicating that the database prefers to lock the entire table during
+		updates).</p>
 
 		<!-- start popup footer //////////////////////////////////////////// -->
 		<div id="popup-footer">
