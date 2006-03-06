@@ -42,8 +42,15 @@ def endTag(name):
 
 def makeTag(name, attrs={}, content="", optional=False):
 	"""Generates a XHTML tag containing the specified attributes and content"""
-	if str(content) != "":
-		return "%s%s%s" % (startTag(name, attrs), str(content), endTag(name))
+	# Convert the content into a string, using custom conversions as necessary
+	if content is None:
+		contentStr = 'n/a'
+	elif isinstance(content, datetime.datetime):
+		contentStr = content.strftime("%Y-%m-%d %H:%M:%S")
+	else:
+		contentStr = str(content)
+	if contentStr != "":
+		return "%s%s%s" % (startTag(name, attrs), contentStr, endTag(name))
 	elif not optional:
 		return startTag(name, attrs, True)
 	else:
@@ -97,7 +104,7 @@ def title(object):
 	if isinstance(object, DocDatabase):
 		return "%s Documentation" % (object.name)
 	else:
-		return "%s %s" % (object.typeName, object.qualifiedName)
+		return "%s Documentation - %s %s" % (object.database.name, object.typeName, object.qualifiedName)
 
 def keywords(object):
 	"""Returns a comma separated set of keywords for the specified object"""
@@ -154,11 +161,11 @@ class DocOutput(object):
 		self.docobject = object
 		self.docsections = []
 
-	def addSection(self, sectionId, sectionTitle):
+	def addSection(self, id, title):
 		"""Starts a new section in the current document with the specified id and title"""
 		self.docsections.append({
-			'id': sectionId,
-			'title': sectionTitle,
+			'id': id,
+			'title': title,
 			'content': ''
 		})
 
@@ -224,24 +231,38 @@ class DocOutput(object):
 		tbspaces = [obj for (name, obj) in sorted(database.tablespaces.items(), key=lambda (name, obj):name)]
 		self.startDocument(database)
 		if len(schemas) > 0:
-			self.addSection('schemas', 'Schemas')
+			self.addSection(id='schemas', title='Schemas')
 			self.addPara("""The following table contains all schemas (logical
 				object containers) in the database. Click on a schema name to
 				view the documentation for that schema, including a list of all
 				objects that exist within it.""")
 			self.addContent(makeTable(
-				head=[("Name", "Description")],
-				data=[(linkTo(schema), escape(schema.description)) for schema in schemas]))
+				head=[(
+					"Name",
+					"Description"
+				)],
+				data=[(
+					linkTo(schema),
+					escape(schema.description)
+				) for schema in schemas]
+			))
 		if len(tbspaces) > 0:
-			self.addSection('tbspaces', 'Tablespaces')
+			self.addSection(id='tbspaces', title='Tablespaces')
 			self.addPara("""The following table contains all tablespaces
 				(physical object containers) in the database. Click on a
 				tablespace name to view the documentation for that schema,
 				including a list of all tables and/or indexes that exist within
 				it.""")
 			self.addContent(makeTable(
-				head=[("Name", "Description")],
-				data=[(linkTo(tbspace), escape(tbspace.description)) for tbspace in tbspaces]))
+				head=[(
+					"Name",
+					"Description"
+				)],
+				data=[(
+					linkTo(tbspace),
+					escape(tbspace.description)
+				) for tbspace in tbspaces]
+			))
 		self.endDocument()
 
 	def writeSchema(self, schema):
@@ -251,32 +272,58 @@ class DocOutput(object):
 		indexes = [obj for (name, obj) in sorted(schema.indexes.items(), key=lambda (name, obj): name)]
 		self.startDocument(schema)
 		if len(relations) > 0:
-			self.addSection('relations', 'Relations')
+			self.addSection(id='relations', title='Relations')
 			self.addPara("""The following table contains all the relations
 				(tables and views) that the schema contains. Click on a
 				relation name to view the documentation for that relation,
 				including a list of all objects that exist within it, and that
 				the relation references.""")
 			self.addContent(makeTable(
-				head=[("Name", "Type", "Description")],
-				data=[(linkTo(relation), escape(relation.typeName), escape(relation.description)) for relation in relations]))
+				head=[(
+					"Name",
+					"Type",
+					"Description"
+				)],
+				data=[(
+					linkTo(relation),
+					escape(relation.typeName),
+					escape(relation.description)
+				) for relation in relations]
+			))
 		if len(routines) > 0:
-			self.addSection('routines', 'Routines')
+			self.addSection(id='routines', title='Routines')
 			self.addPara("""The following table contains all the routines
 				(functions, stored procedures, and methods) that the schema
 				contains. Click on a routine name to view the documentation for
 				that routine.""")
 			self.addContent(makeTable(
-				head=[("Name", "Type", "Description")],
-				data=[(linkTo(routine), escape(routine.typeName), escape(routine.description)) for routine in routines]))
+				head=[(
+					"Name",
+					"Type",
+					"Description"
+				)],
+				data=[(
+					linkTo(routine),
+					escape(routine.typeName),
+					escape(routine.description)
+				) for routine in routines]
+			))
 		if len(indexes) > 0:
-			self.addSection('indexes', 'Indexes')
+			self.addSection(id='indexes', title='Indexes')
 			self.addPara("""The following table contains all the indexes that
 				the schema contains. Click on an index name to view the
 				documentation for that index.""")
 			self.addContent(makeTable(
-				head=[("Name", "Applies To", "Description")],
-				data=[(linkTo(index), linkTo(index.table, qualifiedName=True), escape(index.description)) for index in indexes]))
+				head=[(
+					"Name",
+					"Applies To",
+					"Description")],
+				data=[(
+					linkTo(index),
+					linkTo(index.table, qualifiedName=True),
+					escape(index.description)
+				) for index in indexes]
+			))
 		self.endDocument()
 
 	def writeTablespace(self, tbspace):
@@ -285,71 +332,146 @@ class DocOutput(object):
 		indexes = [obj for (name, obj) in sorted(tbspace.indexes.items(), key=lambda (name, obj): name)]
 		self.startDocument(tbspace)
 		if len(tables) > 0:
-			self.addSection('tables', 'Tables')
+			self.addSection(id='tables', title='Tables')
 			self.addPara("""The following table contains all the tables that
 				the tablespace contains. Click on a table name to view the
 				documentation for that table.""")
 			self.addContent(makeTable(
-				head=[("Name", "Description")],
-				data=[(linkTo(table, qualifiedName=True), escape(table.description)) for table in tables]))
+				head=[(
+					"Name",
+					"Description"
+				)],
+				data=[(
+					linkTo(table, qualifiedName=True),
+					escape(table.description)
+				) for table in tables]
+			))
 		if len(indexes) > 0:
-			self.addSection('indexes', 'Indexes')
+			self.addSection(id='indexes', title='Indexes')
 			self.addPara("""The following table contains all the indexes that
 				the tablespace contains. Click on an index name to view the
 				documentation for that index.""")
 			self.addContent(makeTable(
-				head=[("Name", "Applies To", "Description")],
-				data=[(linkTo(index, qualifiedName=True), linkTo(index.table, qualifiedName=True), escape(index.description)) for index in indexes]))
+				head=[(
+					"Name",
+					"Applies To",
+					"Description"
+				)],
+				data=[(
+					linkTo(index, qualifiedName=True),
+					linkTo(index.table, qualifiedName=True),
+					escape(index.description)
+				) for index in indexes]
+			))
 		self.endDocument()
 
 	def writeTable(self, table):
 		logging.info("Writing documentation for table %s to %s" % (table.name, filename(table)))
 		fields = [obj for (name, obj) in sorted(table.fields.items(), key=lambda (name, obj): name)]
 		indexes = [obj for (name, obj) in sorted(table.indexes.items(), key=lambda (name, obj): name)]
+		constraints = [obj for (name, obj) in sorted(table.constraints.items(), key=lambda (name, obj): name)]
 		dependents = [obj for (name, obj) in sorted(table.dependents.items(), key=lambda (name, obj): name)]
-		# XXX Add section check constraints
-		# XXX Add section for foreign keys
 		self.startDocument(table)
-		self.addSection('attributes', 'Attributes')
+		self.addSection(id='attributes', title='Attributes')
 		self.addPara("""The following table notes various "vital statistics"
 			of the table (such as cardinality -- the number of rows in the
 			table). Note that many of these attributes are only valid as of
 			the last time that statistics were gathered for the table (this
 			date is recorded in the table).""")
+		if table.primaryKey is None:
+			keyCount = 0
+		else:
+			keyCount = len(table.primaryKey.fields)
 		self.addContent(makeTable(
-			head=[("Attribute", "Value")],
+			head=[(
+				"Attribute",
+				"Value",
+				"Attribute",
+				"Value"
+			)],
 			data=[
-				(popupLink("laststats_w3.html", "Last Statistics"), table.statsUpdated),
-				(popupLink("created_w3.html", "Created"), table.created),
-				(popupLink("createdby_w3.html", "Created By"), escape(table.definer)),
-				(popupLink("cardinality_w3.html", "Cardinality"), table.cardinality),
-				(popupLink("dependentrel_w3.html", "Dependent Relations"), len(table.dependentList)),
+				(
+					popupLink("created_w3.html", "Created"),
+					table.created,
+					popupLink("laststats_w3.html", "Last Statistics"),
+					table.statsUpdated
+				),
+				(
+					popupLink("cardinality_w3.html", "Cardinality"),
+					table.cardinality,
+					popupLink("createdby_w3.html", "Created By"),
+					escape(table.definer)
+				),
+				(
+					popupLink("colcount_w3.html", "# Columns"),
+					len(table.fields),
+					popupLink("keycolcount_w3.html", "# Key Columns"),
+					keyCount
+				),
+				(
+					popupLink("rowpages_w3.html", "Row Pages"),
+					table.rowPages,
+					popupLink("totalpages_w3.html", "Total Pages"),
+					table.totalPages
+				),
+				(
+					popupLink("dependentrel_w3.html", "Dependent Relations"),
+					len(table.dependentList),
+					popupLink("locksize_w3.html", "Lock Size"),
+					escape(table.lockSize)
+				),
+				(
+					popupLink("append_w3.html", "Append"),
+					table.append,
+					popupLink("volatile_w3.html", "Volatile"),
+					table.volatile
+				),
+				(
+					popupLink("compression_w3.html", "Value Compression"),
+					table.compression,
+					popupLink("clustered_w3.html", "Multi-dimensional Clustering"),
+					table.clustered
+				)
 			]))
 		if len(fields) > 0:
-			self.addSection('fields', 'Field Descriptions')
+			self.addSection(id='fields', title='Field Descriptions')
 			self.addPara("""The following table contains the fields of the table
 				(in alphabetical order) along with the description of each field.
 				For information on the structure and attributes of each field see
 				the Field Schema section below.""")
 			self.addContent(makeTable(
-			    head=[("Name", "Description")],
-			    data=[(escape(field.name), escape(field.description)) for field in fields]))
-			self.addSection('schema', 'Field Schema')
+				head=[(
+					"Name",
+					"Description"
+				)],
+				data=[(
+					escape(field.name),
+					escape(field.description)
+				) for field in fields]
+			))
+			self.addSection(id='field_schema', title='Field Schema')
 			self.addPara("""The following table contains the attributes of the
 				fields of the table (again, fields are in alphabetical order,
-				though the # column indicates the position of the field within
-				the table).""")
+				though the # column indicates the 1-based position of the field
+				within the table).""")
 			self.addContent(makeTable(
-			    head=[("#", "Name", "Type", "Nulls", "Key Pos", "Cardinality")],
-			    data=[(
-			    	field.position,
-			    	escape(field.name),
-			    	escape(field.datatypeStr),
-			    	field.nullable,
-			    	field.keyIndex,
-			    	field.cardinality)
-			    	for field in fields
-			    ]))
+				head=[(
+					"#",
+					"Name",
+					"Type",
+					"Nulls",
+					"Key Pos",
+					"Cardinality"
+				)],
+				data=[(
+					field.position + 1,
+					escape(field.name),
+					escape(field.datatypeStr),
+					field.nullable,
+					field.keyIndex,
+					field.cardinality
+				) for field in fields]
+			))
 		if len(indexes) > 0:
 			self.addSection('indexes', 'Index Descriptions')
 			self.addPara("""The following table details the indexes defined
@@ -357,33 +479,195 @@ class DocOutput(object):
 				For more information about an individual index (e.g. statistics,
 				directionality, etc.) click on the index name.""")
 			self.addContent(makeTable(
-			    head=[("Name", "Unique", "Fields", "Sort Order")],
-			    data=[(
-			    	linkTo(index, qualifiedName=True),
-			    	index.unique,
-			    	'<br />'.join([escape(ixfield.name) for (ixfield, ixorder) in index.fieldList]),
-					'<br />'.join([escape(ixorder) for (ixfield, ixorder) in index.fieldList]))
-			    	for index in indexes
-			    ]))
+				head=[(
+					"Name",
+					"Unique",
+					"Fields",
+					"Sort Order",
+					"Description"
+				)],
+				data=[(
+					linkTo(index, qualifiedName=True),
+					index.unique,
+					'<br />'.join([escape(ixfield.name) for (ixfield, ixorder) in index.fieldList]),
+					'<br />'.join([escape(ixorder) for (ixfield, ixorder) in index.fieldList]),
+					escape(index.description)
+				) for index in indexes]
+			))
+		if len(constraints) > 0:
+			self.addSection('constraints', 'Constraints')
+			self.addPara("""The following table details the constraints defined
+				against the table, including which fields each constraint
+				limits or tests. For more information about an individual
+				constraint click on the constraint name.""")
+			rows = []
+			for constraint in constraints:
+				if isinstance(constraint, DocForeignKey):
+					expression = '<br />'.join([escape("%s -> %s" % (cfield.name, pfield.name)) for (cfield, pfield) in constraint.fields])
+				elif isinstance(constraint, DocPrimaryKey) or isinstance(constraint, DocUniqueKey) or isinstance(constraint, DocCheck):
+					expression = '<br />'.join([escape(cfield.name) for cfield in constraint.fields])
+				else:
+					expression = '&nbsp;'
+				rows.append((linkTo(constraint), constraint.typeName, expression, constraint.description))
+			self.addContent(makeTable(
+				head=[(
+					"Name",
+					"Type",
+					"Fields",
+					"Description"
+				)],
+				data=rows
+			))
 		if len(dependents) > 0:
 			self.addSection('dependents', 'Dependent Relations')
 			self.addPara("""The following table lists all relations (views or
 				materialized query tables) which reference this table in their
 				associated SQL statement.""")
 			self.addContent(makeTable(
-			    head=[("Name", "Type", "Description")],
-			    data=[(linkTo(dep, qualifiedName=True), escape(dep.typeName), escape(dep.description)) for dep in dependents]))
+			    head=[(
+					"Name",
+					"Type",
+					"Description"
+				)],
+			    data=[(
+					linkTo(dep, qualifiedName=True),
+					escape(dep.typeName),
+					escape(dep.description)
+				) for dep in dependents]
+			))
 		self.addSection('tbspaces', 'Tablespaces')
 		self.addPara("""This table uses the following tablespaces:""")
-		self.addContent(makeTag('ul', {}, '\n'.join([
-			makeTag('li', {}, 'Data tablespace: ' + linkTo(table.dataTablespace)),
-			makeTag('li', {}, 'Index tablespace: ' + linkTo(table.indexTablespace)),
-			makeTag('li', {}, 'Long tablespace: ' + linkTo(table.longTablespace)),
-		])))
+		self.addContent(makeTag(
+			'ul', {}, '\n'.join([
+				makeTag('li', {}, 'Data tablespace: ' + linkTo(table.dataTablespace)),
+				makeTag('li', {}, 'Index tablespace: ' + linkTo(table.indexTablespace)),
+				makeTag('li', {}, 'Long tablespace: ' + linkTo(table.longTablespace)),
+			])
+		))
 		self.endDocument()
 
 	def writeView(self, view):
 		logging.info("Writing documentation for view %s to %s" % (view.name, filename(view)))
+		fields = [obj for (name, obj) in sorted(view.fields.items(), key=lambda (name, obj): name)]
+		dependencies = [obj for (name, obj) in sorted(view.dependencies.items(), key=lambda (name, obj): name)]
+		dependents = [obj for (name, obj) in sorted(view.dependents.items(), key=lambda (name, obj): name)]
+		self.startDocument(view)
+		self.addSection(id='attributes', title='Attributes')
+		self.addPara("""The following table notes various "vital statistics"
+			of the view.""")
+		self.addContent(makeTable(
+			head=[(
+				"Attribute",
+				"Value",
+				"Attribute",
+				"Value"
+			)],
+			data=[
+				(
+					popupLink("created_w3.html", "Created"),
+					view.created,
+					popupLink("createdby_w3.html", "Created By"),
+					escape(view.definer),
+				),
+				(
+					popupLink("colcount_w3.html", "# Columns"),
+					len(view.fields),
+					popupLink("valid_w3.html", "Valid"),
+					view.valid
+				),
+				(
+					popupLink("readonly_w3.html", "Read Only"),
+					view.readOnly,
+					popupLink("checkoption_w3.html", "Check Option"),
+					escape(view.check)
+				),
+				(
+					popupLink("dependentrel_w3.html", "Dependent Relations"),
+					len(view.dependentList),
+					popupLink("dependenciesrel_w3.html", "Dependencies"),
+					len(view.dependencyList)
+				)
+			]))
+		if len(fields) > 0:
+			self.addSection(id='fields', title='Field Descriptions')
+			self.addPara("""The following table contains the fields of the view
+				(in alphabetical order) along with the description of each field.
+				For information on the structure and attributes of each field see
+				the Field Schema section below.""")
+			self.addContent(makeTable(
+				head=[(
+					"Name",
+					"Description"
+				)],
+				data=[(
+					escape(field.name),
+					escape(field.description)
+				) for field in fields]
+			))
+			self.addSection(id='field_schema', title='Field Schema')
+			self.addPara("""The following table contains the attributes of the
+				fields of the view (again, fields are in alphabetical order,
+				though the # column indicates the 1-based position of the field
+				within the view).""")
+			self.addContent(makeTable(
+				head=[(
+					"#",
+					"Name",
+					"Type",
+					"Nulls",
+					"Key Pos",
+					"Cardinality"
+				)],
+				data=[(
+					field.position + 1,
+					escape(field.name),
+					escape(field.datatypeStr),
+					field.nullable,
+					field.keyIndex,
+					field.cardinality
+				) for field in fields]
+			))
+		if len(dependents) > 0:
+			self.addSection('dependents', 'Dependent Relations')
+			self.addPara("""The following table lists all relations (views or
+				materialized query tables) which reference this view in their
+				associated SQL statement.""")
+			self.addContent(makeTable(
+			    head=[(
+					"Name",
+					"Type",
+					"Description"
+				)],
+			    data=[(
+					linkTo(dep, qualifiedName=True),
+					escape(dep.typeName),
+					escape(dep.description)
+				) for dep in dependents]
+			))
+		if len(dependencies) > 0:
+			self.addSection('dependencies', 'Dependencies')
+			self.addPara("""The following table lists all relations (tables,
+				views, materialized query tables, etc.) which this view
+				references in it's SQL statement.""")
+			self.addContent(makeTable(
+				head=[(
+					"Name",
+					"Type",
+					"Description"
+				)],
+				data=[(
+					linkTo(dep, qualifiedName=True),
+					escape(dep.typeName),
+					escape(dep.description)
+				) for dep in dependencies]
+			))
+		self.addSection('sql', 'SQL Definition')
+		self.addPara("""The SQL query which defines the view is given below.
+			Note that, in the process of storing the definition of a view, DB2
+			removes much of the formatting (e.g. link breaks). Hence the
+			statement below may appear "messy".""")
+		self.addContent(makeTag('code', {'class': 'sql'}, escape(view.sql)))
+		self.endDocument()
 
 	def writeRelation(self, relation):
 		if isinstance(relation, DocTable):
