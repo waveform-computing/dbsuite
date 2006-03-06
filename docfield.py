@@ -4,7 +4,7 @@
 
 import logging
 from docrelationbase import DocRelationObject
-from docutil import makeDateTime, makeBoolean
+from docutil import makeDateTime, makeBoolean, formatSize
 
 __all__ = ['DocField']
 
@@ -56,7 +56,7 @@ class DocField(DocRelationObject):
 		else:
 			result = self.datatype.qualifiedName
 		if self.datatype.variableSize:
-			result += '(%d' % (self.__size)
+			result += '(%s' % (formatSize(self.__size))
 			if self.datatype.variableScale:
 				result += ',%d' % (self.__scale)
 			result += ')'
