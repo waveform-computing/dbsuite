@@ -4,7 +4,6 @@
 
 import logging
 from docbase import DocObjectBase
-from doccache import DocCache
 from docschema import DocSchema
 from doctablespace import DocTablespace
 from docutil import makeDateTime, makeBoolean
@@ -14,10 +13,9 @@ __all__ = ['DocDatabase']
 class DocDatabase(DocObjectBase):
 	"""Class representing a DB2 database"""
 	
-	def __init__(self, name, connection):
+	def __init__(self, cache, name):
 		"""Initializes an instance of the class"""
 		super(self.__class__, self).__init__(None, name)
-		cache = DocCache(connection)
 		logging.info("Building database")
 		self.__tablespaces = {}
 		for row in cache.tablespaces.itervalues():
