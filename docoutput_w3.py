@@ -20,6 +20,8 @@ from docfunction import DocFunction
 from docparam import DocParam
 from string import Template
 from xml.sax.saxutils import quoteattr, escape
+from sqltokenizer import DB2UDBSQLTokenizer
+from sqlhighlighter import SQLHTMLHighlighter
 
 __all__ = ['DocOutput']
 
@@ -141,6 +143,8 @@ class DocOutput(object):
 		self.path = path
 		self.updated = datetime.date.today()
 		self.template = Template(open("template_w3.html").read())
+		self.tokenizer = DB2UDBSQLTokenizer()
+		self.highlighter = SQLHTMLHighlighter(self.tokenizer)
 		# Write the documentation files
 		self.writeDatabase(database)
 		for schema in database.schemas.itervalues():
@@ -666,7 +670,7 @@ class DocOutput(object):
 			Note that, in the process of storing the definition of a view, DB2
 			removes much of the formatting (e.g. link breaks). Hence the
 			statement below may appear "messy".""")
-		self.addContent(makeTag('code', {'class': 'sql'}, escape(view.sql)))
+		self.addContent(makeTag('div', {'class': 'sql'}, self.highlighter.highlight(view.sql)))
 		self.endDocument()
 
 	def writeRelation(self, relation):
