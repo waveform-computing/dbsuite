@@ -1,0 +1,18 @@
+.sql {
+	font-family: "Courier New", monospace;
+	font-size: 10pt;
+	white-space: -moz-pre-wrap;
+}
+
+.sql span.sql_error      { background-color: red; }
+.sql span.sql_comment    { color: green; }
+.sql span.sql_keyword    { font-weight: bold; color: blue; }
+.sql span.sql_identifier { }
+.sql span.sql_number     { color: maroon; }
+.sql span.sql_string     { color: maroon; }
+.sql span.sql_operator   { }
+.sql span.sql_parameter  { font-style: italic; }
+.sql span.sql_terminator { }
+
+td.num_cell { background-color: silver; }
+td.sql_cell { background-color: gray; }
