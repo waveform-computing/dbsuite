@@ -1,7 +1,11 @@
 .sql {
+	background-color: #ddd;
 	font-family: "Courier New", monospace;
-	font-size: 10pt;
-	white-space: -moz-pre-wrap;
+	font-size: 8pt;
+	white-space: pre-wrap; /* Standard (for Opera) */
+	white-space: -moz-pre-wrap; /* Non-standard (for Mozilla) */
+	padding: 1em;
+	border-top: 1em #47b solid;
 }
 
 .sql span.sql_error      { background-color: red; }
