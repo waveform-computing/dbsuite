@@ -45,7 +45,7 @@ class DocForeignKey(DocConstraint):
 
 	def __init__(self, table, cache, **row):
 		"""Initializes an instance of the class from a cache row"""
-		super(self.__class__, self).__init__(table, row['name'])
+		super(DocForeignKey, self).__init__(table, row['name'])
 		logging.info("Building foreign key %s" % (self.qualifiedName))
 		self.__refTableSchema = row['refTableSchema']
 		self.__refTableName = row['refTableName']
@@ -69,7 +69,7 @@ class DocForeignKey(DocConstraint):
 		if self.__description:
 			return self.__description
 		else:
-			return super(self.__class__, self).getDescription()
+			return super(DocForeignKey, self).getDescription()
 
 	def __getRefTable(self):
 		return self.database.schemas[self.__refTableSchema].tables[self.__refTableName]

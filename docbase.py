@@ -11,6 +11,7 @@ class DocObjectBase(object):
 
 	def __init__(self, parent, name):
 		"""Initializes an instance of the class"""
+		super(DocObjectBase, self).__init__()
 		assert not parent or isinstance(parent, DocObjectBase)
 		self.__parent = parent
 		self.__name = name

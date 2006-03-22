@@ -38,7 +38,7 @@ class DocUniqueKey(DocConstraint):
 
 	def __init__(self, table, cache, **row):
 		"""Initializes an instance of the class from a cache row"""
-		super(self.__class__, self).__init__(table, row['name'])
+		super(DocUniqueKey, self).__init__(table, row['name'])
 		logging.info("Building unique key %s" % (self.qualifiedName))
 		self.__definer = row['definer']
 		self.__checkExisting = row['checkExisting']
@@ -55,7 +55,7 @@ class DocUniqueKey(DocConstraint):
 		if self.__description:
 			return self.__description
 		else:
-			return super(self.__class__, self).getDescription()
+			return super(DocUniqueKey, self).getDescription()
 
 	def __getDefiner(self):
 		return self.__definer

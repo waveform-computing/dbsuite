@@ -40,7 +40,7 @@ class DocParam(DocObjectBase):
 		if self.__description:
 			return self.__description
 		else:
-			return super(self.__class__, self).getDescription()
+			return super(DocParam, self).getDescription()
 
 	def __getPosition(self):
 		return self.__position

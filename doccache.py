@@ -41,6 +41,7 @@ def fetchDict(cursor):
 
 class DocCache(object):
 	def __init__(self, connection):
+		super(DocCache, self).__init__()
 		# Get a cursor to run the queries
 		cursor = connection.cursor()
 		try:

@@ -13,6 +13,7 @@ class CheckFieldsList(object):
 
 	def __init__(self, table, fields):
 		"""Initializes the list from a list of field names"""
+		super(CheckFieldsList, self).__init__()
 		assert type(fields) == type([])
 		self.__table = table
 		self.__items = fields
@@ -39,7 +40,7 @@ class DocCheck(DocConstraint):
 
 	def __init__(self, table, cache, **row):
 		"""Initializes an instance of the class from a cache row"""
-		super(self.__class__, self).__init__(table, row['name'])
+		super(DocCheck, self).__init__(table, row['name'])
 		logging.info("Building check %s" % (self.qualifiedName))
 		self.__created = row['created']
 		self.__definer = row['definer']
@@ -63,7 +64,7 @@ class DocCheck(DocConstraint):
 		if self.__description:
 			return self.__description
 		else:
-			return super(self.__class__, self).getDescription()
+			return super(DocCheck, self).getDescription()
 
 	def __getCreated(self):
 		return self.__created

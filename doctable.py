@@ -18,7 +18,7 @@ class DocTable(DocRelation):
 
 	def __init__(self, schema, cache, **row):
 		"""Initializes an instance of the class from a cache row"""
-		super(self.__class__, self).__init__(schema, row['name'])
+		super(DocTable, self).__init__(schema, row['name'])
 		logging.info("Building table %s" % (self.qualifiedName))
 		self.__definer = row['definer']
 		self.__checkPending = row['checkPending']
@@ -85,7 +85,7 @@ class DocTable(DocRelation):
 		if self.__description:
 			return self.__description
 		else:
-			return super(self.__class__, self).getDescription()
+			return super(DocTable, self).getDescription()
 
 	def getFields(self):
 		return self.__fields

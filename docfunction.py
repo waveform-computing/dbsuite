@@ -53,7 +53,7 @@ class DocFunction(DocRoutine):
 		if self.__description:
 			return self.__description
 		else:
-			return super(self.__class__, self).getDescription()
+			return super(DocFunction, self).getDescription()
 
 	def getParams(self):
 		return self.__params

@@ -18,7 +18,7 @@ class DocSchema(DocObjectBase):
 
 	def __init__(self, database, cache, **row):
 		"""Initializes an instance of the class from a cache row"""
-		super(self.__class__, self).__init__(database, row['name'])
+		super(DocSchema, self).__init__(database, row['name'])
 		logging.info("Building schema %s" % (self.qualifiedName))
 		self.__owner = row['owner']
 		self.__definer = row['definer']
@@ -79,7 +79,7 @@ class DocSchema(DocObjectBase):
 		if self.__description:
 			return self.__description
 		else:
-			return super(self.__class__, self).getDescription()
+			return super(DocSchema, self).getDescription()
 
 	def __getDatabase(self):
 		return self.parent
