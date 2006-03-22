@@ -106,7 +106,25 @@ import decimal
 	OPERATOR,      # An operator
 	PARAMETER,     # A colon-prefixed or simple qmark parameter
 	TERMINATOR,    # A statement terminator
-) = range(11)
+	USERTOKEN,     # First value for user-defined token types
+) = range(12)
+
+def debugTokens(tokens):
+	for (token_type, token_value, source, line, column) in tokens:
+		token_type = {
+			EOF:        'EOF',
+			ERROR:      'ERROR',
+			WHITESPACE: 'WHITESPACE',
+			COMMENT:    'COMMENT',
+			KEYWORD:    'KEYWORD',
+			IDENTIFIER: 'IDENTIFIER',
+			NUMBER:     'NUMBER',
+			STRING:     'STRING',
+			OPERATOR:   'OPERATOR',
+			PARAMETER:  'PARAMETER',
+			TERMINATOR: 'TERMINATOR',
+		}[token_type]
+		print "(%3d,%3d)  %-10s  %-10s  (%s)" % (line, column, token_type, source, token_value)
 
 class SQLTokenizerBase(object):
 	"""Base SQL tokenizer class."""
@@ -559,6 +577,7 @@ class SQLTokenizerBase(object):
 				self._jump[self.char]()
 			except KeyError:
 				self._handleDefault()
+		self._addToken(EOF, None)
 		if self.newline_split:
 			# Split the list of tokens into a list of lines of lists of tokens
 			newtokens = []
