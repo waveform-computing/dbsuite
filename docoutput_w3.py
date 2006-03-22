@@ -22,6 +22,7 @@ from string import Template
 from xml.sax.saxutils import quoteattr, escape
 from sqltokenizer import DB2UDBSQLTokenizer
 from sqlhighlighter import SQLHTMLHighlighter
+from sqlformatter import SQLFormatter
 
 __all__ = ['DocOutput']
 
@@ -140,11 +141,13 @@ class DocOutput(object):
 		causes the documentation to be written by the instance (which is then
 		usually discarded).
 		"""
+		super(DocOutput, self).__init__()
 		self.path = path
 		self.updated = datetime.date.today()
 		self.template = Template(open("template_w3.html").read())
 		self.tokenizer = DB2UDBSQLTokenizer()
 		self.highlighter = SQLHTMLHighlighter(self.tokenizer)
+		self.formatter = SQLFormatter(self.tokenizer)
 		# Write the documentation files
 		self.writeDatabase(database)
 		for schema in database.schemas.itervalues():
@@ -668,9 +671,10 @@ class DocOutput(object):
 		self.addSection('sql', 'SQL Definition')
 		self.addPara("""The SQL query which defines the view is given below.
 			Note that, in the process of storing the definition of a view, DB2
-			removes much of the formatting (e.g. link breaks). Hence the
-			statement below may appear "messy".""")
-		self.addContent(makeTag('div', {'class': 'sql'}, self.highlighter.highlight(view.sql)))
+			removes much of the formatting, hence the formatting in the 
+			statement below (which this system attempts to reconstruct) is
+			not necessarily the formatting of the original statement.""")
+		self.addContent(makeTag('pre', {'class': 'sql'}, self.highlighter.highlight(self.formatter.parse(view.sql))))
 		self.endDocument()
 
 	def writeRelation(self, relation):
