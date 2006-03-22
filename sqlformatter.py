@@ -975,8 +975,8 @@ class SQLFormatter(object):
 							self._newline()
 						else:
 							break
-				self._outdent()
-				self._expect((OPERATOR, ")"))
+					self._outdent()
+					self._expect((OPERATOR, ")"))
 				self._expect((KEYWORD, "AS"))
 				self._expect((OPERATOR, "("))
 				self._indent()
