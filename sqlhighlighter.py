@@ -105,6 +105,7 @@ default_css_classes = {
 
 class SQLHTMLHighlighter(object):
 	def __init__(self, tokenizer):
+		super(SQLHTMLHighlighter, self).__init__()
 		self._tokenizer = tokenizer
 		self.css_classes = default_css_classes
 		self.number_lines = False
