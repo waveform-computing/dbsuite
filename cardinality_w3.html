@@ -45,8 +45,17 @@
 		<div id="fourth-level">
 			<h1>Cardinality</h1>
 		</div>
-		<p>The total number of rows in the table as of the last time statistics
-		were gathered. The value is n/a if statistics have not been gathered.</p>
+		<p><strong>Tables and Indexes:</strong></p>
+		<p>The total number of rows in the table or index as of the last time
+		statistics were gathered. The value is n/a if statistics have not been
+		gathered.</p>
+		<p><strong>Indexes only:</strong></p>
+		<p>Additionally lists the cardinalities of up to four partial keys
+		depending on the number of fields indexed. For example, if the index
+		is defined on three columns, this field will additionally list the
+		cardinalities of the first column indexed, the cardinality of the
+		combination of the first and second columns indexed, and the cardinality
+		of the combination of the first, second, and third columns indexed.</p>
 
 		<!-- start popup footer //////////////////////////////////////////// -->
 		<div id="popup-footer">
