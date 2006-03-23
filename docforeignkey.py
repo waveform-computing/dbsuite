@@ -74,10 +74,10 @@ class DocForeignKey(DocConstraint):
 	def getDefinitionStr(self):
 		sql = 'CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s.%s(%s)' % (
 			formatIdentifier(self.name),
-			[formatIdentifier(myfield.name) for (myfield, reffield) in self.fields],
+			', '.join([formatIdentifier(myfield.name) for (myfield, reffield) in self.fields]),
 			formatIdentifier(self.refTable.schema.name),
 			formatIdentifier(self.refTable.name),
-			[formatIdentifier(reffield.name) for (myfield, reffield) in self.fields]
+			', '.join([formatIdentifier(reffield.name) for (myfield, reffield) in self.fields])
 		)
 		if self.deleteRule != 'No Action':
 			sql += ' ON DELETE %s' % ({
