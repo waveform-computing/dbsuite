@@ -110,10 +110,10 @@ class SQLFormatter(object):
 			elif len(token) >= 3:
 				result = '"%s"' % (token[2])
 			return result
-	
+
 	def _tokenOutput(self, token):
 		"""Reformats a token for use in the final output.
-		
+
 		The _tokenOutput() method is only called at the end of parsing, when
 		the list of output tokens has been assembled. It is then called
 		repeatedly to format each token. Most tokens are changed in some way.
@@ -192,18 +192,18 @@ class SQLFormatter(object):
 
 	def _newline(self, index=0):
 		"""Adds an INDENT token to the output.
-		
+
 		The _newline() method is called to start a new line in the output. It
 		does this by appending (or inserting, depending on the index parameter)
 		an INDENT token to the output list. Such a token starts a new line,
 		indented to the current indentation level.
-		
+
 		If the index parameter is False, 0, or ommitted, the new INDENT token
 		is appended to the output. If the index parameter is -1, the new INDENT
 		token is inserted immediately before the last non-ignorable
 		(non-whitespace or comment) token. If the index parameter is -2, it
 		is inserted before the second to last non-ignorable token and so on.
-		
+
 		The index parameter, if specified, may not be greater than zero.
 		"""
 		token = (INDENT, self._level, "\n" + self.indent * self._level)
@@ -230,11 +230,11 @@ class SQLFormatter(object):
 
 	def _skip(self):
 		"""Move on to the next token (ignoring comments and whitespace by default).
-		
+
 		The _skip() method is used to move the position of the parser on to
 		the next "normative" token (i.e. non-whitespace or comment token) in
 		the source.
-		
+
 		As a side effect it also appends the tokens it moves over to the output
 		list. However, the last two elements of each token (the line and column
 		in the original source) are discarded (as, by definition, the formatter
@@ -1107,7 +1107,7 @@ class SQLFormatter(object):
 				self._expect((KEYWORD, "IN"))
 				self._keywordIdent()
 				self._expect((IDENTIFIER,))
-		
+
 	def _parseColumnDefinition(self):
 		"""Parses a column definition in a CREATE TABLE statement"""
 		# Parse a column definition
@@ -1267,12 +1267,12 @@ class SQLFormatter(object):
 		else:
 			self._expect([(KEYWORD, "CONSTRAINT"), (KEYWORD, "PRIMARY"),
 				(KEYWORD, "UNIQUE"), (KEYWORD, "FOREIGN"), (KEYWORD, "CHECK")])
-	
+
 	def _parseDropTableStatement(self):
 		"""Parses a DROP TABLE statement"""
 		# DROP TABLE already matched
 		self._parseSchemaObjectName()
-	
+
 	def _parseCreateIndexStatement(self):
 		"""Parses a CREATE INDEX statement"""
 		# CREATE [UNIQUE] INDEX already matched
@@ -1311,12 +1311,12 @@ class SQLFormatter(object):
 		if self._match([(KEYWORD, "ALLOW"), (KEYWORD, "DISALLOW")]):
 			self._expect((IDENTIFIER, "REVERSE")) # REVERSE isn't a KEYWORD
 			self._expect((IDENTIFIER, "SCANS")) # SCANS isn't a KEYWORD
-	
+
 	def _parseDropIndexStatement(self):
 		"""Parses a DROP INDEX statement"""
 		# DROP INDEX already matched
 		self._parseSchemaObjectName()
-	
+
 	def _parseCreateViewStatement(self):
 		"""Parses a CREATE VIEW statement"""
 		# CREATE VIEW already matched
@@ -1335,11 +1335,76 @@ class SQLFormatter(object):
 		self._expect((KEYWORD, "AS"))
 		self._newline()
 		self._parseSelectStatement()
-	
+
 	def _parseDropViewStatement(self):
 		"""Parses a DROP VIEW statement"""
 		# DROP VIEW already matched
 		self._parseSchemaObjectName()
+
+	def _parseAlterTableStatement(self):
+		"""Parses an ALTER TABLE statement"""
+		# ALTER TABLE already matched
+		self._parseSchemaObjectName()
+		self._indent()
+		# XXX Implement ALTER TABLE sometable ALTER COLUMN/CONSTRAINT
+		while True:
+			if self._match((KEYWORD, "ADD")):
+				if self._match((KEYWORD, "RESTRICT")):
+					self._expect((KEYWORD, "ON"))
+					self._expect((KEYWORD, "DROP"))
+				elif self._match((KEYWORD, "COLUMN")):
+					self._parseColumnDefinition()
+				else:
+					self._saveState()
+					try:
+						# Try parsing a table constraint definition
+						self._parseTableConstraint()
+					except ParseError:
+						# If that fails, rewind and try and parse a column definition
+						self._restoreState()
+						self._parseColumnDefinition()
+					else:
+						self._forgetState()
+			elif self._match((KEYWORD, "DROP")):
+				if self._match((KEYWORD, "PRIMARY")):
+					self._expect((KEYWORD, "KEY"))
+				elif self._match((KEYWORD, "FOREIGN")):
+					self._expect((KEYWORD, "KEY"))
+					self._keywordIdent()
+					self._expect((IDENTIFIER,))
+				elif self._match([(KEYWORD, "UNIQUE"), (KEYWORD, "CHECK"), (KEYWORD, "CONSTRAINT")]):
+					self._keywordIdent()
+					self._expect((IDENTIFIER,))
+				elif self._match((KEYWORD, "RESTRICT")):
+					self._expect((KEYWORD, "ON"))
+					self._expect((KEYWORD, "DROP"))
+				else:
+					self._expect([(KEYWORD, "PRIMARY"), (KEYWORD, "FOREIGN"), (KEYWORD, "CHECK"), (KEYWORD, "CONSTRAINT")])
+			elif self._match((KEYWORD, "LOCKSIZE")):
+				self._expect([(KEYWORD, "ROW"), (KEYWORD, "TABLE")])
+			elif self._match((IDENTIFIER, "APPEND")):
+				self._expect([(KEYWORD, "ON"), (IDENTIFIER, "OFF")])
+			elif self._match((IDENTIFIER, "VOLATILE")):
+				self._match((KEYWORD, "CARDINALITY"))
+			elif self._match((KEYWORD, "NOT")):
+				self._expect((IDENTIFIER, "VOLATILE"))
+				self._match((KEYWORD, "CARDINALITY"))
+			elif self._match((IDENTIFIER, "ACTIVATE")):
+				if self._expect([(KEYWORD, "NOT"), (IDENTIFIER, "VALUE")])[:2] == (KEYWORD, "NOT"):
+					self._expect((IDENTIFIER, "LOGGED"))
+					self._expect((IDENTIFIER, "INITIALLY"))
+					if self._match((KEYWORD, "WITH")):
+						self._expect((IDENTIFIER, "EMPTY"))
+						self._expect((KEYWORD, "TABLE"))
+				else:
+					self._expect((IDENTIFIER, "COMPRESSION"))
+			elif self._match((IDENTIFIER, "DEACTIVATE")):
+				self._expect((IDENTIFIER, "VALUE"))
+				self._expect((IDENTIFIER, "COMPRESSION"))
+			else:
+				break
+			self._newline()
+		self._outdent()
 
 	def parse(self, source, terminator=";"):
 		"""Parses an arbitrary SQL statement or script"""
@@ -1354,12 +1419,16 @@ class SQLFormatter(object):
 				if self._token()[0] in (COMMENT, WHITESPACE):
 					self._skip()
 				# Try and parse a statement
+				# XXX Implement ALTER TABLE...
 				if self._match((KEYWORD, "INSERT")):
 					self._parseInsertStatement()
 				elif self._match((KEYWORD, "UPDATE")):
 					self._parseUpdateStatement()
 				elif self._match((KEYWORD, "DELETE")):
 					self._parseDeleteStatement()
+				elif self._match((KEYWORD, "ALTER")):
+					self._expect((KEYWORD, "TABLE"))
+					self._parseAlterTableStatement()
 				elif self._match((KEYWORD, "CREATE")):
 					if self._match((KEYWORD, "TABLE")):
 						self._parseCreateTableStatement()
