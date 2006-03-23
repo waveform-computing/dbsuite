@@ -1070,18 +1070,21 @@ class SQLFormatter(object):
 		# Parse optional WHERE clause
 		if self._match((KEYWORD, "WHERE")):
 			self._parsePredicate1()
-			
+
 	def _parseCreateTableStatement(self):
 		"""Parses a CREATE TABLE statement"""
 		# CREATE TABLE already matched
 		self._parseSchemaObjectName()
+		# Parse elements
 		self._expect((OPERATOR, "("))
 		self._indent()
 		while True:
 			self._saveState()
 			try:
+				# Try parsing a table constraint definition
 				self._parseTableConstraint()
 			except ParseError:
+				# If that fails, rewind and try and parse a column definition
 				self._restoreState()
 				self._parseColumnDefinition()
 			else:
@@ -1092,6 +1095,18 @@ class SQLFormatter(object):
 				break
 		self._outdent()
 		self._expect((OPERATOR, ")"))
+		# Parse tablespaces
+		if self._match((KEYWORD, "IN")):
+			self._keywordIdent()
+			self._expect((IDENTIFIER,))
+			if self._match((KEYWORD, "INDEX")):
+				self._expect((KEYWORD, "IN"))
+				self._keywordIdent()
+				self._expect((IDENTIFIER,))
+			if self._match((KEYWORD, "LONG")):
+				self._expect((KEYWORD, "IN"))
+				self._keywordIdent()
+				self._expect((IDENTIFIER,))
 		
 	def _parseColumnDefinition(self):
 		"""Parses a column definition in a CREATE TABLE statement"""
@@ -1261,7 +1276,41 @@ class SQLFormatter(object):
 	def _parseCreateIndexStatement(self):
 		"""Parses a CREATE INDEX statement"""
 		# CREATE [UNIQUE] INDEX already matched
-		pass
+		self._parseSchemaObjectName()
+		self._indent()
+		self._expect((KEYWORD, "ON"))
+		self._parseSchemaObjectName()
+		# Parse column list (with optional order indicators)
+		self._expect((OPERATOR, "("))
+		self._indent()
+		while True:
+			self._keywordIdent()
+			self._expect((IDENTIFIER,))
+			self._match([(IDENTIFIER, "ASC"), (IDENTIFIER, "DESC")]) # ASC and DESC aren't KEYWORDs
+			if self._match((OPERATOR, ",")):
+				self._newline()
+			else:
+				break
+		self._outdent()
+		self._expect((OPERATOR, ")"))
+		# Parse optional include columns
+		if self._match((IDENTIFIER, "INCLUDE")): # INCLUDE isn't a KEYWORD
+			self._newline(-1)
+			self._expect((OPERATOR, "("))
+			self._indent()
+			while True:
+				self._keywordIdent()
+				self._expect((IDENTIFIER,))
+				if self._match((OPERATOR, ",")):
+					self._newline()
+				else:
+					break
+			self._outdent()
+			self._expect((OPERATOR, ")"))
+		# Parse index options
+		if self._match([(KEYWORD, "ALLOW"), (KEYWORD, "DISALLOW")]):
+			self._expect((IDENTIFIER, "REVERSE")) # REVERSE isn't a KEYWORD
+			self._expect((IDENTIFIER, "SCANS")) # SCANS isn't a KEYWORD
 	
 	def _parseDropIndexStatement(self):
 		"""Parses a DROP INDEX statement"""
@@ -1337,6 +1386,17 @@ class SQLFormatter(object):
 				# Look for a terminator or EOF
 				if self._expect([(TERMINATOR,), (EOF,)])[:1] == (EOF,):
 					break
+				else:
+					# Match any more terminators (blank statements)
+					while self._match((TERMINATOR,)):
+						pass
+					# Check if EOF occurs after the terminator
+					if self._match((EOF,)):
+						break
+					# Otherwise, reset the indent level and leave a blank line
+					self._level = 0
+					self._newline()
+					self._newline()
 		except ParseError, e:
 			print "Error: %s" % (e[0])
 			(_, _, _, errorline, errorcol) = e[1]
