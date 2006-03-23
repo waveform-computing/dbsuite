@@ -496,7 +496,7 @@ class DocCache(object):
 				C.TYPE                AS "type",
 				RTRIM(C.QUALIFIER)    AS "qualifier",
 				RTRIM(C.FUNC_PATH)    AS "funcPath",
-				C.TEXT                AS "sql",
+				C.TEXT                AS "expression",
 				T.REMARKS             AS "description"
 			FROM
 				SYSCAT.TABCONST T
@@ -522,7 +522,7 @@ class DocCache(object):
 				'F': 'Functional Dependency',
 				'O': 'Object Property'
 			}[row['type']]
-			row['sql'] = str(row['sql'])
+			row['expression'] = str(row['expression'])
 
 	def getCheckFields(self, cursor):
 		logging.info("Retrieving check fields")
