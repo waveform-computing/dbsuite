@@ -551,6 +551,13 @@ class DocOutput(object):
 				makeTag('li', {}, 'Long tablespace: ' + linkTo(table.longTablespace)),
 			])
 		))
+		self.addSection('sql', 'SQL Definition')
+		self.addPara("""The SQL which created the table is given below.
+			Note that this is not necessarily the same as the actual statement
+			used to create the table (it has been reconstructed from the
+			content of the system catalog tables and may differ in a number of
+			areas).""")
+		self.addContent(makeTag('pre', {'class': 'sql'}, self.highlighter.highlight(self.formatter.parse(table.createSql))))
 		self.endDocument()
 
 	def writeView(self, view):
@@ -669,12 +676,12 @@ class DocOutput(object):
 				) for dep in dependencies]
 			))
 		self.addSection('sql', 'SQL Definition')
-		self.addPara("""The SQL query which defines the view is given below.
+		self.addPara("""The SQL which created the view is given below.
 			Note that, in the process of storing the definition of a view, DB2
 			removes much of the formatting, hence the formatting in the 
 			statement below (which this system attempts to reconstruct) is
 			not necessarily the formatting of the original statement.""")
-		self.addContent(makeTag('pre', {'class': 'sql'}, self.highlighter.highlight(self.formatter.parse(view.sql))))
+		self.addContent(makeTag('pre', {'class': 'sql'}, self.highlighter.highlight(self.formatter.parse(view.createSql))))
 		self.endDocument()
 
 	def writeRelation(self, relation):
