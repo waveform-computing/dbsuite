@@ -6,6 +6,7 @@ import sys
 import os.path
 import datetime
 import logging
+from decimal import Decimal
 from docdatabase import DocDatabase
 from doctablespace import DocTablespace
 from docschema import DocSchema
@@ -28,6 +29,21 @@ __all__ = ['DocOutput']
 
 # Utility routines for generating XHTML tags and sequences
 
+def formatContent(content):
+	if content is None:
+		# Format None as 'n/a'
+		return 'n/a'
+	elif isinstance(content, datetime.datetime):
+		# Format timestamps as ISO8601-ish (without the T separator)
+		return content.strftime('%Y-%m-%d %H:%M:%S')
+	elif type(content) in [int, long]:
+		# Format integer numbers with , as a thousand separator
+		s = str(content)
+		for i in xrange(len(s) - 3, 0, -3): s = "%s,%s" % (s[:i], s[i:])
+		return s
+	else:
+		return str(content)
+
 def startTag(name, attrs={}, empty=False):
 	"""Generates an XHTML start tag containing the specified attributes"""
 	subst = {
@@ -46,12 +62,7 @@ def endTag(name):
 def makeTag(name, attrs={}, content="", optional=False):
 	"""Generates a XHTML tag containing the specified attributes and content"""
 	# Convert the content into a string, using custom conversions as necessary
-	if content is None:
-		contentStr = 'n/a'
-	elif isinstance(content, datetime.datetime):
-		contentStr = content.strftime("%Y-%m-%d %H:%M:%S")
-	else:
-		contentStr = str(content)
+	contentStr = formatContent(content)
 	if contentStr != "":
 		return "%s%s%s" % (startTag(name, attrs), contentStr, endTag(name))
 	elif not optional:
@@ -97,10 +108,7 @@ def linkTo(object, attrs={}, qualifiedName=False):
 		return makeTag('a', a, escape(object.name))
 
 def popupLink(target, content, width=400, height=300):
-	return makeTag('a', {
-		'class': 'help-link-dark',
-		'href': 'javascript:popup("%s","internal",%d,%d)' % (target, height, width),
-	}, content)
+	return makeTag('a', {'href': 'javascript:popup("%s","internal",%d,%d)' % (target, height, width)}, content)
 
 def title(object):
 	"""Returns a title string for the specified object"""
@@ -154,8 +162,11 @@ class DocOutput(object):
 			self.writeSchema(schema)
 			for relation in schema.relations.itervalues():
 				self.writeRelation(relation)
-		#	for index in schema.indexes.itervalues():
-		#		self.writeIndex(index)
+				if isinstance(relation, DocTable):
+					for constraint in relation.constraints.itervalues():
+						self.writeConstraint(constraint)
+			for index in schema.indexes.itervalues():
+				self.writeIndex(index)
 		#	for routine in schema.routines.itervalues():
 		#		self.writeRoutine(routine)
 		for tablespace in database.tablespaces.itervalues():
@@ -398,47 +409,53 @@ class DocOutput(object):
 			)],
 			data=[
 				(
+					'Data Tablespace',
+					linkTo(table.dataTablespace),
+					'Index Tablespace',
+					linkTo(table.indexTablespace),
+				),
+				(
+					'Long Tablespace',
+					linkTo(table.longTablespace),
+					popupLink("clustered_w3.html", makeTag('acronym', {'title': 'Multi-Dimensional Clustering'}, 'MDC')),
+					table.clustered,
+				),
+				(
 					popupLink("created_w3.html", "Created"),
 					table.created,
 					popupLink("laststats_w3.html", "Last Statistics"),
-					table.statsUpdated
+					table.statsUpdated,
 				),
 				(
+					popupLink("createdby_w3.html", "Created By"),
+					escape(table.definer),
 					popupLink("cardinality_w3.html", "Cardinality"),
 					table.cardinality,
-					popupLink("createdby_w3.html", "Created By"),
-					escape(table.definer)
 				),
 				(
+					popupLink("keycolcount_w3.html", "# Key Columns"),
+					keyCount,
 					popupLink("colcount_w3.html", "# Columns"),
 					len(table.fields),
-					popupLink("keycolcount_w3.html", "# Key Columns"),
-					keyCount
 				),
 				(
 					popupLink("rowpages_w3.html", "Row Pages"),
 					table.rowPages,
 					popupLink("totalpages_w3.html", "Total Pages"),
-					table.totalPages
+					table.totalPages,
 				),
 				(
 					popupLink("dependentrel_w3.html", "Dependent Relations"),
 					len(table.dependentList),
 					popupLink("locksize_w3.html", "Lock Size"),
-					escape(table.lockSize)
+					escape(table.lockSize),
 				),
 				(
 					popupLink("append_w3.html", "Append"),
 					table.append,
 					popupLink("volatile_w3.html", "Volatile"),
-					table.volatile
+					table.volatile,
 				),
-				(
-					popupLink("compression_w3.html", "Value Compression"),
-					table.compression,
-					popupLink("clustered_w3.html", "Multi-dimensional Clustering"),
-					table.clustered
-				)
 			]))
 		if len(fields) > 0:
 			self.addSection(id='fields', title='Field Descriptions')
@@ -542,15 +559,6 @@ class DocOutput(object):
 					escape(dep.description)
 				) for dep in dependents]
 			))
-		self.addSection('tbspaces', 'Tablespaces')
-		self.addPara("""This table uses the following tablespaces:""")
-		self.addContent(makeTag(
-			'ul', {}, '\n'.join([
-				makeTag('li', {}, 'Data tablespace: ' + linkTo(table.dataTablespace)),
-				makeTag('li', {}, 'Index tablespace: ' + linkTo(table.indexTablespace)),
-				makeTag('li', {}, 'Long tablespace: ' + linkTo(table.longTablespace)),
-			])
-		))
 		self.addSection('sql', 'SQL Definition')
 		self.addPara("""The SQL which created the table is given below.
 			Note that this is not necessarily the same as the actual statement
@@ -587,19 +595,19 @@ class DocOutput(object):
 					popupLink("colcount_w3.html", "# Columns"),
 					len(view.fields),
 					popupLink("valid_w3.html", "Valid"),
-					view.valid
+					view.valid,
 				),
 				(
 					popupLink("readonly_w3.html", "Read Only"),
 					view.readOnly,
 					popupLink("checkoption_w3.html", "Check Option"),
-					escape(view.check)
+					escape(view.check),
 				),
 				(
 					popupLink("dependentrel_w3.html", "Dependent Relations"),
 					len(view.dependentList),
 					popupLink("dependenciesrel_w3.html", "Dependencies"),
-					len(view.dependencyList)
+					len(view.dependencyList),
 				)
 			]))
 		if len(fields) > 0:
@@ -628,17 +636,13 @@ class DocOutput(object):
 					"#",
 					"Name",
 					"Type",
-					"Nulls",
-					"Key Pos",
-					"Cardinality"
+					"Nulls"
 				)],
 				data=[(
 					field.position + 1,
 					escape(field.name),
 					escape(field.datatypeStr),
-					field.nullable,
-					field.keyIndex,
-					field.cardinality
+					field.nullable
 				) for field in fields]
 			))
 		if len(dependents) > 0:
@@ -689,7 +693,292 @@ class DocOutput(object):
 			self.writeTable(relation)
 		elif isinstance(relation, DocView):
 			self.writeView(relation)
+
+	def writeIndex(self, index):
+		logging.info("Writing documentation for index %s to %s" % (index.name, filename(index)))
+		position = 0
+		fields = []
+		for (field, ordering) in index.fieldList:
+			fields.append((field, ordering, position))
+			position += 1
+		fields = sorted(fields, key=lambda(field, ordering, position): field.name)
+		self.startDocument(index)
+		self.addSection(id='attributes', title='Attributes')
+		self.addPara("""The following table notes various "vital statistics"
+			of the index.""")
+		if not index.clusterFactor is None:
+			clusterRatio = index.clusterFactor # XXX Convert as necessary
+		else:
+			clusterRatio = index.clusterRatio
+		self.addContent(makeTable(
+			head=[(
+				"Attribute",
+				"Value",
+				"Attribute",
+				"Value"
+			)],
+			data=[
+				(
+					'Table',
+					linkTo(index.table),
+					'Tablespace',
+					linkTo(index.tablespace),
+				),
+				(
+					popupLink("created_w3.html", "Created"),
+					index.created,
+					popupLink("laststats_w3.html", "Last Statistics"),
+					index.statsUpdated,
+				),
+				(
+					popupLink("createdby_w3.html", "Created By"),
+					escape(index.definer),
+					popupLink("colcount_w3.html", "# Columns"),
+					len(fields),
+				),
+				(
+					popupLink("unique_w3.html", "Unique"),
+					index.unique,
+					popupLink("reversescans_w3.html", "Reverse Scans"),
+					index.reverseScans,
+				),
+				(
+					popupLink("cardinality_w3.html", "Cardinality"),
+					'<br />'.join(
+						[formatContent(index.cardinality[0])] + 
+						['1..%s: %s' % (keynum + 1, formatContent(card)) for (keynum, card) in enumerate(index.cardinality[1])]
+					),
+					popupLink("levels_w3.html", "Levels"),
+					index.levels,
+				),
+				(
+					popupLink("leafpages_w3.html", "Leaf Pages"),
+					index.leafPages,
+					popupLink("sequentialpages_w3.html", "Sequential Pages"),
+					index.sequentialPages,
+				),
+				(
+					popupLink("clusterratio_w3.html", "Cluster Ratio"),
+					clusterRatio, # see above
+					popupLink("density_w3.html", "Density"),
+					index.density,
+				),
+			]))
+		if len(fields) > 0:
+			self.addSection(id='fields', title='Fields')
+			self.addPara("""The following table contains the fields of the index
+				(in alphabetical order) along with the position of the field in
+				the index, the ordering of the field (Ascending or Descending)
+				and the description of the field.""")
+			self.addContent(makeTable(
+				head=[(
+					"#",
+					"Name",
+					"Order",
+					"Description"
+				)],
+				data=[(
+					position + 1,
+					escape(field.name),
+					ordering,
+					escape(field.description)
+				) for (field, ordering, position) in fields]
+			))
+		self.addSection('sql', 'SQL Definition')
+		self.addPara("""The SQL which created the index is given below.
+			Note that this is not necessarily the same as the actual statement
+			used to create the index (it has been reconstructed from the
+			content of the system catalog tables and may differ in a number of
+			areas).""")
+		self.addContent(makeTag('pre', {'class': 'sql'}, self.highlighter.highlight(self.formatter.parse(index.createSql))))
 		self.endDocument()
+	
+	def writeUniqueKey(self, key):
+		logging.info("Writing documentation for unique key %s to %s" % (key.name, filename(key)))
+		position = 0
+		fields = []
+		for field in key.fields:
+			fields.append((field, position))
+			position += 1
+		fields = sorted(fields, key=lambda(field, position): field.name)
+		self.startDocument(key)
+		self.addSection(id='attributes', title='Attributes')
+		self.addPara("""The following table notes various "vital statistics"
+			of the unique key.""")
+		self.addContent(makeTable(
+			head=[(
+				"Attribute",
+				"Value",
+				"Attribute",
+				"Value"
+			)],
+			data=[
+				(
+					popupLink("createdby_w3.html", "Created By"),
+					escape(key.definer),
+					popupLink("colcount_w3.html", "# Columns"),
+					len(fields),
+				),
+			]))
+		if len(fields) > 0:
+			self.addSection(id='fields', title='Fields')
+			self.addPara("""The following table contains the fields of the key
+				(in alphabetical order) along with the position of the field in
+				the key, and the description of the field in the key's table.""")
+			self.addContent(makeTable(
+				head=[(
+					"#",
+					"Field",
+					"Description"
+				)],
+				data=[(
+					position + 1,
+					escape(field.name),
+					escape(field.description)
+				) for (field, position) in fields]
+			))
+		self.addSection('sql', 'SQL Definition')
+		self.addPara("""The SQL which can be used to create the key is given
+			below. Note that this is not necessarily the same as the actual
+			statement used to create the key (it has been reconstructed from
+			the content of the system catalog tables and may differ in a number
+			of areas).""")
+		self.addContent(makeTag('pre', {'class': 'sql'}, self.highlighter.highlight(self.formatter.parse(key.createSql))))
+		self.endDocument()
+
+	def writeForeignKey(self, key):
+		logging.info("Writing documentation for foreign key %s to %s" % (key.name, filename(key)))
+		position = 0
+		fields = []
+		for (field1, field2) in key.fields:
+			fields.append((field1, field2, position))
+			position += 1
+		fields = sorted(fields, key=lambda(field1, field2, position): field1.name)
+		self.startDocument(key)
+		self.addSection(id='attributes', title='Attributes')
+		self.addPara("""The following table notes various "vital statistics"
+			of the foreign key.""")
+		self.addContent(makeTable(
+			head=[(
+				"Attribute",
+				"Value",
+				"Attribute",
+				"Value"
+			)],
+			data=[
+				(
+					'Referenced Table',
+					linkTo(key.refTable),
+					'Referenced Key',
+					linkTo(key.refKey),
+				),
+				(
+					popupLink("created_w3.html", "Created"),
+					key.created,
+					popupLink("createdby_w3.html", "Created By"),
+					escape(key.definer),
+				),
+				(
+					popupLink("enforced_w3.html", "Enforced"),
+					key.enforced,
+					popupLink("queryoptimize_w3.html", "Query Optimizing"),
+					key.queryOptimize,
+				),
+				(
+					popupLink("deleterule_w3.html", "Delete Rule"),
+					key.deleteRule,
+					popupLink("updaterule_w3.html", "Update Rule"),
+					key.updateRule,
+				),
+			]))
+		if len(fields) > 0:
+			self.addSection(id='fields', title='Fields')
+			self.addPara("""The following table contains the fields of the key
+				(in alphabetical order) along with the position of the field in
+				the key, the field in the parent table that is referenced by
+				the key, and the description of the field in the key's table.""")
+			self.addContent(makeTable(
+				head=[(
+					"#",
+					"Field",
+					"Parent",
+					"Description"
+				)],
+				data=[(
+					position + 1,
+					escape(field1.name),
+					escape(field2.name),
+					escape(field1.description)
+				) for (field1, field2, position) in fields]
+			))
+		self.addSection('sql', 'SQL Definition')
+		self.addPara("""The SQL which can be used to create the key is given
+			below. Note that this is not necessarily the same as the actual
+			statement used to create the key (it has been reconstructed from
+			the content of the system catalog tables and may differ in a number
+			of areas).""")
+		self.addContent(makeTag('pre', {'class': 'sql'}, self.highlighter.highlight(self.formatter.parse(key.createSql))))
+		self.endDocument()
+
+	def writeCheck(self, check):
+		logging.info("Writing documentation for check constraint %s to %s" % (check.name, filename(check)))
+		fields = sorted(list(check.fields), key=lambda(field): field.name)
+		self.startDocument(check)
+		self.addSection(id='attributes', title='Attributes')
+		self.addPara("""The following table notes various "vital statistics"
+			of the check.""")
+		self.addContent(makeTable(
+			head=[(
+				"Attribute",
+				"Value",
+				"Attribute",
+				"Value"
+			)],
+			data=[
+				(
+					popupLink("created_w3.html", "Created"),
+					check.created,
+					popupLink("createdby_w3.html", "Created By"),
+					escape(check.definer),
+				),
+				(
+					popupLink("enforced_w3.html", "Enforced"),
+					check.enforced,
+					popupLink("queryoptimize_w3.html", "Query Optimizing"),
+					check.queryOptimize,
+				),
+			]))
+		if len(fields) > 0:
+			self.addSection(id='fields', title='Fields')
+			self.addPara("""The following table contains the fields that the
+				check references in it's SQL expression, and the description of
+				the field in the check's table.""")
+			self.addContent(makeTable(
+				head=[(
+					"Field",
+					"Description"
+				)],
+				data=[(
+					escape(field.name),
+					escape(field.description)
+				) for field in fields]
+			))
+		self.addSection('sql', 'SQL Definition')
+		self.addPara("""The SQL which can be used to create the check is given
+			below. Note that this is not necessarily the same as the actual
+			statement used to create the check (it has been reconstructed from
+			the content of the system catalog tables and may differ in a number
+			of areas).""")
+		self.addContent(makeTag('pre', {'class': 'sql'}, self.highlighter.highlight(self.formatter.parse(check.createSql))))
+		self.endDocument()
+
+	def writeConstraint(self, constraint):
+		if isinstance(constraint, DocUniqueKey):
+			self.writeUniqueKey(constraint)
+		elif isinstance(constraint, DocForeignKey):
+			self.writeForeignKey(constraint)
+		elif isinstance(constraint, DocCheck):
+			self.writeCheck(constraint)
 
 def main():
 	pass
