@@ -3,8 +3,9 @@
 # vim: set noet sw=4 ts=4:
 
 import logging
+from string import Template
 from docschemabase import DocSchemaObject
-from docutil import makeDateTime
+from docutil import makeDateTime, formatIdentifier
 
 __all__ = ['DocIndex']
 
@@ -177,6 +178,37 @@ class DocIndex(DocSchemaObject):
 	def __getReverseScans(self):
 		return self.__reverseScans
 
+	def __getCreateSql(self):
+		sql = """CREATE $type $schema.$index
+ON $tbschema.$tbname ($fields)"""
+		values = {
+			'type': {False: 'INDEX', True: 'UNIQUE INDEX'}[self.unique],
+			'schema': formatIdentifier(self.schema.name),
+			'index': formatIdentifier(self.name),
+			'tbschema': formatIdentifier(self.table.schema.name),
+			'tbname': formatIdentifier(self.table.name),
+			'fields': ', '.join(['%s%s' % (field.name, {
+				'Ascending': '',
+				'Descending': ' DESC'
+			}[order]) for (field, order) in self.fieldList if order != 'Include'])
+		}
+		if self.unique:
+			incfields = [field for (field, order) in self.fieldList if order == 'Include']
+			if len(incfields) > 0:
+				sql += '\nINCLUDE ($incfields)'
+				values['incfields'] = ', '.join([field.name for field in incfields])
+		if self.reverseScans:
+			sql += '\nALLOW REVERSE SCANS'
+		sql += ';'
+		return Template(sql).substitute(values)
+
+	def __getDropSql(self):
+		sql = Template('DROP INDEX $schema.$index;')
+		return sql.substitute({
+			'schema': formatIdentifier(self.schema.name),
+			'index': formatIdentifier(self.name)
+		})
+
 	fields = property(__getFields, doc="""The fields that the index references, each entry is a tuple (field, order)""")
 	fieldList = property(__getFieldList, doc="""The fields that the index references in an ordered list, each entry is a tuple (field, order)""")
 	table = property(__getTable, doc="""The table that the index is defined for""")
@@ -196,6 +228,8 @@ class DocIndex(DocSchemaObject):
 	userDefined = property(__getUserDefined, doc="""True if the index is user defined, False if system defined""")
 	required = property(__getRequired, doc="""True if the index is required to enforce another object like a primary key or unique constraint""")
 	reverseScans = property(__getReverseScans, doc="""True if the index supports bidirectional scans""")
+	createSql = property(__getCreateSql, doc="""The SQL that can be used to create the index""")
+	dropSql = property(__getDropSql, doc="""The SQL that can be used to drop the index""")
 
 def main():
 	pass

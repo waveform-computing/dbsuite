@@ -3,13 +3,14 @@
 # vim: set noet sw=4 ts=4:
 
 import logging
+from string import Template
 from docschemabase import DocRelation
 from docproxies import IndexesDict, IndexesList, RelationsDict, RelationsList
 from docfield import DocField
 from docuniquekey import DocUniqueKey, DocPrimaryKey
 from docforeignkey import DocForeignKey
 from doccheck import DocCheck
-from docutil import makeDateTime, makeBoolean
+from docutil import makeDateTime, makeBoolean, formatIdentifier
 
 __all__ = ['DocTable']
 
@@ -180,7 +181,35 @@ class DocTable(DocRelation):
 	def __getActiveBlocks(self):
 		return self.__activeBlocks
 
-	indexes = property(__getIndexes, doc="""The indexes used by this table""")
+	def __getCreateSql(self):
+		sql = Template("""CREATE TABLE $schema.$table (
+$elements
+) $tbspaces;$indexes""")
+		values = {
+			'schema': formatIdentifier(self.schema.name),
+			'table': formatIdentifier(self.name),	
+			'elements': ',\n'.join(
+				[field.definitionStr for field in self.fieldList] + 
+				[constraint.definitionStr for constraint in self.constraints.itervalues()]
+			),
+			'tbspaces': 'IN ' + formatIdentifier(self.dataTablespace.name),
+			'indexes': ''.join(['\n' + index.createSql for index in self.indexList])
+		}
+		if self.indexTablespace != self.dataTablespace:
+			values['tbspaces'] += ' INDEX IN ' + formatIdentifier(self.indexTablespace.name)
+		if self.longTablespace != self.dataTablespace:
+			values['tbspaces'] += ' LONG IN ' + formatIdentifier(self.longTablespace.name)
+		return sql.substitute(values)
+	
+	def __getDropSql(self):
+		sql = Template('DROP TABLE $schema.$table;')
+		return sql.substitute({
+			'schema': formatIdentifier(self.schema.name),
+			'table': formatIdentifier(self.name)
+		})
+	
+	indexes = property(__getIndexes, doc="""The indexes used by this table in a dictionary""")
+	indexList = property(__getIndexList, doc="""The indexes used by this table in a list""")
 	constraints = property(__getConstraints, doc="""The constraints (keys, checks, etc.) contained in the table""")
 	primaryKey = property(__getPrimaryKey, doc="""The primary key constraint of the table""")
 	uniqueKeys = property(__getUniqueKeys, doc="""The unique key constraints (including the primary key, if any) contained in the table""")
@@ -204,6 +233,8 @@ class DocTable(DocRelation):
 	accessMode = property(__getAccessMode, doc="""The current access mode for the table""")
 	clustered = property(__getClustered, doc="""True if the table is a multi-dimensional clustering table""")
 	activeBlocks = property(__getActiveBlocks, doc="""The number of active blocks for multi-dimensional clustering tables""")
+	createSql = property(__getCreateSql, doc="""The SQL that can be used to create the table and all associated indexes""")
+	dropSql = property(__getDropSql, doc="""The SQL that can be used to drop the table and all associated indexes""")
 
 def main():
 	pass

@@ -4,6 +4,7 @@
 
 import logging
 from docrelationbase import DocConstraint
+from docutil import formatIdentifier
 
 __all__ = ['DocUniqueKey', 'DocPrimaryKey']
 
@@ -56,6 +57,12 @@ class DocUniqueKey(DocConstraint):
 			return self.__description
 		else:
 			return super(DocUniqueKey, self).getDescription()
+	
+	def getDefinitionStr(self):
+		return 'CONSTRAINT %s UNIQUE (%s)' % (
+			formatIdentifier(self.name),
+			', '.join([formatIdentifier(field.name) for field in self.fields])
+		)
 
 	def __getDefiner(self):
 		return self.__definer
@@ -71,6 +78,12 @@ class DocPrimaryKey(DocUniqueKey):
 
 	def getTypeName(self):
 		return "Primary Key"
+
+	def getDefinitionStr(self):
+		return "CONSTRAINT %s PRIMARY KEY (%s)" % (
+			formatIdentifier(self.name),
+			', '.join([formatIdentifier(field.name) for field in self.fields])
+		)
 
 def main():
 	pass

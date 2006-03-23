@@ -4,7 +4,7 @@
 
 import logging
 from docrelationbase import DocConstraint
-from docutil import makeBoolean, makeDateTime
+from docutil import makeBoolean, makeDateTime, formatIdentifier
 
 __all__ = ['DocForeignKey']
 
@@ -70,6 +70,28 @@ class DocForeignKey(DocConstraint):
 			return self.__description
 		else:
 			return super(DocForeignKey, self).getDescription()
+	
+	def getDefinitionStr(self):
+		sql = 'CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s.%s(%s)' % (
+			formatIdentifier(self.name),
+			[formatIdentifier(myfield.name) for (myfield, reffield) in self.fields],
+			formatIdentifier(self.refTable.schema.name),
+			formatIdentifier(self.refTable.name),
+			[formatIdentifier(reffield.name) for (myfield, reffield) in self.fields]
+		)
+		if self.deleteRule != 'No Action':
+			sql += ' ON DELETE %s' % ({
+				'No Action': 'NO ACTION',
+				'Restrict': 'RESTRICT',
+				'Cascade': 'CASCADE',
+				'Set NULL': 'SET NULL',
+			}[self.deleteRule])
+		if self.updateRule != 'No Action':
+			sql += ' ON UPDATE %s' % ({
+				'No Action': 'NO ACTION',
+				'Restrict': 'RESTRICT',
+			})
+		return sql
 
 	def __getRefTable(self):
 		return self.database.schemas[self.__refTableSchema].tables[self.__refTableName]

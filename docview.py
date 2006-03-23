@@ -3,10 +3,11 @@
 # vim: set noet sw=4 ts=4:
 
 import logging
+from string import Template
 from docschemabase import DocRelation
 from docproxies import RelationsDict, RelationsList
 from docfield import DocField
-from docutil import makeDateTime, makeBoolean
+from docutil import makeDateTime, makeBoolean, formatIdentifier
 
 __all__ = ['DocView']
 
@@ -84,8 +85,15 @@ class DocView(DocRelation):
 	def __getFuncPath(self):
 		return self.__funcPath
 	
-	def __getSql(self):
+	def __getCreateSql(self):
 		return self.__sql
+	
+	def __getDropSql(self):
+		sql = Template('DROP VIEW $schema.$view;')
+		return sql.substitute({
+			'schema': formatIdentifier(self.schema.name),
+			'view': formatIdentifier(self.name)
+		})
 	
 	dependencies = property(__getDependencies, doc="""A dictionary of the relations (e.g. views) that this view depends upon (keyed by (schemaName, relationName) tuples)""")
 	dependencyList = property(__getDependencyList, doc="""A list of the relations (e.g. views) that this view depends upon""")
@@ -96,7 +104,8 @@ class DocView(DocRelation):
 	valid = property(__getValid, doc="""Specifies whether the view is accessible or inoperative""")
 	qualifier = property(__getQualifier, doc="""Specifies the current schema at the time the view was created""")
 	funcPath = property(__getFuncPath, doc="""Specifies the function resolution path at the time the view was created""")
-	sql = property(__getSql, doc="""Contains the SQL query that defines the view's content""")
+	createSql = property(__getCreateSql, doc="""Contains the SQL that can be used to create the view""")
+	dropSql = property(__getDropSql, doc="""Contains the SQL that can be used to drop the view""")
 	
 def main():
 	pass

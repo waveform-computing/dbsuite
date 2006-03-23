@@ -4,7 +4,7 @@
 
 import logging
 from docrelationbase import DocConstraint
-from docutil import makeDateTime, makeBoolean
+from docutil import makeDateTime, makeBoolean, formatIdentifier
 
 __all__ = ['DocCheck']
 
@@ -50,7 +50,7 @@ class DocCheck(DocConstraint):
 		self.__type = row['type']
 		self.__qualifier = row['qualifier']
 		self.__funcPath = row['funcPath']
-		self.__sql = row['sql']
+		self.__expression = row['expression']
 		self.__description = row['description']
 		self.__fields = CheckFieldsList(table, cache.checkFields[(table.schema.name, table.name, self.name)])
 
@@ -65,6 +65,12 @@ class DocCheck(DocConstraint):
 			return self.__description
 		else:
 			return super(DocCheck, self).getDescription()
+
+	def getDefinitionStr(self):
+		return 'CONSTRAINT %s CHECK (%s)' % (
+			formatIdentifier(self.name),
+			self.expression
+		)
 
 	def __getCreated(self):
 		return self.__created
@@ -90,8 +96,8 @@ class DocCheck(DocConstraint):
 	def __getFuncPath(self):
 		return self.__funcPath
 
-	def __getSql(self):
-		return self.__sql
+	def __getExpression(self):
+		return self.__expression
 
 	created = property(__getCreated, doc="""Timestamp indicating when the check constraint was created""")
 	definer = property(__getDefiner, doc="""The user who created the constraint""")
@@ -101,7 +107,7 @@ class DocCheck(DocConstraint):
 	type = property(__getType, doc="""Whether the constraint is a system-generated constraint (for generated columns) or a user-defined check""")
 	qualifier = property(__getQualifier, doc="""The current schema at the time the check constraint was created""")
 	funcPath = property(__getFuncPath, doc="""The function resolution path at the time the check constraint was created""")
-	sql = property(__getSql, doc="""The SQL expression that the check constraint tests""")
+	expression = property(__getExpression, doc="""The SQL expression that the check constraint tests""")
 
 def main():
 	pass
