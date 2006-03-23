@@ -49,6 +49,7 @@ class DocForeignKey(DocConstraint):
 		logging.info("Building foreign key %s" % (self.qualifiedName))
 		self.__refTableSchema = row['refTableSchema']
 		self.__refTableName = row['refTableName']
+		self.__refKeyName = row['refKeyName']
 		self.__created = row['created']
 		self.__definer = row['definer']
 		self.__enforced = row['enforced']
