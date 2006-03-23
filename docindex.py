@@ -89,7 +89,7 @@ class DocIndex(DocSchemaObject):
 		self.__cardinality2 = row['cardinality2']
 		self.__cardinality3 = row['cardinality3']
 		self.__cardinality4 = row['cardinality4']
-		self.__cardinality = row['cardinality'],
+		self.__cardinality = row['cardinality']
 		self.__clusterRatio = row['clusterRatio']
 		self.__clusterFactor = row['clusterFactor']
 		self.__sequentialPages = row['sequentialPages']
