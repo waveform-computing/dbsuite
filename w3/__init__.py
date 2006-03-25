@@ -244,7 +244,7 @@ class DocOutput(object):
 	# Database object specific methods
 
 	def writeDatabase(self, database):
-		logging.info("Writing documentation for database to %s" % (filename(database)))
+		logging.debug("Writing documentation for database to %s" % (filename(database)))
 		schemas = [obj for (name, obj) in sorted(database.schemas.items(), key=lambda (name, obj):name)]
 		tbspaces = [obj for (name, obj) in sorted(database.tablespaces.items(), key=lambda (name, obj):name)]
 		self.startDocument(database)
@@ -284,7 +284,7 @@ class DocOutput(object):
 		self.endDocument()
 
 	def writeSchema(self, schema):
-		logging.info("Writing documentation for schema %s to %s" % (schema.name, filename(schema)))
+		logging.debug("Writing documentation for schema %s to %s" % (schema.name, filename(schema)))
 		relations = [obj for (name, obj) in sorted(schema.relations.items(), key=lambda (name, obj): name)]
 		routines = [obj for (name, obj) in sorted(schema.specificRoutines.items(), key=lambda (name, obj): name)]
 		indexes = [obj for (name, obj) in sorted(schema.indexes.items(), key=lambda (name, obj): name)]
@@ -345,7 +345,7 @@ class DocOutput(object):
 		self.endDocument()
 
 	def writeTablespace(self, tbspace):
-		logging.info("Writing documentation for tablespace %s to %s" % (tbspace.name, filename(tbspace)))
+		logging.debug("Writing documentation for tablespace %s to %s" % (tbspace.name, filename(tbspace)))
 		tables = [obj for (name, obj) in sorted(tbspace.tables.items(), key=lambda (name, obj): name)]
 		indexes = [obj for (name, obj) in sorted(tbspace.indexes.items(), key=lambda (name, obj): name)]
 		self.startDocument(tbspace)
@@ -384,7 +384,7 @@ class DocOutput(object):
 		self.endDocument()
 
 	def writeTable(self, table):
-		logging.info("Writing documentation for table %s to %s" % (table.name, filename(table)))
+		logging.debug("Writing documentation for table %s to %s" % (table.name, filename(table)))
 		fields = [obj for (name, obj) in sorted(table.fields.items(), key=lambda (name, obj): name)]
 		indexes = [obj for (name, obj) in sorted(table.indexes.items(), key=lambda (name, obj): name)]
 		constraints = [obj for (name, obj) in sorted(table.constraints.items(), key=lambda (name, obj): name)]
@@ -569,7 +569,7 @@ class DocOutput(object):
 		self.endDocument()
 
 	def writeView(self, view):
-		logging.info("Writing documentation for view %s to %s" % (view.name, filename(view)))
+		logging.debug("Writing documentation for view %s to %s" % (view.name, filename(view)))
 		fields = [obj for (name, obj) in sorted(view.fields.items(), key=lambda (name, obj): name)]
 		dependencies = [obj for (name, obj) in sorted(view.dependencies.items(), key=lambda (name, obj): name)]
 		dependents = [obj for (name, obj) in sorted(view.dependents.items(), key=lambda (name, obj): name)]
@@ -695,7 +695,7 @@ class DocOutput(object):
 			self.writeView(relation)
 
 	def writeIndex(self, index):
-		logging.info("Writing documentation for index %s to %s" % (index.name, filename(index)))
+		logging.debug("Writing documentation for index %s to %s" % (index.name, filename(index)))
 		position = 0
 		fields = []
 		for (field, ordering) in index.fieldList:
@@ -794,7 +794,7 @@ class DocOutput(object):
 		self.endDocument()
 	
 	def writeUniqueKey(self, key):
-		logging.info("Writing documentation for unique key %s to %s" % (key.name, filename(key)))
+		logging.debug("Writing documentation for unique key %s to %s" % (key.name, filename(key)))
 		position = 0
 		fields = []
 		for field in key.fields:
@@ -847,7 +847,7 @@ class DocOutput(object):
 		self.endDocument()
 
 	def writeForeignKey(self, key):
-		logging.info("Writing documentation for foreign key %s to %s" % (key.name, filename(key)))
+		logging.debug("Writing documentation for foreign key %s to %s" % (key.name, filename(key)))
 		position = 0
 		fields = []
 		for (field1, field2) in key.fields:
@@ -921,7 +921,7 @@ class DocOutput(object):
 		self.endDocument()
 
 	def writeCheck(self, check):
-		logging.info("Writing documentation for check constraint %s to %s" % (check.name, filename(check)))
+		logging.debug("Writing documentation for check constraint %s to %s" % (check.name, filename(check)))
 		fields = sorted(list(check.fields), key=lambda(field): field.name)
 		self.startDocument(check)
 		self.addSection(id='attributes', title='Attributes')
