@@ -15,7 +15,7 @@ class DocParam(DocObjectBase):
 		"""Initializes an instance of the class from a cache row"""
 		super(DocParam, self).__init__(routine, row['name'])
 		self.__position = row['position']
-		logging.info("Building parameter %s" % (self.qualifiedName))
+		logging.debug("Building parameter %s" % (self.qualifiedName))
 		self.__type = row['type']
 		self.__datatypeSchema = row['datatypeSchema']
 		self.__datatypeName = row['datatypeName']

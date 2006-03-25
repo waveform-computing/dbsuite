@@ -17,7 +17,7 @@ class DocView(DocRelation):
 	def __init__(self, schema, cache, **row):
 		"""Initializes an instance of the class from a cache row"""
 		super(DocView, self).__init__(schema, row['name'])
-		logging.info("Building view %s" % (self.qualifiedName))
+		logging.debug("Building view %s" % (self.qualifiedName))
 		self.__definer = row['definer']
 		self.__created = row['created']
 		self.__check = row['check']

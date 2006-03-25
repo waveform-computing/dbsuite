@@ -15,7 +15,7 @@ class DocTablespace(DocObjectBase):
 	def __init__(self, database, cache, **row):
 		"""Initializes an instance of the class from a cache row"""
 		super(DocTablespace, self).__init__(database, row['name'])
-		logging.info("Building tablespace %s" % (self.qualifiedName))
+		logging.debug("Building tablespace %s" % (self.qualifiedName))
 		self.__definer = row['definer']
 		self.__created = row['created']
 		self.__managedBy = row['managedBy']

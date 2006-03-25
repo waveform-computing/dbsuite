@@ -41,7 +41,7 @@ class DocCheck(DocConstraint):
 	def __init__(self, table, cache, **row):
 		"""Initializes an instance of the class from a cache row"""
 		super(DocCheck, self).__init__(table, row['name'])
-		logging.info("Building check %s" % (self.qualifiedName))
+		logging.debug("Building check %s" % (self.qualifiedName))
 		self.__created = row['created']
 		self.__definer = row['definer']
 		self.__enforced = row['enforced']

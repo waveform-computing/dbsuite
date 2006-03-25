@@ -71,7 +71,7 @@ class DocCache(object):
 			cursor = None
 
 	def getSchemas(self, cursor):
-		logging.info("Retrieving schemas")
+		logging.debug("Retrieving schemas")
 		cursor.execute("""
 			SELECT
 				RTRIM(SCHEMANAME) AS "name",
@@ -86,7 +86,7 @@ class DocCache(object):
 			row['created'] = makeDateTime(row['created'])
 
 	def getDatatypes(self, cursor):
-		logging.info("Retrieving datatypes")
+		logging.debug("Retrieving datatypes")
 		cursor.execute("""
 			SELECT
 				RTRIM(TYPESCHEMA)   AS "schemaName",
@@ -119,7 +119,7 @@ class DocCache(object):
 			}[row['type']]
 
 	def getTables(self, cursor):
-		logging.info("Retrieving tables")
+		logging.debug("Retrieving tables")
 		cursor.execute("""
 			SELECT
 				RTRIM(TABSCHEMA)     AS "schemaName",
@@ -167,7 +167,7 @@ class DocCache(object):
 			}[row['accessMode']]
 
 	def getViews(self, cursor):
-		logging.info("Retrieving views")
+		logging.debug("Retrieving views")
 		cursor.execute("""
 			SELECT
 				RTRIM(T.TABSCHEMA)    AS "schemaName",
@@ -202,11 +202,11 @@ class DocCache(object):
 
 	def getAliases(self, cursor):
 		# XXX Query aliases
-		logging.info("Retrieving aliases")
+		logging.debug("Retrieving aliases")
 		self.aliases = {}
 
 	def getDependencies(self, cursor):
-		logging.info("Retrieving relation dependencies")
+		logging.debug("Retrieving relation dependencies")
 		cursor.execute("""
 			SELECT
 				RTRIM(BSCHEMA)    AS "relationSchema",
@@ -226,7 +226,7 @@ class DocCache(object):
 			self.dependencies[(depSchema, depName)].append((relationSchema, relationName))
 
 	def getIndexes(self, cursor):
-		logging.info("Retrieving indexes")
+		logging.debug("Retrieving indexes")
 		cursor.execute("""
 			SELECT
 				RTRIM(I.INDSCHEMA)             AS "schemaName",
@@ -275,7 +275,7 @@ class DocCache(object):
 			}[row['type']]
 
 	def getIndexFields(self, cursor):
-		logging.info("Retrieving index fields")
+		logging.debug("Retrieving index fields")
 		cursor.execute("""
 			SELECT
 				RTRIM(INDSCHEMA) AS "indexSchema",
@@ -296,7 +296,7 @@ class DocCache(object):
 			self.indexFields[(indexSchema, indexName)].append((fieldName, order))
 
 	def getTableIndexes(self, cursor):
-		logging.info("Retrieving table indexes")
+		logging.debug("Retrieving table indexes")
 		cursor.execute("""
 			SELECT
 				RTRIM(TABSCHEMA) AS "tableSchema",
@@ -313,7 +313,7 @@ class DocCache(object):
 			self.tableIndexes[(tableSchema, tableName)].append((indexSchema, indexName))
 
 	def getFields(self, cursor):
-		logging.info("Retrieving fields")
+		logging.debug("Retrieving fields")
 		cursor.execute("""
 			SELECT
 				RTRIM(TABSCHEMA)  AS "schemaName",
@@ -360,7 +360,7 @@ class DocCache(object):
 			row['generateExpression'] = str(row['generateExpression'])
 
 	def getUniqueKeys(self, cursor):
-		logging.info("Retrieving unique keys")
+		logging.debug("Retrieving unique keys")
 		cursor.execute("""
 			SELECT
 				RTRIM(TABSCHEMA)  AS "schemaName",
@@ -382,7 +382,7 @@ class DocCache(object):
 			}[row['checkExisting']]
 
 	def getUniqueKeyFields(self, cursor):
-		logging.info("Retrieving unique key fields")
+		logging.debug("Retrieving unique key fields")
 		cursor.execute("""
 			SELECT
 				RTRIM(TABSCHEMA) AS "keySchema",
@@ -403,7 +403,7 @@ class DocCache(object):
 			self.uniqueKeyFields[(keySchema, keyTable, keyName)].append(fieldName)
 
 	def getForeignKeys(self, cursor):
-		logging.info("Retrieving foreign keys")
+		logging.debug("Retrieving foreign keys")
 		cursor.execute("""
 			SELECT
 				RTRIM(T.TABSCHEMA)    AS "schemaName",
@@ -450,7 +450,7 @@ class DocCache(object):
 			}[row['updateRule']]
 
 	def getForeignKeyFields(self, cursor):
-		logging.info("Retrieving foreign key fields")
+		logging.debug("Retrieving foreign key fields")
 		cursor.execute("""
 			SELECT
 				RTRIM(R.TABSCHEMA) AS "keySchema",
@@ -482,7 +482,7 @@ class DocCache(object):
 			self.foreignKeyFields[(keySchema, keyTable, keyName)].append((foreignFieldName, parentFieldName))
 
 	def getChecks(self, cursor):
-		logging.info("Retrieving check constraints")
+		logging.debug("Retrieving check constraints")
 		cursor.execute("""
 			SELECT
 				RTRIM(T.TABSCHEMA)    AS "schemaName",
@@ -525,8 +525,8 @@ class DocCache(object):
 			row['expression'] = str(row['expression'])
 
 	def getCheckFields(self, cursor):
-		logging.info("Retrieving check fields")
-		logging.info("Retrieving unique key fields")
+		logging.debug("Retrieving check fields")
+		logging.debug("Retrieving unique key fields")
 		cursor.execute("""
 			SELECT
 				RTRIM(TABSCHEMA) AS "keySchema",
@@ -542,7 +542,7 @@ class DocCache(object):
 			self.checkFields[(keySchema, keyTable, keyName)].append(fieldName)
 
 	def getFunctions(self, cursor):
-		logging.info("Retrieving functions")
+		logging.debug("Retrieving functions")
 		cursor.execute("""
 			SELECT
 				RTRIM(ROUTINESCHEMA)     AS "schemaName",
@@ -609,7 +609,7 @@ class DocCache(object):
 			row['sql'] = str(row['sql'])
 
 	def getFunctionParams(self, cursor):
-		logging.info("Retrieving parameters")
+		logging.debug("Retrieving parameters")
 		cursor.execute("""
 			SELECT
 				RTRIM(ROUTINESCHEMA)          AS "schemaName",
@@ -642,7 +642,7 @@ class DocCache(object):
 			}[row['type']]
 
 	def getTablespaces(self, cursor):
-		logging.info("Retrieving tablespaces")
+		logging.debug("Retrieving tablespaces")
 		cursor.execute("""
 			SELECT
 				RTRIM(TBSPACE)    AS "name",

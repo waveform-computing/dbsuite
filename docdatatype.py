@@ -14,7 +14,7 @@ class DocDatatype(DocSchemaObject):
 	def __init__(self, schema, cache, **row):
 		"""Initializes an instance of the class from a cache row"""
 		super(DocDatatype, self).__init__(schema, row['name'])
-		logging.info("Building datatype %s" % (self.qualifiedName))
+		logging.debug("Building datatype %s" % (self.qualifiedName))
 		self.__definer = row['definer']
 		self.__sourceSchema = row['sourceSchema']
 		self.__sourceName = row['sourceName']

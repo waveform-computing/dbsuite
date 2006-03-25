@@ -20,7 +20,7 @@ class DocTable(DocRelation):
 	def __init__(self, schema, cache, **row):
 		"""Initializes an instance of the class from a cache row"""
 		super(DocTable, self).__init__(schema, row['name'])
-		logging.info("Building table %s" % (self.qualifiedName))
+		logging.debug("Building table %s" % (self.qualifiedName))
 		self.__definer = row['definer']
 		self.__checkPending = row['checkPending']
 		self.__created = row['created']

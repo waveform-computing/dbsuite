@@ -19,7 +19,7 @@ class DocSchema(DocObjectBase):
 	def __init__(self, database, cache, **row):
 		"""Initializes an instance of the class from a cache row"""
 		super(DocSchema, self).__init__(database, row['name'])
-		logging.info("Building schema %s" % (self.qualifiedName))
+		logging.debug("Building schema %s" % (self.qualifiedName))
 		self.__owner = row['owner']
 		self.__definer = row['definer']
 		self.__created = row['created']

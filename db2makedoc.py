@@ -5,11 +5,10 @@
 import logging
 import doccache
 import docdatabase
-import docoutput_w3
 
 def main():
 	# Configure the output
-	#logging.basicConfig(level = logging.INFO)
+	logging.basicConfig(level = logging.INFO)
 	# Find a suitable connection library and create a database connection
 	try:
 		import DB2
@@ -19,11 +18,11 @@ def main():
 		import odbc
 		connection = odbc.odbc("DQSMS/dave/St4rGate")
 	try:
-		print "Building metadata cache"
+		logging.info("Building metadata cache")
 		cache = doccache.DocCache(connection)
-		print "Building database object hierarchy"
+		logging.info("Building database object hierarchy")
 		database = docdatabase.DocDatabase(cache, "DQSMS")
-		print "Writing output with w3 handler"
+		logging.info("Writing output with w3 handler")
 		docoutput_w3.DocOutput(database, "../public_html/dqsms")
 	finally:
 		connection.close()

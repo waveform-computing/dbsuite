@@ -16,7 +16,7 @@ class DocDatabase(DocObjectBase):
 	def __init__(self, cache, name):
 		"""Initializes an instance of the class"""
 		super(DocDatabase, self).__init__(None, name)
-		logging.info("Building database")
+		logging.debug("Building database")
 		self.__tablespaces = {}
 		for row in cache.tablespaces.itervalues():
 			self.__tablespaces[row['name']] = DocTablespace(self, cache, **row)

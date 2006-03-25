@@ -15,7 +15,7 @@ class DocField(DocRelationObject):
 	def __init__(self, relation, cache, **row):
 		"""Initializes an instance of the class from a cache row"""
 		super(DocField, self).__init__(relation, row['name'])
-		logging.info("Building field %s" % (self.qualifiedName))
+		logging.debug("Building field %s" % (self.qualifiedName))
 		self.__datatypeSchema = row['datatypeSchema']
 		self.__datatypeName = row['datatypeName']
 		self.__size = row['size']
