@@ -8,17 +8,12 @@ import datetime
 import logging
 from decimal import Decimal
 from docdatabase import DocDatabase
-from doctablespace import DocTablespace
-from docschema import DocSchema
 from doctable import DocTable
 from docview import DocView
-from docfield import DocField
-from docdatatype import DocDatatype
 from doccheck import DocCheck
 from docforeignkey import DocForeignKey
 from docuniquekey import DocUniqueKey, DocPrimaryKey
 from docfunction import DocFunction
-from docparam import DocParam
 from string import Template
 from xml.sax.saxutils import quoteattr, escape
 from sqltokenizer import DB2UDBSQLTokenizer
@@ -152,7 +147,7 @@ class DocOutput(object):
 		super(DocOutput, self).__init__()
 		self.path = path
 		self.updated = datetime.date.today()
-		self.template = Template(open("template_w3.html").read())
+		self.template = Template(open("w3/template_w3.html").read())
 		self.tokenizer = DB2UDBSQLTokenizer()
 		self.highlighter = SQLHTMLHighlighter(self.tokenizer)
 		self.formatter = SQLFormatter(self.tokenizer)
