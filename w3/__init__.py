@@ -90,7 +90,7 @@ def makeTable(data, head=[], foot=[], tableAttrs={}):
 # HTML construction methods
 
 def filename(object):
-	"""Returns a unique filename for the specified object"""
+	"""Returns a unique, but deterministic filename for the specified object"""
 	return "%s.html" % (object.identifier)
 
 def linkTo(object, attrs={}, qualifiedName=False):
@@ -132,7 +132,77 @@ def menu(object):
 		result += makeTag('a', {'href': filename(object.database)}, 'Documentation') + '\n'
 	return makeTag('div', {'class': 'top-level'}, result)
 
-# Output class
+class Document(object):
+	def __init__(self, object):
+		"""HTML document class.
+		
+		Represents the document to be produced for a given database object. The
+		object parameter provides the database object that the document covers.
+		"""
+		super(Document, self).__init__()
+		self._object = object
+		self._sections = []
+		self._updated = datetime.date.today()
+		# XXX Figure out how to better search for the template
+		self._template = Template(open("w3/template.html").read())
+
+	def addSection(self, id, title):
+		"""Starts a new section in the current document with the specified id and title"""
+		self._sections.append({
+			'id': id,
+			'title': title,
+			'content': ''
+		})
+
+	def addContent(self, content):
+		"""Adds HTML content to the end of the current section"""
+		self._sections[-1]['content'] += content + '\n'
+
+	def addPara(self, para):
+		"""Adds a paragraph of text to the end of the current section"""
+		self.addContent(makeTag('p', {}, escape(para)))
+	
+	def write(self, filename):
+		"""Writes the document to the specified file"""
+		# Construct an index to place before the sections content
+		index = '\n'.join([
+			makeTag('li', {}, makeTag('a', {'href': '#' + section['id'], 'title': 'Jump to section'}, escape(section['title'])))
+			for section in self._sections
+		])
+		# Concatenate all document sections together with headers before each
+		content = '\n'.join([
+			'\n'.join([
+				makeTag('div', {'class': 'hrule-dots'}, '&nbsp;'),
+				makeTag('h2', {'id': section['id']}, escape(section['title'])),
+				section['content'],
+				makeTag('p', {}, makeTag('a', {'href': '#masthead', 'title': 'Jump to top'}, 'Back to top'))
+			])
+			for section in self._sections
+		])
+		# Construct the body from a header, the index and the content from above
+		body = '\n'.join([
+			makeTag('h1', {}, escape(title(self._object))),
+			makeTag('p', {}, escape(self._object.description)),
+			makeTag('ul', {}, index),
+			content
+		])
+		# Put the body and a number of other substitution values (mostly for
+		# the metadata in the document HEAD) into a dictionary
+		parameters = {
+			'updated':      quoteattr(str(self._updated)),
+			'updated_long': self._updated.strftime('%a, %d %b %Y'),
+			'ownername':    quoteattr('Dave Hughes'),
+			'owneremail':   quoteattr('dave_hughes@uk.ibm.com'),
+			'description':  quoteattr(title(self._object)),
+			'keywords':     quoteattr(keywords(self._object)),
+			'sitetitle':    escape(title(self._object.database)),
+			'doctitle':     escape(title(self._object)),
+			'breadcrumbs':  breadcrumbs(self._object),
+			'menu':         menu(self._object),
+			'body':         body,
+		}
+		# Substitute all the values into the main template and write it to a file
+		open(filename, "w").write(self._template.substitute(parameters))
 
 class DocOutput(object):
 	"""HTML documentation writer class -- IBM w3 Intranet v8 standard"""
@@ -146,8 +216,6 @@ class DocOutput(object):
 		"""
 		super(DocOutput, self).__init__()
 		self.path = path
-		self.updated = datetime.date.today()
-		self.template = Template(open("w3/template_w3.html").read())
 		self.tokenizer = DB2UDBSQLTokenizer()
 		self.highlighter = SQLHTMLHighlighter(self.tokenizer)
 		self.formatter = SQLFormatter(self.tokenizer)
@@ -167,89 +235,18 @@ class DocOutput(object):
 		for tablespace in database.tablespaces.itervalues():
 			self.writeTablespace(tablespace)
 
-	# Document construction methods
-
-	def startDocument(self, object):
-		"""Starts a new document for the specified object"""
-		self.docobject = object
-		self.docsections = []
-
-	def addSection(self, id, title):
-		"""Starts a new section in the current document with the specified id and title"""
-		self.docsections.append({
-			'id': id,
-			'title': title,
-			'content': ''
-		})
-
-	def addContent(self, content):
-		"""Adds HTML content to the end of the current section"""
-		self.docsections[-1]['content'] += content + '\n'
-
-	def addPara(self, para):
-		"""Adds a paragraph of text to the end of the current section"""
-		self.addContent(makeTag('p', {}, escape(para)))
-
-	def endDocument(self):
-		"""Writes the current document to its destination file"""
-		# Construct an index to place before the sections content
-		index = '\n'.join([
-			makeTag('li', {}, makeTag('a', {'href': '#' + section['id'], 'title': 'Jump to section'}, escape(section['title'])))
-			for section in self.docsections
-		])
-		# Concatenate all document sections together with headers before each
-		content = '\n'.join([
-			'\n'.join([
-				makeTag('div', {'class': 'hrule-dots'}, '&nbsp;'),
-				makeTag('h2', {'id': section['id']}, escape(section['title'])),
-				section['content'],
-				makeTag('p', {}, makeTag('a', {'href': '#masthead', 'title': 'Jump to top'}, 'Back to top'))
-			])
-			for section in self.docsections
-		])
-		# Construct the body from a header, the index and the content from above
-		body = '\n'.join([
-			makeTag('h1', {}, escape(title(self.docobject))),
-			makeTag('p', {}, escape(self.docobject.description)),
-			makeTag('ul', {}, index),
-			content
-		])
-		# Put the body and a number of other substitution values (mostly for
-		# the metadata in the document HEAD) into a dictionary
-		parameters = {
-			'updated':      quoteattr(str(self.updated)),
-			'updated_long': self.updated.strftime('%a, %d %b %Y'),
-			'ownername':    quoteattr('Dave Hughes'),
-			'owneremail':   quoteattr('dave_hughes@uk.ibm.com'),
-			'description':  quoteattr(title(self.docobject)),
-			'keywords':     quoteattr(keywords(self.docobject)),
-			'sitetitle':    escape(title(self.docobject.database)),
-			'doctitle':     escape(title(self.docobject)),
-			'breadcrumbs':  breadcrumbs(self.docobject),
-			'menu':         menu(self.docobject),
-			'body':         body,
-		}
-		# Substitute all the values into the main template and write it to a file
-		f = open(os.path.join(self.path, filename(self.docobject)), "w")
-		try:
-			f.write(self.template.substitute(parameters))
-		finally:
-			f.close()
-
-	# Database object specific methods
-
 	def writeDatabase(self, database):
 		logging.debug("Writing documentation for database to %s" % (filename(database)))
 		schemas = [obj for (name, obj) in sorted(database.schemas.items(), key=lambda (name, obj):name)]
 		tbspaces = [obj for (name, obj) in sorted(database.tablespaces.items(), key=lambda (name, obj):name)]
-		self.startDocument(database)
+		doc = Document(database)
 		if len(schemas) > 0:
-			self.addSection(id='schemas', title='Schemas')
-			self.addPara("""The following table contains all schemas (logical
+			doc.addSection(id='schemas', title='Schemas')
+			doc.addPara("""The following table contains all schemas (logical
 				object containers) in the database. Click on a schema name to
 				view the documentation for that schema, including a list of all
 				objects that exist within it.""")
-			self.addContent(makeTable(
+			doc.addContent(makeTable(
 				head=[(
 					"Name",
 					"Description"
@@ -260,13 +257,13 @@ class DocOutput(object):
 				) for schema in schemas]
 			))
 		if len(tbspaces) > 0:
-			self.addSection(id='tbspaces', title='Tablespaces')
-			self.addPara("""The following table contains all tablespaces
+			doc.addSection(id='tbspaces', title='Tablespaces')
+			doc.addPara("""The following table contains all tablespaces
 				(physical object containers) in the database. Click on a
 				tablespace name to view the documentation for that schema,
 				including a list of all tables and/or indexes that exist within
 				it.""")
-			self.addContent(makeTable(
+			doc.addContent(makeTable(
 				head=[(
 					"Name",
 					"Description"
@@ -276,22 +273,22 @@ class DocOutput(object):
 					escape(tbspace.description)
 				) for tbspace in tbspaces]
 			))
-		self.endDocument()
+		doc.write(os.path.join(self.path, filename(database)))
 
 	def writeSchema(self, schema):
 		logging.debug("Writing documentation for schema %s to %s" % (schema.name, filename(schema)))
 		relations = [obj for (name, obj) in sorted(schema.relations.items(), key=lambda (name, obj): name)]
 		routines = [obj for (name, obj) in sorted(schema.specificRoutines.items(), key=lambda (name, obj): name)]
 		indexes = [obj for (name, obj) in sorted(schema.indexes.items(), key=lambda (name, obj): name)]
-		self.startDocument(schema)
+		doc = Document(schema)
 		if len(relations) > 0:
-			self.addSection(id='relations', title='Relations')
-			self.addPara("""The following table contains all the relations
+			doc.addSection(id='relations', title='Relations')
+			doc.addPara("""The following table contains all the relations
 				(tables and views) that the schema contains. Click on a
 				relation name to view the documentation for that relation,
 				including a list of all objects that exist within it, and that
 				the relation references.""")
-			self.addContent(makeTable(
+			doc.addContent(makeTable(
 				head=[(
 					"Name",
 					"Type",
@@ -304,12 +301,12 @@ class DocOutput(object):
 				) for relation in relations]
 			))
 		if len(routines) > 0:
-			self.addSection(id='routines', title='Routines')
-			self.addPara("""The following table contains all the routines
+			doc.addSection(id='routines', title='Routines')
+			doc.addPara("""The following table contains all the routines
 				(functions, stored procedures, and methods) that the schema
 				contains. Click on a routine name to view the documentation for
 				that routine.""")
-			self.addContent(makeTable(
+			doc.addContent(makeTable(
 				head=[(
 					"Name",
 					"Type",
@@ -322,11 +319,11 @@ class DocOutput(object):
 				) for routine in routines]
 			))
 		if len(indexes) > 0:
-			self.addSection(id='indexes', title='Indexes')
-			self.addPara("""The following table contains all the indexes that
+			doc.addSection(id='indexes', title='Indexes')
+			doc.addPara("""The following table contains all the indexes that
 				the schema contains. Click on an index name to view the
 				documentation for that index.""")
-			self.addContent(makeTable(
+			doc.addContent(makeTable(
 				head=[(
 					"Name",
 					"Applies To",
@@ -337,19 +334,19 @@ class DocOutput(object):
 					escape(index.description)
 				) for index in indexes]
 			))
-		self.endDocument()
+		doc.write(os.path.join(self.path, filename(schema)))
 
 	def writeTablespace(self, tbspace):
 		logging.debug("Writing documentation for tablespace %s to %s" % (tbspace.name, filename(tbspace)))
 		tables = [obj for (name, obj) in sorted(tbspace.tables.items(), key=lambda (name, obj): name)]
 		indexes = [obj for (name, obj) in sorted(tbspace.indexes.items(), key=lambda (name, obj): name)]
-		self.startDocument(tbspace)
+		doc = Document(tbspace)
 		if len(tables) > 0:
-			self.addSection(id='tables', title='Tables')
-			self.addPara("""The following table contains all the tables that
+			doc.addSection(id='tables', title='Tables')
+			doc.addPara("""The following table contains all the tables that
 				the tablespace contains. Click on a table name to view the
 				documentation for that table.""")
-			self.addContent(makeTable(
+			doc.addContent(makeTable(
 				head=[(
 					"Name",
 					"Description"
@@ -360,11 +357,11 @@ class DocOutput(object):
 				) for table in tables]
 			))
 		if len(indexes) > 0:
-			self.addSection(id='indexes', title='Indexes')
-			self.addPara("""The following table contains all the indexes that
+			doc.addSection(id='indexes', title='Indexes')
+			doc.addPara("""The following table contains all the indexes that
 				the tablespace contains. Click on an index name to view the
 				documentation for that index.""")
-			self.addContent(makeTable(
+			doc.addContent(makeTable(
 				head=[(
 					"Name",
 					"Applies To",
@@ -376,7 +373,7 @@ class DocOutput(object):
 					escape(index.description)
 				) for index in indexes]
 			))
-		self.endDocument()
+		doc.write(os.path.join(self.path, filename(tbspace)))
 
 	def writeTable(self, table):
 		logging.debug("Writing documentation for table %s to %s" % (table.name, filename(table)))
@@ -384,9 +381,9 @@ class DocOutput(object):
 		indexes = [obj for (name, obj) in sorted(table.indexes.items(), key=lambda (name, obj): name)]
 		constraints = [obj for (name, obj) in sorted(table.constraints.items(), key=lambda (name, obj): name)]
 		dependents = [obj for (name, obj) in sorted(table.dependents.items(), key=lambda (name, obj): name)]
-		self.startDocument(table)
-		self.addSection(id='attributes', title='Attributes')
-		self.addPara("""The following table notes various "vital statistics"
+		doc = Document(table)
+		doc.addSection(id='attributes', title='Attributes')
+		doc.addPara("""The following table notes various "vital statistics"
 			of the table (such as cardinality -- the number of rows in the
 			table). Note that many of these attributes are only valid as of
 			the last time that statistics were gathered for the table (this
@@ -395,7 +392,7 @@ class DocOutput(object):
 			keyCount = 0
 		else:
 			keyCount = len(table.primaryKey.fields)
-		self.addContent(makeTable(
+		doc.addContent(makeTable(
 			head=[(
 				"Attribute",
 				"Value",
@@ -412,53 +409,53 @@ class DocOutput(object):
 				(
 					'Long Tablespace',
 					linkTo(table.longTablespace),
-					popupLink("clustered_w3.html", makeTag('acronym', {'title': 'Multi-Dimensional Clustering'}, 'MDC')),
+					popupLink("clustered.html", makeTag('acronym', {'title': 'Multi-Dimensional Clustering'}, 'MDC')),
 					table.clustered,
 				),
 				(
-					popupLink("created_w3.html", "Created"),
+					popupLink("created.html", "Created"),
 					table.created,
-					popupLink("laststats_w3.html", "Last Statistics"),
+					popupLink("laststats.html", "Last Statistics"),
 					table.statsUpdated,
 				),
 				(
-					popupLink("createdby_w3.html", "Created By"),
+					popupLink("createdby.html", "Created By"),
 					escape(table.definer),
-					popupLink("cardinality_w3.html", "Cardinality"),
+					popupLink("cardinality.html", "Cardinality"),
 					table.cardinality,
 				),
 				(
-					popupLink("keycolcount_w3.html", "# Key Columns"),
+					popupLink("keycolcount.html", "# Key Columns"),
 					keyCount,
-					popupLink("colcount_w3.html", "# Columns"),
+					popupLink("colcount.html", "# Columns"),
 					len(table.fields),
 				),
 				(
-					popupLink("rowpages_w3.html", "Row Pages"),
+					popupLink("rowpages.html", "Row Pages"),
 					table.rowPages,
-					popupLink("totalpages_w3.html", "Total Pages"),
+					popupLink("totalpages.html", "Total Pages"),
 					table.totalPages,
 				),
 				(
-					popupLink("dependentrel_w3.html", "Dependent Relations"),
+					popupLink("dependentrel.html", "Dependent Relations"),
 					len(table.dependentList),
-					popupLink("locksize_w3.html", "Lock Size"),
+					popupLink("locksize.html", "Lock Size"),
 					escape(table.lockSize),
 				),
 				(
-					popupLink("append_w3.html", "Append"),
+					popupLink("append.html", "Append"),
 					table.append,
-					popupLink("volatile_w3.html", "Volatile"),
+					popupLink("volatile.html", "Volatile"),
 					table.volatile,
 				),
 			]))
 		if len(fields) > 0:
-			self.addSection(id='fields', title='Field Descriptions')
-			self.addPara("""The following table contains the fields of the table
+			doc.addSection(id='fields', title='Field Descriptions')
+			doc.addPara("""The following table contains the fields of the table
 				(in alphabetical order) along with the description of each field.
 				For information on the structure and attributes of each field see
 				the Field Schema section below.""")
-			self.addContent(makeTable(
+			doc.addContent(makeTable(
 				head=[(
 					"Name",
 					"Description"
@@ -468,12 +465,12 @@ class DocOutput(object):
 					escape(field.description)
 				) for field in fields]
 			))
-			self.addSection(id='field_schema', title='Field Schema')
-			self.addPara("""The following table contains the attributes of the
+			doc.addSection(id='field_schema', title='Field Schema')
+			doc.addPara("""The following table contains the attributes of the
 				fields of the table (again, fields are in alphabetical order,
 				though the # column indicates the 1-based position of the field
 				within the table).""")
-			self.addContent(makeTable(
+			doc.addContent(makeTable(
 				head=[(
 					"#",
 					"Name",
@@ -492,12 +489,12 @@ class DocOutput(object):
 				) for field in fields]
 			))
 		if len(indexes) > 0:
-			self.addSection('indexes', 'Index Descriptions')
-			self.addPara("""The following table details the indexes defined
+			doc.addSection('indexes', 'Index Descriptions')
+			doc.addPara("""The following table details the indexes defined
 				against the table, including which fields each index targets.
 				For more information about an individual index (e.g. statistics,
 				directionality, etc.) click on the index name.""")
-			self.addContent(makeTable(
+			doc.addContent(makeTable(
 				head=[(
 					"Name",
 					"Unique",
@@ -514,8 +511,8 @@ class DocOutput(object):
 				) for index in indexes]
 			))
 		if len(constraints) > 0:
-			self.addSection('constraints', 'Constraints')
-			self.addPara("""The following table details the constraints defined
+			doc.addSection('constraints', 'Constraints')
+			doc.addPara("""The following table details the constraints defined
 				against the table, including which fields each constraint
 				limits or tests. For more information about an individual
 				constraint click on the constraint name.""")
@@ -528,7 +525,7 @@ class DocOutput(object):
 				else:
 					expression = '&nbsp;'
 				rows.append((linkTo(constraint), constraint.typeName, expression, constraint.description))
-			self.addContent(makeTable(
+			doc.addContent(makeTable(
 				head=[(
 					"Name",
 					"Type",
@@ -538,11 +535,11 @@ class DocOutput(object):
 				data=rows
 			))
 		if len(dependents) > 0:
-			self.addSection('dependents', 'Dependent Relations')
-			self.addPara("""The following table lists all relations (views or
+			doc.addSection('dependents', 'Dependent Relations')
+			doc.addPara("""The following table lists all relations (views or
 				materialized query tables) which reference this table in their
 				associated SQL statement.""")
-			self.addContent(makeTable(
+			doc.addContent(makeTable(
 			    head=[(
 					"Name",
 					"Type",
@@ -554,25 +551,25 @@ class DocOutput(object):
 					escape(dep.description)
 				) for dep in dependents]
 			))
-		self.addSection('sql', 'SQL Definition')
-		self.addPara("""The SQL which created the table is given below.
+		doc.addSection('sql', 'SQL Definition')
+		doc.addPara("""The SQL which created the table is given below.
 			Note that this is not necessarily the same as the actual statement
 			used to create the table (it has been reconstructed from the
 			content of the system catalog tables and may differ in a number of
 			areas).""")
-		self.addContent(makeTag('pre', {'class': 'sql'}, self.highlighter.highlight(self.formatter.parse(table.createSql))))
-		self.endDocument()
+		doc.addContent(makeTag('pre', {'class': 'sql'}, self.highlighter.highlight(self.formatter.parse(table.createSql))))
+		doc.write(os.path.join(self.path, filename(table)))
 
 	def writeView(self, view):
 		logging.debug("Writing documentation for view %s to %s" % (view.name, filename(view)))
 		fields = [obj for (name, obj) in sorted(view.fields.items(), key=lambda (name, obj): name)]
 		dependencies = [obj for (name, obj) in sorted(view.dependencies.items(), key=lambda (name, obj): name)]
 		dependents = [obj for (name, obj) in sorted(view.dependents.items(), key=lambda (name, obj): name)]
-		self.startDocument(view)
-		self.addSection(id='attributes', title='Attributes')
-		self.addPara("""The following table notes various "vital statistics"
+		doc = Document(view)
+		doc.addSection(id='attributes', title='Attributes')
+		doc.addPara("""The following table notes various "vital statistics"
 			of the view.""")
-		self.addContent(makeTable(
+		doc.addContent(makeTable(
 			head=[(
 				"Attribute",
 				"Value",
@@ -581,37 +578,37 @@ class DocOutput(object):
 			)],
 			data=[
 				(
-					popupLink("created_w3.html", "Created"),
+					popupLink("created.html", "Created"),
 					view.created,
-					popupLink("createdby_w3.html", "Created By"),
+					popupLink("createdby.html", "Created By"),
 					escape(view.definer),
 				),
 				(
-					popupLink("colcount_w3.html", "# Columns"),
+					popupLink("colcount.html", "# Columns"),
 					len(view.fields),
-					popupLink("valid_w3.html", "Valid"),
+					popupLink("valid.html", "Valid"),
 					view.valid,
 				),
 				(
-					popupLink("readonly_w3.html", "Read Only"),
+					popupLink("readonly.html", "Read Only"),
 					view.readOnly,
-					popupLink("checkoption_w3.html", "Check Option"),
+					popupLink("checkoption.html", "Check Option"),
 					escape(view.check),
 				),
 				(
-					popupLink("dependentrel_w3.html", "Dependent Relations"),
+					popupLink("dependentrel.html", "Dependent Relations"),
 					len(view.dependentList),
-					popupLink("dependenciesrel_w3.html", "Dependencies"),
+					popupLink("dependenciesrel.html", "Dependencies"),
 					len(view.dependencyList),
 				)
 			]))
 		if len(fields) > 0:
-			self.addSection(id='fields', title='Field Descriptions')
-			self.addPara("""The following table contains the fields of the view
+			doc.addSection(id='fields', title='Field Descriptions')
+			doc.addPara("""The following table contains the fields of the view
 				(in alphabetical order) along with the description of each field.
 				For information on the structure and attributes of each field see
 				the Field Schema section below.""")
-			self.addContent(makeTable(
+			doc.addContent(makeTable(
 				head=[(
 					"Name",
 					"Description"
@@ -621,12 +618,12 @@ class DocOutput(object):
 					escape(field.description)
 				) for field in fields]
 			))
-			self.addSection(id='field_schema', title='Field Schema')
-			self.addPara("""The following table contains the attributes of the
+			doc.addSection(id='field_schema', title='Field Schema')
+			doc.addPara("""The following table contains the attributes of the
 				fields of the view (again, fields are in alphabetical order,
 				though the # column indicates the 1-based position of the field
 				within the view).""")
-			self.addContent(makeTable(
+			doc.addContent(makeTable(
 				head=[(
 					"#",
 					"Name",
@@ -641,11 +638,11 @@ class DocOutput(object):
 				) for field in fields]
 			))
 		if len(dependents) > 0:
-			self.addSection('dependents', 'Dependent Relations')
-			self.addPara("""The following table lists all relations (views or
+			doc.addSection('dependents', 'Dependent Relations')
+			doc.addPara("""The following table lists all relations (views or
 				materialized query tables) which reference this view in their
 				associated SQL statement.""")
-			self.addContent(makeTable(
+			doc.addContent(makeTable(
 			    head=[(
 					"Name",
 					"Type",
@@ -658,11 +655,11 @@ class DocOutput(object):
 				) for dep in dependents]
 			))
 		if len(dependencies) > 0:
-			self.addSection('dependencies', 'Dependencies')
-			self.addPara("""The following table lists all relations (tables,
+			doc.addSection('dependencies', 'Dependencies')
+			doc.addPara("""The following table lists all relations (tables,
 				views, materialized query tables, etc.) which this view
 				references in it's SQL statement.""")
-			self.addContent(makeTable(
+			doc.addContent(makeTable(
 				head=[(
 					"Name",
 					"Type",
@@ -674,14 +671,14 @@ class DocOutput(object):
 					escape(dep.description)
 				) for dep in dependencies]
 			))
-		self.addSection('sql', 'SQL Definition')
-		self.addPara("""The SQL which created the view is given below.
+		doc.addSection('sql', 'SQL Definition')
+		doc.addPara("""The SQL which created the view is given below.
 			Note that, in the process of storing the definition of a view, DB2
 			removes much of the formatting, hence the formatting in the 
 			statement below (which this system attempts to reconstruct) is
 			not necessarily the formatting of the original statement.""")
-		self.addContent(makeTag('pre', {'class': 'sql'}, self.highlighter.highlight(self.formatter.parse(view.createSql))))
-		self.endDocument()
+		doc.addContent(makeTag('pre', {'class': 'sql'}, self.highlighter.highlight(self.formatter.parse(view.createSql))))
+		doc.write(os.path.join(self.path, filename(view)))
 
 	def writeRelation(self, relation):
 		if isinstance(relation, DocTable):
@@ -697,15 +694,15 @@ class DocOutput(object):
 			fields.append((field, ordering, position))
 			position += 1
 		fields = sorted(fields, key=lambda(field, ordering, position): field.name)
-		self.startDocument(index)
-		self.addSection(id='attributes', title='Attributes')
-		self.addPara("""The following table notes various "vital statistics"
+		doc = Document(index)
+		doc.addSection(id='attributes', title='Attributes')
+		doc.addPara("""The following table notes various "vital statistics"
 			of the index.""")
 		if not index.clusterFactor is None:
 			clusterRatio = index.clusterFactor # XXX Convert as necessary
 		else:
 			clusterRatio = index.clusterRatio
-		self.addContent(makeTable(
+		doc.addContent(makeTable(
 			head=[(
 				"Attribute",
 				"Value",
@@ -720,52 +717,52 @@ class DocOutput(object):
 					linkTo(index.tablespace),
 				),
 				(
-					popupLink("created_w3.html", "Created"),
+					popupLink("created.html", "Created"),
 					index.created,
-					popupLink("laststats_w3.html", "Last Statistics"),
+					popupLink("laststats.html", "Last Statistics"),
 					index.statsUpdated,
 				),
 				(
-					popupLink("createdby_w3.html", "Created By"),
+					popupLink("createdby.html", "Created By"),
 					escape(index.definer),
-					popupLink("colcount_w3.html", "# Columns"),
+					popupLink("colcount.html", "# Columns"),
 					len(fields),
 				),
 				(
-					popupLink("unique_w3.html", "Unique"),
+					popupLink("unique.html", "Unique"),
 					index.unique,
-					popupLink("reversescans_w3.html", "Reverse Scans"),
+					popupLink("reversescans.html", "Reverse Scans"),
 					index.reverseScans,
 				),
 				(
-					popupLink("cardinality_w3.html", "Cardinality"),
+					popupLink("cardinality.html", "Cardinality"),
 					'<br />'.join(
 						[formatContent(index.cardinality[0])] + 
 						['1..%s: %s' % (keynum + 1, formatContent(card)) for (keynum, card) in enumerate(index.cardinality[1])]
 					),
-					popupLink("levels_w3.html", "Levels"),
+					popupLink("levels.html", "Levels"),
 					index.levels,
 				),
 				(
-					popupLink("leafpages_w3.html", "Leaf Pages"),
+					popupLink("leafpages.html", "Leaf Pages"),
 					index.leafPages,
-					popupLink("sequentialpages_w3.html", "Sequential Pages"),
+					popupLink("sequentialpages.html", "Sequential Pages"),
 					index.sequentialPages,
 				),
 				(
-					popupLink("clusterratio_w3.html", "Cluster Ratio"),
+					popupLink("clusterratio.html", "Cluster Ratio"),
 					clusterRatio, # see above
-					popupLink("density_w3.html", "Density"),
+					popupLink("density.html", "Density"),
 					index.density,
 				),
 			]))
 		if len(fields) > 0:
-			self.addSection(id='fields', title='Fields')
-			self.addPara("""The following table contains the fields of the index
+			doc.addSection(id='fields', title='Fields')
+			doc.addPara("""The following table contains the fields of the index
 				(in alphabetical order) along with the position of the field in
 				the index, the ordering of the field (Ascending or Descending)
 				and the description of the field.""")
-			self.addContent(makeTable(
+			doc.addContent(makeTable(
 				head=[(
 					"#",
 					"Name",
@@ -779,14 +776,14 @@ class DocOutput(object):
 					escape(field.description)
 				) for (field, ordering, position) in fields]
 			))
-		self.addSection('sql', 'SQL Definition')
-		self.addPara("""The SQL which created the index is given below.
+		doc.addSection('sql', 'SQL Definition')
+		doc.addPara("""The SQL which created the index is given below.
 			Note that this is not necessarily the same as the actual statement
 			used to create the index (it has been reconstructed from the
 			content of the system catalog tables and may differ in a number of
 			areas).""")
-		self.addContent(makeTag('pre', {'class': 'sql'}, self.highlighter.highlight(self.formatter.parse(index.createSql))))
-		self.endDocument()
+		doc.addContent(makeTag('pre', {'class': 'sql'}, self.highlighter.highlight(self.formatter.parse(index.createSql))))
+		doc.write(os.path.join(self.path, filename(index)))
 	
 	def writeUniqueKey(self, key):
 		logging.debug("Writing documentation for unique key %s to %s" % (key.name, filename(key)))
@@ -796,11 +793,11 @@ class DocOutput(object):
 			fields.append((field, position))
 			position += 1
 		fields = sorted(fields, key=lambda(field, position): field.name)
-		self.startDocument(key)
-		self.addSection(id='attributes', title='Attributes')
-		self.addPara("""The following table notes various "vital statistics"
+		doc = Document(key)
+		doc.addSection(id='attributes', title='Attributes')
+		doc.addPara("""The following table notes various "vital statistics"
 			of the unique key.""")
-		self.addContent(makeTable(
+		doc.addContent(makeTable(
 			head=[(
 				"Attribute",
 				"Value",
@@ -809,18 +806,18 @@ class DocOutput(object):
 			)],
 			data=[
 				(
-					popupLink("createdby_w3.html", "Created By"),
+					popupLink("createdby.html", "Created By"),
 					escape(key.definer),
-					popupLink("colcount_w3.html", "# Columns"),
+					popupLink("colcount.html", "# Columns"),
 					len(fields),
 				),
 			]))
 		if len(fields) > 0:
-			self.addSection(id='fields', title='Fields')
-			self.addPara("""The following table contains the fields of the key
+			doc.addSection(id='fields', title='Fields')
+			doc.addPara("""The following table contains the fields of the key
 				(in alphabetical order) along with the position of the field in
 				the key, and the description of the field in the key's table.""")
-			self.addContent(makeTable(
+			doc.addContent(makeTable(
 				head=[(
 					"#",
 					"Field",
@@ -832,14 +829,14 @@ class DocOutput(object):
 					escape(field.description)
 				) for (field, position) in fields]
 			))
-		self.addSection('sql', 'SQL Definition')
-		self.addPara("""The SQL which can be used to create the key is given
+		doc.addSection('sql', 'SQL Definition')
+		doc.addPara("""The SQL which can be used to create the key is given
 			below. Note that this is not necessarily the same as the actual
 			statement used to create the key (it has been reconstructed from
 			the content of the system catalog tables and may differ in a number
 			of areas).""")
-		self.addContent(makeTag('pre', {'class': 'sql'}, self.highlighter.highlight(self.formatter.parse(key.createSql))))
-		self.endDocument()
+		doc.addContent(makeTag('pre', {'class': 'sql'}, self.highlighter.highlight(self.formatter.parse(key.createSql))))
+		doc.write(os.path.join(self.path, filename(key)))
 
 	def writeForeignKey(self, key):
 		logging.debug("Writing documentation for foreign key %s to %s" % (key.name, filename(key)))
@@ -849,11 +846,11 @@ class DocOutput(object):
 			fields.append((field1, field2, position))
 			position += 1
 		fields = sorted(fields, key=lambda(field1, field2, position): field1.name)
-		self.startDocument(key)
-		self.addSection(id='attributes', title='Attributes')
-		self.addPara("""The following table notes various "vital statistics"
+		doc = Document(key)
+		doc.addSection(id='attributes', title='Attributes')
+		doc.addPara("""The following table notes various "vital statistics"
 			of the foreign key.""")
-		self.addContent(makeTable(
+		doc.addContent(makeTable(
 			head=[(
 				"Attribute",
 				"Value",
@@ -868,31 +865,31 @@ class DocOutput(object):
 					linkTo(key.refKey),
 				),
 				(
-					popupLink("created_w3.html", "Created"),
+					popupLink("created.html", "Created"),
 					key.created,
-					popupLink("createdby_w3.html", "Created By"),
+					popupLink("createdby.html", "Created By"),
 					escape(key.definer),
 				),
 				(
-					popupLink("enforced_w3.html", "Enforced"),
+					popupLink("enforced.html", "Enforced"),
 					key.enforced,
-					popupLink("queryoptimize_w3.html", "Query Optimizing"),
+					popupLink("queryoptimize.html", "Query Optimizing"),
 					key.queryOptimize,
 				),
 				(
-					popupLink("deleterule_w3.html", "Delete Rule"),
+					popupLink("deleterule.html", "Delete Rule"),
 					key.deleteRule,
-					popupLink("updaterule_w3.html", "Update Rule"),
+					popupLink("updaterule.html", "Update Rule"),
 					key.updateRule,
 				),
 			]))
 		if len(fields) > 0:
-			self.addSection(id='fields', title='Fields')
-			self.addPara("""The following table contains the fields of the key
+			doc.addSection(id='fields', title='Fields')
+			doc.addPara("""The following table contains the fields of the key
 				(in alphabetical order) along with the position of the field in
 				the key, the field in the parent table that is referenced by
 				the key, and the description of the field in the key's table.""")
-			self.addContent(makeTable(
+			doc.addContent(makeTable(
 				head=[(
 					"#",
 					"Field",
@@ -906,23 +903,24 @@ class DocOutput(object):
 					escape(field1.description)
 				) for (field1, field2, position) in fields]
 			))
-		self.addSection('sql', 'SQL Definition')
-		self.addPara("""The SQL which can be used to create the key is given
+		doc.addSection('sql', 'SQL Definition')
+		doc.addPara("""The SQL which can be used to create the key is given
 			below. Note that this is not necessarily the same as the actual
 			statement used to create the key (it has been reconstructed from
 			the content of the system catalog tables and may differ in a number
 			of areas).""")
-		self.addContent(makeTag('pre', {'class': 'sql'}, self.highlighter.highlight(self.formatter.parse(key.createSql))))
-		self.endDocument()
+		doc.addContent(makeTag('pre', {'class': 'sql'}, self.highlighter.highlight(self.formatter.parse(key.createSql))))
+		doc.write(os.path.join(self.path, filename(key)))
+
 
 	def writeCheck(self, check):
 		logging.debug("Writing documentation for check constraint %s to %s" % (check.name, filename(check)))
 		fields = sorted(list(check.fields), key=lambda(field): field.name)
-		self.startDocument(check)
-		self.addSection(id='attributes', title='Attributes')
-		self.addPara("""The following table notes various "vital statistics"
+		doc = Document(check)
+		doc.addSection(id='attributes', title='Attributes')
+		doc.addPara("""The following table notes various "vital statistics"
 			of the check.""")
-		self.addContent(makeTable(
+		doc.addContent(makeTable(
 			head=[(
 				"Attribute",
 				"Value",
@@ -931,24 +929,24 @@ class DocOutput(object):
 			)],
 			data=[
 				(
-					popupLink("created_w3.html", "Created"),
+					popupLink("created.html", "Created"),
 					check.created,
-					popupLink("createdby_w3.html", "Created By"),
+					popupLink("createdby.html", "Created By"),
 					escape(check.definer),
 				),
 				(
-					popupLink("enforced_w3.html", "Enforced"),
+					popupLink("enforced.html", "Enforced"),
 					check.enforced,
-					popupLink("queryoptimize_w3.html", "Query Optimizing"),
+					popupLink("queryoptimize.html", "Query Optimizing"),
 					check.queryOptimize,
 				),
 			]))
 		if len(fields) > 0:
-			self.addSection(id='fields', title='Fields')
-			self.addPara("""The following table contains the fields that the
+			doc.addSection(id='fields', title='Fields')
+			doc.addPara("""The following table contains the fields that the
 				check references in it's SQL expression, and the description of
 				the field in the check's table.""")
-			self.addContent(makeTable(
+			doc.addContent(makeTable(
 				head=[(
 					"Field",
 					"Description"
@@ -958,14 +956,14 @@ class DocOutput(object):
 					escape(field.description)
 				) for field in fields]
 			))
-		self.addSection('sql', 'SQL Definition')
-		self.addPara("""The SQL which can be used to create the check is given
+		doc.addSection('sql', 'SQL Definition')
+		doc.addPara("""The SQL which can be used to create the check is given
 			below. Note that this is not necessarily the same as the actual
 			statement used to create the check (it has been reconstructed from
 			the content of the system catalog tables and may differ in a number
 			of areas).""")
-		self.addContent(makeTag('pre', {'class': 'sql'}, self.highlighter.highlight(self.formatter.parse(check.createSql))))
-		self.endDocument()
+		doc.addContent(makeTag('pre', {'class': 'sql'}, self.highlighter.highlight(self.formatter.parse(check.createSql))))
+		doc.write(os.path.join(self.path, filename(check)))
 
 	def writeConstraint(self, constraint):
 		if isinstance(constraint, DocUniqueKey):
