@@ -11,18 +11,17 @@ __all__ = ['DocRelationObject', 'DocConstraint']
 class DocRelationObject(DocObjectBase):
 	"""Base class for database objects that belong directly to a relation"""
 	
+	def getDatabase(self):
+		return self.parent.parent.parent
+	
 	def __getRelation(self):
 		return self.parent
 	
 	def __getSchema(self):
 		return self.parent.parent
 	
-	def __getDatabase(self):
-		return self.parent.parent.parent
-	
 	relation = property(__getRelation, doc="""The relation that owns the object""")
 	schema = property(__getSchema, doc="""The schema that contains the object""")
-	database = property(__getDatabase, doc="""The database that contains the object""")
 
 class DocConstraint(DocRelationObject):
 	"""Base class for constraints that belong in a relation (e.g. primary keys, checks, etc.)"""

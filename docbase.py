@@ -15,6 +15,9 @@ class DocObjectBase(object):
 		assert not parent or isinstance(parent, DocObjectBase)
 		self.__parent = parent
 		self.__name = name
+
+	def getDatabase(self):
+		raise NotImplementedError
 	
 	def getParent(self):
 		return self.__parent
@@ -47,6 +50,7 @@ class DocObjectBase(object):
 		return self.qualifiedName
 	
 	# Use the lambda trick to make property getter methods "virtual"
+	database = property(lambda self: self.getDatabase(), doc="""The database that owns the object (the root of the hierarchy)""")
 	parent = property(lambda self: self.getParent(), doc="""Returns the parent database object (e.g. the parent of a table is a schema)""")
 	identifier = property(lambda self: self.getIdentifier(), doc="""Returns a unique identifier for this object (suitable for use as the basis for a unique filename, for example)""")
 	name = property(lambda self: self.getName(), doc="""Returns the unqualified name of the database object""")

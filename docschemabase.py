@@ -9,14 +9,13 @@ __all__ = ['DocSchemaObject', 'DocRelation']
 class DocSchemaObject(DocObjectBase):
 	"""Base class for database objects that belong directly to a schema"""
 	
+	def getDatabase(self):
+		return self.parent.parent
+	
 	def __getSchema(self):
 		return self.parent
 	
-	def __getDatabase(self):
-		return self.parent.parent
-	
 	schema = property(__getSchema, doc="""The schema that owns the object""")
-	database = property(__getDatabase, doc="""The database that contains the object""")
 
 class DocRelation(DocSchemaObject):
 	"""Base class for relations that belong in a schema (e.g. tables, views, etc.)"""

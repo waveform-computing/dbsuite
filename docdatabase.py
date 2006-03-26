@@ -30,7 +30,7 @@ class DocDatabase(DocObjectBase):
 	def getIdentifier(self):
 		return "db"
 	
-	def __getDatabase(self):
+	def getDatabase(self):
 		return self
 
 	def __getTablespaces(self):
@@ -39,7 +39,6 @@ class DocDatabase(DocObjectBase):
 	def __getSchemas(self):
 		return self.__schemas
 
-	database = property(__getDatabase, doc="""The database object itself""")
 	schemas = property(__getSchemas, doc="""The schemas contained in the database""")
 	tablespaces = property(__getTablespaces, doc="""The tablespaces contained in the database""")
 

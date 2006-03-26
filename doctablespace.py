@@ -47,7 +47,7 @@ class DocTablespace(DocObjectBase):
 		else:
 			return super(DocTablespace, self).getDescription()
 
-	def __getDatabase(self):
+	def getDatabase(self):
 		return self.parent
 
 	def __getTables(self):
@@ -92,7 +92,6 @@ class DocTablespace(DocObjectBase):
 	def __getDropRecovery(self):
 		return self.__dropRecovery
 
-	database = property(__getDatabase, doc="""The database that owns the tablespace""")
 	tables = property(__getTables, doc="""A dictionary of the tables contained in the tablespace (keyed by (schemaName, tableName) tuples)""")
 	tableList = property(__getTableList, doc="""A list of the tables contained in the tablespace""")
 	indexes = property(__getIndexes, doc="""A dictionary of the indexes contained in the tablespace (keyed by (schemaName, indexName) tuples)""")

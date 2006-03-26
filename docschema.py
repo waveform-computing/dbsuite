@@ -81,7 +81,7 @@ class DocSchema(DocObjectBase):
 		else:
 			return super(DocSchema, self).getDescription()
 
-	def __getDatabase(self):
+	def getDatabase(self):
 		return self.parent
 
 	def __getDatatypes(self):
@@ -141,7 +141,6 @@ class DocSchema(DocObjectBase):
 	def __getCreated(self):
 		return self.__created
 
-	database = property(__getDatabase, doc="""The database that owns the schema""")
 	datatypes = property(__getDatatypes, doc="""The datatypes contained in the schema""")
 	relations = property(__getRelations, doc="""The relations (tables, views, etc.) contained in the schema""")
 	tables = property(__getTables, doc="""The tables contained in the schema""")

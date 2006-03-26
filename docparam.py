@@ -42,6 +42,9 @@ class DocParam(DocObjectBase):
 		else:
 			return super(DocParam, self).getDescription()
 
+	def getDatabase(self):
+		return self.parent.parent.parent
+
 	def __getPosition(self):
 		return self.__position
 
@@ -50,9 +53,6 @@ class DocParam(DocObjectBase):
 
 	def __getSchema(self):
 		return self.parent.parent
-
-	def __getDatabase(self):
-		return self.parent.parent.parent
 
 	def __getType(self):
 		return self.__type
@@ -75,7 +75,6 @@ class DocParam(DocObjectBase):
 	position = property(__getPosition, doc="""The 0-based position of the parameter in the function's prototype""")
 	routine = property(__getRoutine, doc="""The routine that owns the parameter""")
 	schema = property(__getSchema, doc="""The schema that contains the parameter""")
-	database = property(__getDatabase, doc="""The database that contains the parameter""")
 	type = property(__getType, doc="""The type of the parameter (input, output, inout, etc.)""")
 	datatype = property(__getDatatype, doc="""The datatype of the parameter""")
 	locator = property(__getLocator, doc="""True if the parameter or result is passed in the form of a locator""")
