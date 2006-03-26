@@ -5,18 +5,18 @@
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
 <head>
 	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-	<meta name="Description" content=$description />
-	<meta name="Keywords" scheme="iso8601" content=$keywords />
-	<meta name="Owner" content=$owneremail />
-	<meta name="Feedback" content=$owneremail />
+	<meta name="Description" content=$headdoctitle />
+	<meta name="Keywords" scheme="iso8601" content=$headkeywords />
+	<meta name="Owner" content=$headauthoremail />
+	<meta name="Feedback" content=$headauthoremail />
 	<meta name="Robots" content="index,follow" />
 	<meta name="Security" content="internal use only" />
-	<meta name="DC.Date" scheme="iso8601" content=$updated />
+	<meta name="DC.Date" scheme="iso8601" content=$headupdated />
 	<meta name="DC.Language" scheme="rfc1766" content="en-US" />
 	<meta name="DC.Rights" content="Copyright (c) 2001,2006 by IBM corporation" />
 	<meta name="IBM.Country" content="US" />
-	<meta name="IBM.Effective" content=$updated />
-	<title>$doctitle</title>
+	<meta name="IBM.Effective" content=$headupdated />
+	<title>$bodysitetitle - $bodydoctitle</title>
 	<script type="text/javaScript" src="//w3.ibm.com/ui/v8/scripts/scripts.js"></script>
 	<link rel="stylesheet" type="text/css" href="//w3.ibm.com/ui/v8/css/v4-screen.css" />
 	<style type="text/css" media="all">
@@ -58,7 +58,7 @@
 	<div id="prt-w3-sitemark"><img src="//w3.ibm.com/ui/v8/images/id-w3-sitemark-simple.gif" alt="" width="54" height="33" /></div>
 	<div id="prt-ibm-logo"><img src="//w3.ibm.com/ui/v8/images/id-ibm-logo-black.gif" alt="" width="44" height="15" /></div>
 	<div id="w3-sitemark"><img src="//w3.ibm.com/ui/v8/images/id-w3-sitemark-large.gif" alt="IBM Logo" width="266" height="70" usemap="#sitemark_map" /><map id="sitemark_map" name="sitemark_map"><area shape="rect" alt="Link to W3 Home Page" coords="0,0,130,70" href="http://w3.ibm.com/"  accesskey="1" /></map></div>
-	<div id="site-title-only">$sitetitle</div>
+	<div id="site-title-only">$bodysitetitle</div>
 	<div id="ibm-logo"><img src="//w3.ibm.com/ui/v8/images/id-ibm-logo.gif" alt="" width="44" height="15" /></div>
 	<div id="persistent-nav"><a id="w3home" href="http://w3.ibm.com/"> w3 Home </a><a id="bluepages" href="http://w3.ibm.com/bluepages/"> BluePages </a><a id="helpnow" href="http://w3.ibm.com/help/"> HelpNow </a><a id="feedback" href="http://w3.ibm.com/feedback/" accesskey="9"> Feedback </a></div>
 	<div id="header-search">
@@ -78,7 +78,7 @@
 
 	<!-- start content head -->
 	<div id="content-head">
-		<p id="date-stamp">Updated on $updated_long</p>
+		<p id="date-stamp">Updated on $bodyupdated</p>
 		<div class="hrule-dots">&nbsp;</div>    
 		<p id="breadcrumbs">
 			$breadcrumbs
