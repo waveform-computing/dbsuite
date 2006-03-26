@@ -6,7 +6,10 @@ import sys
 import os.path
 import datetime
 import logging
+import re
 from decimal import Decimal
+from w3.htmlutils import *
+from w3.document import Document
 from docdatabase import DocDatabase
 from doctable import DocTable
 from docview import DocView
@@ -14,80 +17,12 @@ from doccheck import DocCheck
 from docforeignkey import DocForeignKey
 from docuniquekey import DocUniqueKey, DocPrimaryKey
 from docfunction import DocFunction
-from string import Template
 from xml.sax.saxutils import quoteattr, escape
 from sqltokenizer import DB2UDBSQLTokenizer
 from sqlhighlighter import SQLHTMLHighlighter
 from sqlformatter import SQLFormatter
 
 __all__ = ['DocOutput']
-
-# Utility routines for generating XHTML tags and sequences
-
-def formatContent(content):
-	if content is None:
-		# Format None as 'n/a'
-		return 'n/a'
-	elif isinstance(content, datetime.datetime):
-		# Format timestamps as ISO8601-ish (without the T separator)
-		return content.strftime('%Y-%m-%d %H:%M:%S')
-	elif type(content) in [int, long]:
-		# Format integer numbers with , as a thousand separator
-		s = str(content)
-		for i in xrange(len(s) - 3, 0, -3): s = "%s,%s" % (s[:i], s[i:])
-		return s
-	else:
-		return str(content)
-
-def startTag(name, attrs={}, empty=False):
-	"""Generates an XHTML start tag containing the specified attributes"""
-	subst = {
-		'name': name,
-		'attrs': ''.join([" %s=%s" % (str(key), quoteattr(str(attrs[key]))) for key in attrs]),
-	}
-	if empty:
-		return "<%(name)s%(attrs)s />" % subst
-	else:
-		return "<%(name)s%(attrs)s>" % subst
-
-def endTag(name):
-	"""Generates an XHTML end tag"""
-	return "</%s>" % (name)
-
-def makeTag(name, attrs={}, content="", optional=False):
-	"""Generates a XHTML tag containing the specified attributes and content"""
-	# Convert the content into a string, using custom conversions as necessary
-	contentStr = formatContent(content)
-	if contentStr != "":
-		return "%s%s%s" % (startTag(name, attrs), contentStr, endTag(name))
-	elif not optional:
-		return startTag(name, attrs, True)
-	else:
-		return ""
-
-def makeTableCell(content, head=False, cellAttrs={}):
-	"""Returns a table cell containing the specified content"""
-	if str(content) != "":
-		return makeTag(['td', 'th'][head], cellAttrs, content)
-	else:
-		return makeTag(['td', 'th'][head], cellAttrs, '&nbsp;')
-
-def makeTableRow(cells, head=False, rowAttrs={}):
-	"""Returns a table row containing the specified cells"""
-	return makeTag('tr', rowAttrs, ''.join([makeTableCell(content, head) for content in cells]))
-
-def makeTable(data, head=[], foot=[], tableAttrs={}):
-	"""Returns a table containing the specified head and data cells"""
-	defaultAttrs = {'class': 'basic-table', 'cellspacing': 1, 'cellpadding': 0}
-	defaultAttrs.update(tableAttrs)
-	return makeTag('table', defaultAttrs, ''.join([
-			makeTag('thead', {}, ''.join([makeTableRow(row, head=True, rowAttrs={'class': 'blue-med-dark'}) for row in head]), optional=True),
-			makeTag('tfoot', {}, ''.join([makeTableRow(row, head=True, rowAttrs={'class': 'blue-med-dark'}) for row in foot]), optional=True),
-			makeTag('tbody', {}, ''.join([makeTableRow(row, head=False, rowAttrs={'class': color}) for (row, color) in zip(data, ['white', 'gray'] * len(data))]), optional=False),
-		])
-	)
-
-# HTML construction methods
 
 def filename(object):
 	"""Returns a unique, but deterministic filename for the specified object"""
@@ -105,105 +40,6 @@ def linkTo(object, attrs={}, qualifiedName=False):
 def popupLink(target, content, width=400, height=300):
 	return makeTag('a', {'href': 'javascript:popup("%s","internal",%d,%d)' % (target, height, width)}, content)
 
-def title(object):
-	"""Returns a title string for the specified object"""
-	if isinstance(object, DocDatabase):
-		return "%s Documentation" % (object.name)
-	else:
-		return "%s Documentation - %s %s" % (object.database.name, object.typeName, object.qualifiedName)
-
-def keywords(object):
-	"""Returns a comma separated set of keywords for the specified object"""
-	return "%s, %s, %s" % (object.typeName, object.name, object.qualifiedName)
-
-def breadcrumbs(object):
-	"""Returns a set of breadcrumb links for the specified object"""
-	if object is None:
-		return makeTag('a', {'href': 'index.html'}, 'Home')
-	else:
-		return breadcrumbs(object.parent) + " &raquo; " + makeTag('a', {'href': filename(object)}, '%s %s' % (object.typeName, object.name))
-
-def menu(object):
-	"""Returns a left-nav menu block for the specified object"""
-	result = makeTag('a', {'href': 'index.html', 'id': 'site-home'}, 'Home') + '\n'
-	if isinstance(object, DocDatabase):
-		result += makeTag('a', {'href': filename(object), 'class': 'active'}, 'Documentation') + '\n'
-	else:
-		result += makeTag('a', {'href': filename(object.database)}, 'Documentation') + '\n'
-	return makeTag('div', {'class': 'top-level'}, result)
-
-class Document(object):
-	def __init__(self, object):
-		"""HTML document class.
-		
-		Represents the document to be produced for a given database object. The
-		object parameter provides the database object that the document covers.
-		"""
-		super(Document, self).__init__()
-		self._object = object
-		self._sections = []
-		self._updated = datetime.date.today()
-		# XXX Figure out how to better search for the template
-		self._template = Template(open("w3/template.html").read())
-
-	def addSection(self, id, title):
-		"""Starts a new section in the current document with the specified id and title"""
-		self._sections.append({
-			'id': id,
-			'title': title,
-			'content': ''
-		})
-
-	def addContent(self, content):
-		"""Adds HTML content to the end of the current section"""
-		self._sections[-1]['content'] += content + '\n'
-
-	def addPara(self, para):
-		"""Adds a paragraph of text to the end of the current section"""
-		self.addContent(makeTag('p', {}, escape(para)))
-	
-	def write(self, filename):
-		"""Writes the document to the specified file"""
-		# Construct an index to place before the sections content
-		index = '\n'.join([
-			makeTag('li', {}, makeTag('a', {'href': '#' + section['id'], 'title': 'Jump to section'}, escape(section['title'])))
-			for section in self._sections
-		])
-		# Concatenate all document sections together with headers before each
-		content = '\n'.join([
-			'\n'.join([
-				makeTag('div', {'class': 'hrule-dots'}, '&nbsp;'),
-				makeTag('h2', {'id': section['id']}, escape(section['title'])),
-				section['content'],
-				makeTag('p', {}, makeTag('a', {'href': '#masthead', 'title': 'Jump to top'}, 'Back to top'))
-			])
-			for section in self._sections
-		])
-		# Construct the body from a header, the index and the content from above
-		body = '\n'.join([
-			makeTag('h1', {}, escape(title(self._object))),
-			makeTag('p', {}, escape(self._object.description)),
-			makeTag('ul', {}, index),
-			content
-		])
-		# Put the body and a number of other substitution values (mostly for
-		# the metadata in the document HEAD) into a dictionary
-		parameters = {
-			'updated':      quoteattr(str(self._updated)),
-			'updated_long': self._updated.strftime('%a, %d %b %Y'),
-			'ownername':    quoteattr('Dave Hughes'),
-			'owneremail':   quoteattr('dave_hughes@uk.ibm.com'),
-			'description':  quoteattr(title(self._object)),
-			'keywords':     quoteattr(keywords(self._object)),
-			'sitetitle':    escape(title(self._object.database)),
-			'doctitle':     escape(title(self._object)),
-			'breadcrumbs':  breadcrumbs(self._object),
-			'menu':         menu(self._object),
-			'body':         body,
-		}
-		# Substitute all the values into the main template and write it to a file
-		open(filename, "w").write(self._template.substitute(parameters))
-
 class DocOutput(object):
 	"""HTML documentation writer class -- IBM w3 Intranet v8 standard"""
 
@@ -215,10 +51,12 @@ class DocOutput(object):
 		usually discarded).
 		"""
 		super(DocOutput, self).__init__()
-		self.path = path
-		self.tokenizer = DB2UDBSQLTokenizer()
-		self.highlighter = SQLHTMLHighlighter(self.tokenizer)
-		self.formatter = SQLFormatter(self.tokenizer)
+		self._updated = datetime.date.today()
+		self._database = database
+		self._path = path
+		self._tokenizer = DB2UDBSQLTokenizer()
+		self._highlighter = SQLHTMLHighlighter(self._tokenizer)
+		self._formatter = SQLFormatter(self._tokenizer)
 		# Write the documentation files
 		self.writeDatabase(database)
 		for schema in database.schemas.itervalues():
@@ -234,12 +72,62 @@ class DocOutput(object):
 		#		self.writeRoutine(routine)
 		for tablespace in database.tablespaces.itervalues():
 			self.writeTablespace(tablespace)
+	
+	findref = re.compile(r"@([A-Za-z_$#@][A-Za-z0-9_$#@]*(\.[A-Za-z_$#@][A-Za-z0-9_$#@]*){0,2})\b")
+	def formatDescription(self, text):
+		"""Formats text into HTML, converting @-prefixed references into links.
+		
+		References in the provided text parameter are returned as links to
+		the targetted objects (the objects are located with the findObject()
+		method above). The resulting string is valid HTML; that is, all
+		characters which require converting to character entities are converted
+		using the escape() function of the xml.sax.saxutils unit.
+		"""
+		start = 0
+		result = ''
+		while True:
+			match = self.findref.search(text, start)
+			if match is None:
+				result += text[start:]
+				return result
+			else:
+				result += escape(text[start:match.start(1) - 1])
+				start = match.end(1)
+				target = self._database.find(match.group(1))
+				if target is None:
+					result += escape(match.group(1))
+				else:
+					result += linkTo(target, qualifiedName=True)
+
+	def newDocument(self, object):
+		"""Creates a new Document object for the specified object.
+		
+		This method returns a new Document object with most of the attributes
+		(like doctitle, sitetitle, etc.) filled in from the specified object.
+		"""
+		doc = Document()
+		# Use a single value for the update date of all documents produced by the class
+		doc.updated = self._updated
+		doc.author = ''
+		doc.authoremail = ''
+		doc.title = "%s %s" % (object.typeName, object.qualifiedName)
+		doc.sitetitle = "%s Documentation" % (self._database.name)
+		doc.description = self.formatDescription(object.description)
+		doc.keywords = [self._database.name, object.typeName, object.name, object.qualifiedName]
+		o = object
+		while not o is None:
+			doc.breadcrumbs.insert(0, (filename(o), '%s %s' % (o.typeName, o.name)))
+			o = o.parent
+		doc.breadcrumbs.insert(0, ('index.html', 'Home'))
+		# XXX Construct the menu properly
+		doc.menu = [('index.html', 'Home', []), (filename(self._database), 'Documentation', [])]
+		return doc
 
 	def writeDatabase(self, database):
 		logging.debug("Writing documentation for database to %s" % (filename(database)))
 		schemas = [obj for (name, obj) in sorted(database.schemas.items(), key=lambda (name, obj):name)]
 		tbspaces = [obj for (name, obj) in sorted(database.tablespaces.items(), key=lambda (name, obj):name)]
-		doc = Document(database)
+		doc = self.newDocument(database)
 		if len(schemas) > 0:
 			doc.addSection(id='schemas', title='Schemas')
 			doc.addPara("""The following table contains all schemas (logical
@@ -253,7 +141,7 @@ class DocOutput(object):
 				)],
 				data=[(
 					linkTo(schema),
-					escape(schema.description)
+					self.formatDescription(schema.description)
 				) for schema in schemas]
 			))
 		if len(tbspaces) > 0:
@@ -270,17 +158,17 @@ class DocOutput(object):
 				)],
 				data=[(
 					linkTo(tbspace),
-					escape(tbspace.description)
+					self.formatDescription(tbspace.description)
 				) for tbspace in tbspaces]
 			))
-		doc.write(os.path.join(self.path, filename(database)))
+		doc.write(os.path.join(self._path, filename(database)))
 
 	def writeSchema(self, schema):
 		logging.debug("Writing documentation for schema %s to %s" % (schema.name, filename(schema)))
 		relations = [obj for (name, obj) in sorted(schema.relations.items(), key=lambda (name, obj): name)]
 		routines = [obj for (name, obj) in sorted(schema.specificRoutines.items(), key=lambda (name, obj): name)]
 		indexes = [obj for (name, obj) in sorted(schema.indexes.items(), key=lambda (name, obj): name)]
-		doc = Document(schema)
+		doc = self.newDocument(schema)
 		if len(relations) > 0:
 			doc.addSection(id='relations', title='Relations')
 			doc.addPara("""The following table contains all the relations
@@ -297,7 +185,7 @@ class DocOutput(object):
 				data=[(
 					linkTo(relation),
 					escape(relation.typeName),
-					escape(relation.description)
+					self.formatDescription(relation.description)
 				) for relation in relations]
 			))
 		if len(routines) > 0:
@@ -315,7 +203,7 @@ class DocOutput(object):
 				data=[(
 					linkTo(routine),
 					escape(routine.typeName),
-					escape(routine.description)
+					self.formatDescription(routine.description)
 				) for routine in routines]
 			))
 		if len(indexes) > 0:
@@ -331,16 +219,16 @@ class DocOutput(object):
 				data=[(
 					linkTo(index),
 					linkTo(index.table, qualifiedName=True),
-					escape(index.description)
+					self.formatDescription(index.description)
 				) for index in indexes]
 			))
-		doc.write(os.path.join(self.path, filename(schema)))
+		doc.write(os.path.join(self._path, filename(schema)))
 
 	def writeTablespace(self, tbspace):
 		logging.debug("Writing documentation for tablespace %s to %s" % (tbspace.name, filename(tbspace)))
 		tables = [obj for (name, obj) in sorted(tbspace.tables.items(), key=lambda (name, obj): name)]
 		indexes = [obj for (name, obj) in sorted(tbspace.indexes.items(), key=lambda (name, obj): name)]
-		doc = Document(tbspace)
+		doc = self.newDocument(tbspace)
 		if len(tables) > 0:
 			doc.addSection(id='tables', title='Tables')
 			doc.addPara("""The following table contains all the tables that
@@ -353,7 +241,7 @@ class DocOutput(object):
 				)],
 				data=[(
 					linkTo(table, qualifiedName=True),
-					escape(table.description)
+					self.formatDescription(table.description)
 				) for table in tables]
 			))
 		if len(indexes) > 0:
@@ -370,10 +258,10 @@ class DocOutput(object):
 				data=[(
 					linkTo(index, qualifiedName=True),
 					linkTo(index.table, qualifiedName=True),
-					escape(index.description)
+					self.formatDescription(index.description)
 				) for index in indexes]
 			))
-		doc.write(os.path.join(self.path, filename(tbspace)))
+		doc.write(os.path.join(self._path, filename(tbspace)))
 
 	def writeTable(self, table):
 		logging.debug("Writing documentation for table %s to %s" % (table.name, filename(table)))
@@ -381,7 +269,7 @@ class DocOutput(object):
 		indexes = [obj for (name, obj) in sorted(table.indexes.items(), key=lambda (name, obj): name)]
 		constraints = [obj for (name, obj) in sorted(table.constraints.items(), key=lambda (name, obj): name)]
 		dependents = [obj for (name, obj) in sorted(table.dependents.items(), key=lambda (name, obj): name)]
-		doc = Document(table)
+		doc = self.newDocument(table)
 		doc.addSection(id='attributes', title='Attributes')
 		doc.addPara("""The following table notes various "vital statistics"
 			of the table (such as cardinality -- the number of rows in the
@@ -462,7 +350,7 @@ class DocOutput(object):
 				)],
 				data=[(
 					escape(field.name),
-					escape(field.description)
+					self.formatDescription(field.description)
 				) for field in fields]
 			))
 			doc.addSection(id='field_schema', title='Field Schema')
@@ -507,7 +395,7 @@ class DocOutput(object):
 					index.unique,
 					'<br />'.join([escape(ixfield.name) for (ixfield, ixorder) in index.fieldList]),
 					'<br />'.join([escape(ixorder) for (ixfield, ixorder) in index.fieldList]),
-					escape(index.description)
+					self.formatDescription(index.description)
 				) for index in indexes]
 			))
 		if len(constraints) > 0:
@@ -548,7 +436,7 @@ class DocOutput(object):
 			    data=[(
 					linkTo(dep, qualifiedName=True),
 					escape(dep.typeName),
-					escape(dep.description)
+					self.formatDescription(dep.description)
 				) for dep in dependents]
 			))
 		doc.addSection('sql', 'SQL Definition')
@@ -557,15 +445,15 @@ class DocOutput(object):
 			used to create the table (it has been reconstructed from the
 			content of the system catalog tables and may differ in a number of
 			areas).""")
-		doc.addContent(makeTag('pre', {'class': 'sql'}, self.highlighter.highlight(self.formatter.parse(table.createSql))))
-		doc.write(os.path.join(self.path, filename(table)))
+		doc.addContent(makeTag('pre', {'class': 'sql'}, self._highlighter.highlight(self._formatter.parse(table.createSql))))
+		doc.write(os.path.join(self._path, filename(table)))
 
 	def writeView(self, view):
 		logging.debug("Writing documentation for view %s to %s" % (view.name, filename(view)))
 		fields = [obj for (name, obj) in sorted(view.fields.items(), key=lambda (name, obj): name)]
 		dependencies = [obj for (name, obj) in sorted(view.dependencies.items(), key=lambda (name, obj): name)]
 		dependents = [obj for (name, obj) in sorted(view.dependents.items(), key=lambda (name, obj): name)]
-		doc = Document(view)
+		doc = self.newDocument(view)
 		doc.addSection(id='attributes', title='Attributes')
 		doc.addPara("""The following table notes various "vital statistics"
 			of the view.""")
@@ -615,7 +503,7 @@ class DocOutput(object):
 				)],
 				data=[(
 					escape(field.name),
-					escape(field.description)
+					self.formatDescription(field.description)
 				) for field in fields]
 			))
 			doc.addSection(id='field_schema', title='Field Schema')
@@ -651,7 +539,7 @@ class DocOutput(object):
 			    data=[(
 					linkTo(dep, qualifiedName=True),
 					escape(dep.typeName),
-					escape(dep.description)
+					self.formatDescription(dep.description)
 				) for dep in dependents]
 			))
 		if len(dependencies) > 0:
@@ -668,7 +556,7 @@ class DocOutput(object):
 				data=[(
 					linkTo(dep, qualifiedName=True),
 					escape(dep.typeName),
-					escape(dep.description)
+					self.formatDescription(dep.description)
 				) for dep in dependencies]
 			))
 		doc.addSection('sql', 'SQL Definition')
@@ -677,8 +565,8 @@ class DocOutput(object):
 			removes much of the formatting, hence the formatting in the 
 			statement below (which this system attempts to reconstruct) is
 			not necessarily the formatting of the original statement.""")
-		doc.addContent(makeTag('pre', {'class': 'sql'}, self.highlighter.highlight(self.formatter.parse(view.createSql))))
-		doc.write(os.path.join(self.path, filename(view)))
+		doc.addContent(makeTag('pre', {'class': 'sql'}, self._highlighter.highlight(self._formatter.parse(view.createSql))))
+		doc.write(os.path.join(self._path, filename(view)))
 
 	def writeRelation(self, relation):
 		if isinstance(relation, DocTable):
@@ -694,7 +582,7 @@ class DocOutput(object):
 			fields.append((field, ordering, position))
 			position += 1
 		fields = sorted(fields, key=lambda(field, ordering, position): field.name)
-		doc = Document(index)
+		doc = self.newDocument(index)
 		doc.addSection(id='attributes', title='Attributes')
 		doc.addPara("""The following table notes various "vital statistics"
 			of the index.""")
@@ -773,7 +661,7 @@ class DocOutput(object):
 					position + 1,
 					escape(field.name),
 					ordering,
-					escape(field.description)
+					self.formatDescription(field.description)
 				) for (field, ordering, position) in fields]
 			))
 		doc.addSection('sql', 'SQL Definition')
@@ -782,8 +670,8 @@ class DocOutput(object):
 			used to create the index (it has been reconstructed from the
 			content of the system catalog tables and may differ in a number of
 			areas).""")
-		doc.addContent(makeTag('pre', {'class': 'sql'}, self.highlighter.highlight(self.formatter.parse(index.createSql))))
-		doc.write(os.path.join(self.path, filename(index)))
+		doc.addContent(makeTag('pre', {'class': 'sql'}, self._highlighter.highlight(self._formatter.parse(index.createSql))))
+		doc.write(os.path.join(self._path, filename(index)))
 	
 	def writeUniqueKey(self, key):
 		logging.debug("Writing documentation for unique key %s to %s" % (key.name, filename(key)))
@@ -793,7 +681,7 @@ class DocOutput(object):
 			fields.append((field, position))
 			position += 1
 		fields = sorted(fields, key=lambda(field, position): field.name)
-		doc = Document(key)
+		doc = self.newDocument(key)
 		doc.addSection(id='attributes', title='Attributes')
 		doc.addPara("""The following table notes various "vital statistics"
 			of the unique key.""")
@@ -826,7 +714,7 @@ class DocOutput(object):
 				data=[(
 					position + 1,
 					escape(field.name),
-					escape(field.description)
+					self.formatDescription(field.description)
 				) for (field, position) in fields]
 			))
 		doc.addSection('sql', 'SQL Definition')
@@ -835,8 +723,8 @@ class DocOutput(object):
 			statement used to create the key (it has been reconstructed from
 			the content of the system catalog tables and may differ in a number
 			of areas).""")
-		doc.addContent(makeTag('pre', {'class': 'sql'}, self.highlighter.highlight(self.formatter.parse(key.createSql))))
-		doc.write(os.path.join(self.path, filename(key)))
+		doc.addContent(makeTag('pre', {'class': 'sql'}, self._highlighter.highlight(self._formatter.parse(key.createSql))))
+		doc.write(os.path.join(self._path, filename(key)))
 
 	def writeForeignKey(self, key):
 		logging.debug("Writing documentation for foreign key %s to %s" % (key.name, filename(key)))
@@ -846,7 +734,7 @@ class DocOutput(object):
 			fields.append((field1, field2, position))
 			position += 1
 		fields = sorted(fields, key=lambda(field1, field2, position): field1.name)
-		doc = Document(key)
+		doc = self.newDocument(key)
 		doc.addSection(id='attributes', title='Attributes')
 		doc.addPara("""The following table notes various "vital statistics"
 			of the foreign key.""")
@@ -900,7 +788,7 @@ class DocOutput(object):
 					position + 1,
 					escape(field1.name),
 					escape(field2.name),
-					escape(field1.description)
+					self.formatDescription(field1.description)
 				) for (field1, field2, position) in fields]
 			))
 		doc.addSection('sql', 'SQL Definition')
@@ -909,14 +797,14 @@ class DocOutput(object):
 			statement used to create the key (it has been reconstructed from
 			the content of the system catalog tables and may differ in a number
 			of areas).""")
-		doc.addContent(makeTag('pre', {'class': 'sql'}, self.highlighter.highlight(self.formatter.parse(key.createSql))))
-		doc.write(os.path.join(self.path, filename(key)))
+		doc.addContent(makeTag('pre', {'class': 'sql'}, self._highlighter.highlight(self._formatter.parse(key.createSql))))
+		doc.write(os.path.join(self._path, filename(key)))
 
 
 	def writeCheck(self, check):
 		logging.debug("Writing documentation for check constraint %s to %s" % (check.name, filename(check)))
 		fields = sorted(list(check.fields), key=lambda(field): field.name)
-		doc = Document(check)
+		doc = self.newDocument(check)
 		doc.addSection(id='attributes', title='Attributes')
 		doc.addPara("""The following table notes various "vital statistics"
 			of the check.""")
@@ -953,7 +841,7 @@ class DocOutput(object):
 				)],
 				data=[(
 					escape(field.name),
-					escape(field.description)
+					self.formatDescription(field.description)
 				) for field in fields]
 			))
 		doc.addSection('sql', 'SQL Definition')
@@ -962,8 +850,8 @@ class DocOutput(object):
 			statement used to create the check (it has been reconstructed from
 			the content of the system catalog tables and may differ in a number
 			of areas).""")
-		doc.addContent(makeTag('pre', {'class': 'sql'}, self.highlighter.highlight(self.formatter.parse(check.createSql))))
-		doc.write(os.path.join(self.path, filename(check)))
+		doc.addContent(makeTag('pre', {'class': 'sql'}, self._highlighter.highlight(self._formatter.parse(check.createSql))))
+		doc.write(os.path.join(self._path, filename(check)))
 
 	def writeConstraint(self, constraint):
 		if isinstance(constraint, DocUniqueKey):
