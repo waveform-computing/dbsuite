@@ -74,30 +74,48 @@ class DocOutput(object):
 			self.writeTablespace(tablespace)
 	
 	findref = re.compile(r"@([A-Za-z_$#@][A-Za-z0-9_$#@]*(\.[A-Za-z_$#@][A-Za-z0-9_$#@]*){0,2})\b")
+	findfmt = re.compile(r"\B([/_*])(\w+)\1\B")
 	def formatDescription(self, text):
-		"""Formats text into HTML, converting @-prefixed references into links.
+		"""Converts simple prefix-based markup in text into HTML.
 		
-		References in the provided text parameter are returned as links to
-		the targetted objects (the objects are located with the findObject()
-		method above). The resulting string is valid HTML; that is, all
-		characters which require converting to character entities are converted
-		using the escape() function of the xml.sax.saxutils unit.
+		References in the provided text (specified as @-prefix qualified names)
+		are returned as links to the targetted objects (the objects are located
+		with the find() method of the DocDatabase object at the root of the
+		object hierarchy).
+		
+		Highlights in the text are also converted. Currently *bold* text is
+		converted to <strong> tags, /italic/ text is converted to <em> tags,
+		and _underlined_ text is convert to <u> tags.
+		
+		The resulting string is valid HTML; that is, all characters which
+		require converting to character entities are converted using the
+		escape() function of the xml.sax.saxutils unit.
 		"""
 		start = 0
 		result = ''
 		while True:
-			match = self.findref.search(text, start)
-			if match is None:
-				result += text[start:]
-				return result
-			else:
-				result += escape(text[start:match.start(1) - 1])
-				start = match.end(1)
-				target = self._database.find(match.group(1))
+			matchref = self.findref.search(text, start)
+			matchfmt = self.findfmt.search(text, start)
+			if matchref is not None and (matchfmt is None or matchfmt.start(0) > matchref.start(0)):
+				result += escape(text[start:matchref.start(0)])
+				start = matchref.end(0)
+				target = self._database.find(matchref.group(1))
 				if target is None:
-					result += escape(match.group(1))
+					result += escape(matchref.group(1))
 				else:
 					result += linkTo(target, qualifiedName=True)
+			elif matchfmt is not None and (matchref is None or matchfmt.start(0) < matchref.start(0)):
+				result += escape(text[start:matchfmt.start(0)])
+				start = matchfmt.end(0)
+				if matchfmt.group(1) == '*':
+					result += makeTag('strong', {}, matchfmt.group(2))
+				elif matchfmt.group(1) == '/':
+					result += makeTag('em', {}, matchfmt.group(2))
+				elif matchfmt.group(1) == '_':
+					result += makeTag('u', {}, matchfmt.group(2))
+			else:
+				result += text[start:]
+				return result
 
 	def newDocument(self, object):
 		"""Creates a new Document object for the specified object.
@@ -148,7 +166,7 @@ class DocOutput(object):
 			doc.addSection(id='tbspaces', title='Tablespaces')
 			doc.addPara("""The following table contains all tablespaces
 				(physical object containers) in the database. Click on a
-				tablespace name to view the documentation for that schema,
+				tablespace name to view the documentation for that tablespace,
 				including a list of all tables and/or indexes that exist within
 				it.""")
 			doc.addContent(makeTable(
@@ -229,6 +247,48 @@ class DocOutput(object):
 		tables = [obj for (name, obj) in sorted(tbspace.tables.items(), key=lambda (name, obj): name)]
 		indexes = [obj for (name, obj) in sorted(tbspace.indexes.items(), key=lambda (name, obj): name)]
 		doc = self.newDocument(tbspace)
+		doc.addSection(id='attributes', title='Attributes')
+		doc.addPara("""The following table notes various "vital statistics"
+			of the tablespace.""")
+		doc.addContent(makeTable(
+			head=[(
+				"Attribute",
+				"Value",
+				"Attribute",
+				"Value"
+			)],
+			data=[
+				(
+					popupLink("created.html", "Created"),
+					tbspace.created,
+					popupLink("tables.html", "# Tables"),
+					len(tables),
+				),
+				(
+					popupLink("createdby.html", "Created By"),
+					escape(tbspace.definer),
+					popupLink("cardinality.html", "# Indexes"),
+					len(indexes),
+				),
+				(
+					popupLink("managedby.html", "Managed By"),
+					escape(tbspace.managedBy),
+					popupLink("tbspacetype.html", "Data Type"),
+					escape(tbspace.dataType),
+				),
+				(
+					popupLink("extentsize.html", "Extent Size"),
+					tbspace.extentSize,
+					popupLink("prefetchsize.html", "Prefetch Size"),
+					tbspace.prefetchSize,
+				),
+				(
+					popupLink("pagesize.html", "Page Size"),
+					tbspace.pageSize,
+					popupLink("droprecovery.html", "Drop Recovery"),
+					tbspace.dropRecovery,
+				),
+			]))
 		if len(tables) > 0:
 			doc.addSection(id='tables', title='Tables')
 			doc.addPara("""The following table contains all the tables that
