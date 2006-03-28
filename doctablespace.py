@@ -27,9 +27,9 @@ class DocTablespace(DocObjectBase):
 		self.__pageSize = row['pageSize']
 		self.__dropRecovery = row['dropRecovery']
 		self.__description = row['description']
-		self.__tableList = RelationsList(self.database, cache.tablespaceTables[self.name])
+		self.__tableList = RelationsList(self.database, sorted(cache.tablespaceTables[self.name]))
 		self.__tables = RelationsDict(self.database, cache.tablespaceTables[self.name])
-		self.__indexList = IndexesList(self.database, cache.tablespaceIndexes[self.name])
+		self.__indexList = IndexesList(self.database, sorted(cache.tablespaceIndexes[self.name]))
 		self.__indexes = IndexesDict(self.database, cache.tablespaceIndexes[self.name])
 
 	def getTypeName(self):
@@ -93,9 +93,9 @@ class DocTablespace(DocObjectBase):
 		return self.__dropRecovery
 
 	tables = property(__getTables, doc="""A dictionary of the tables contained in the tablespace (keyed by (schemaName, tableName) tuples)""")
-	tableList = property(__getTableList, doc="""A list of the tables contained in the tablespace""")
+	tableList = property(__getTableList, doc="""A list of the tables contained in the tablespace, sorted by qualified name""")
 	indexes = property(__getIndexes, doc="""A dictionary of the indexes contained in the tablespace (keyed by (schemaName, indexName) tuples)""")
-	indexList = property(__getIndexList, doc="""A list of the indexes contained in the tablespace""")
+	indexList = property(__getIndexList, doc="""A list of the indexes contained in the tablespace, sorted by qualified name""")
 	definer = property(__getDefiner, doc="""The user ID who created the tablespace""")
 	created = property(__getCreated, doc="""Timestamp indicating when the tablespace was created""")
 	managedBy = property(__getManagedBy, doc="""Indicates whether the tablespace is managed by the operating system or the database""")
