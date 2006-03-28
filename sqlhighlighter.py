@@ -13,10 +13,11 @@ is that this raises too many questions (which version of HTML, how
 should the CSS rules be included, what's the title of the document,
 etc); it's up to you to wrap the output in an HTML document.
 
-To use the highlighter, construct an instance of SQLHighlighter,
-passing a tokenizer instance to the constructor, then call the
-highlight method passing the SQL you wish to convert into highlighted
-HTML (the output is returned as a string).
+To use the highlighter, construct an instance of SQLHighlighter, then call
+the parse method passing the output of a tokenizer from the sqltokenizer
+unit, i.e. a list of token tuples (or a list of lists of token tuples if
+newline_split was active on the tokenizer). The method will return a string
+containing HTML with the various CSS classes applied with <span> elements.
 
 The following attributes can be used to control the output of
 the highlighter:
@@ -90,12 +91,14 @@ be highlighted.
 
 from xml.sax.saxutils import quoteattr, escape
 from sqltokenizer import *
+from sqlformatter import *
 
 default_css_classes = {
 	ERROR:      'sql_error',
 	COMMENT:    'sql_comment',
 	KEYWORD:    'sql_keyword',
 	IDENTIFIER: 'sql_identifier',
+	DATATYPE:   'sql_datatype',
 	NUMBER:     'sql_number',
 	STRING:     'sql_string',
 	OPERATOR:   'sql_operator',
@@ -104,9 +107,8 @@ default_css_classes = {
 }
 
 class SQLHTMLHighlighter(object):
-	def __init__(self, tokenizer):
+	def __init__(self):
 		super(SQLHTMLHighlighter, self).__init__()
-		self._tokenizer = tokenizer
 		self.css_classes = default_css_classes
 		self.number_lines = False
 		self.number_class = 'num_cell'
@@ -134,16 +136,16 @@ class SQLHTMLHighlighter(object):
 			quoteattr(self.number_class),
 			linetokens[0][3], # line number
 			quoteattr(self.sql_class),
-			"".join([self._formatToken(token) for token in linetokens])
+			''.join([self._formatToken(token) for token in linetokens])
 		)
 
-	def highlight(self, source, terminator=';'):
-		self._tokenizer.newline_split = self.number_lines
-		tokens = self._tokenizer.parse(source, terminator)
-		if self.number_lines:
-			return "\n".join([self._formatLine(line) for line in tokens])
+	def parse(self, tokens):
+		if type(tokens[0]) == type([]):
+			# We're dealing with a list of lists of tokens (i.e. the
+			# newline_split property of the tokenizer was set when parsing)
+			return '\n'.join([self._formatLine(line) for line in tokens])
 		else:
-			return "".join([self._formatToken(token) for token in tokens])
+			return ''.join([self._formatToken(token) for token in tokens])
 
 if __name__ == "__main__":
 	# XXX Robust test cases

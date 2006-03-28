@@ -55,8 +55,8 @@ class DocOutput(object):
 		self._database = database
 		self._path = path
 		self._tokenizer = DB2UDBSQLTokenizer()
-		self._highlighter = SQLHTMLHighlighter(self._tokenizer)
-		self._formatter = SQLFormatter(self._tokenizer)
+		self._formatter = SQLFormatter()
+		self._highlighter = SQLHTMLHighlighter()
 		# Write the documentation files
 		self.writeDatabase(database)
 		for schema in database.schemas.itervalues():
@@ -72,6 +72,14 @@ class DocOutput(object):
 		#		self.writeRoutine(routine)
 		for tablespace in database.tablespaces.itervalues():
 			self.writeTablespace(tablespace)
+
+	def formatSql(self, sql):
+		# Tokenize, reformat, and then syntax highlight the provided code
+		tokens = self._tokenizer.parse(sql)
+		tokens = self._formatter.parse(tokens)
+		html = self._highlighter.parse(tokens)
+		return html
+		#return self._highlighter.parse(self._formatter.parse(self._tokenizer.parse(sql)))
 	
 	findref = re.compile(r"@([A-Za-z_$#@][A-Za-z0-9_$#@]*(\.[A-Za-z_$#@][A-Za-z0-9_$#@]*){0,2})\b")
 	findfmt = re.compile(r"\B([/_*])(\w+)\1\B")
@@ -117,6 +125,28 @@ class DocOutput(object):
 				result += text[start:]
 				return result
 
+	def createMenu(self, item, active=True):
+		result = []
+		while True:
+			result = [(filename(item), item.name, result, active)]
+			active = False
+			item = item.parent
+			if item is None:
+				break
+		result.insert(0, ('index.html', 'Home', [], False))
+		return result
+
+	def createMenuLevel(self, items, index):
+		if len(items) <= 10:
+			slice = items
+		elif index <= 3:
+			slice = items[:7]
+		elif index >= len(items) - 3:
+			slice = items[-7:]
+		else:
+			slice = items[index - 3:index + 3]
+		return [(filename(item), item.name, []) for item in slice]
+
 	def newDocument(self, object):
 		"""Creates a new Document object for the specified object.
 		
@@ -138,7 +168,8 @@ class DocOutput(object):
 			o = o.parent
 		doc.breadcrumbs.insert(0, ('index.html', 'Home'))
 		# XXX Construct the menu properly
-		doc.menu = [('index.html', 'Home', []), (filename(self._database), 'Documentation', [])]
+		doc.menu = self.createMenu(object)
+		#doc.menu = [('index.html', 'Home', []), (filename(self._database), 'Documentation', [])]
 		return doc
 
 	def writeDatabase(self, database):
@@ -505,7 +536,7 @@ class DocOutput(object):
 			used to create the table (it has been reconstructed from the
 			content of the system catalog tables and may differ in a number of
 			areas).""")
-		doc.addContent(makeTag('pre', {'class': 'sql'}, self._highlighter.highlight(self._formatter.parse(table.createSql))))
+		doc.addContent(makeTag('pre', {'class': 'sql'}, self.formatSql(table.createSql)))
 		doc.write(os.path.join(self._path, filename(table)))
 
 	def writeView(self, view):
@@ -625,7 +656,7 @@ class DocOutput(object):
 			removes much of the formatting, hence the formatting in the 
 			statement below (which this system attempts to reconstruct) is
 			not necessarily the formatting of the original statement.""")
-		doc.addContent(makeTag('pre', {'class': 'sql'}, self._highlighter.highlight(self._formatter.parse(view.createSql))))
+		doc.addContent(makeTag('pre', {'class': 'sql'}, self.formatSql(view.createSql)))
 		doc.write(os.path.join(self._path, filename(view)))
 
 	def writeRelation(self, relation):
@@ -683,15 +714,6 @@ class DocOutput(object):
 					index.reverseScans,
 				),
 				(
-					popupLink("cardinality.html", "Cardinality"),
-					'<br />'.join(
-						[formatContent(index.cardinality[0])] + 
-						['1..%s: %s' % (keynum + 1, formatContent(card)) for (keynum, card) in enumerate(index.cardinality[1])]
-					),
-					popupLink("levels.html", "Levels"),
-					index.levels,
-				),
-				(
 					popupLink("leafpages.html", "Leaf Pages"),
 					index.leafPages,
 					popupLink("sequentialpages.html", "Sequential Pages"),
@@ -702,6 +724,15 @@ class DocOutput(object):
 					clusterRatio, # see above
 					popupLink("density.html", "Density"),
 					index.density,
+				),
+				(
+					popupLink("cardinality.html", "Cardinality"),
+					'<br />'.join(
+						[formatContent(index.cardinality[0])] + 
+						['1..%s: %s' % (keynum + 1, formatContent(card)) for (keynum, card) in enumerate(index.cardinality[1])]
+					),
+					popupLink("levels.html", "Levels"),
+					index.levels,
 				),
 			]))
 		if len(fields) > 0:
@@ -730,7 +761,7 @@ class DocOutput(object):
 			used to create the index (it has been reconstructed from the
 			content of the system catalog tables and may differ in a number of
 			areas).""")
-		doc.addContent(makeTag('pre', {'class': 'sql'}, self._highlighter.highlight(self._formatter.parse(index.createSql))))
+		doc.addContent(makeTag('pre', {'class': 'sql'}, self.formatSql(index.createSql)))
 		doc.write(os.path.join(self._path, filename(index)))
 	
 	def writeUniqueKey(self, key):
@@ -783,7 +814,7 @@ class DocOutput(object):
 			statement used to create the key (it has been reconstructed from
 			the content of the system catalog tables and may differ in a number
 			of areas).""")
-		doc.addContent(makeTag('pre', {'class': 'sql'}, self._highlighter.highlight(self._formatter.parse(key.createSql))))
+		doc.addContent(makeTag('pre', {'class': 'sql'}, self.formatSql(key.createSql)))
 		doc.write(os.path.join(self._path, filename(key)))
 
 	def writeForeignKey(self, key):
@@ -857,7 +888,7 @@ class DocOutput(object):
 			statement used to create the key (it has been reconstructed from
 			the content of the system catalog tables and may differ in a number
 			of areas).""")
-		doc.addContent(makeTag('pre', {'class': 'sql'}, self._highlighter.highlight(self._formatter.parse(key.createSql))))
+		doc.addContent(makeTag('pre', {'class': 'sql'}, self.formatSql(key.createSql)))
 		doc.write(os.path.join(self._path, filename(key)))
 
 
@@ -910,7 +941,7 @@ class DocOutput(object):
 			statement used to create the check (it has been reconstructed from
 			the content of the system catalog tables and may differ in a number
 			of areas).""")
-		doc.addContent(makeTag('pre', {'class': 'sql'}, self._highlighter.highlight(self._formatter.parse(check.createSql))))
+		doc.addContent(makeTag('pre', {'class': 'sql'}, self.formatSql(check.createSql)))
 		doc.write(os.path.join(self._path, filename(check)))
 
 	def writeConstraint(self, constraint):

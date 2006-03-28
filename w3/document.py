@@ -71,20 +71,21 @@ class Document(object):
 			for (crumbhref, crumbtitle) in self.breadcrumbs
 		])
 		# Mutually recursive functions for making the menu divs and links
-		def makeMenuLink(level, index, href, title, children):
+		def makeMenuLink(level, index, href, title, children, active):
 			linkattr = {'href': href}
 			if (index == 0) and (level == 0): linkattr['id'] = 'site-home'
+			if active: linkattr['class'] = 'active'
 			return ''.join([
 				makeTag('a', linkattr, title),
 				makeMenuDiv(level + 1, children)
 			])
 
 		def makeMenuDiv(level, data):
-			if len(data) > 0:
+			if len(data) > 0 and level <= 2:
 				divclass = ['top-level', 'second-level', 'third-level'][level]
 				return makeTag('div', {'class': divclass}, ''.join([
-					makeMenuLink(level, index, href, title, children)
-					for (index, (href, title, children)) in enumerate(data)
+					makeMenuLink(level, index, href, title, children, active)
+					for (index, (href, title, children, active)) in enumerate(data)
 				]))
 			else:
 				return ''

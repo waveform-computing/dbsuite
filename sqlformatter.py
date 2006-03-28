@@ -12,22 +12,30 @@ The reformatted SQL is intended to be more palatable for human consumption
 
 Currently the class is capable of reformatting the following SQL statements:
 
+ALTER TABLE
 CREATE TABLE
 CREATE VIEW
-SELECT
+CREATE INDEX
+SELECT (*)
 INSERT
 UPDATE
 DELETE
 
+(*) The SELECT implementation is reasonably complete, handling simply SELECTs,
+sub-SELECTs, common-table-expressions from SQL-99, calls to table functions,
+full-selects (with set operators), and SELECTs on the results of other DML
+operations (i.e. INSERT, UPDATE, DELETE).
+
 """
 
+from sqldialects import *
 from sqltokenizer import *
 from collections import deque
 
 # Custom token types used by the formatter
 (
+	DATATYPE,  # Datatypes (e.g. VARCHAR) converted from KEYWORD or IDENTIFIER
 	INDENT,    # Whitespace indentation at the start of a line
-	REALSPACE, # Whitespace inserted by the formatter (as opposed to original WHITESPACE tokens)
 ) = range(USERTOKEN, USERTOKEN + 2)
 
 class ParseError(Exception):
@@ -73,9 +81,8 @@ class SQLFormatter(object):
 	is pretty damn close to a "pure" ANSI SQL dialect).
 	"""
 
-	def __init__(self, tokenizer):
+	def __init__(self):
 		super(SQLFormatter, self).__init__()
-		self._tokenizer = tokenizer
 		self.indent = " "*4 # Default indent is 4 spaces
 
 	def _tokenName(self, token):
@@ -100,6 +107,7 @@ class SQLFormatter(object):
 					KEYWORD:    'keyword',
 					OPERATOR:   'operator',
 					IDENTIFIER: 'identifier',
+					DATATYPE:   'datatype',
 					COMMENT:    'comment',
 					NUMBER:     'number',
 					STRING:     'string',
@@ -112,54 +120,67 @@ class SQLFormatter(object):
 			return result
 
 	def _tokenOutput(self, token):
-		"""Reformats a token for use in the final output.
+		"""Reformats an output token for use in the final output.
 
 		The _tokenOutput() method is only called at the end of parsing, when
 		the list of output tokens has been assembled. It is then called
-		repeatedly to format each token. Most tokens are changed in some way.
-		For example, the method outputs the token_value field (second element)
-		for KEYWORD tokens to ensure they are always in uppercase, and all
-		WHITESPACE tokens are output as a single space (whitespace tokens
-		inserted by the formatter use the INDENT or REALSPACE token types and
-		are output verbatim).
+		repeatedly to format each token. For example, all WHITESPACE tokens
+		are output as a single space (whitespace tokens inserted by the
+		formatter, like INDENT, are converted back to WHITESPACE tokens but
+		the source field is output verbatim).
+		
+		Note that output tokens don't have line or column elements.
 		"""
 		def quotestr(s, qchar):
 			return "%s%s%s" % (qchar, s.replace(qchar, qchar*2), qchar)
-		def formatident(token):
-			identchars = set(self._tokenizer.identchars)
-			quotedident = not token[1][0] in (identchars - set("0123456789"))
+		
+		def formatident(ident):
+			identchars = set(ibmdb2udb_identchars)
+			quotedident = not ident[0] in (identchars - set("0123456789"))
 			if not quotedident:
-				for c in token[1][1:]:
+				for c in ident[1:]:
 					if not c in identchars:
 						quotedident = True
 						break
 			if quotedident:
-				return quotestr(token[1], '"')
+				return quotestr(ident, '"')
 			else:
-				return token[1]
-		def formatparam(token):
+				return ident
+		
+		def formatparam(param):
 			# XXX Like formatident above, only quote if necessary
-			return token[2]
-		if token[0] in (EOF, ERROR):
-			return ""
-		elif token[0] == WHITESPACE:
-			return " " # All original whitespace compressed to a single space
-		elif token[0] == COMMENT:
-			return "/*%s*/" % (token[1]) # All comments converted to C-style
-		elif token[0] == KEYWORD:
-			return token[1] # Keywords returned converted to UPPERCASE
-		elif token[0] == IDENTIFIER:
-			return formatident(token)
-		elif token[0] == NUMBER:
-			return str(token[1]) # Numbers reformatted by Decimal library
-		elif token[0] == STRING:
-			return quotestr(token[1], "'") # Strings converted to single quotes
-		elif token[0] == INDENT:
-			return "\n" + self.indent*token[1] # Build indentation strings
+			return param
+		
+		if token[0] == IDENTIFIER:
+			# Format identifiers using subroutine above
+			return (IDENTIFIER, token[1], formatident(token[1]))
+		elif token[0] == DATATYPE:
+			# Treat datatypes like identifiers (as they are essentially)
+			return (DATATYPE, token[1], formatident(token[1]))
 		elif token[0] == PARAMETER:
-			return formatparam(token)
-		elif token[0] in (OPERATOR, TERMINATOR):
-			return token[2] # Other tokens returned verbatim
+			# Format parameters using subroutine above
+			return (PARAMETER, token[1], formatparam(token[2]))
+		elif token[0] == KEYWORD:
+			# All keywords converted to uppercase
+			return (KEYWORD, token[1], token[1])
+		elif token[0] == WHITESPACE:
+			# All original whitespace compressed to a single space
+			return (WHITESPACE, None, " ")
+		elif token[0] == COMMENT:
+			# All comments converted to C-style
+			return (COMMENT, token[1], "/*%s*/" % (token[1]))
+		elif token[0] == NUMBER:
+			# Numbers reformatted by Decimal library
+			return (NUMBER, token[1], str(token[1]))
+		elif token[0] == STRING:
+			# All strings converted to single quotes
+			return (STRING, token[1], quotestr(token[1], "'"))
+		elif token[0] == INDENT:
+			# Indentation is converted to WHITESPACE tokens
+			return (WHITESPACE, None, "\n" + self.indent*token[1])
+		else:
+			# All other tokens returned verbatim
+			return token
 
 	def _saveState(self):
 		"""Saves the current state of the parser on a stack for later retrieval."""
@@ -303,6 +324,24 @@ class SQLFormatter(object):
 			token = self._token()
 			self._tokens[self._index] = (IDENTIFIER, token[1], token[2], token[3], token[4])
 
+	def _identDatatype(self):
+		"""Convert the current token into a DATATYPE if it is an IDENTIFIER.
+		
+		The _identDatatype() method is used immediately prior to a call to
+		_expect() to match a DATATYPE token. If the current token is an
+		IDENTIFIER token (which might previously have been a KEYWORD token
+		converted by _keywordIdent() above), it is converted to a DATATYPE
+		token (a custom token type introduced by this unit).
+		
+		This is used to permit alternate highlighting for datatypes by the
+		SQLHighlighter class (which knows about the custom DATATYPE token
+		type).
+		"""
+		# If the current token is an IDENTIFIER, convert it into a DATATYPE
+		if (self._token()[0] == IDENTIFIER):
+			token = self._token()
+			self._tokens[self._index] = (DATATYPE, token[1], token[2], token[3], token[4])
+
 	def _parseRelationObjectName(self):
 		"""Parses the (possibly qualified) name of a relation-owned object.
 
@@ -364,11 +403,13 @@ class SQLFormatter(object):
 		"""
 		# Parse the type name (or schema name)
 		self._keywordIdent()
-		result = [self._expect((IDENTIFIER,))[1]]
+		self._identDatatype()
+		result = [self._expect((DATATYPE,))[1]]
 		# Check for a qualifier (without _skipping whitespace)
 		if self._match((OPERATOR, ".")):
 			self._keywordIdent()
-			result = [result[0], self._expect((IDENTIFIER,))[1]]
+			self._identDatatype()
+			result = [result[0], self._expect((DATATYPE,))[1]]
 		# Parse the optional argument(s)
 		args = ()
 		if self._match((OPERATOR, "(")):
@@ -1406,10 +1447,13 @@ class SQLFormatter(object):
 			self._newline()
 		self._outdent()
 
-	def parse(self, source, terminator=";"):
+	def parse(self, tokens):
 		"""Parses an arbitrary SQL statement or script"""
 		self._statestack = deque()
-		self._tokens = self._tokenizer.parse(source, terminator)
+		# Check that newline_split wasn't used in the tokenizer
+		if type(tokens[0]) == type([]):
+			raise ParseError("Tokens must not be organized by line")
+		self._tokens = list(tokens) # Take a COPY of the token list
 		self._index = 0
 		self._level = 0
 		self._output = []
@@ -1470,6 +1514,7 @@ class SQLFormatter(object):
 			print "Error: %s" % (e[0])
 			(_, _, _, errorline, errorcol) = e[1]
 			currline = 1
+			source = ''.join([s for (_, _, s, _, _) in tokens])
 			for line in source.splitlines():
 				if (currline >= errorline - 2) and (currline <= errorline + 2):
 					print line
@@ -1477,7 +1522,22 @@ class SQLFormatter(object):
 						print ' '*(errorcol-1) + '^'
 				currline += 1
 			raise
-		return ''.join([self._tokenOutput(token) for token in self._output])
+		# Format/convert all output tokens
+		self._output = [self._tokenOutput(token) for token in self._output]
+		# Recalculate line and column elements for all tokens
+		line = 1
+		column = 1
+		tokens = []
+		for token in self._output:
+			tokens.append(token + (line, column))
+			source = token[2]
+			# Note that all line breaks are \n by this point
+			while '\n' in source:
+				line += 1
+				column = 1
+				source = source[source.index('\n') + 1:]
+			column += len(source)
+		return tokens
 
 if __name__ == "__main__":
 	# XXX Robust test cases
