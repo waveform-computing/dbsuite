@@ -39,11 +39,12 @@ class DocObjectBase(object):
 		if self.parent: result = self.parent.qualifiedName + "." + result
 		return result
 
-	def isSystemObject(self):
+	def getSystem(self):
 		"""Returns True if the database object is a system-defined object (like a system catalog table)"""
-		result = self.name in set(["NULLID", "SQLJ", "SYSCAT", "SYSFUN", "SYSIBM", "SYSPROC", "SYSSTAT", "SYSTOOLS"])
-		if self.parent: result |= self.parent.isSystemObject
-		return result
+		if not self.parent is None:
+			return self.parent.isSystemObject()
+		else:
+			return False
 
 	def __str__(self):
 		"""Return a string representation of the object"""
@@ -57,6 +58,7 @@ class DocObjectBase(object):
 	qualifiedName = property(lambda self: self.getQualifiedName(), doc="""Returns the fully qualified name of the database object""")
 	typeName = property(lambda self: self.getTypeName(), doc="""Returns the human readable name of the object's type""")
 	description = property(lambda self: self.getDescription(), doc="""Returns a brief description of the object""")
+	system = property(lambda self: self.getSystem(), doc="""True if the object is a system-defined object""")
 
 def main():
 	pass
