@@ -691,13 +691,8 @@ class DocCache(object):
 			for tbspace in self.tablespaces])
 
 def main():
-	import DB2
-	conn = DB2.Connection("DQSMS")
-	cache = DocCache(conn)
-	conn.close()
-	del conn
-	print cache.views.keys()
-	print ("SYSCAT", "TABOPTIONS") in cache.views
+	# XXX Test cases
+	pass
 
 if __name__ == "__main__":
 	main()
