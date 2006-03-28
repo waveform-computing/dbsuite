@@ -20,9 +20,13 @@ class DocDatabase(DocObjectBase):
 		self.__tablespaces = {}
 		for row in cache.tablespaces.itervalues():
 			self.__tablespaces[row['name']] = DocTablespace(self, cache, **row)
+		self.__tablespaceList = [x for x in self.__tablespaces.itervalues()]
+		self.__tablespaceList.sort(key=lambda tbspace:tbspace.name)
 		self.__schemas = {}
 		for row in cache.schemas.itervalues():
 			self.__schemas[row['name']] = DocSchema(self, cache, **row)
+		self.__schemaList = [x for x in self.__schemas.itervalues()]
+		self.__schemaList.sort(key=lambda schema:schema.name)
 
 	def find(self, qualifiedName):
 		"""Find an object in the hierarchy by its qualified name.
@@ -76,11 +80,19 @@ class DocDatabase(DocObjectBase):
 	def __getTablespaces(self):
 		return self.__tablespaces
 	
+	def __getTablespaceList(self):
+		return self.__tablespaceList
+	
 	def __getSchemas(self):
 		return self.__schemas
+	
+	def __getSchemaList(self):
+		return self.__schemaList
 
 	schemas = property(__getSchemas, doc="""The schemas contained in the database""")
+	schemaList = property(__getSchemaList, doc="""The schemas contained in the database, sorted by name""")
 	tablespaces = property(__getTablespaces, doc="""The tablespaces contained in the database""")
+	tablespaceList = property(__getTablespaceList, doc="""The tablespaces contained in the database, sorted by name""")
 
 def main():
 	pass
