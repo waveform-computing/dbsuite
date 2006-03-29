@@ -5,7 +5,6 @@
 import logging
 from base import DocObjectBase
 from proxies import IndexesDict, IndexesList, RelationsDict, RelationsList
-from util import makeDateTime
 
 class DocTablespace(DocObjectBase):
 	"""Class representing a tablespace in a DB2 database"""

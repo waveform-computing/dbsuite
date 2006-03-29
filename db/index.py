@@ -5,7 +5,7 @@
 import logging
 from string import Template
 from schemabase import DocSchemaObject
-from util import makeDateTime, formatIdentifier
+from util import formatIdentifier
 
 class IndexFieldsDict(object):
 	"""Presents a dictionary of (field, indexOrder) tuples keyed by fieldName"""

@@ -91,7 +91,7 @@ are defined:
 
 import sys
 import decimal
-import sql.dialects
+import dialects
 
 # Token constants
 (
@@ -133,8 +133,8 @@ class SQLTokenizerBase(object):
 		"""Initializes an instance of the class."""
 		self._terminator = ';'
 		self._savedhandler = None
-		self.keywords = set(sql.dialects.sql92_keywords)
-		self.identchars = set(sql.dialects.sql92_identchars)
+		self.keywords = set(dialects.sql92_keywords)
+		self.identchars = set(dialects.sql92_identchars)
 		self.spacechars = ' \t\r\n'
 		self.newline_split = False
 		self.sql_comments = True
@@ -605,24 +605,24 @@ class SQL99Tokenizer(SQLTokenizerBase):
 	
 	def __init__(self):
 		super(SQL99Tokenizer, self).__init__()
-		self.keywords = set(sql.dialects.sql99_keywords)
-		self.identchars = set(sql.dialects.sql99_identchars)
+		self.keywords = set(dialects.sql99_keywords)
+		self.identchars = set(dialects.sql99_identchars)
 
 class SQL2003Tokenizer(SQLTokenizerBase):
 	"""ANSI SQL-2003 tokenizer class."""
 	
 	def __init__(self):
 		super(SQL2003Tokenizer, self).__init__()
-		self.keywords = set(sql.dialects.sql2003_keywords)
-		self.identchars = set(sql.dialects.sql2003_identchars)
+		self.keywords = set(dialects.sql2003_keywords)
+		self.identchars = set(dialects.sql2003_identchars)
 
 class DB2ZOSSQLTokenizer(SQLTokenizerBase):
 	"""IBM DB2 UDB for z/OS tokenizer class."""
 	
 	def __init__(self):
 		super(DB2ZOSSQLTokenizer, self).__init__()
-		self.keywords = set(sql.dialects.ibmdb2zos_keywords)
-		self.identchars = set(sql.dialects.ibmdb2zos_identchars)
+		self.keywords = set(dialects.ibmdb2zos_keywords)
+		self.identchars = set(dialects.ibmdb2zos_identchars)
 
 	def _handleNot(self):
 		"""Parses characters meaning "NOT" (! and ^) in the source."""
@@ -650,8 +650,8 @@ class DB2UDBSQLTokenizer(DB2ZOSSQLTokenizer):
 
 	def __init__(self):
 		super(DB2UDBSQLTokenizer, self).__init__()
-		self.keywords = set(sql.dialects.ibmdb2udb_keywords)
-		self.identchars = set(sql.dialects.ibmdb2udb_identchars)
+		self.keywords = set(dialects.ibmdb2udb_keywords)
+		self.identchars = set(dialects.ibmdb2udb_identchars)
 		# Support for C-style /*..*/ comments add in DB2 UDB v8 FP9
 		self.c_comments = True
 	

@@ -9,7 +9,6 @@ from view import DocView
 from index import DocIndex
 from datatype import DocDatatype
 from function import DocFunction
-from util import makeDateTime
 
 class DocSchema(DocObjectBase):
 	"""Class representing a schema in a DB2 database"""
