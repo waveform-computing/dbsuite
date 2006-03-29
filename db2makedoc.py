@@ -5,6 +5,7 @@
 import logging
 import doccache
 import docdatabase
+import w3
 
 def main():
 	# Configure the output
@@ -23,7 +24,7 @@ def main():
 		logging.info("Building database object hierarchy")
 		database = docdatabase.DocDatabase(cache, "DQSMS")
 		logging.info("Writing output with w3 handler")
-		docoutput_w3.DocOutput(database, "../public_html/dqsms")
+		w3.DocOutput(database, "../public_html/dqsms")
 	finally:
 		connection.close()
 		connection = None
