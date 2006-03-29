@@ -28,9 +28,9 @@ operations (i.e. INSERT, UPDATE, DELETE).
 
 """
 
-from sqldialects import *
-from sqltokenizer import *
 from collections import deque
+from sql.dialects import *
+from sql.tokenizer import *
 
 # Custom token types used by the formatter
 (

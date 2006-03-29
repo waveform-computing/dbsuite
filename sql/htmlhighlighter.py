@@ -90,8 +90,8 @@ be highlighted.
 """
 
 from xml.sax.saxutils import quoteattr, escape
-from sqltokenizer import *
-from sqlformatter import *
+from sql.tokenizer import *
+from sql.formatter import *
 
 default_css_classes = {
 	ERROR:      'sql_error',

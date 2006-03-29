@@ -18,9 +18,9 @@ from db.foreignkey import DocForeignKey
 from db.uniquekey import DocUniqueKey, DocPrimaryKey
 from db.function import DocFunction
 from xml.sax.saxutils import quoteattr, escape
-from sqltokenizer import DB2UDBSQLTokenizer
-from sqlhighlighter import SQLHTMLHighlighter
-from sqlformatter import SQLFormatter
+from sql.tokenizer import DB2UDBSQLTokenizer
+from sql.formatter import SQLFormatter
+from sql.htmlhighlighter import SQLHTMLHighlighter
 
 __all__ = ['DocOutput']
 

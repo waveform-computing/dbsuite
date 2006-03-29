@@ -4,7 +4,7 @@
 
 import logging
 import db.database
-import cache.db2udbluw
+import input.db2udbluw
 import output.w3
 
 def main():
@@ -20,7 +20,7 @@ def main():
 		connection = odbc.odbc("DQSMS/dave/St4rGate")
 	try:
 		logging.info("Building metadata cache")
-		data = cache.db2udbluw.DocCache(connection)
+		data = input.db2udbluw.DocCache(connection)
 		logging.info("Building database object hierarchy")
 		database = db.database.DocDatabase(data, "DQSMS")
 		logging.info("Writing output with w3 handler")
