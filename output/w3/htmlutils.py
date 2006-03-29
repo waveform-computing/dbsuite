@@ -6,10 +6,6 @@ import datetime
 import HTMLParser
 from xml.sax.saxutils import quoteattr, escape
 
-__all__ = ['stripTags', 'startTag', 'endTag', 'formatContent', 'makeTag',
-	'makeTableCell', 'makeTableRow', 'makeTable', 'makeListItem',
-	'makeOrderedList', 'makeUnorderedList', 'makeDefinitionList']
-
 class StripHTML(HTMLParser.HTMLParser):
 	def strip(self, data):
 		self._output = []

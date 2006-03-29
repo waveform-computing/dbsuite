@@ -5,8 +5,6 @@
 import logging
 from util import makeDateTime, makeBoolean
 
-__all__ = ['DocCache']
-
 def fetchDict(cursor):
 	"""Returns rows from a cursor as a list of dictionaries.
 
