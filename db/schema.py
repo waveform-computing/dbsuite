@@ -3,15 +3,13 @@
 # vim: set noet sw=4 ts=4:
 
 import logging
-from docbase import DocObjectBase
-from doctable import DocTable
-from docview import DocView
-from docindex import DocIndex
-from docdatatype import DocDatatype
-from docfunction import DocFunction
-from docutil import makeDateTime
-
-__all__ = ['DocSchema']
+from base import DocObjectBase
+from table import DocTable
+from view import DocView
+from index import DocIndex
+from datatype import DocDatatype
+from function import DocFunction
+from util import makeDateTime
 
 class DocSchema(DocObjectBase):
 	"""Class representing a schema in a DB2 database"""

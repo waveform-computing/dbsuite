@@ -3,10 +3,8 @@
 # vim: set noet sw=4 ts=4:
 
 import logging
-from docrelationbase import DocConstraint
-from docutil import makeBoolean, makeDateTime, formatIdentifier
-
-__all__ = ['DocForeignKey']
+from relationbase import DocConstraint
+from util import formatIdentifier
 
 class ForeignKeyFieldsList(object):
 	"""Presents a list of (field, parentField) tuples in a foreign key"""

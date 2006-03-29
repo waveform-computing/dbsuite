@@ -3,11 +3,8 @@
 # vim: set noet sw=4 ts=4:
 
 import logging
-from docschemabase import DocRoutine
-from docparam import DocParam
-from docutil import makeDateTime, makeBoolean
-
-__all__ = ['DocFunction']
+from schemabase import DocRoutine
+from param import DocParam
 
 class DocFunction(DocRoutine):
 	"""Class representing a function in a DB2 database"""

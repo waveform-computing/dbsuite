@@ -3,12 +3,9 @@
 # vim: set noet sw=4 ts=4:
 
 import logging
-from docbase import DocObjectBase
-from docschema import DocSchema
-from doctablespace import DocTablespace
-from docutil import makeDateTime, makeBoolean
-
-__all__ = ['DocDatabase']
+from base import DocObjectBase
+from schema import DocSchema
+from tablespace import DocTablespace
 
 class DocDatabase(DocObjectBase):
 	"""Class representing a DB2 database"""

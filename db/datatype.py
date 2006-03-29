@@ -3,10 +3,7 @@
 # vim: set noet sw=4 ts=4:
 
 import logging
-from docschemabase import DocSchemaObject
-from docutil import makeDateTime, makeBoolean
-
-__all__ = ['DocDatatype']
+from schemabase import DocSchemaObject
 
 class DocDatatype(DocSchemaObject):
 	"""Class representing a datatype in a DB2 database"""

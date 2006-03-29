@@ -3,10 +3,8 @@
 # vim: set noet sw=4 ts=4:
 
 import logging
-from docrelationbase import DocConstraint
-from docutil import formatIdentifier
-
-__all__ = ['DocUniqueKey', 'DocPrimaryKey']
+from relationbase import DocConstraint
+from util import formatIdentifier
 
 class UniqueKeyFieldsList(object):
 	"""Presents a list of fields in a unique key"""

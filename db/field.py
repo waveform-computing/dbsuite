@@ -4,10 +4,8 @@
 
 import logging
 from string import Template
-from docrelationbase import DocRelationObject
-from docutil import makeDateTime, makeBoolean, formatSize, formatIdentifier
-
-__all__ = ['DocField']
+from relationbase import DocRelationObject
+from util import formatSize, formatIdentifier
 
 class DocField(DocRelationObject):
 	"""Class representing a field in a relation in a DB2 database"""

@@ -4,8 +4,6 @@
 
 """Defines all abstract base classes"""
 
-__all__ = ['DocBase']
-
 class DocObjectBase(object):
 	"""Base class for all documented database objects"""
 

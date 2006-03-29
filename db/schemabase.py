@@ -2,9 +2,7 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-from docbase import DocObjectBase
-
-__all__ = ['DocSchemaObject', 'DocRelation']
+from base import DocObjectBase
 
 class DocSchemaObject(DocObjectBase):
 	"""Base class for database objects that belong directly to a schema"""

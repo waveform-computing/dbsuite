@@ -4,15 +4,13 @@
 
 import logging
 from string import Template
-from docschemabase import DocRelation
-from docproxies import IndexesDict, IndexesList, RelationsDict, RelationsList
-from docfield import DocField
-from docuniquekey import DocUniqueKey, DocPrimaryKey
-from docforeignkey import DocForeignKey
-from doccheck import DocCheck
-from docutil import makeDateTime, makeBoolean, formatIdentifier
-
-__all__ = ['DocTable']
+from schemabase import DocRelation
+from proxies import IndexesDict, IndexesList, RelationsDict, RelationsList
+from field import DocField
+from uniquekey import DocUniqueKey, DocPrimaryKey
+from foreignkey import DocForeignKey
+from check import DocCheck
+from util import formatIdentifier
 
 class DocTable(DocRelation):
 	"""Class representing a table in a DB2 database"""

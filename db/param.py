@@ -3,10 +3,7 @@
 # vim: set noet sw=4 ts=4:
 
 import logging
-from docbase import DocObjectBase
-from docutil import makeBoolean
-
-__all__ = ['DocParam']
+from base import DocObjectBase
 
 class DocParam(DocObjectBase):
 	"""Class representing a parameter in a routine in a DB2 database"""

@@ -3,10 +3,8 @@
 # vim: set noet sw=4 ts=4:
 
 from string import Template
-from docbase import DocObjectBase
-from docutil import formatIdentifier
-
-__all__ = ['DocRelationObject', 'DocConstraint']
+from base import DocObjectBase
+from util import formatIdentifier
 
 class DocRelationObject(DocObjectBase):
 	"""Base class for database objects that belong directly to a relation"""

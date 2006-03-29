@@ -3,10 +3,8 @@
 # vim: set noet sw=4 ts=4:
 
 import logging
-from docrelationbase import DocConstraint
-from docutil import makeDateTime, makeBoolean, formatIdentifier
-
-__all__ = ['DocCheck']
+from relationbase import DocConstraint
+from util import formatIdentifier
 
 class CheckFieldsList(object):
 	"""Presents a list of fields in a check constraint"""

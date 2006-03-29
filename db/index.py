@@ -4,10 +4,8 @@
 
 import logging
 from string import Template
-from docschemabase import DocSchemaObject
-from docutil import makeDateTime, formatIdentifier
-
-__all__ = ['DocIndex']
+from schemabase import DocSchemaObject
+from util import makeDateTime, formatIdentifier
 
 class IndexFieldsDict(object):
 	"""Presents a dictionary of (field, indexOrder) tuples keyed by fieldName"""

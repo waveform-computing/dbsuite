@@ -4,12 +4,10 @@
 
 import logging
 from string import Template
-from docschemabase import DocRelation
-from docproxies import RelationsDict, RelationsList
-from docfield import DocField
-from docutil import makeDateTime, makeBoolean, formatIdentifier
-
-__all__ = ['DocView']
+from schemabase import DocRelation
+from proxies import RelationsDict, RelationsList
+from field import DocField
+from util import formatIdentifier
 
 class DocView(DocRelation):
 	"""Class representing a view in a DB2 database"""

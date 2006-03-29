@@ -4,8 +4,6 @@
 
 from UserDict import DictMixin
 
-__all__ = ['RelationsDict', 'RelationsList', 'IndexesDict', 'IndexesList']
-
 class RelationsDict(object, DictMixin):
 	"""Presents a dictionary of relations"""
 	
