@@ -3,9 +3,9 @@
 # vim: set noet sw=4 ts=4:
 
 import logging
-import doccache
-import docdatabase
-import w3
+import db.database
+import cache.db2udbluw
+import output.w3
 
 def main():
 	# Configure the output
@@ -20,11 +20,11 @@ def main():
 		connection = odbc.odbc("DQSMS/dave/St4rGate")
 	try:
 		logging.info("Building metadata cache")
-		cache = doccache.DocCache(connection)
+		data = cache.db2udbluw.DocCache(connection)
 		logging.info("Building database object hierarchy")
-		database = docdatabase.DocDatabase(cache, "DQSMS")
+		database = db.database.DocDatabase(data, "DQSMS")
 		logging.info("Writing output with w3 handler")
-		w3.DocOutput(database, "../public_html/dqsms")
+		output.w3.DocOutput(database, "../public_html/dqsms")
 	finally:
 		connection.close()
 		connection = None
