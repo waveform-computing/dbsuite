@@ -27,7 +27,7 @@ class DocParam(DocObjectBase):
 
 	def getName(self):
 		result = super(DocParam, self).getName()
-		if not result: result = str(self.__position)
+		if not result: result = "p%d" % (self.__position)
 		return result
 
 	def getTypeName(self):
