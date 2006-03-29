@@ -3,25 +3,25 @@
 # vim: set noet sw=4 ts=4:
 
 import logging
-from base import DocObjectBase
-from schema import DocSchema
-from tablespace import DocTablespace
+from base import DocBase
+from schema import Schema
+from tablespace import Tablespace
 
-class DocDatabase(DocObjectBase):
+class Database(DocBase):
 	"""Class representing a DB2 database"""
 	
 	def __init__(self, cache, name):
 		"""Initializes an instance of the class"""
-		super(DocDatabase, self).__init__(None, name)
+		super(Database, self).__init__(None, name)
 		logging.debug("Building database")
 		self.__tablespaces = {}
 		for row in cache.tablespaces.itervalues():
-			self.__tablespaces[row['name']] = DocTablespace(self, cache, **row)
+			self.__tablespaces[row['name']] = Tablespace(self, cache, **row)
 		self.__tablespaceList = [x for x in self.__tablespaces.itervalues()]
 		self.__tablespaceList.sort(key=lambda tbspace:tbspace.name)
 		self.__schemas = {}
 		for row in cache.schemas.itervalues():
-			self.__schemas[row['name']] = DocSchema(self, cache, **row)
+			self.__schemas[row['name']] = Schema(self, cache, **row)
 		self.__schemaList = [x for x in self.__schemas.itervalues()]
 		self.__schemaList.sort(key=lambda schema:schema.name)
 

@@ -3,19 +3,19 @@
 # vim: set noet sw=4 ts=4:
 
 import logging
-from base import DocObjectBase
-from table import DocTable
-from view import DocView
-from index import DocIndex
-from datatype import DocDatatype
-from function import DocFunction
+from base import DocBase
+from table import Table
+from view import View
+from index import Index
+from datatype import Datatype
+from function import Function
 
-class DocSchema(DocObjectBase):
+class Schema(DocBase):
 	"""Class representing a schema in a DB2 database"""
 
 	def __init__(self, database, cache, **row):
 		"""Initializes an instance of the class from a cache row"""
-		super(DocSchema, self).__init__(database, row['name'])
+		super(Schema, self).__init__(database, row['name'])
 		logging.debug("Building schema %s" % (self.qualifiedName))
 		self.__owner = row['owner']
 		self.__definer = row['definer']
@@ -46,17 +46,17 @@ class DocSchema(DocObjectBase):
 		self.__specificMethods = {}
 		self.__specificProcedures = {}
 		for datatype in [cache.datatypes[(schema, name)] for (schema, name) in cache.datatypes if schema == self.name]:
-			self.__datatypes[datatype['name']] = DocDatatype(self, cache, **datatype)
+			self.__datatypes[datatype['name']] = Datatype(self, cache, **datatype)
 		self.__datatypeList = [x for x in self.__datatypes.itervalues()]
 		self.__datatypeList.sort(key=lambda datatype:datatype.name)
 		for tableRec in [cache.tables[(schema, name)] for (schema, name) in cache.tables if schema == self.name]:
-			table = DocTable(self, cache, **tableRec)
+			table = Table(self, cache, **tableRec)
 			self.__tables[tableRec['name']] = table
 			self.__relations[tableRec['name']] = table
 		self.__tableList = [x for x in self.__tables.itervalues()]
 		self.__tableList.sort(key=lambda table:table.name)
 		for viewRec in [cache.views[(schema, name)] for (schema, name) in cache.views if schema == self.name]:
-			view = DocView(self, cache, **viewRec)
+			view = View(self, cache, **viewRec)
 			self.__views[viewRec['name']] = view
 			self.__relations[viewRec['name']] = view
 		self.__viewList = [x for x in self.__views.itervalues()]
@@ -65,11 +65,11 @@ class DocSchema(DocObjectBase):
 		self.__relationList = [x for x in self.__relations.itervalues()]
 		self.__relationList.sort(key=lambda relation:relation.name)
 		for indexRec in [cache.indexes[(schema, name)] for (schema, name) in cache.indexes if schema == self.name]:
-			self.__indexes[indexRec['name']] = DocIndex(self, cache, **indexRec)
+			self.__indexes[indexRec['name']] = Index(self, cache, **indexRec)
 		self.__indexList = [x for x in self.__indexes.itervalues()]
 		self.__indexList.sort(key=lambda index:index.name)
 		for funcRec in [cache.functions[(schema, name)] for (schema, name) in cache.functions if schema == self.name]:
-			func = DocFunction(self, cache, **funcRec)
+			func = Function(self, cache, **funcRec)
 			if not funcRec['name'] in self.__routines:
 				self.__routines[funcRec['name']] = []
 			self.__routines[funcRec['name']].append(func)
@@ -100,7 +100,7 @@ class DocSchema(DocObjectBase):
 		if self.__description:
 			return self.__description
 		else:
-			return super(DocSchema, self).getDescription()
+			return super(Schema, self).getDescription()
 
 	def getSystem(self):
 		return self.name in [

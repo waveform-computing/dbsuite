@@ -4,7 +4,7 @@
 
 import logging
 from string import Template
-from schemabase import DocSchemaObject
+from schemabase import SchemaObject
 from util import formatIdentifier
 
 class IndexFieldsDict(object):
@@ -69,12 +69,12 @@ class IndexFieldsList(object):
 				return True
 		return False
 
-class DocIndex(DocSchemaObject):
+class Index(SchemaObject):
 	"""Class representing an index in a DB2 database"""
 
 	def __init__(self, schema, cache, **row):
 		"""Initializes an instance of the class from a cache row"""
-		super(DocIndex, self).__init__(schema, row['name'])
+		super(Index, self).__init__(schema, row['name'])
 		logging.debug("Building index %s" % (self.qualifiedName))
 		self.__definer = row['definer']
 		self.__tableSchema = row['tableSchema']
@@ -112,7 +112,7 @@ class DocIndex(DocSchemaObject):
 		if self.__description:
 			return self.__description
 		else:
-			return super(DocIndex, self).getDescription()
+			return super(Index, self).getDescription()
 
 	def __getFields(self):
 		return self.__fields

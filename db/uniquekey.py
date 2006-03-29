@@ -3,7 +3,7 @@
 # vim: set noet sw=4 ts=4:
 
 import logging
-from relationbase import DocConstraint
+from relationbase import Constraint
 from util import formatIdentifier
 
 class UniqueKeyFieldsList(object):
@@ -32,12 +32,12 @@ class UniqueKeyFieldsList(object):
 				return True
 		return False
 
-class DocUniqueKey(DocConstraint):
+class UniqueKey(Constraint):
 	"""Class representing a unique key in a table in a DB2 database"""
 
 	def __init__(self, table, cache, **row):
 		"""Initializes an instance of the class from a cache row"""
-		super(DocUniqueKey, self).__init__(table, row['name'])
+		super(UniqueKey, self).__init__(table, row['name'])
 		logging.debug("Building unique key %s" % (self.qualifiedName))
 		self.__definer = row['definer']
 		self.__checkExisting = row['checkExisting']
@@ -54,7 +54,7 @@ class DocUniqueKey(DocConstraint):
 		if self.__description:
 			return self.__description
 		else:
-			return super(DocUniqueKey, self).getDescription()
+			return super(UniqueKey, self).getDescription()
 	
 	def getDefinitionStr(self):
 		return 'CONSTRAINT %s UNIQUE (%s)' % (
@@ -71,7 +71,7 @@ class DocUniqueKey(DocConstraint):
 	definer = property(__getDefiner, doc="""The user who created the key""")
 	checkExisting = property(__getCheckExisting, doc="""Indicates when existing data is to be checked (if at all)""")
 
-class DocPrimaryKey(DocUniqueKey):
+class PrimaryKey(UniqueKey):
 	"""Class representing a primary key in a table in a DB2 database"""
 
 	def getTypeName(self):

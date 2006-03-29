@@ -4,17 +4,17 @@
 
 import logging
 from string import Template
-from schemabase import DocRelation
+from schemabase import Relation
 from proxies import RelationsDict, RelationsList
-from field import DocField
+from field import Field
 from util import formatIdentifier
 
-class DocView(DocRelation):
+class View(Relation):
 	"""Class representing a view in a DB2 database"""
 	
 	def __init__(self, schema, cache, **row):
 		"""Initializes an instance of the class from a cache row"""
-		super(DocView, self).__init__(schema, row['name'])
+		super(View, self).__init__(schema, row['name'])
 		logging.debug("Building view %s" % (self.qualifiedName))
 		self.__definer = row['definer']
 		self.__created = row['created']
@@ -27,7 +27,7 @@ class DocView(DocRelation):
 		self.__description = row['description']
 		self.__fields = {}
 		for field in [cache.fields[(schemaName, viewName, fieldName)] for (schemaName, viewName, fieldName) in cache.fields if schemaName == schema.name and viewName == self.name]:
-			self.__fields[field['name']] = DocField(self, cache, **field)
+			self.__fields[field['name']] = Field(self, cache, **field)
 		self.__fieldList = [x for x in self.__fields.itervalues()]
 		self.__fieldList.sort(key=lambda field:field.position)
 		self.__dependents = RelationsDict(self.database, cache.dependents.get((schema.name, self.name)))
@@ -42,7 +42,7 @@ class DocView(DocRelation):
 		if self.__description:
 			return self.__description
 		else:
-			return super(DocView, self).getDescription()
+			return super(View, self).getDescription()
 
 	def getDependents(self):
 		return self.__dependents

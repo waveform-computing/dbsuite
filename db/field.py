@@ -4,15 +4,15 @@
 
 import logging
 from string import Template
-from relationbase import DocRelationObject
+from relationbase import RelationObject
 from util import formatSize, formatIdentifier
 
-class DocField(DocRelationObject):
+class Field(RelationObject):
 	"""Class representing a field in a relation in a DB2 database"""
 
 	def __init__(self, relation, cache, **row):
 		"""Initializes an instance of the class from a cache row"""
-		super(DocField, self).__init__(relation, row['name'])
+		super(Field, self).__init__(relation, row['name'])
 		logging.debug("Building field %s" % (self.qualifiedName))
 		self.__datatypeSchema = row['datatypeSchema']
 		self.__datatypeName = row['datatypeName']
@@ -44,7 +44,7 @@ class DocField(DocRelationObject):
 		if self.__description:
 			return self.__description
 		else:
-			return super(DocField, self).getDescription()
+			return super(Field, self).getDescription()
 
 	def __getDatatype(self):
 		return self.database.schemas[self.__datatypeSchema].datatypes[self.__datatypeName]
@@ -144,8 +144,8 @@ class DocField(DocRelationObject):
 		return ' '.join(items)
 		
 	def __getCreateSql(self):
-		from doctable import DocTable
-		if isinstance(self.relation, DocTable):
+		from doctable import Table
+		if isinstance(self.relation, Table):
 			sql = Template('ALTER TABLE $schema.$table ADD COLUMN $fielddef;')
 			return sql.substitute({
 				'schema': formatIdentifier(self.relation.schema.name),
@@ -156,8 +156,8 @@ class DocField(DocRelationObject):
 			return ""
 	
 	def __getDropSql(self):
-		from doctable import DocTable
-		if isinstance(self.relation, DocTable):
+		from doctable import Table
+		if isinstance(self.relation, Table):
 			sql = Template('ALTER TABLE $schema.$table DROP COLUMN $field;')
 			return sql.substitute({
 				'schema': formatIdentifier(self.relation.schema.name),

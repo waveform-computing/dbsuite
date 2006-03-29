@@ -3,7 +3,7 @@
 # vim: set noet sw=4 ts=4:
 
 import logging
-from relationbase import DocConstraint
+from relationbase import Constraint
 from util import formatIdentifier
 
 class CheckFieldsList(object):
@@ -33,12 +33,12 @@ class CheckFieldsList(object):
 				return True
 		return False
 
-class DocCheck(DocConstraint):
+class Check(Constraint):
 	"""Class representing a check constraint in a table in a DB2 database"""
 
 	def __init__(self, table, cache, **row):
 		"""Initializes an instance of the class from a cache row"""
-		super(DocCheck, self).__init__(table, row['name'])
+		super(Check, self).__init__(table, row['name'])
 		logging.debug("Building check %s" % (self.qualifiedName))
 		self.__created = row['created']
 		self.__definer = row['definer']
@@ -62,7 +62,7 @@ class DocCheck(DocConstraint):
 		if self.__description:
 			return self.__description
 		else:
-			return super(DocCheck, self).getDescription()
+			return super(Check, self).getDescription()
 
 	def getDefinitionStr(self):
 		return 'CONSTRAINT %s CHECK (%s)' % (

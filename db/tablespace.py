@@ -3,15 +3,15 @@
 # vim: set noet sw=4 ts=4:
 
 import logging
-from base import DocObjectBase
+from base import DocBase
 from proxies import IndexesDict, IndexesList, RelationsDict, RelationsList
 
-class DocTablespace(DocObjectBase):
+class Tablespace(DocBase):
 	"""Class representing a tablespace in a DB2 database"""
 
 	def __init__(self, database, cache, **row):
 		"""Initializes an instance of the class from a cache row"""
-		super(DocTablespace, self).__init__(database, row['name'])
+		super(Tablespace, self).__init__(database, row['name'])
 		logging.debug("Building tablespace %s" % (self.qualifiedName))
 		self.__definer = row['definer']
 		self.__created = row['created']
@@ -42,7 +42,7 @@ class DocTablespace(DocObjectBase):
 		if self.__description:
 			return self.__description
 		else:
-			return super(DocTablespace, self).getDescription()
+			return super(Tablespace, self).getDescription()
 
 	def getDatabase(self):
 		return self.parent

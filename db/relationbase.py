@@ -3,10 +3,10 @@
 # vim: set noet sw=4 ts=4:
 
 from string import Template
-from base import DocObjectBase
+from base import DocBase
 from util import formatIdentifier
 
-class DocRelationObject(DocObjectBase):
+class RelationObject(DocBase):
 	"""Base class for database objects that belong directly to a relation"""
 	
 	def getDatabase(self):
@@ -21,7 +21,7 @@ class DocRelationObject(DocObjectBase):
 	relation = property(__getRelation, doc="""The relation that owns the object""")
 	schema = property(__getSchema, doc="""The schema that contains the object""")
 
-class DocConstraint(DocRelationObject):
+class Constraint(RelationObject):
 	"""Base class for constraints that belong in a relation (e.g. primary keys, checks, etc.)"""
 	
 	def __getTable(self):

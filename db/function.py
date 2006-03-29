@@ -3,15 +3,15 @@
 # vim: set noet sw=4 ts=4:
 
 import logging
-from schemabase import DocRoutine
-from param import DocParam
+from schemabase import Routine
+from param import Param
 
-class DocFunction(DocRoutine):
+class Function(Routine):
 	"""Class representing a function in a DB2 database"""
 	
 	def __init__(self, schema, cache, **row):
 		"""Initializes an instance of the class from a cache row"""
-		super(DocFunction, self).__init__(schema, row['name'], row['specificName'])
+		super(Function, self).__init__(schema, row['name'], row['specificName'])
 		logging.debug("Building function %s" % (self.qualifiedName))
 		self.__definer = row['definer']
 		self.__rtypeSchema = row['rtypeSchema']
@@ -36,7 +36,7 @@ class DocFunction(DocRoutine):
 		self.__description = row['description']
 		self.__params = {}
 		for param in [cache.parameters[(schemaName, specificName, paramPos)] for (schemaName, specificName, paramPos) in cache.parameters if schemaName == schema.name and specificName == self.specificName]:
-			self.__params[param['name']] = DocParam(self, cache, **param)
+			self.__params[param['name']] = Param(self, cache, **param)
 		self.__paramList = [x for x in self.__params.itervalues()]
 		self.__paramList.sort(key=lambda param:param.position)
 
@@ -50,7 +50,7 @@ class DocFunction(DocRoutine):
 		if self.__description:
 			return self.__description
 		else:
-			return super(DocFunction, self).getDescription()
+			return super(Function, self).getDescription()
 
 	def getParams(self):
 		return self.__params

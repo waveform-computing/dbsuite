@@ -4,13 +4,13 @@
 
 """Defines all abstract base classes"""
 
-class DocObjectBase(object):
+class DocBase(object):
 	"""Base class for all documented database objects"""
 
 	def __init__(self, parent, name):
 		"""Initializes an instance of the class"""
-		super(DocObjectBase, self).__init__()
-		assert not parent or isinstance(parent, DocObjectBase)
+		super(DocBase, self).__init__()
+		assert not parent or isinstance(parent, DocBase)
 		self.__parent = parent
 		self.__name = name
 

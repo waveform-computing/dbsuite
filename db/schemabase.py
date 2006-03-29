@@ -2,9 +2,9 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-from base import DocObjectBase
+from base import DocBase
 
-class DocSchemaObject(DocObjectBase):
+class SchemaObject(DocBase):
 	"""Base class for database objects that belong directly to a schema"""
 	
 	def getDatabase(self):
@@ -15,7 +15,7 @@ class DocSchemaObject(DocObjectBase):
 	
 	schema = property(__getSchema, doc="""The schema that owns the object""")
 
-class DocRelation(DocSchemaObject):
+class Relation(SchemaObject):
 	"""Base class for relations that belong in a schema (e.g. tables, views, etc.)"""
 	
 	def getIdentifier(self):
@@ -39,11 +39,11 @@ class DocRelation(DocSchemaObject):
 	fields = property(lambda self: self.getFields(), doc="""The fields contained in the relation""")
 	fieldList = property(lambda self: self.getFieldList(), doc="""The fields contained in the relation in an ordered list""")
 
-class DocRoutine(DocSchemaObject):
+class Routine(SchemaObject):
 	"""Base class for routines that belong in a schema (functions, procedures, etc.)"""
 
 	def __init__(self, parent, name, specificName):
-		super(DocRoutine, self).__init__(parent, name)
+		super(Routine, self).__init__(parent, name)
 		self.__specificName = specificName
 		
 	def __getSpecificName(self):

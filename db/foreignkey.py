@@ -3,7 +3,7 @@
 # vim: set noet sw=4 ts=4:
 
 import logging
-from relationbase import DocConstraint
+from relationbase import Constraint
 from util import formatIdentifier
 
 class ForeignKeyFieldsList(object):
@@ -38,12 +38,12 @@ class ForeignKeyFieldsList(object):
 				return True
 		return False
 
-class DocForeignKey(DocConstraint):
+class ForeignKey(Constraint):
 	"""Class representing a foreign key in a table in a DB2 database"""
 
 	def __init__(self, table, cache, **row):
 		"""Initializes an instance of the class from a cache row"""
-		super(DocForeignKey, self).__init__(table, row['name'])
+		super(ForeignKey, self).__init__(table, row['name'])
 		logging.debug("Building foreign key %s" % (self.qualifiedName))
 		self.__refTableSchema = row['refTableSchema']
 		self.__refTableName = row['refTableName']
@@ -68,7 +68,7 @@ class DocForeignKey(DocConstraint):
 		if self.__description:
 			return self.__description
 		else:
-			return super(DocForeignKey, self).getDescription()
+			return super(ForeignKey, self).getDescription()
 	
 	def getDefinitionStr(self):
 		sql = 'CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s.%s(%s)' % (

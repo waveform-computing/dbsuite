@@ -3,14 +3,14 @@
 # vim: set noet sw=4 ts=4:
 
 import logging
-from base import DocObjectBase
+from base import DocBase
 
-class DocParam(DocObjectBase):
+class Param(DocBase):
 	"""Class representing a parameter in a routine in a DB2 database"""
 
 	def __init__(self, routine, cache, **row):
 		"""Initializes an instance of the class from a cache row"""
-		super(DocParam, self).__init__(routine, row['name'])
+		super(Param, self).__init__(routine, row['name'])
 		self.__position = row['position']
 		logging.debug("Building parameter %s" % (self.qualifiedName))
 		self.__type = row['type']
@@ -23,7 +23,7 @@ class DocParam(DocObjectBase):
 		self.__description = row['description']
 
 	def getName(self):
-		result = super(DocParam, self).getName()
+		result = super(Param, self).getName()
 		if not result: result = "p%d" % (self.__position)
 		return result
 
@@ -37,7 +37,7 @@ class DocParam(DocObjectBase):
 		if self.__description:
 			return self.__description
 		else:
-			return super(DocParam, self).getDescription()
+			return super(Param, self).getDescription()
 
 	def getDatabase(self):
 		return self.parent.parent.parent

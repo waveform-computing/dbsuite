@@ -3,14 +3,14 @@
 # vim: set noet sw=4 ts=4:
 
 import logging
-from schemabase import DocSchemaObject
+from schemabase import SchemaObject
 
-class DocDatatype(DocSchemaObject):
+class Datatype(SchemaObject):
 	"""Class representing a datatype in a DB2 database"""
 	
 	def __init__(self, schema, cache, **row):
 		"""Initializes an instance of the class from a cache row"""
-		super(DocDatatype, self).__init__(schema, row['name'])
+		super(Datatype, self).__init__(schema, row['name'])
 		logging.debug("Building datatype %s" % (self.qualifiedName))
 		self.__definer = row['definer']
 		self.__sourceSchema = row['sourceSchema']
@@ -37,7 +37,7 @@ class DocDatatype(DocSchemaObject):
 		if self.__description:
 			return self.__description
 		else:
-			return super(DocDatatype, self).getDescription()
+			return super(Datatype, self).getDescription()
 
 	def __getDefiner(self):
 		return self.__definer

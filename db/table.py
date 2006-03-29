@@ -4,20 +4,20 @@
 
 import logging
 from string import Template
-from schemabase import DocRelation
+from schemabase import Relation
 from proxies import IndexesDict, IndexesList, RelationsDict, RelationsList
-from field import DocField
-from uniquekey import DocUniqueKey, DocPrimaryKey
-from foreignkey import DocForeignKey
-from check import DocCheck
+from field import Field
+from uniquekey import UniqueKey, PrimaryKey
+from foreignkey import ForeignKey
+from check import Check
 from util import formatIdentifier
 
-class DocTable(DocRelation):
+class Table(Relation):
 	"""Class representing a table in a DB2 database"""
 
 	def __init__(self, schema, cache, **row):
 		"""Initializes an instance of the class from a cache row"""
-		super(DocTable, self).__init__(schema, row['name'])
+		super(Table, self).__init__(schema, row['name'])
 		logging.debug("Building table %s" % (self.qualifiedName))
 		self.__definer = row['definer']
 		self.__checkPending = row['checkPending']
@@ -42,7 +42,7 @@ class DocTable(DocRelation):
 		for field in [cache.fields[(schemaName, tableName, fieldName)]
 			for (schemaName, tableName, fieldName) in cache.fields
 			if schemaName == schema.name and tableName == self.name]:
-			self.__fields[field['name']] = DocField(self, cache, **field)
+			self.__fields[field['name']] = Field(self, cache, **field)
 		self.__fieldList = [x for x in self.__fields.itervalues()]
 		self.__fieldList.sort(key=lambda field:field.position)
 		self.__dependents = RelationsDict(self.database, cache.dependents.get((schema.name, self.name)))
@@ -56,24 +56,24 @@ class DocTable(DocRelation):
 			for (schemaName, tableName, constName) in cache.uniqueKeys
 			if schemaName == schema.name and tableName == self.name]:
 			if key['type'] == 'P':
-				constraint = DocPrimaryKey(self, cache, **key)
+				constraint = PrimaryKey(self, cache, **key)
 				self.__primaryKey = constraint
 			else:
-				constraint = DocUniqueKey(self, cache, **key)
+				constraint = UniqueKey(self, cache, **key)
 			self.__constraints[key['name']] = constraint
 			self.__uniqueKeys[key['name']] = constraint
 		self.__foreignKeys = {}
 		for key in [cache.foreignKeys[(schemaName, tableName, constName)]
 			for (schemaName, tableName, constName) in cache.foreignKeys
 			if schemaName == schema.name and tableName == self.name]:
-			constraint = DocForeignKey(self, cache, **key)
+			constraint = ForeignKey(self, cache, **key)
 			self.__constraints[key['name']] = constraint
 			self.__foreignKeys[key['name']] = constraint
 		self.__checks = {}
 		for check in [cache.checks[(schemaName, tableName, constName)]
 			for (schemaName, tableName, constName) in cache.checks
 			if schemaName == schema.name and tableName == self.name]:
-			constraint = DocCheck(self, cache, **check)
+			constraint = Check(self, cache, **check)
 			self.__constraints[check['name']] = constraint
 			self.__checks[check['name']] = constraint
 
@@ -84,7 +84,7 @@ class DocTable(DocRelation):
 		if self.__description:
 			return self.__description
 		else:
-			return super(DocTable, self).getDescription()
+			return super(Table, self).getDescription()
 
 	def getFields(self):
 		return self.__fields
