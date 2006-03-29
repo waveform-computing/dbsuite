@@ -5,14 +5,14 @@
 import datetime
 from string import Template
 from xml.sax.saxutils import quoteattr, escape
-from w3.htmlutils import *
+from output.w3.htmlutils import *
 
 class Document(object):
 	def __init__(self):
 		"""HTML document class"""
 		super(Document, self).__init__()
 		# XXX Figure out how to better search for the template
-		self._template = Template(open("w3/template.html").read())
+		self._template = Template(open("output/w3/htdocs/template.html").read())
 		self._sections = []
 		# Attribute                            Format
 		self.updated = datetime.date.today() # datetime object
@@ -20,7 +20,6 @@ class Document(object):
 		self.authoremail = ''                # e-mail address
 		self.sitetitle = ''                  # HTML
 		self.title = ''                      # HTML
-		self.description = ''                # HTML
 		self.keywords = []                   # List of keywords
 		self.breadcrumbs = []                # List of (href, title) tuples
 		self.menu = []                       # List of (href, title, [children]) tuples
@@ -61,7 +60,6 @@ class Document(object):
 		# Construct the body from a header, the index and the content from above
 		body = ''.join([
 			makeTag('h1', {}, self.title),
-			makeTag('p', {}, self.description),
 			index,
 			content
 		])
@@ -98,7 +96,6 @@ class Document(object):
 			'headauthoremail': quoteattr(self.authoremail),
 			'headdoctitle':    quoteattr(stripTags(self.title)),
 			'headsitetitle':   quoteattr(stripTags(self.sitetitle)),
-			'headdescription': quoteattr(stripTags(self.description)),
 			'headkeywords':    quoteattr(', '.join(self.keywords)),
 			# Fields formatted as content for use in <BODY>
 			'bodyauthor':      makeTag('a', {'href': self.authoremail}, escape(self.author)),

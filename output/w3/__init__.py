@@ -8,15 +8,15 @@ import datetime
 import logging
 import re
 from decimal import Decimal
-from w3.htmlutils import *
-from w3.document import Document
-from docdatabase import DocDatabase
-from doctable import DocTable
-from docview import DocView
-from doccheck import DocCheck
-from docforeignkey import DocForeignKey
-from docuniquekey import DocUniqueKey, DocPrimaryKey
-from docfunction import DocFunction
+from output.w3.htmlutils import *
+from output.w3.document import Document
+from db.database import DocDatabase
+from db.table import DocTable
+from db.view import DocView
+from db.check import DocCheck
+from db.foreignkey import DocForeignKey
+from db.uniquekey import DocUniqueKey, DocPrimaryKey
+from db.function import DocFunction
 from xml.sax.saxutils import quoteattr, escape
 from sqltokenizer import DB2UDBSQLTokenizer
 from sqlhighlighter import SQLHTMLHighlighter
