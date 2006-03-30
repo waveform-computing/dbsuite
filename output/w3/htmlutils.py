@@ -116,6 +116,23 @@ def makeDefinitionList(items):
 		for term, definition in items
 	]))
 
+def filename(object):
+	"""Returns a unique, but deterministic filename for the specified object"""
+	return "%s.html" % (object.identifier)
+
+def linkTo(object, attrs={}, qualifiedName=False):
+	"""Generates an XHTML link to an object"""
+	a = {'href': filename(object)}
+	a.update(attrs)
+	if qualifiedName:
+		return makeTag('a', a, escape(object.qualifiedName))
+	else:
+		return makeTag('a', a, escape(object.name))
+
+def popupLink(target, content, width=400, height=300):
+	"""Generates a popup link to the specified target"""
+	return makeTag('a', {'href': 'javascript:popup("%s","internal",%d,%d)' % (target, height, width)}, content)
+
 def main():
 	# XXX Test cases
 	pass
