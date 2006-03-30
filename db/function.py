@@ -37,8 +37,7 @@ class Function(Routine):
 		self.__params = {}
 		for param in [cache.parameters[(schemaName, specificName, paramPos)] for (schemaName, specificName, paramPos) in cache.parameters if schemaName == schema.name and specificName == self.specificName]:
 			self.__params[param['name']] = Param(self, cache, **param)
-		self.__paramList = [x for x in self.__params.itervalues()]
-		self.__paramList.sort(key=lambda param:param.position)
+		self.__paramList = sorted(self.__params.itervalues(), key=lambda param:param.position)
 
 	def getTypeName(self):
 		return "Function"

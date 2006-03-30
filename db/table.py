@@ -43,8 +43,7 @@ class Table(Relation):
 			for (schemaName, tableName, fieldName) in cache.fields
 			if schemaName == schema.name and tableName == self.name]:
 			self.__fields[field['name']] = Field(self, cache, **field)
-		self.__fieldList = [x for x in self.__fields.itervalues()]
-		self.__fieldList.sort(key=lambda field:field.position)
+		self.__fieldList = sorted(self.__fields.itervalues(), key=lambda field:field.position)
 		self.__dependents = RelationsDict(self.database, cache.dependents.get((schema.name, self.name)))
 		self.__dependentList = RelationsList(self.database, cache.dependents.get((schema.name, self.name)))
 		self.__indexes = IndexesDict(self.database, cache.tableIndexes.get((schema.name, self.name)))
@@ -62,6 +61,7 @@ class Table(Relation):
 				constraint = UniqueKey(self, cache, **key)
 			self.__constraints[key['name']] = constraint
 			self.__uniqueKeys[key['name']] = constraint
+		self.__uniqueKeyList = sorted(self.__uniqueKeys.itervalues(), key=lambda key:key.name)
 		self.__foreignKeys = {}
 		for key in [cache.foreignKeys[(schemaName, tableName, constName)]
 			for (schemaName, tableName, constName) in cache.foreignKeys
@@ -69,6 +69,7 @@ class Table(Relation):
 			constraint = ForeignKey(self, cache, **key)
 			self.__constraints[key['name']] = constraint
 			self.__foreignKeys[key['name']] = constraint
+		self.__foreignKeyList = sorted(self.__foreignKeys.itervalues(), key=lambda key:key.name)
 		self.__checks = {}
 		for check in [cache.checks[(schemaName, tableName, constName)]
 			for (schemaName, tableName, constName) in cache.checks
@@ -76,6 +77,8 @@ class Table(Relation):
 			constraint = Check(self, cache, **check)
 			self.__constraints[check['name']] = constraint
 			self.__checks[check['name']] = constraint
+		self.__checkList = sorted(self.__checks.itervalues(), key=lambda check:check.name)
+		self.__constraintList = sorted(self.__constraints.itervalues(), key=lambda constraint:constraint.name)
 
 	def getTypeName(self):
 		return "Table"
@@ -107,17 +110,29 @@ class Table(Relation):
 	def __getConstraints(self):
 		return self.__constraints
 
+	def __getConstraintList(self):
+		return self.__constraintList
+
 	def __getPrimaryKey(self):
 		return self.__primaryKey
 
 	def __getUniqueKeys(self):
 		return self.__uniqueKeys
 
+	def __getUniqueKeyList(self):
+		return self.__uniqueKeyList
+
 	def __getForeignKeys(self):
 		return self.__foreignKeys
 
+	def __getForeignKeyList(self):
+		return self.__foreignKeyList
+
 	def __getChecks(self):
 		return self.__checks
+
+	def __getCheckList(self):
+		return self.__checkList
 
 	def __getDefiner(self):
 		return self.__definer
@@ -209,10 +224,14 @@ $elements
 	indexes = property(__getIndexes, doc="""The indexes used by this table in a dictionary""")
 	indexList = property(__getIndexList, doc="""The indexes used by this table in a list""")
 	constraints = property(__getConstraints, doc="""The constraints (keys, checks, etc.) contained in the table""")
+	constraintList = property(__getConstraintList, doc="""The constraints (keys, checks, etc.) contained in the table, in a sorted list""")
 	primaryKey = property(__getPrimaryKey, doc="""The primary key constraint of the table""")
 	uniqueKeys = property(__getUniqueKeys, doc="""The unique key constraints (including the primary key, if any) contained in the table""")
+	uniqueKeyList = property(__getUniqueKeyList, doc="""The unique key constraints (including the primary key, if any) contained in the table, in a sorted list""")
 	foreignKeys = property(__getForeignKeys, doc="""The foreign key constraints contained in the table""")
+	foreignKeyList = property(__getForeignKeyList, doc="""The foreign key constraints contained in the table, in a sorted list""")
 	checks = property(__getChecks, doc="""The check constraints contained in the table""")
+	checkList = property(__getCheckList, doc="""The check constraints contained in the table, in a sorted list""")
 	definer = property(__getDefiner, doc="""The user who created the table""")
 	checkPending = property(__getCheckPending, doc="""True if the table is in check-pending state""")
 	created = property(__getCreated, doc="""Timestamp indicating when the table was created""")

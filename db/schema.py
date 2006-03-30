@@ -22,52 +22,37 @@ class Schema(DocBase):
 		self.__created = row['created']
 		self.__description = row['description']
 		self.__datatypes = {}
-		self.__datatypeList = []
 		self.__relations = {}
-		self.__relationList = []
 		self.__tables = {}
-		self.__tableList = []
 		self.__views = {}
-		self.__viewList = []
 		self.__aliases = {}
-		self.__aliasList = []
 		self.__indexes = {}
-		self.__indexList = []
 		self.__routines = {}
-		self.__routineList = []
 		self.__functions = {}
-		self.__functionList = []
 		self.__methods = {}
-		self.__methodList = []
 		self.__procedures = {}
-		self.__procedureList = []
 		self.__specificRoutines = {}
 		self.__specificFunctions = {}
 		self.__specificMethods = {}
 		self.__specificProcedures = {}
 		for datatype in [cache.datatypes[(schema, name)] for (schema, name) in cache.datatypes if schema == self.name]:
 			self.__datatypes[datatype['name']] = Datatype(self, cache, **datatype)
-		self.__datatypeList = [x for x in self.__datatypes.itervalues()]
-		self.__datatypeList.sort(key=lambda datatype:datatype.name)
+		self.__datatypeList = sorted(self.__datatypes.itervalues, key=lambda datatype: datatype.name)
 		for tableRec in [cache.tables[(schema, name)] for (schema, name) in cache.tables if schema == self.name]:
 			table = Table(self, cache, **tableRec)
 			self.__tables[tableRec['name']] = table
 			self.__relations[tableRec['name']] = table
-		self.__tableList = [x for x in self.__tables.itervalues()]
-		self.__tableList.sort(key=lambda table:table.name)
+		self.__tableList = sorted(self.__tables.itervalues(), key=lambda table:table.name)
 		for viewRec in [cache.views[(schema, name)] for (schema, name) in cache.views if schema == self.name]:
 			view = View(self, cache, **viewRec)
 			self.__views[viewRec['name']] = view
 			self.__relations[viewRec['name']] = view
-		self.__viewList = [x for x in self.__views.itervalues()]
-		self.__viewList.sort(key=lambda view:view.name)
+		self.__viewList = sorted(self.__views.itervalues(), key=lambda view:view.name)
 		# XXX Add support for aliases
-		self.__relationList = [x for x in self.__relations.itervalues()]
-		self.__relationList.sort(key=lambda relation:relation.name)
+		self.__relationList = sorted(self.__relations.itervalues(), key=lambda relation:relation.name)
 		for indexRec in [cache.indexes[(schema, name)] for (schema, name) in cache.indexes if schema == self.name]:
 			self.__indexes[indexRec['name']] = Index(self, cache, **indexRec)
-		self.__indexList = [x for x in self.__indexes.itervalues()]
-		self.__indexList.sort(key=lambda index:index.name)
+		self.__indexList = sorted(self.__indexes.itervalues(), key=lambda index:index.name)
 		for funcRec in [cache.functions[(schema, name)] for (schema, name) in cache.functions if schema == self.name]:
 			func = Function(self, cache, **funcRec)
 			if not funcRec['name'] in self.__routines:
@@ -78,12 +63,10 @@ class Schema(DocBase):
 			self.__functions[funcRec['name']].append(func)
 			self.__specificRoutines[funcRec['specificName']] = func
 			self.__specificFunctions[funcRec['specificName']] = func
-		self.__functionList = [x for x in self.__functions.itervalues()]
-		self.__functionList.sort(key=lambda function:function[0].name)
+		self.__functionList = sorted(self.__functions.itervalues(), key=lambda function:function[0].name)
 		# XXX Add support for methods
 		# XXX Add support for stored procedures
-		self.__routineList = [x for x in self.__routines.itervalues()]
-		self.__routineList.sort(key=lambda routine:routine[0].name)
+		self.__routineList = sorted(self.__routines.itervalues(), key=lambda routine:routine[0].name)
 		# XXX Add support for sequences
 		# XXX Add support for triggers
 

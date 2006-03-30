@@ -55,6 +55,20 @@ class Constraint(RelationObject):
 			'const': formatIdentifier(self.name)
 		})
 	
+	def getNext(self):
+		i = self.table.constraintList.index(self)
+		if i < len(self.table.constraintList) - 1:
+			return self.table.constraintList[i + 1]
+		else:
+			return None
+
+	def getPrior(self):
+		i = self.table.constraintList.index(self)
+		if i > 0:
+			return self.table.constraintList[i - 1]
+		else:
+			return None
+	
 	# Use the lambda trick to allow property getter methods to be overridden
 	fields = property(lambda self: self.getFields(), doc="""The fields constrained by this constraint""")
 	definitionStr = property(lambda self: self.getDefinitionStr(), doc="""The attributes of the constraint formatted for use in an ALTER TABLE or CREATE TABLE statement""")

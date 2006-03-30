@@ -28,8 +28,7 @@ class View(Relation):
 		self.__fields = {}
 		for field in [cache.fields[(schemaName, viewName, fieldName)] for (schemaName, viewName, fieldName) in cache.fields if schemaName == schema.name and viewName == self.name]:
 			self.__fields[field['name']] = Field(self, cache, **field)
-		self.__fieldList = [x for x in self.__fields.itervalues()]
-		self.__fieldList.sort(key=lambda field:field.position)
+		self.__fieldList = sorted(self.__fields.itervalues(), key=lambda field:field.position)
 		self.__dependents = RelationsDict(self.database, cache.dependents.get((schema.name, self.name)))
 		self.__dependentList = RelationsList(self.database, cache.dependents.get((schema.name, self.name)))
 		self.__dependencies = RelationsDict(self.database, cache.dependencies.get((schema.name, self.name)))

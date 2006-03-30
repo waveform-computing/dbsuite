@@ -17,13 +17,11 @@ class Database(DocBase):
 		self.__tablespaces = {}
 		for row in cache.tablespaces.itervalues():
 			self.__tablespaces[row['name']] = Tablespace(self, cache, **row)
-		self.__tablespaceList = [x for x in self.__tablespaces.itervalues()]
-		self.__tablespaceList.sort(key=lambda tbspace:tbspace.name)
+		self.__tablespaceList = sorted(self.__tablespaces.itervalues(), key=lambda tbspace:tbspace.name)
 		self.__schemas = {}
 		for row in cache.schemas.itervalues():
 			self.__schemas[row['name']] = Schema(self, cache, **row)
-		self.__schemaList = [x for x in self.__schemas.itervalues()]
-		self.__schemaList.sort(key=lambda schema:schema.name)
+		self.__schemaList = sorted(self.__schemas.itervalues(), key=lambda schema:schema.name)
 
 	def find(self, qualifiedName):
 		"""Find an object in the hierarchy by its qualified name.

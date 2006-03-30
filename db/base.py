@@ -38,11 +38,16 @@ class DocBase(object):
 		return result
 
 	def getSystem(self):
-		"""Returns True if the database object is a system-defined object (like a system catalog table)"""
 		if not self.parent is None:
 			return self.parent.isSystemObject()
 		else:
 			return False
+
+	def getNext(self):
+		raise NotImplementedError
+
+	def getPrior(self):
+		raise NotImplementedError
 
 	def __str__(self):
 		"""Return a string representation of the object"""
@@ -57,6 +62,8 @@ class DocBase(object):
 	typeName = property(lambda self: self.getTypeName(), doc="""Returns the human readable name of the object's type""")
 	description = property(lambda self: self.getDescription(), doc="""Returns a brief description of the object""")
 	system = property(lambda self: self.getSystem(), doc="""True if the object is a system-defined object""")
+	next = property(lambda self: self.getNext(), doc="""Returns the next object of the same type with the same parent, or None if this is the last such object""")
+	prior = property(lambda self: self.getPrior(), doc="""Returns the previous object of the same type with the same parent, or None if this is the last such object""")
 
 def main():
 	pass
