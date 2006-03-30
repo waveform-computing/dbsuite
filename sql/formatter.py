@@ -36,7 +36,7 @@ from tokenizer import *
 (
 	DATATYPE,  # Datatypes (e.g. VARCHAR) converted from KEYWORD or IDENTIFIER
 	INDENT,    # Whitespace indentation at the start of a line
-) = range(USERTOKEN, USERTOKEN + 2)
+) = newTokens(2)
 
 class ParseError(Exception):
 		# XXX Implement __str__ to provide context

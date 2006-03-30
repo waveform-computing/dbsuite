@@ -93,6 +93,19 @@ import sys
 import decimal
 import dialects
 
+_tokenval = 0
+
+def newToken():
+	"""Returns a new token value which is guaranteed to be unique"""
+	global _tokenval
+	_tokenval += 1
+	return _tokenval
+
+def newTokens(count):
+	"""Generator function for creating multiple new token values"""
+	for i in range(count):
+		yield newToken()
+
 # Token constants
 (
 	EOF,           # End of data
@@ -106,8 +119,7 @@ import dialects
 	OPERATOR,      # An operator
 	PARAMETER,     # A colon-prefixed or simple qmark parameter
 	TERMINATOR,    # A statement terminator
-	USERTOKEN,     # First value for user-defined token types
-) = range(12)
+) = newTokens(11)
 
 def debugTokens(tokens):
 	for (token_type, token_value, source, line, column) in tokens:
