@@ -16,13 +16,13 @@ def fetchDict(cursor):
 
 # Instead of having each documentation class query the database for its data
 # (which would result in literally thousands of queries being run), we use a
-# DocCache object which queries all the major catalog tables in its constructor
+# Cache object which queries all the major catalog tables in its constructor
 # without filtering (resulting in far fewer queries -- basically one for each
 # sort of object a database can contain; views, tables, indexes, etc.)
 #
 # As the name suggests, the results are cached in this object, specifically
 # as dictionaries of dictionaries, which are then used to construct the objects
-# in the hierarchy by the DocDatabase class.
+# in the hierarchy by the Database class.
 #
 # The unique identifer of an object (e.g. a schema and name for a table) forms
 # the key of the "outer" dictionary for each cache, while the contained
@@ -37,9 +37,9 @@ def fetchDict(cursor):
 # hierarchy (in particular, see the cache for table dependencies, and the
 # indexes that apply to a given table)
 
-class DocCache(object):
+class Cache(object):
 	def __init__(self, connection):
-		super(DocCache, self).__init__()
+		super(Cache, self).__init__()
 		# Get a cursor to run the queries
 		cursor = connection.cursor()
 		try:
