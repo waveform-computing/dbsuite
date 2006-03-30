@@ -20,9 +20,9 @@ def main():
 		connection = odbc.odbc("DQSMS/dave/St4rGate")
 	try:
 		logging.info("Building metadata cache")
-		data = input.db2udbluw.DocCache(connection)
+		data = input.db2udbluw.Cache(connection)
 		logging.info("Building database object hierarchy")
-		database = db.database.DocDatabase(data, "DQSMS")
+		database = db.database.Database(data, "DQSMS")
 		logging.info("Writing output with w3 handler")
 		output.w3.DocOutput(database, "../public_html/dqsms")
 	finally:
