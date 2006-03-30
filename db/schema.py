@@ -37,7 +37,7 @@ class Schema(DocBase):
 		self.__specificProcedures = {}
 		for datatype in [cache.datatypes[(schema, name)] for (schema, name) in cache.datatypes if schema == self.name]:
 			self.__datatypes[datatype['name']] = Datatype(self, cache, **datatype)
-		self.__datatypeList = sorted(self.__datatypes.itervalues, key=lambda datatype: datatype.name)
+		self.__datatypeList = sorted(self.__datatypes.itervalues(), key=lambda datatype: datatype.name)
 		for tableRec in [cache.tables[(schema, name)] for (schema, name) in cache.tables if schema == self.name]:
 			table = Table(self, cache, **tableRec)
 			self.__tables[tableRec['name']] = table
