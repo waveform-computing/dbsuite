@@ -33,20 +33,9 @@ class Relation(SchemaObject):
 	def getFieldList(self):
 		raise NotImplementedError()
 
-	def getNext(self):
-		i = self.schema.relationList.index(self)
-		if i < len(self.schema.relationList) - 1:
-			return self.schema.relationList[i + 1]
-		else:
-			return None
+	def getParentList(self):
+		return self.schema.relationList
 
-	def getPrior(self):
-		i = self.schema.relationList.index(self)
-		if i > 0:
-			return self.schema.relationList[i - 1]
-		else:
-			return None
-	
 	# Use the lambda trick to allow property getter methods to be overridden
 	dependents = property(lambda self: self.getDependents(), doc="""A dictionary of the relations that depend on this relation (keyed by (schemaName, relationName) tuples)""")
 	dependentList = property(lambda self: self.getDependentList(), doc="""A list of the relations that depend on this relation""")

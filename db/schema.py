@@ -100,6 +100,9 @@ class Schema(DocBase):
 	def getDatabase(self):
 		return self.parent
 
+	def getParentList(self):
+		return self.database.schemaList
+
 	def __getDatatypes(self):
 		return self.__datatypes
 	

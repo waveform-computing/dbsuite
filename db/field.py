@@ -46,19 +46,8 @@ class Field(RelationObject):
 		else:
 			return super(Field, self).getDescription()
 	
-	def getNext(self):
-		i = self.relation.fieldList.index(self)
-		if i < len(self.relation.fieldList) - 1:
-			return self.relation.fieldList[i + 1]
-		else:
-			return None
-
-	def getPrior(self):
-		i = self.relation.fieldList.index(self)
-		if i > 0:
-			return self.relation.fieldList[i - 1]
-		else:
-			return None
+	def getParentList(self):
+		return self.relation.fieldList
 
 	def __getDatatype(self):
 		return self.database.schemas[self.__datatypeSchema].datatypes[self.__datatypeName]

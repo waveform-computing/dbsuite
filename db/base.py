@@ -27,7 +27,7 @@ class DocBase(object):
 		return "Object"
 	
 	def getDescription(self):
-		return "No description in system catalog"
+		return "No description in the system catalog"
 	
 	def getIdentifier(self):
 		return id(self)
@@ -43,11 +43,34 @@ class DocBase(object):
 		else:
 			return False
 
+	def getParentList(self):
+		return None
+
+	def getParentIndex(self):
+		if self.parentList is None:
+			raise NotImplementedError
+		else:
+			return self.parentList.index(self)
+	
 	def getNext(self):
-		raise NotImplementedError
+		if self.parentList is None:
+			raise NotImplementedError
+		else:
+			i = self.parentIndex
+			if i < len(self.parentList) - 1:
+				return self.parentList[i + 1]
+			else:
+				return None
 
 	def getPrior(self):
-		raise NotImplementedError
+		if self.parentList is None:
+			raise NotImplementedError
+		else:
+			i = self.parentIndex
+			if i > 0:
+				return self.parentList[i - 1]
+			else:
+				return None
 
 	def __str__(self):
 		"""Return a string representation of the object"""
@@ -64,6 +87,8 @@ class DocBase(object):
 	system = property(lambda self: self.getSystem(), doc="""True if the object is a system-defined object""")
 	next = property(lambda self: self.getNext(), doc="""Returns the next object of the same type with the same parent, or None if this is the last such object""")
 	prior = property(lambda self: self.getPrior(), doc="""Returns the previous object of the same type with the same parent, or None if this is the last such object""")
+	parentList = property(lambda self:self.getParentList(), doc="""Returns the list containing objects of the same type with the same parent, or None if the object is standalone""")
+	parentIndex = property(lambda self:self.getParentIndex(), doc="""Returns the index of this object within the parentList""")
 
 def main():
 	pass

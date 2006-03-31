@@ -47,6 +47,9 @@ class Tablespace(DocBase):
 	def getDatabase(self):
 		return self.parent
 
+	def getParentList(self):
+		return self.database.tablespaceList
+
 	def __getTables(self):
 		return self.__tables
 

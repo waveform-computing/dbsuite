@@ -114,6 +114,9 @@ class Index(SchemaObject):
 		else:
 			return super(Index, self).getDescription()
 
+	def getParentList(self):
+		return self.schema.indexList
+
 	def __getFields(self):
 		return self.__fields
 
