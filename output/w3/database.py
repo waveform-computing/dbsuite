@@ -17,6 +17,8 @@ def write(self, database):
 	schemas = [obj for (name, obj) in sorted(database.schemas.items(), key=lambda (name, obj):name)]
 	tbspaces = [obj for (name, obj) in sorted(database.tablespaces.items(), key=lambda (name, obj):name)]
 	doc = self.newDocument(database)
+	doc.addSection(id='description', title='Description')
+	doc.addContent('<p>%s</p>' % (database.description))
 	if len(schemas) > 0:
 		doc.addSection(id='schemas', title='Schemas')
 		doc.addPara("""The following table contains all schemas (logical

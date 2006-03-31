@@ -123,24 +123,48 @@ class DocOutput(object):
 	def createMenu(self, item, active=True):
 		result = []
 		while True:
-			result = [(filename(item), item.name, result, active)]
+			result = self.createMenuLevel(item, active, result)
 			active = False
 			item = item.parent
 			if item is None:
 				break
-		result.insert(0, ('index.html', 'Home', [], False))
+		result.insert(0, ('index.html', 'Home', 'Home', [], False))
 		return result
 
-	def createMenuLevel(self, items, index):
-		if len(items) <= 10:
-			slice = items
-		elif index <= 3:
-			slice = items[:7]
-		elif index >= len(items) - 3:
-			slice = items[-7:]
+	def createMenuLevel(self, selitem, active, subitems):
+		moretop = False
+		morebot = False
+		if selitem.parentList is None:
+			slice = [selitem]
 		else:
-			slice = items[index - 3:index + 3]
-		return [(filename(item), item.name, []) for item in slice]
+			index = selitem.parentIndex
+			if len(selitem.parentList) <= 10:
+				slice = selitem.parentList
+			elif index <= 3:
+				slice = selitem.parentList[:7]
+				morebot = True
+			elif index >= len(selitem.parentList) - 3:
+				slice = selitem.parentList[-7:]
+				moretop = True
+			else:
+				slice = selitem.parentList[index - 3:index + 4]
+				moretop = True
+				morebot = True
+		items = []
+		for item in slice:
+			label = item.name
+			if len(label) > 10:
+				label = '%s...' % (label[:10])
+			title = '%s %s' % (item.typeName, item.qualifiedName)
+			if item == selitem:
+				items.append((filename(item), title, escape(label), subitems, active))
+			else:
+				items.append((filename(item), title, escape(label), [], False))
+		if moretop:
+			items.insert(0, ('#', 'More items', '&uarr; More items...', [], False))
+		if morebot:
+			items.append(('#', 'More items', '&darr; More items...', [], False))
+		return items
 
 	def newDocument(self, object):
 		"""Creates a new Document object for the specified object.

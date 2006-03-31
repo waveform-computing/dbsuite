@@ -72,6 +72,8 @@ def write(self, functions):
 					function.threadSafe,
 				),
 			]))
+		doc.addSection(id='description', title='Description')
+		doc.addContent('<p>%s</p>' % (function.description))
 		##doc.addSection('sql', 'SQL Definition')
 		##doc.addPara("""The SQL which can be used to create the function is given
 		##	below. Note that this is not necessarily the same as the actual

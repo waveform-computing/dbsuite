@@ -59,6 +59,8 @@ def write(self, tbspace):
 				tbspace.dropRecovery,
 			),
 		]))
+	doc.addSection(id='description', title='Description')
+	doc.addContent('<p>%s</p>' % (tbspace.description))
 	if len(tables) > 0:
 		doc.addSection(id='tables', title='Tables')
 		doc.addPara("""The following table contains all the tables that

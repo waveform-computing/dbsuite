@@ -57,6 +57,8 @@ def write(self, key):
 				key.updateRule,
 			),
 		]))
+	doc.addSection(id='description', title='Description')
+	doc.addContent('<p>%s</p>' % (key.description))
 	if len(fields) > 0:
 		doc.addSection(id='fields', title='Fields')
 		doc.addPara("""The following table contains the fields of the key

@@ -54,6 +54,8 @@ def write(self, view):
 				len(view.dependencyList),
 			)
 		]))
+	doc.addSection(id='description', title='Description')
+	doc.addContent('<p>%s</p>' % (view.description))
 	if len(fields) > 0:
 		doc.addSection(id='fields', title='Field Descriptions')
 		doc.addPara("""The following table contains the fields of the view

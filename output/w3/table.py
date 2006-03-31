@@ -89,6 +89,8 @@ def write(self, table):
 				table.volatile,
 			),
 		]))
+	doc.addSection(id='description', title='Description')
+	doc.addContent('<p>%s</p>' % (table.description))
 	if len(fields) > 0:
 		doc.addSection(id='fields', title='Field Descriptions')
 		doc.addPara("""The following table contains the fields of the table
