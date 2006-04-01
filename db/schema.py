@@ -63,10 +63,10 @@ class Schema(DocBase):
 			self.__functions[funcRec['name']].append(func)
 			self.__specificRoutines[funcRec['specificName']] = func
 			self.__specificFunctions[funcRec['specificName']] = func
-		self.__functionList = sorted(self.__functions.itervalues(), key=lambda function:function[0].name)
+		self.__functionList = sorted(self.__specificFunctions.itervalues(), key=lambda function:function.name)
 		# XXX Add support for methods
 		# XXX Add support for stored procedures
-		self.__routineList = sorted(self.__routines.itervalues(), key=lambda routine:routine[0].name)
+		self.__routineList = sorted(self.__specificRoutines.itervalues(), key=lambda routine:routine.name)
 		# XXX Add support for sequences
 		# XXX Add support for triggers
 

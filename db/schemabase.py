@@ -60,10 +60,18 @@ class Routine(SchemaObject):
 
 	def getParamList(self):
 		raise NotImplementedError()
+
+	def getReturns(self):
+		raise NotImplementedError()
+
+	def getReturnList(self):
+		raise NotImplementedError()
 	
 	# Use the lambda trick to allow property getter methods to be overridden
 	params = property(lambda self: self.getParams(), doc="""The parameters of the routine""")
 	paramList = property(lambda self: self.getParamList(), doc="""The parameters of the routine in an ordered list""")
+	returns = property(lambda self: self.getReturns(), doc="""The return type (or types) of the routine""")
+	returnList = property(lambda self: self.getReturnList(), doc="""The return type (or types) of the routine in an ordered list""")
 	specificName = property(__getSpecificName, doc="""The specific name of the routine""")
 
 def main():

@@ -5,6 +5,7 @@
 import logging
 from schemabase import Routine
 from param import Param
+from util import formatSize, formatIdentifier
 
 class Function(Routine):
 	"""Class representing a function in a DB2 database"""
@@ -14,8 +15,6 @@ class Function(Routine):
 		super(Function, self).__init__(schema, row['name'], row['specificName'])
 		logging.debug("Building function %s" % (self.qualifiedName))
 		self.__definer = row['definer']
-		self.__rtypeSchema = row['rtypeSchema']
-		self.__rtypeName = row['rtypeName']
 		self.__origin = row['origin']
 		self.__type = row['type']
 		self.__language = row['language']
@@ -35,9 +34,20 @@ class Function(Routine):
 		self.__sql = row['sql']
 		self.__description = row['description']
 		self.__params = {}
-		for param in [cache.parameters[(schemaName, specificName, paramPos)] for (schemaName, specificName, paramPos) in cache.parameters if schemaName == schema.name and specificName == self.specificName]:
-			self.__params[param['name']] = Param(self, cache, **param)
+		self.__returns = {}
+		myparams = [
+			cache.parameters[(schemaName, specificName, paramType, paramPos)]
+			for (schemaName, specificName, paramType, paramPos) in cache.parameters
+			if schemaName == schema.name and specificName == self.specificName
+		]
+		for row in myparams:
+			param = Param(self, cache, **row)
+			if param.type == 'Result':
+				self.__returns[param.name] = param
+			else:
+				self.__params[param.name] = param
 		self.__paramList = sorted(self.__params.itervalues(), key=lambda param:param.position)
+		self.__returnList = sorted(self.__returns.itervalues(), key=lambda param:param.position)
 
 	def getTypeName(self):
 		return "Function"
@@ -50,19 +60,25 @@ class Function(Routine):
 			return self.__description
 		else:
 			return super(Function, self).getDescription()
+	
+	def getParentList(self):
+		return self.schema.functionList
 
 	def getParams(self):
 		return self.__params
 	
 	def getParamList(self):
 		return self.__paramList
+
+	def getReturns(self):
+		return self.__returns
+
+	def getReturnList(self):
+		return self.__returnList
 	
 	def __getDefiner(self):
 		return self.__definer
 
-	def __getReturnType(self):
-		return self.database.schemas[self.__rtypeSchema].datatypes[self.__rtypeName]
-	
 	def __getOrigin(self):
 		return self.__origin
 	
@@ -115,7 +131,6 @@ class Function(Routine):
 		return self.__sql
 	
 	definer = property(__getDefiner, doc="""The user who created the index""")
-	returnType = property(__getReturnType, doc="""The return type of the function""")
 	origin = property(__getOrigin, doc="""The origin of the function (external, built-in, user-defined, etc.)""")
 	type = property(__getType, doc="""The sort of structure the function returns (row, table, scalar, etc.)""")
 	language = property(__getLanguage, doc="""The language the function is implemented in""")
