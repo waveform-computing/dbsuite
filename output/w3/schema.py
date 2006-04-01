@@ -19,7 +19,7 @@ def write(self, schema):
 	indexes = [obj for (name, obj) in sorted(schema.indexes.items(), key=lambda (name, obj): name)]
 	doc = self.newDocument(schema)
 	doc.addSection(id='description', title='Description')
-	doc.addContent('<p>%s</p>' % (schema.description))
+	doc.addContent('<p>%s</p>' % (self.formatDescription(schema.description)))
 	if len(relations) > 0:
 		doc.addSection(id='relations', title='Relations')
 		doc.addPara("""The following table contains all the relations

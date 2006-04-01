@@ -21,6 +21,8 @@ def write(self, index):
 		position += 1
 	fields = sorted(fields, key=lambda(field, ordering, position): field.name)
 	doc = self.newDocument(index)
+	doc.addSection(id='description', title='Description')
+	doc.addContent('<p>%s</p>' % (self.formatDescription(index.description)))
 	doc.addSection(id='attributes', title='Attributes')
 	doc.addPara("""The following table notes various "vital statistics"
 		of the index.""")
@@ -82,8 +84,6 @@ def write(self, index):
 				index.levels,
 			),
 		]))
-	doc.addSection(id='description', title='Description')
-	doc.addContent('<p>%s</p>' % (index.description))
 	if len(fields) > 0:
 		doc.addSection(id='fields', title='Fields')
 		doc.addPara("""The following table contains the fields of the index

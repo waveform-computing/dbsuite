@@ -22,6 +22,8 @@ def write(self, table):
 	constraints = [obj for (name, obj) in sorted(table.constraints.items(), key=lambda (name, obj): name)]
 	dependents = [obj for (name, obj) in sorted(table.dependents.items(), key=lambda (name, obj): name)]
 	doc = self.newDocument(table)
+	doc.addSection(id='description', title='Description')
+	doc.addContent('<p>%s</p>' % (self.formatDescription(table.description)))
 	doc.addSection(id='attributes', title='Attributes')
 	doc.addPara("""The following table notes various "vital statistics"
 		of the table (such as cardinality -- the number of rows in the
@@ -89,8 +91,6 @@ def write(self, table):
 				table.volatile,
 			),
 		]))
-	doc.addSection(id='description', title='Description')
-	doc.addContent('<p>%s</p>' % (table.description))
 	if len(fields) > 0:
 		doc.addSection(id='fields', title='Field Descriptions')
 		doc.addPara("""The following table contains the fields of the table

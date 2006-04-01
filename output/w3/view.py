@@ -18,6 +18,8 @@ def write(self, view):
 	dependencies = [obj for (name, obj) in sorted(view.dependencies.items(), key=lambda (name, obj): name)]
 	dependents = [obj for (name, obj) in sorted(view.dependents.items(), key=lambda (name, obj): name)]
 	doc = self.newDocument(view)
+	doc.addSection(id='description', title='Description')
+	doc.addContent('<p>%s</p>' % (self.formatDescription(view.description)))
 	doc.addSection(id='attributes', title='Attributes')
 	doc.addPara("""The following table notes various "vital statistics"
 		of the view.""")
@@ -54,8 +56,6 @@ def write(self, view):
 				len(view.dependencyList),
 			)
 		]))
-	doc.addSection(id='description', title='Description')
-	doc.addContent('<p>%s</p>' % (view.description))
 	if len(fields) > 0:
 		doc.addSection(id='fields', title='Field Descriptions')
 		doc.addPara("""The following table contains the fields of the view

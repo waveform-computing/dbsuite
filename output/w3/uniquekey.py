@@ -21,6 +21,8 @@ def write(self, key):
 		position += 1
 	fields = sorted(fields, key=lambda(field, position): field.name)
 	doc = self.newDocument(key)
+	doc.addSection(id='description', title='Description')
+	doc.addContent('<p>%s</p>' % (self.formatDescription(key.description)))
 	doc.addSection(id='attributes', title='Attributes')
 	doc.addPara("""The following table notes various "vital statistics"
 		of the unique key.""")
@@ -39,8 +41,6 @@ def write(self, key):
 				len(fields),
 			),
 		]))
-	doc.addSection(id='description', title='Description')
-	doc.addContent('<p>%s</p>' % (key.description))
 	if len(fields) > 0:
 		doc.addSection(id='fields', title='Fields')
 		doc.addPara("""The following table contains the fields of the key

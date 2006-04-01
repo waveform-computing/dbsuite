@@ -17,6 +17,8 @@ def write(self, tbspace):
 	tables = [obj for (name, obj) in sorted(tbspace.tables.items(), key=lambda (name, obj): name)]
 	indexes = [obj for (name, obj) in sorted(tbspace.indexes.items(), key=lambda (name, obj): name)]
 	doc = self.newDocument(tbspace)
+	doc.addSection(id='description', title='Description')
+	doc.addContent('<p>%s</p>' % (self.formatDescription(tbspace.description)))
 	doc.addSection(id='attributes', title='Attributes')
 	doc.addPara("""The following table notes various "vital statistics"
 		of the tablespace.""")
@@ -59,8 +61,6 @@ def write(self, tbspace):
 				tbspace.dropRecovery,
 			),
 		]))
-	doc.addSection(id='description', title='Description')
-	doc.addContent('<p>%s</p>' % (tbspace.description))
 	if len(tables) > 0:
 		doc.addSection(id='tables', title='Tables')
 		doc.addPara("""The following table contains all the tables that

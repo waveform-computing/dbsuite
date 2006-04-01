@@ -7,6 +7,30 @@ import os.path
 import logging
 from htmlutils import *
 
+def formatParam(param):
+	return "%s %s" % (makeTag('em', {}, escape(param.name)), escape(param.datatypeStr))
+
+def formatParams(params):
+	# XXX Handle anonymous parmeters here
+	return ', '.join([formatParam(param) for param in params])
+
+def formatReturns(function):
+	if len(function.returnList) == 0:
+		return ''
+	elif function.type == 'Row':
+		return ' RETURNS ROW(%s)' % (formatParams(function.returnList))
+	elif function.type == 'Table':
+		return ' RETURNS TABLE(%s)' % (formatParams(function.returnList))
+	else:
+		return ' RETURNS %s' % (escape(function.returnList[0].datatypeStr))
+
+def prototype(function, link=True):
+	return makeTag('code', {}, "%s(%s)%s" % (
+		escape(function.qualifiedName),
+		formatParams(function.paramList),
+		formatReturns(function))
+	)
+
 def write(self, functions):
 	"""Outputs the documentation for a function.
 
@@ -18,6 +42,21 @@ def write(self, functions):
 	for function in functions:
 		logging.debug("Writing documentation for function %s to %s" % (function.name, filename(function)))
 		doc = self.newDocument(function)
+		doc.addSection(id='description', title='Description')
+		doc.addContent(prototype(function))
+		doc.addContent('<p>%s</p>' % (self.formatDescription(function.description)))
+		params = list(function.paramList) # Take a copy of the parameter list
+		if function.type in ['Row', 'Table']:
+			# Extend the list with return parameters if the function is a
+			# ROW or TABLE function (and hence, returns multiple named parms)
+			params.extend(function.returnList)
+		doc.addContent(makeTag('dl', {}, ''.join([
+			''.join([
+				makeTag('dt', {}, escape(param.name)),
+				makeTag('dd', {}, self.formatDescription(param.description)),
+			])
+			for param in params
+		])))
 		doc.addSection(id='attributes', title='Attributes')
 		doc.addPara("""The following table notes the various attributes and
 			properties of the function.""")
@@ -72,8 +111,6 @@ def write(self, functions):
 					function.threadSafe,
 				),
 			]))
-		doc.addSection(id='description', title='Description')
-		doc.addContent('<p>%s</p>' % (function.description))
 		##doc.addSection('sql', 'SQL Definition')
 		##doc.addPara("""The SQL which can be used to create the function is given
 		##	below. Note that this is not necessarily the same as the actual

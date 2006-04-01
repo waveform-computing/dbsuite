@@ -16,6 +16,8 @@ def write(self, check):
 	logging.debug("Writing documentation for check constraint %s to %s" % (check.name, filename(check)))
 	fields = sorted(list(check.fields), key=lambda(field): field.name)
 	doc = self.newDocument(check)
+	doc.addSection(id='description', title='Description')
+	doc.addContent('<p>%s</p>' % (self.formatDescription(check.description)))
 	doc.addSection(id='attributes', title='Attributes')
 	doc.addPara("""The following table notes various "vital statistics"
 		of the check.""")
@@ -40,8 +42,6 @@ def write(self, check):
 				check.queryOptimize,
 			),
 		]))
-	doc.addSection(id='description', title='Description')
-	doc.addContent('<p>%s</p>' % (check.description))
 	if len(fields) > 0:
 		doc.addSection(id='fields', title='Fields')
 		doc.addPara("""The following table contains the fields that the
