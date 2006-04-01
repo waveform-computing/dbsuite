@@ -625,7 +625,7 @@ class Cache(object):
 				REMARKS                       AS "description"
 			FROM SYSCAT.ROUTINEPARMS
 			WITH UR""")
-		self.parameters = dict([((row['schemaName'], row['specificName'], row['position']), row) for row in fetchDict(cursor)])
+		self.parameters = dict([((row['schemaName'], row['specificName'], row['type'], row['position']), row) for row in fetchDict(cursor)])
 		for row in self.parameters.itervalues():
 			row['locator'] = makeBoolean(row['locator'])
 			if not row['size']: row['size'] = None
