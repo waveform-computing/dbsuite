@@ -5,7 +5,7 @@
 import sys
 import os.path
 import logging
-from htmlutils import *
+from output.w3.htmlutils import *
 
 def write(self, index):
 	"""Outputs the documentation for an index object.
@@ -30,60 +30,62 @@ def write(self, index):
 		clusterRatio = index.clusterFactor # XXX Convert as necessary
 	else:
 		clusterRatio = index.clusterRatio
-	doc.addContent(makeTable(
-		head=[(
-			"Attribute",
-			"Value",
-			"Attribute",
-			"Value"
-		)],
-		data=[
-			(
-				'Table',
-				linkTo(index.table),
-				'Tablespace',
-				linkTo(index.tablespace),
-			),
-			(
-				popupLink("created.html", "Created"),
-				index.created,
-				popupLink("laststats.html", "Last Statistics"),
-				index.statsUpdated,
-			),
-			(
-				popupLink("createdby.html", "Created By"),
-				escape(index.definer),
-				popupLink("colcount.html", "# Columns"),
-				len(fields),
-			),
-			(
-				popupLink("unique.html", "Unique"),
-				index.unique,
-				popupLink("reversescans.html", "Reverse Scans"),
-				index.reverseScans,
-			),
-			(
-				popupLink("leafpages.html", "Leaf Pages"),
-				index.leafPages,
-				popupLink("sequentialpages.html", "Sequential Pages"),
-				index.sequentialPages,
-			),
-			(
-				popupLink("clusterratio.html", "Cluster Ratio"),
-				clusterRatio, # see above
-				popupLink("density.html", "Density"),
-				index.density,
-			),
-			(
-				popupLink("cardinality.html", "Cardinality"),
-				'<br />'.join(
-					[formatContent(index.cardinality[0])] + 
-					['1..%s: %s' % (keynum + 1, formatContent(card)) for (keynum, card) in enumerate(index.cardinality[1])]
-				),
-				popupLink("levels.html", "Levels"),
-				index.levels,
-			),
-		]))
+	head=[(
+		"Attribute",
+		"Value",
+		"Attribute",
+		"Value"
+	)]
+	data=[
+		(
+			'Table',
+			linkTo(index.table),
+			'Tablespace',
+			linkTo(index.tablespace),
+		),
+		(
+			popupLink("created.html", "Created"),
+			index.created,
+			popupLink("laststats.html", "Last Statistics"),
+			index.statsUpdated,
+		),
+		(
+			popupLink("createdby.html", "Created By"),
+			escape(index.definer),
+			popupLink("colcount.html", "# Columns"),
+			len(fields),
+		),
+		(
+			popupLink("unique.html", "Unique"),
+			index.unique,
+			popupLink("reversescans.html", "Reverse Scans"),
+			index.reverseScans,
+		),
+		(
+			popupLink("leafpages.html", "Leaf Pages"),
+			index.leafPages,
+			popupLink("sequentialpages.html", "Sequential Pages"),
+			index.sequentialPages,
+		),
+		(
+			popupLink("clusterratio.html", "Cluster Ratio"),
+			clusterRatio, # see above
+			popupLink("density.html", "Density"),
+			index.density,
+		),
+		(
+			popupLink("cardinality.html", "Cardinality"),
+			formatContent(index.cardinality[0]),
+			{'rowspan': len(index.cardinality[1]) + 1, '': popupLink("levels.html", "Levels")},
+			{'rowspan': len(index.cardinality[1]) + 1, '': index.levels},
+		),
+	]
+	for (cardix, card) in enumerate(index.cardinality[1]):
+		data.append((
+			popupLink("cardinality.html", "Key 1..%d Cardinality" % (cardix + 1)),
+			formatContent(card),
+		))
+	doc.addContent(makeTable(data, head))
 	if len(fields) > 0:
 		doc.addSection(id='fields', title='Fields')
 		doc.addPara("""The following table contains the fields of the index
