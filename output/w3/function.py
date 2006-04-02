@@ -5,7 +5,7 @@
 import sys
 import os.path
 import logging
-from htmlutils import *
+from output.w3.htmlutils import *
 
 def formatParam(param):
 	return "%s %s" % (makeTag('em', {}, escape(param.name)), escape(param.datatypeStr))
@@ -109,6 +109,10 @@ def write(self, functions):
 					function.parallel,
 					popupLink("threadsafe.html", "Thread Safe"),
 					function.threadSafe,
+				),
+				(
+					popupLink("specificname.html", "Specific Name"),
+					{'colspan': 3, '': function.specificName},
 				),
 			]))
 		##doc.addSection('sql', 'SQL Definition')
