@@ -72,25 +72,40 @@ def makeTag(name, attrs={}, content="", optional=False):
 	else:
 		return ""
 
-def makeTableCell(content, head=False, cellAttrs={}):
-	"""Returns a table cell containing the specified content"""
-	if str(content) != "":
-		return makeTag(['td', 'th'][bool(head)], cellAttrs, content)
+def makeTableCaption(caption, attrs={}):
+	if caption:
+		return makeTag('caption', attrs, caption)
 	else:
-		return makeTag(['td', 'th'][bool(head)], cellAttrs, '&nbsp;')
+		return ''
 
-def makeTableRow(cells, head=False, rowAttrs={}):
+def makeTableCell(content, head=False, attrs={}):
+	"""Returns a table cell containing the specified content"""
+	if type(content) == type({}):
+		attrs = dict(content) # Take a copy of content
+		content = attrs.get('', '')
+		del attrs['']
+	if str(content) != "":
+		return makeTag(['td', 'th'][bool(head)], attrs, content)
+	else:
+		return makeTag(['td', 'th'][bool(head)], attrs, '&nbsp;')
+
+def makeTableRow(cells, head=False, attrs={}):
 	"""Returns a table row containing the specified cells"""
-	return makeTag('tr', rowAttrs, ''.join([makeTableCell(content, head) for content in cells]))
+	if type(cells) == type({}):
+		attrs = dict(cells) # Take a copy of cells
+		cells = attrs.get('', [])
+		del attrs['']
+	return makeTag('tr', attrs, ''.join([makeTableCell(content, head) for content in cells]))
 
-def makeTable(data, head=[], foot=[], tableAttrs={}):
+def makeTable(data, head=[], foot=[], caption='', tableAttrs={}):
 	"""Returns a table containing the specified head and data cells"""
 	defaultAttrs = {'class': 'basic-table', 'cellspacing': 1, 'cellpadding': 0}
 	defaultAttrs.update(tableAttrs)
 	return makeTag('table', defaultAttrs, ''.join([
-			makeTag('thead', {}, ''.join([makeTableRow(row, head=True, rowAttrs={'class': 'blue-med-dark'}) for row in head]), optional=True),
-			makeTag('tfoot', {}, ''.join([makeTableRow(row, head=True, rowAttrs={'class': 'blue-med-dark'}) for row in foot]), optional=True),
-			makeTag('tbody', {}, ''.join([makeTableRow(row, head=False, rowAttrs={'class': color}) for (row, color) in zip(data, ['white', 'gray'] * len(data))]), optional=False),
+			makeTableCaption(caption),
+			makeTag('thead', {}, ''.join([makeTableRow(row, head=True, attrs={'class': 'blue-med-dark'}) for row in head]), optional=True),
+			makeTag('tfoot', {}, ''.join([makeTableRow(row, head=True, attrs={'class': 'blue-med-dark'}) for row in foot]), optional=True),
+			makeTag('tbody', {}, ''.join([makeTableRow(row, head=False, attrs={'class': color}) for (row, color) in zip(data, ['white', 'gray'] * len(data))]), optional=False),
 		])
 	)
 
