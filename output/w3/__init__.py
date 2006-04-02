@@ -7,18 +7,9 @@ import os.path
 import datetime
 import logging
 import re
-import database
-import schema
-import tablespace
-import table
-import view
-import index
-import uniquekey
-import foreignkey
-import check
-import function
 from decimal import Decimal
 from htmlutils import *
+from xml.sax.saxutils import quoteattr, escape
 from document import Document
 from db.database import Database
 from db.table import Table
@@ -27,7 +18,16 @@ from db.check import Check
 from db.uniquekey import UniqueKey, PrimaryKey
 from db.foreignkey import ForeignKey
 from db.function import Function
-from xml.sax.saxutils import quoteattr, escape
+from output.w3 import database
+from output.w3 import schema
+from output.w3 import tablespace
+from output.w3 import table
+from output.w3 import view
+from output.w3 import index
+from output.w3 import uniquekey
+from output.w3 import foreignkey
+from output.w3 import check
+from output.w3 import function
 from sql.tokenizer import DB2UDBSQLTokenizer
 from sql.formatter import SQLFormatter
 from sql.htmlhighlighter import SQLHTMLHighlighter

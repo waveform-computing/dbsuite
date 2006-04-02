@@ -5,7 +5,7 @@
 import sys
 import os.path
 import logging
-from htmlutils import *
+from output.w3.htmlutils import *
 from db.foreignkey import ForeignKey
 from db.uniquekey import UniqueKey, PrimaryKey
 from db.check import Check

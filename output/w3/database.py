@@ -5,7 +5,7 @@
 import sys
 import os.path
 import logging
-from htmlutils import *
+from output.w3.htmlutils import *
 
 def write(self, database):
 	"""Outputs the documentation for a database object.

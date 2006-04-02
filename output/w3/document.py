@@ -5,7 +5,7 @@
 import datetime
 from string import Template
 from xml.sax.saxutils import quoteattr, escape
-from htmlutils import *
+from output.w3.htmlutils import *
 
 class Document(object):
 	def __init__(self):
