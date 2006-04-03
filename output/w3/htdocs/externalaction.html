@@ -5,8 +5,8 @@
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
 <head>
 	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-	<meta name="Description" content="Description of # Columns" />
-	<meta name="Keywords" scheme="iso8601" content="column count" />
+	<meta name="Description" content="Description of External Action" />
+	<meta name="Keywords" scheme="iso8601" content="external action" />
 	<meta name="Owner" content=$owneremail />
 	<meta name="Feedback" content=$owneremail />
 	<meta name="Robots" content="index,follow" />
@@ -16,7 +16,7 @@
 	<meta name="DC.Rights" content="Copyright (c) 2001,2006 by IBM corporation" />
 	<meta name="IBM.Country" content="US" />
 	<meta name="IBM.Effective" content=$updated />
-	<title># Columns</title>
+	<title>External Action</title>
 	<script language="JavaScript" type="text/javaScript" src="//w3.ibm.com/ui/v8/scripts/scripts.js"></script>
 	<link rel="stylesheet" type="text/css" href="//w3.ibm.com/ui/v8/css/v4-screen.css" />
 	<link rel="stylesheet" type="text/css" href="//w3.ibm.com/ui/v8/css/v4-interior.css" />
@@ -43,9 +43,14 @@
 	<!-- start main content -->
 	<div id="content-main">
 		<div id="fourth-level">
-			<h1># Columns</h1>
+			<h1>External Action</h1>
 		</div>
-		<p>The total number of columns in the table, view or index.</p>
+		<p>If True, the function has external side effects (indicating
+		that the number of invocations of the function is significant,
+		and hence that the optimizer cannot eliminate any otherwise
+		unnecessary function calls).</p>
+		<p>Not applicable unless the <a href="funcorigin.html">origin</a>
+		is user-defined external, or SQL body.</p>
 
 		<!-- start popup footer //////////////////////////////////////////// -->
 		<div id="popup-footer">

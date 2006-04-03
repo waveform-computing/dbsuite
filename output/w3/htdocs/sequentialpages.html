@@ -5,8 +5,8 @@
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
 <head>
 	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-	<meta name="Description" content="Description of # Columns" />
-	<meta name="Keywords" scheme="iso8601" content="column count" />
+	<meta name="Description" content="Description of Sequential Pages" />
+	<meta name="Keywords" scheme="iso8601" content="index sequential pages" />
 	<meta name="Owner" content=$owneremail />
 	<meta name="Feedback" content=$owneremail />
 	<meta name="Robots" content="index,follow" />
@@ -16,7 +16,7 @@
 	<meta name="DC.Rights" content="Copyright (c) 2001,2006 by IBM corporation" />
 	<meta name="IBM.Country" content="US" />
 	<meta name="IBM.Effective" content=$updated />
-	<title># Columns</title>
+	<title>Sequential Pages</title>
 	<script language="JavaScript" type="text/javaScript" src="//w3.ibm.com/ui/v8/scripts/scripts.js"></script>
 	<link rel="stylesheet" type="text/css" href="//w3.ibm.com/ui/v8/css/v4-screen.css" />
 	<link rel="stylesheet" type="text/css" href="//w3.ibm.com/ui/v8/css/v4-interior.css" />
@@ -43,9 +43,13 @@
 	<!-- start main content -->
 	<div id="content-main">
 		<div id="fourth-level">
-			<h1># Columns</h1>
+			<h1>Sequential Pages</h1>
 		</div>
-		<p>The total number of columns in the table, view or index.</p>
+		<p>The number of leaf pages located on disk in the key order of
+		the index with little or no gap between them. This is a
+		measurement of the performance of the index. The <a
+		href="density.html">density</a> value puts this value
+		in the context of the size of the index.</p>
 
 		<!-- start popup footer //////////////////////////////////////////// -->
 		<div id="popup-footer">
