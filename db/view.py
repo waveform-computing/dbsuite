@@ -55,6 +55,16 @@ class View(Relation):
 	def getFieldList(self):
 		return self.__fieldList
 
+	def getCreateSql(self):
+		return self.__sql + ';'
+	
+	def getDropSql(self):
+		sql = Template('DROP VIEW $schema.$view;')
+		return sql.substitute({
+			'schema': formatIdentifier(self.schema.name),
+			'view': formatIdentifier(self.name)
+		})
+	
 	def __getDependencies(self):
 		return self.__dependencies
 	
@@ -82,16 +92,6 @@ class View(Relation):
 	def __getFuncPath(self):
 		return self.__funcPath
 	
-	def __getCreateSql(self):
-		return self.__sql
-	
-	def __getDropSql(self):
-		sql = Template('DROP VIEW $schema.$view;')
-		return sql.substitute({
-			'schema': formatIdentifier(self.schema.name),
-			'view': formatIdentifier(self.name)
-		})
-	
 	dependencies = property(__getDependencies, doc="""A dictionary of the relations (e.g. views) that this view depends upon (keyed by (schemaName, relationName) tuples)""")
 	dependencyList = property(__getDependencyList, doc="""A list of the relations (e.g. views) that this view depends upon""")
 	definer = property(__getDefiner, doc="""The user who created the view""")
@@ -101,8 +101,6 @@ class View(Relation):
 	valid = property(__getValid, doc="""Specifies whether the view is accessible or inoperative""")
 	qualifier = property(__getQualifier, doc="""Specifies the current schema at the time the view was created""")
 	funcPath = property(__getFuncPath, doc="""Specifies the function resolution path at the time the view was created""")
-	createSql = property(__getCreateSql, doc="""Contains the SQL that can be used to create the view""")
-	dropSql = property(__getDropSql, doc="""Contains the SQL that can be used to drop the view""")
 	
 def main():
 	pass

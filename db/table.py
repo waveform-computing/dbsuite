@@ -101,6 +101,33 @@ class Table(Relation):
 	def getDependentList(self):
 		return self.__dependentList
 
+	def getCreateSql(self):
+		sql = Template("""CREATE TABLE $schema.$table (
+$elements
+) $tbspaces;$indexes""")
+		values = {
+			'schema': formatIdentifier(self.schema.name),
+			'table': formatIdentifier(self.name),	
+			'elements': ',\n'.join(
+				[field.prototype for field in self.fieldList] + 
+				[constraint.prototype for constraint in self.constraints.itervalues()]
+			),
+			'tbspaces': 'IN ' + formatIdentifier(self.dataTablespace.name),
+			'indexes': ''.join(['\n' + index.createSql for index in self.indexList])
+		}
+		if self.indexTablespace != self.dataTablespace:
+			values['tbspaces'] += ' INDEX IN ' + formatIdentifier(self.indexTablespace.name)
+		if self.longTablespace != self.dataTablespace:
+			values['tbspaces'] += ' LONG IN ' + formatIdentifier(self.longTablespace.name)
+		return sql.substitute(values)
+	
+	def getDropSql(self):
+		sql = Template('DROP TABLE $schema.$table;')
+		return sql.substitute({
+			'schema': formatIdentifier(self.schema.name),
+			'table': formatIdentifier(self.name)
+		})
+	
 	def __getIndexes(self):
 		return self.__indexes
 
@@ -194,33 +221,6 @@ class Table(Relation):
 	def __getActiveBlocks(self):
 		return self.__activeBlocks
 
-	def __getCreateSql(self):
-		sql = Template("""CREATE TABLE $schema.$table (
-$elements
-) $tbspaces;$indexes""")
-		values = {
-			'schema': formatIdentifier(self.schema.name),
-			'table': formatIdentifier(self.name),	
-			'elements': ',\n'.join(
-				[field.definitionStr for field in self.fieldList] + 
-				[constraint.definitionStr for constraint in self.constraints.itervalues()]
-			),
-			'tbspaces': 'IN ' + formatIdentifier(self.dataTablespace.name),
-			'indexes': ''.join(['\n' + index.createSql for index in self.indexList])
-		}
-		if self.indexTablespace != self.dataTablespace:
-			values['tbspaces'] += ' INDEX IN ' + formatIdentifier(self.indexTablespace.name)
-		if self.longTablespace != self.dataTablespace:
-			values['tbspaces'] += ' LONG IN ' + formatIdentifier(self.longTablespace.name)
-		return sql.substitute(values)
-	
-	def __getDropSql(self):
-		sql = Template('DROP TABLE $schema.$table;')
-		return sql.substitute({
-			'schema': formatIdentifier(self.schema.name),
-			'table': formatIdentifier(self.name)
-		})
-	
 	indexes = property(__getIndexes, doc="""The indexes used by this table in a dictionary""")
 	indexList = property(__getIndexList, doc="""The indexes used by this table in a list""")
 	constraints = property(__getConstraints, doc="""The constraints (keys, checks, etc.) contained in the table""")
@@ -250,8 +250,6 @@ $elements
 	accessMode = property(__getAccessMode, doc="""The current access mode for the table""")
 	clustered = property(__getClustered, doc="""True if the table is a multi-dimensional clustering table""")
 	activeBlocks = property(__getActiveBlocks, doc="""The number of active blocks for multi-dimensional clustering tables""")
-	createSql = property(__getCreateSql, doc="""The SQL that can be used to create the table and all associated indexes""")
-	dropSql = property(__getDropSql, doc="""The SQL that can be used to drop the table and all associated indexes""")
 
 def main():
 	pass

@@ -49,6 +49,46 @@ class Field(RelationObject):
 	def getParentList(self):
 		return self.relation.fieldList
 
+	def getCreateSql(self):
+		from doctable import Table
+		if isinstance(self.relation, Table):
+			sql = Template('ALTER TABLE $schema.$table ADD COLUMN $fielddef;')
+			return sql.substitute({
+				'schema': formatIdentifier(self.relation.schema.name),
+				'table': formatIdentifier(self.relation.name),
+				'fielddef': self.prototype
+			})
+		else:
+			return ""
+	
+	def getDropSql(self):
+		from doctable import Table
+		if isinstance(self.relation, Table):
+			sql = Template('ALTER TABLE $schema.$table DROP COLUMN $field;')
+			return sql.substitute({
+				'schema': formatIdentifier(self.relation.schema.name),
+				'table': formatIdentifier(self.relation.name),
+				'field': formatIdentifier(self.name)
+			})
+		else:
+			return ""
+	
+	def __getPrototype(self):
+		items = [formatIdentifier(self.name), self.datatypeStr]
+		if not self.nullable:
+			items.append('NOT NULL')
+		if self.default:
+			items.append('WITH DEFAULT %s' % (self.default))
+		if not self.logged is None:
+			if not self.logged:
+				items.append('NOT LOGGED')
+		if not self.compact is None:
+			if self.compact:
+				items.append('COMPACT')
+		if self.generated != 'Never':
+			items.append('GENERATED ALWAYS AS ( %s )' % (self.generateExpression))
+		return ' '.join(items)
+		
 	def __getDatatype(self):
 		return self.database.schemas[self.__datatypeSchema].datatypes[self.__datatypeName]
 
@@ -130,46 +170,6 @@ class Field(RelationObject):
 	def __getCompressDefault(self):
 		return self.__compressDefault
 	
-	def __getDefinitionStr(self):
-		items = [formatIdentifier(self.name), self.datatypeStr]
-		if not self.nullable:
-			items.append('NOT NULL')
-		if self.default:
-			items.append('WITH DEFAULT %s' % (self.default))
-		if not self.logged is None:
-			if not self.logged:
-				items.append('NOT LOGGED')
-		if not self.compact is None:
-			if self.compact:
-				items.append('COMPACT')
-		if self.generated != 'Never':
-			items.append('GENERATED ALWAYS AS ( %s )' % (self.generateExpression))
-		return ' '.join(items)
-		
-	def __getCreateSql(self):
-		from doctable import Table
-		if isinstance(self.relation, Table):
-			sql = Template('ALTER TABLE $schema.$table ADD COLUMN $fielddef;')
-			return sql.substitute({
-				'schema': formatIdentifier(self.relation.schema.name),
-				'table': formatIdentifier(self.relation.name),
-				'fielddef': self.definitionStr
-			})
-		else:
-			return ""
-	
-	def __getDropSql(self):
-		from doctable import Table
-		if isinstance(self.relation, Table):
-			sql = Template('ALTER TABLE $schema.$table DROP COLUMN $field;')
-			return sql.substitute({
-				'schema': formatIdentifier(self.relation.schema.name),
-				'table': formatIdentifier(self.relation.name),
-				'field': formatIdentifier(self.name)
-			})
-		else:
-			return ""
-	
 	datatype = property(__getDatatype, doc="""The datatype of the field""")
 	datatypeStr = property(__getDatatypeStr, doc="""The datatype of the field formatted as a string for display""")
 	byteSize = property(__getByteSize, doc="""The (maximum) number of bytes that the field occupies on disk""")
@@ -190,9 +190,7 @@ class Field(RelationObject):
 	generated = property(__getGenerated, doc="""Indicates whether/when the field is generated""")
 	generateExpression = property(__getGenerateExpression, doc="""If the field is generated, holds the expression used to generate the field's value""")
 	compressDefault = property(__getCompressDefault, doc="""Indicates whether the field uses a compressed format for default values""")
-	definitionStr = property(__getDefinitionStr, doc="""The attributes of the field (name, type, etc.) formatted for use in a CREATE TABLE or ALTER TABLE statement""")
-	createSql = property(__getCreateSql, doc="""The SQL that can be used to create the field""")
-	dropSql = property(__getDropSql, doc="""The SQL that can be used to drop the field""")
+	prototype = property(__getPrototype, doc="""The attributes of the field (name, type, etc.) formatted for use in a CREATE TABLE or ALTER TABLE statement""")
 
 def main():
 	pass
