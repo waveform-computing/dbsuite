@@ -72,6 +72,12 @@ class DocBase(object):
 			else:
 				return None
 
+	def getCreateSql(self):
+		raise NotImplementedError
+
+	def getDropSql(self):
+		raise NotImplementedError
+
 	def __str__(self):
 		"""Return a string representation of the object"""
 		return self.qualifiedName
@@ -89,6 +95,8 @@ class DocBase(object):
 	prior = property(lambda self: self.getPrior(), doc="""Returns the previous object of the same type with the same parent, or None if this is the last such object""")
 	parentList = property(lambda self:self.getParentList(), doc="""Returns the list containing objects of the same type with the same parent, or None if the object is standalone""")
 	parentIndex = property(lambda self:self.getParentIndex(), doc="""Returns the index of this object within the parentList""")
+	createSql = property(lambda self: self.getCreateSql(), doc="""The SQL that can be used to create the object""")
+	dropSql = property(lambda self: self.getDropSql(), doc="""The SQL that can be used to drop the object""")
 
 def main():
 	pass
