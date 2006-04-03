@@ -3,10 +3,12 @@
 # vim: set noet sw=4 ts=4:
 
 import sys
+import os
 import os.path
 import datetime
 import logging
 import re
+import shutil
 from decimal import Decimal
 from htmlutils import *
 from xml.sax.saxutils import quoteattr, escape
@@ -32,6 +34,30 @@ from sql.tokenizer import DB2UDBSQLTokenizer
 from sql.formatter import SQLFormatter
 from sql.htmlhighlighter import SQLHTMLHighlighter
 
+def _copytree(src, dst):
+	"""Utility function based on copytree in shutil"""
+	names = os.listdir(src)
+	errors = []
+	if not os.path.isdir(dst):
+		try:
+			os.unlink(dst)
+		except OSError:
+			os.mkdir(dst)
+	for name in names:
+		srcname = os.path.join(src, name)
+		dstname = os.path.join(dst, name)
+		try:
+			if os.path.isdir(srcname):
+				_copytree(srcname, dstname)
+			else:
+				shutil.copy(srcname, dstname)
+		except (IOError, os.error), why:
+			errors.append((srcname, dstname, why))
+		except Error, err:
+			errors.extend(err.args[0])
+	if errors:
+		raise Error, errors
+
 class DocOutput(object):
 	"""HTML documentation writer class -- IBM w3 v8 Intranet standard"""
 
@@ -49,7 +75,9 @@ class DocOutput(object):
 		self._tokenizer = DB2UDBSQLTokenizer()
 		self._formatter = SQLFormatter()
 		self._highlighter = SQLHTMLHighlighter()
-		# Write the documentation files
+		# Copy the contents of the htdocs subdirectory to the target
+		_copytree('output/w3/htdocs/', self._path)
+		# Write the documentation files for each object
 		self.writeDatabase(database)
 		for schema in database.schemas.itervalues():
 			self.writeSchema(schema)
@@ -64,14 +92,33 @@ class DocOutput(object):
 				self.writeFunction(function)
 		for tablespace in database.tablespaces.itervalues():
 			self.writeTablespace(tablespace)
+	
+	def formatSql(self, sql, terminator=";"):
+		"""Converts an SQL statement into highlighted HTML.
 
-	def formatSql(self, sql):
+		Using the tokenizer, reformatter and HTML highlighter units in the
+		sql sub-package, this routine takes raw (typically white-space
+		mangled) SQL code and returns pretty-printed, syntax highlighted
+		SQL in HTML format.
+
+		This routine handles highlighting any arbitrary SQL script.
+		"""
+		# Tokenize, reformat, and then syntax highlight the provided code
+		tokens = self._tokenizer.parse(sql, terminator)
+		tokens = self._formatter.parse(tokens)
+		return self._highlighter.parse(tokens)
+
+	def formatPrototype(self, sql):
+		"""Converts an SQL function prototype into highlighted HTML.
+
+		This method is similar to the formatSql() method, but operates on
+		standalone function prototypes which aren't otherwise valid standalone
+		SQL scripts.
+		"""
 		# Tokenize, reformat, and then syntax highlight the provided code
 		tokens = self._tokenizer.parse(sql)
-		tokens = self._formatter.parse(tokens)
-		html = self._highlighter.parse(tokens)
-		return html
-		#return self._highlighter.parse(self._formatter.parse(self._tokenizer.parse(sql)))
+		tokens = self._formatter.parseRoutinePrototype(tokens)
+		return self._highlighter.parse(tokens)
 	
 	findref = re.compile(r"@([A-Za-z_$#@][A-Za-z0-9_$#@]*(\.[A-Za-z_$#@][A-Za-z0-9_$#@]*){0,2})\b")
 	findfmt = re.compile(r"\B([/_*])(\w+)\1\B")
