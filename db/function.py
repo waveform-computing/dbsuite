@@ -3,6 +3,7 @@
 # vim: set noet sw=4 ts=4:
 
 import logging
+from string import Template
 from schemabase import Routine
 from param import Param
 from util import formatSize, formatIdentifier
@@ -76,6 +77,40 @@ class Function(Routine):
 	def getReturnList(self):
 		return self.__returnList
 	
+	def getPrototype(self):
+		
+		def formatParams(params):
+			return ', '.join(['%s %s' % (param.name, param.datatypeStr) for param in params])
+
+		def formatReturns():
+			if len(self.returnList) == 0:
+				return ''
+			elif self.type == 'Row':
+				return ' RETURNS ROW(%s)' % (formatParams(self.returnList))
+			elif self.type == 'Table':
+				return ' RETURNS TABLE(%s)' % (formatParams(self.returnList))
+			else:
+				return ' RETURNS %s' % (self.returnList[0].datatypeStr)
+
+		return "%s(%s)%s" % (
+			self.qualifiedName,
+			formatParams(self.paramList),
+			formatReturns()
+		)
+	
+	def getCreateSql(self):
+		if self.language == 'SQL':
+			return self.sql + '!'
+		else:
+			raise NotImplementedError
+	
+	def getDropSql(self):
+		sql = Template('DROP SPECIFIC FUNCTION $schema.$specific;')
+		return sql.substitute({
+			'schema': formatIdentifier(self.schema.name),
+			'specific': formatIdentifier(self.specificName)
+		})
+
 	def __getDefiner(self):
 		return self.__definer
 
@@ -129,7 +164,7 @@ class Function(Routine):
 	
 	def __getSql(self):
 		return self.__sql
-	
+
 	definer = property(__getDefiner, doc="""The user who created the index""")
 	origin = property(__getOrigin, doc="""The origin of the function (external, built-in, user-defined, etc.)""")
 	type = property(__getType, doc="""The sort of structure the function returns (row, table, scalar, etc.)""")
@@ -147,7 +182,7 @@ class Function(Routine):
 	created = property(__getCreated, doc="""Timestamp indicating when the index was created""")
 	qualifier = property(__getQualifier, doc="""The current schema at the time the function was created""")
 	funcPath = property(__getFuncPath, doc="""The function resolution path at the time the function was created""")
-	sql = property(__getSql, doc="""The complete SQL statement that created the function""")
+	sql = property(__getSql, doc="""The complete SQL statement that created the function, if language is SQL""")
 	
 def main():
 	pass
