@@ -56,7 +56,7 @@ class UniqueKey(Constraint):
 		else:
 			return super(UniqueKey, self).getDescription()
 	
-	def getDefinitionStr(self):
+	def getPrototype(self):
 		return 'CONSTRAINT %s UNIQUE (%s)' % (
 			formatIdentifier(self.name),
 			', '.join([formatIdentifier(field.name) for field in self.fields])
@@ -77,7 +77,7 @@ class PrimaryKey(UniqueKey):
 	def getTypeName(self):
 		return "Primary Key"
 
-	def getDefinitionStr(self):
+	def getPrototype(self):
 		return "CONSTRAINT %s PRIMARY KEY (%s)" % (
 			formatIdentifier(self.name),
 			', '.join([formatIdentifier(field.name) for field in self.fields])

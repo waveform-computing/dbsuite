@@ -70,7 +70,7 @@ class ForeignKey(Constraint):
 		else:
 			return super(ForeignKey, self).getDescription()
 	
-	def getDefinitionStr(self):
+	def getPrototype(self):
 		sql = 'CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s.%s(%s)' % (
 			formatIdentifier(self.name),
 			', '.join([formatIdentifier(myfield.name) for (myfield, reffield) in self.fields]),
