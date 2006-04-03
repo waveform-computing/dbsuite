@@ -36,18 +36,18 @@ class Constraint(RelationObject):
 	def getFields(self):
 		raise NotImplementedError
 	
-	def getDefinitionStr(self):
+	def getPrototype(self):
 		raise NotImplementedError
 	
-	def __getCreateSql(self):
+	def getCreateSql(self):
 		sql = Template('ALTER TABLE $schema.$table ADD $constdef;')
 		return sql.substitute({
 			'schema': formatIdentifier(self.table.schema.name),
 			'table': formatIdentifier(self.table.name),
-			'constdef': self.definitionStr
+			'constdef': self.prototype
 		})
 	
-	def __getDropSql(self):
+	def getDropSql(self):
 		sql = Template('ALTER TABLE $schema.$table DROP CONSTRAINT $const;')
 		return sql.substitute({
 			'schema': formatIdentifier(self.table.schema.name),
@@ -60,10 +60,8 @@ class Constraint(RelationObject):
 
 	# Use the lambda trick to allow property getter methods to be overridden
 	fields = property(lambda self: self.getFields(), doc="""The fields constrained by this constraint""")
-	definitionStr = property(lambda self: self.getDefinitionStr(), doc="""The attributes of the constraint formatted for use in an ALTER TABLE or CREATE TABLE statement""")
+	prototype = property(lambda self: self.getPrototype(), doc="""The attributes of the constraint formatted for use in an ALTER TABLE or CREATE TABLE statement""")
 	table = property(__getTable, doc="""The table that owns the constraint""")
-	createSql = property(__getCreateSql, doc="""The SQL that can be used to create the constraint""")
-	dropSql = property(__getDropSql, doc="""The SQL that can be used to drop the constraint""")
 
 def main():
 	pass
