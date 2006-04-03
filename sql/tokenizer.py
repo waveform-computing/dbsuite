@@ -491,6 +491,11 @@ class SQLTokenizerBase(object):
 		except ValueError, e:
 			self._addToken(ERROR, str(e))
 
+	def _handleSemiColon(self):
+		"""Parses semi-colon characters (;) in the source."""
+		self._next()
+		self._addToken(TERMINATOR, ';')
+
 	def _handleSlash(self):
 		"""Parses forward-slash characters ("/") in the source."""
 		self._next()
@@ -556,6 +561,7 @@ class SQLTokenizerBase(object):
 			"'": self._handleQuote,
 			'"': self._handleDoubleQuote,
 			'|': self._handleBar,
+			';': self._handleSemiColon,
 		})
 		for char in self.spacechars:
 			self._jump[char] = self._handleWhitespace
