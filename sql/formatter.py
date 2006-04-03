@@ -60,8 +60,10 @@ class SQLFormatter(object):
 
 		(token_type, token_value, token_source, line, column)
 
-	To use the class simply pass such a list to the reformat method. The method
-	will return a string containing the reformatted SQL.
+	In other words, this class accepts the output of the SQLTokenizer class
+	in the tokenizer unit. To use the class simply pass such a list to the
+	parseScript method. The method will return a string containing the
+	reformatted SQL.
 
 	The token_type element gives the general "family" of the token (such as
 	OPERATOR, IDENTIFIER, etc), while the token_value element provides the
@@ -76,9 +78,8 @@ class SQLFormatter(object):
 	A set of internal utility methods are used to simplify this further. See
 	the match and expect methods in particular. The numerous parseX methods in
 	the unit define the grammar of the SQL language being parsed. The dialect
-	used by the class is the IBM DB2 UDB dialect, with as many of the DB2
-	extensions as possible removed (in order to wind up with something which
-	is pretty damn close to a "pure" ANSI SQL dialect).
+	used by the class is the IBM DB2 UDB for LUW dialect, with a few extensions
+	and rarely used extensions removed (or at least, not yet implemented!)
 	"""
 
 	def __init__(self):
@@ -650,20 +651,16 @@ class SQLFormatter(object):
 
 	def _parseScalarFunction(self):
 		"""Parses a scalar function call with all its arguments"""
-		# Parse the function name (or schema if followed by a qualifier)
-		self._keywordIdent()
-		self._expect((IDENTIFIER,))
-		# Check for a qualifier (without _skipping whitespace)
-		if self._match((OPERATOR, ".")):
-			self._keywordIdent()
-			self._expect((IDENTIFIER,))
+		# Parse the function name
+		self._parseSchemaObjectName()
 		# Parse the arguments (the enclosing parentheses are mandatory)
 		self._expect((OPERATOR, "("))
-		while True:
-			self._parseExpression1() # Argument Expression
-			if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
-				break
-
+		if not self._match((OPERATOR, ")")):
+			while True:
+				self._parseExpression1() # Argument Expression
+				if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
+					break
+	
 	def _parseCast(self):
 		"""Parses a CAST() expression"""
 		# CAST already matched
@@ -830,6 +827,11 @@ class SQLFormatter(object):
 				if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
 					break
 
+	def _parseTableFunction(self):
+		"""Parses a table function call with all its arguments"""
+		# Syntactically, this is identical to a scalar function call
+		self._parseScalarFunction()
+
 	def _parseValues(self):
 		"""Parses a VALUES expression"""
 		# VALUES already matched
@@ -895,7 +897,17 @@ class SQLFormatter(object):
 					self._forgetState()
 			elif self._match((KEYWORD, "TABLE")):
 				self._expect((OPERATOR, "("))
-				self._parseFullSelect1()
+				# Ambiguity: TABLE() can indicate a table-function call or a nested table expression
+				self._saveState()
+				try:
+					# Try and parse a full-select
+					self._parseFullSelect1()
+				except ParseError:
+					# If it fails, rewind and try a table function call instead
+					self._restoreState()
+					self._parseTableFunction()
+				else:
+					self._forgetState()
 				self._expect((OPERATOR, ")"))
 				self._parseTableCorrelation()
 			elif self._match([(KEYWORD, "FINAL"), (KEYWORD, "NEW")]):
@@ -999,156 +1011,6 @@ class SQLFormatter(object):
 		else:
 			self._expect([(KEYWORD, "SELECT"), (KEYWORD, "VALUES"), (OPERATOR, "(")])
 
-	def _parseSelectStatement(self):
-		"""Parses a SELECT statement optionally preceded by a common-table-expression"""
-		# Parse the optional common-table-expression
-		if self._match((KEYWORD, "WITH")):
-			while True:
-				self._keywordIdent()
-				self._expect((IDENTIFIER,))
-				# Parse the optional column-alias list
-				if self._match((OPERATOR, "(")):
-					self._indent()
-					while True:
-						self._keywordIdent()
-						self._expect((IDENTIFIER,))
-						if self._match((OPERATOR, ",")):
-							self._newline()
-						else:
-							break
-					self._outdent()
-					self._expect((OPERATOR, ")"))
-				self._expect((KEYWORD, "AS"))
-				self._expect((OPERATOR, "("))
-				self._indent()
-				self._parseFullSelect1()
-				self._outdent()
-				self._expect((OPERATOR, ")"))
-				if self._match((OPERATOR, ",")):
-					self._newline()
-				else:
-					break
-			self._newline()
-		self._parseFullSelect1()
-		# XXX Parse read-only-clause
-		# XXX Parse update-clause
-		# XXX Parse optimize-for-clause
-		# XXX Parse isolation-clause
-
-	def _parseInsertStatement(self):
-		"""Parses an INSERT statement"""
-		# XXX Add INCLUDE column capability and correlation clauses for target
-		# INSERT already matched
-		self._expect((KEYWORD, "INTO"))
-		# XXX Parse table name
-		self._keywordIdent()
-		self._expect((IDENTIFIER,))
-		# Parse optional column list
-		if self._match((OPERATOR, "(")):
-			while True:
-				self._keywordIdent()
-				self._expect((IDENTIFIER,))
-				if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
-					break
-		# XXX A common table expression is permitted here
-		# Parse a full-select (SELECT or VALUES)
-		self._parseFullSelect1()
-
-	def _parseUpdateStatement(self):
-		"""Parses an UPDATE statement"""
-		# XXX Add INCLUDE column capability and correlation clauses for target
-		# UPDATE already matched
-		# XXX Parse table name
-		self._keywordIdent()
-		self._expect((IDENTIFIER,))
-		# Parse mandatory assignment clause
-		self._expect((KEYWORD, "SET"))
-		while True:
-			if self._match((OPERATOR, "(")):
-				# Parse tuple assignment ( (FIELD1,FIELD2)=(...) )
-				while True:
-					self._keywordIdent()
-					self._expect((IDENTIFIER,))
-					if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
-						break
-				self._expect((OPERATOR, "="))
-				self._expect((OPERATOR, "("))
-				# Ambiguity: Tuple of expressions or a full-select
-				self._saveState()
-				try:
-					self._parseFullSelect1()
-					self._expect((OPERATOR, ")"))
-				except ParseError:
-					self._restoreState()
-					while True:
-						if not self._match((KEYWORD, "DEFAULT")):
-							self._parseExpression1()
-						if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
-							break
-				else:
-					self._forgetState()
-			else:
-				# Parse simple assignment (FIELD=VALUE)
-				self._keywordIdent()
-				self._expect((IDENTIFIER,))
-				self._expect((OPERATOR, "="))
-				if not self._match((KEYWORD, "DEFAULT")):
-					self._parseExpression1()
-			if not self._match((OPERATOR, ",")):
-				break
-		# Parse optional WHERE clause
-		if self._match((KEYWORD, "WHERE")):
-			self._parsePredicate1()
-
-	def _parseDeleteStatement(self):
-		"""Parses a DELETE statement"""
-		# XXX Add INCLUDE column capability and correlation clauses for target
-		# DELETE already matched
-		self._expect((KEYWORD, "FROM"))
-		# XXX Parse table name
-		self._keywordIdent()
-		self._expect((IDENTIFIER,))
-		# Parse optional WHERE clause
-		if self._match((KEYWORD, "WHERE")):
-			self._parsePredicate1()
-
-	def _parseCreateTableStatement(self):
-		"""Parses a CREATE TABLE statement"""
-		# CREATE TABLE already matched
-		self._parseSchemaObjectName()
-		# Parse elements
-		self._expect((OPERATOR, "("))
-		self._indent()
-		while True:
-			self._saveState()
-			try:
-				# Try parsing a table constraint definition
-				self._parseTableConstraint()
-			except ParseError:
-				# If that fails, rewind and try and parse a column definition
-				self._restoreState()
-				self._parseColumnDefinition()
-			else:
-				self._forgetState()
-			if self._match((OPERATOR, ",")):
-				self._newline()
-			else:
-				break
-		self._outdent()
-		self._expect((OPERATOR, ")"))
-		# Parse tablespaces
-		if self._match((KEYWORD, "IN")):
-			self._keywordIdent()
-			self._expect((IDENTIFIER,))
-			if self._match((KEYWORD, "INDEX")):
-				self._expect((KEYWORD, "IN"))
-				self._keywordIdent()
-				self._expect((IDENTIFIER,))
-			if self._match((KEYWORD, "LONG")):
-				self._expect((KEYWORD, "IN"))
-				self._keywordIdent()
-				self._expect((IDENTIFIER,))
-
 	def _parseColumnDefinition(self):
 		"""Parses a column definition in a CREATE TABLE statement"""
 		# Parse a column definition
@@ -1240,8 +1102,12 @@ class SQLFormatter(object):
 					elif self._match((KEYWORD, "SET")):
 						self._expect((KEYWORD, "NULL"))
 					else:
-						self._expect([(KEYWORD, "RESTRICT"), (IDENTIFIER, "CASCADE"),
-							(KEYWORD, "NO"), (KEYWORD, "SET")])
+						self._expect([
+							(KEYWORD, "RESTRICT"),
+							(IDENTIFIER, "CASCADE"), # CASCADE is not a KEYWORD
+							(KEYWORD, "NO"),
+							(KEYWORD, "SET")
+						])
 				else:
 					break
 		elif self._match((KEYWORD, "CHECK")):
@@ -1249,8 +1115,13 @@ class SQLFormatter(object):
 			self._parsePredicate1()
 			self._expect((OPERATOR, ")"))
 		else:
-			self._expect([(KEYWORD, "CONSTRAINT"), (KEYWORD, "PRIMARY"),
-				(KEYWORD, "UNIQUE"), (KEYWORD, "REFERENCES"), (KEYWORD, "CHECK")])
+			self._expect([
+				(KEYWORD, "CONSTRAINT"),
+				(KEYWORD, "PRIMARY"),
+				(KEYWORD, "UNIQUE"),
+				(KEYWORD, "REFERENCES"),
+				(KEYWORD, "CHECK")
+			])
 
 	def _parseTableConstraint(self):
 		"""Parses a constraint attached to a table in a CREATE TABLE statement"""
@@ -1297,8 +1168,12 @@ class SQLFormatter(object):
 					elif self._match((KEYWORD, "SET")):
 						self._expect((KEYWORD, "NULL"))
 					else:
-						self._expect([(KEYWORD, "RESTRICT"), (IDENTIFIER, "CASCADE"),
-							(KEYWORD, "NO"), (KEYWORD, "SET")])
+						self._expect([
+							(KEYWORD, "RESTRICT"),
+							(IDENTIFIER, "CASCADE"), # CASCADE is not a KEYWORD
+							(KEYWORD, "NO"),
+							(KEYWORD, "SET")
+						])
 				else:
 					break
 		elif self._match((KEYWORD, "CHECK")):
@@ -1306,81 +1181,386 @@ class SQLFormatter(object):
 			self._parsePredicate1()
 			self._expect((OPERATOR, ")"))
 		else:
-			self._expect([(KEYWORD, "CONSTRAINT"), (KEYWORD, "PRIMARY"),
-				(KEYWORD, "UNIQUE"), (KEYWORD, "FOREIGN"), (KEYWORD, "CHECK")])
+			self._expect([
+				(KEYWORD, "CONSTRAINT"),
+				(KEYWORD, "PRIMARY"),
+				(KEYWORD, "UNIQUE"),
+				(KEYWORD, "FOREIGN"),
+				(KEYWORD, "CHECK")
+			])
 
-	def _parseDropTableStatement(self):
-		"""Parses a DROP TABLE statement"""
-		# DROP TABLE already matched
+	def _parseCallStatement(self):
+		"""Parses a CALL statement"""
+		# CALL already matched
 		self._parseSchemaObjectName()
-
-	def _parseCreateIndexStatement(self):
-		"""Parses a CREATE INDEX statement"""
-		# CREATE [UNIQUE] INDEX already matched
-		self._parseSchemaObjectName()
+		if self._match((OPERATOR, "(")):
+			while True:
+				self._parseExpression1()
+				if self._match([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
+					break
+	
+	def _parseSetStatement(self):
+		"""Parses a SET statement in a dynamic compound statement"""
+		# SET already matched
+		while True:
+			if self._match((OPERATOR, "(")):
+				# Parse tuple assignment ( (FIELD1,FIELD2)=(...) )
+				while True:
+					self._keywordIdent()
+					self._expect((IDENTIFIER,))
+					if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
+						break
+				self._expect((OPERATOR, "="))
+				self._expect((OPERATOR, "("))
+				# Ambiguity: Tuple of expressions or a full-select
+				self._saveState()
+				try:
+					self._indent()
+					self._parseFullSelect1()
+					self._outdent()
+					self._expect((OPERATOR, ")"))
+				except ParseError:
+					self._restoreState()
+					while True:
+						self._parseExpression1()
+						if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
+							break
+				else:
+					self._forgetState()
+			else:
+				# Parse simple assignment (FIELD=VALUE)
+				self._keywordIdent()
+				self._expect((IDENTIFIER,))
+				self._expect((OPERATOR, "="))
+				self._parseExpression1()
+			if not self._match((OPERATOR, ",")):
+				break
+	
+	def _parseForStatement(self):
+		"""Parses a FOR-loop in a dynamic compound statement"""
+		# XXX Implement support for labels
+		# FOR already matched
+		self._keywordIdent()
+		self._expect((IDENTIFIER,))
+		self._expect((KEYWORD, "AS"))
+		# XXX Implement support for CURSOR clause in procedures
 		self._indent()
-		self._expect((KEYWORD, "ON"))
+		self._parseSelectStatement()
+		self._outdent()
+		self._expect((KEYWORD, "DO"))
+		self._indent()
+		while True:
+			self._parseRoutineStatement()
+			self._expect((TERMINATOR, ";"))
+			self._newline()
+			if self._match((KEYWORD, "END")):
+				break
+		self._outdent(-1)
+		self._expect((KEYWORD, "FOR"))
+	
+	def _parseWhileStatement(self):
+		"""Parses a WHILE-loop in a dynamic compound statement"""
+		# XXX Implement support for labels
+		# WHILE already matched
+		self._parsePredicate1()
+		self._newline()
+		self._expect((KEYWORD, "DO"))
+		self._indent()
+		while True:
+			self._parseRoutineStatement()
+			self._expect((TERMINATOR, ";"))
+			self._newline()
+			if self._match((KEYWORD, "END")):
+				break
+		self._outdent(-1)
+		self._expect((KEYWORD, "WHILE"))
+	
+	def _parseGetDiagnosticStatement(self):
+		"""Parses a GET DIAGNOSTICS statement in a dynamic compound statement"""
+		# GET already matched
+		self._expect((IDENTIFIER, "DIAGNOSTICS")) # DIAGNOSTIC is not a KEYWORD
+		if self._match((KEYWORD, "EXCEPTION")):
+			self._expect((NUMBER, 1))
+			while True:
+				self._keywordIdent()
+				self._expect((IDENTIFIER,))
+				self._expect((OPERATOR, "="))
+				self._expect([
+					(IDENTIFIER, "MESSAGE_TEXT"),
+					(IDENTIFIER, "DB2_TOKEN_STRING")
+				]) # MESSAGE_TEXT and DB2_TOKEN_STRING are not KEYWORDs
+				if not self._match((OPERATOR, ",")):
+					break
+		else:
+			self._keywordIdent()
+			self._expect((IDENTIFIER,))
+			self._expect((OPERATOR, "="))
+			self._expect([
+				(IDENTIFIER, "ROW_COUNT"),
+				(IDENTIFIER, "DB2_RETURN_STATUS")
+			]) # ROW_COUNT and DB2_RETURN_STATUS are not KEYWORDs
+	
+	def _parseIfStatement(self):
+		"""Parses an IF-conditional in a dynamic compound statement"""
+		# IF already matched
+		t = (KEYWORD, "IF")
+		while True:
+			if t in ((KEYWORD, "IF"), (KEYWORD, "ELSEIF")):
+				self._parsePredicate1()
+				self._expect((KEYWORD, "THEN"))
+				self._indent()
+				while True:
+					self._parseRoutineStatement()
+					self._expect((TERMINATOR, ";"))
+					self._newline()
+					t = self._match([
+						(KEYWORD, "ELSEIF"),
+						(KEYWORD, "ELSE"),
+						(KEYWORD, "END")
+					])
+					if t:
+						self._outdent(-1)
+						break
+			elif t == (KEYWORD, "ELSE"):
+				self._indent()
+				while True:
+					self._parseRoutineStatement()
+					self._expect((TERMINATOR, ";"))
+					if self._match((KEYWORD, "END")):
+						self._outdent(-1)
+						break
+				break
+			else:
+				break
+		self._expect((KEYWORD, "IF"))
+
+	def _parseSignalStatement(self):
+		"""Parses a SIGNAL statement in a dynamic compound statement"""
+		# SIGNAL already matched
+		if self._match((IDENTIFIER, "SQLSTATE")): # SQLSTATE is not a KEYWORD
+			self._match((IDENTIFIER, "VALUE")) # VALUE is not a KEYWORD
+			self._keywordIdent()
+			self._expect([(IDENTIFIER,), (STRING,)])
+		else:
+			self._keywordIdent()
+			self._expect((IDENTIFIER,))
+		if self._match((KEYWORD, "SET")):
+			self._expect((IDENTIFIER, "MESSAGE_TEXT"))
+			self._expect((OPERATOR, "="))
+			self._parseExpression1()
+		# We deliberately don't parse the deprecated parenthesized expression
+		# syntax here
+	
+	def _parseIterateStatement(self):
+		"""Parses an ITERATE statement within a loop"""
+		# ITERATE already matched
+		self._keywordIdent()
+		self._match((IDENTIFIER,))
+	
+	def _parseLeaveStatement(self):
+		"""Parses a LEAVE statement within a loop"""
+		# LEAVE already matched
+		self._keywordIdent()
+		self._match((IDENTIFIER,))
+	
+	def _parseReturnStatement(self):
+		"""Parses a RETURN statement in a compound statement"""
+		# RETURN already matched
+		self._saveState()
+		try:
+			# Try and parse a select-statement
+			self._parseSelectStatement()
+		except ParseError:
+			# If it fails, rewind and try an expression or tuple instead
+			self._restoreState()
+			self._parseExpression1()
+		else:
+			self._forgetState()
+
+	def _parseDynamicCompoundStatement(self):
+		"""Parses a dynamic compound statement"""
+		# XXX Implement support for labelled blocks
+		# XXX Only permit labels when part of a function/method/trigger
+		# BEGIN already matched
+		self._expect((IDENTIFIER, "ATOMIC")) # ATOMIC is not a KEYWORD
+		self._indent()
+		# Parse optional variable/condition declarations
+		if self._match((KEYWORD, "DECLARE")):
+			while True:
+				self._keywordIdent()
+				self._expect((IDENTIFIER,))
+				if self._match((KEYWORD, "CONDITION")):
+					self._expect((KEYWORD, "FOR"))
+					if self._match((IDENTIFIER, "SQLSTATE")): # SQLSTATE is not a KEYWORD
+						self._match((IDENTIFIER, "VALUE")) # VALUE is no a KEYWORD
+					self._expect((STRING,))
+				else:
+					self._parseDataType()
+					if self._match((KEYWORD, "DEFAULT")):
+						self._parseExpression1()
+				self._expect((TERMINATOR, ";"))
+				self._newline()
+				if not self._match((KEYWORD, "DECLARE")):
+					break
+		# Parse routine statements
+		while True:
+			self._parseRoutineStatement()
+			self._expect((TERMINATOR, ";"))
+			self._newline()
+			if not self._match((KEYWORD, "END")):
+				break
+		self._outdent(-1)
+	
+	def _parseSelectStatement(self):
+		"""Parses a SELECT statement optionally preceded by a common-table-expression"""
+		# Parse the optional common-table-expression
+		if self._match((KEYWORD, "WITH")):
+			while True:
+				self._keywordIdent()
+				self._expect((IDENTIFIER,))
+				# Parse the optional column-alias list
+				if self._match((OPERATOR, "(")):
+					self._indent()
+					while True:
+						self._keywordIdent()
+						self._expect((IDENTIFIER,))
+						if self._match((OPERATOR, ",")):
+							self._newline()
+						else:
+							break
+					self._outdent()
+					self._expect((OPERATOR, ")"))
+				self._expect((KEYWORD, "AS"))
+				self._expect((OPERATOR, "("))
+				self._indent()
+				self._parseFullSelect1()
+				self._outdent()
+				self._expect((OPERATOR, ")"))
+				if self._match((OPERATOR, ",")):
+					self._newline()
+				else:
+					break
+			self._newline()
+		self._parseFullSelect1()
+		# XXX Parse read-only-clause
+		# XXX Parse update-clause
+		# XXX Parse optimize-for-clause
+		# XXX Parse isolation-clause
+
+	def _parseInsertStatement(self):
+		"""Parses an INSERT statement"""
+		# XXX Add INCLUDE column capability and correlation clauses for target
+		# INSERT already matched
+		self._expect((KEYWORD, "INTO"))
+		# XXX Parse table correlation
 		self._parseSchemaObjectName()
-		# Parse column list (with optional order indicators)
+		# Parse optional column list
+		if self._match((OPERATOR, "(")):
+			while True:
+				self._keywordIdent()
+				self._expect((IDENTIFIER,))
+				if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
+					break
+		# XXX A common table expression is permitted here
+		# Parse a full-select (SELECT or VALUES)
+		self._parseFullSelect1()
+
+	def _parseUpdateStatement(self):
+		"""Parses an UPDATE statement"""
+		# XXX Add INCLUDE column capability and correlation clauses for target
+		# UPDATE already matched
+		# XXX Parse table correlation
+		self._parseSchemaObjectName()
+		# Parse mandatory assignment clause
+		self._expect((KEYWORD, "SET"))
+		while True:
+			if self._match((OPERATOR, "(")):
+				# Parse tuple assignment ( (FIELD1,FIELD2)=(...) )
+				while True:
+					self._keywordIdent()
+					self._expect((IDENTIFIER,))
+					if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
+						break
+				self._expect((OPERATOR, "="))
+				self._expect((OPERATOR, "("))
+				# Ambiguity: Tuple of expressions or a full-select
+				self._saveState()
+				try:
+					self._parseFullSelect1()
+					self._expect((OPERATOR, ")"))
+				except ParseError:
+					self._restoreState()
+					while True:
+						if not self._match((KEYWORD, "DEFAULT")):
+							self._parseExpression1()
+						if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
+							break
+				else:
+					self._forgetState()
+			else:
+				# Parse simple assignment (FIELD=VALUE)
+				self._keywordIdent()
+				self._expect((IDENTIFIER,))
+				self._expect((OPERATOR, "="))
+				if not self._match((KEYWORD, "DEFAULT")):
+					self._parseExpression1()
+			if not self._match((OPERATOR, ",")):
+				break
+		# Parse optional WHERE clause
+		if self._match((KEYWORD, "WHERE")):
+			self._parsePredicate1()
+
+	def _parseDeleteStatement(self):
+		"""Parses a DELETE statement"""
+		# XXX Add INCLUDE column capability and correlation clauses for target
+		# DELETE already matched
+		self._expect((KEYWORD, "FROM"))
+		# XXX Parse table correlation
+		self._parseSchemaObjectName()
+		# Parse optional WHERE clause
+		if self._match((KEYWORD, "WHERE")):
+			self._parsePredicate1()
+	
+	def _parseMergeStatement(self):
+		# XXX Implement MERGE parsing
+		pass
+
+	def _parseCreateTableStatement(self):
+		"""Parses a CREATE TABLE statement"""
+		# CREATE TABLE already matched
+		self._parseSchemaObjectName()
+		# Parse elements
 		self._expect((OPERATOR, "("))
 		self._indent()
 		while True:
-			self._keywordIdent()
-			self._expect((IDENTIFIER,))
-			self._match([(IDENTIFIER, "ASC"), (IDENTIFIER, "DESC")]) # ASC and DESC aren't KEYWORDs
+			self._saveState()
+			try:
+				# Try parsing a table constraint definition
+				self._parseTableConstraint()
+			except ParseError:
+				# If that fails, rewind and try and parse a column definition
+				self._restoreState()
+				self._parseColumnDefinition()
+			else:
+				self._forgetState()
 			if self._match((OPERATOR, ",")):
 				self._newline()
 			else:
 				break
 		self._outdent()
 		self._expect((OPERATOR, ")"))
-		# Parse optional include columns
-		if self._match((IDENTIFIER, "INCLUDE")): # INCLUDE isn't a KEYWORD
-			self._newline(-1)
-			self._expect((OPERATOR, "("))
-			self._indent()
-			while True:
+		# Parse tablespaces
+		if self._match((KEYWORD, "IN")):
+			self._keywordIdent()
+			self._expect((IDENTIFIER,))
+			if self._match((KEYWORD, "INDEX")):
+				self._expect((KEYWORD, "IN"))
 				self._keywordIdent()
 				self._expect((IDENTIFIER,))
-				if self._match((OPERATOR, ",")):
-					self._newline()
-				else:
-					break
-			self._outdent()
-			self._expect((OPERATOR, ")"))
-		# Parse index options
-		if self._match([(KEYWORD, "ALLOW"), (KEYWORD, "DISALLOW")]):
-			self._expect((IDENTIFIER, "REVERSE")) # REVERSE isn't a KEYWORD
-			self._expect((IDENTIFIER, "SCANS")) # SCANS isn't a KEYWORD
-
-	def _parseDropIndexStatement(self):
-		"""Parses a DROP INDEX statement"""
-		# DROP INDEX already matched
-		self._parseSchemaObjectName()
-
-	def _parseCreateViewStatement(self):
-		"""Parses a CREATE VIEW statement"""
-		# CREATE VIEW already matched
-		self._parseSchemaObjectName()
-		if self._match((OPERATOR, "(")):
-			self._indent()
-			while True:
+			if self._match((KEYWORD, "LONG")):
+				self._expect((KEYWORD, "IN"))
 				self._keywordIdent()
 				self._expect((IDENTIFIER,))
-				if self._match((OPERATOR, ",")):
-					self._newline()
-				else:
-					break
-			self._outdent()
-			self._expect((OPERATOR, ")"))
-		self._expect((KEYWORD, "AS"))
-		self._newline()
-		self._parseSelectStatement()
-
-	def _parseDropViewStatement(self):
-		"""Parses a DROP VIEW statement"""
-		# DROP VIEW already matched
-		self._parseSchemaObjectName()
 
 	def _parseAlterTableStatement(self):
 		"""Parses an ALTER TABLE statement"""
@@ -1447,8 +1627,327 @@ class SQLFormatter(object):
 			self._newline()
 		self._outdent()
 
-	def parse(self, tokens):
-		"""Parses an arbitrary SQL statement or script"""
+	def _parseCreateIndexStatement(self):
+		"""Parses a CREATE INDEX statement"""
+		# CREATE [UNIQUE] INDEX already matched
+		self._parseSchemaObjectName()
+		self._indent()
+		self._expect((KEYWORD, "ON"))
+		self._parseSchemaObjectName()
+		# Parse column list (with optional order indicators)
+		self._expect((OPERATOR, "("))
+		self._indent()
+		while True:
+			self._keywordIdent()
+			self._expect((IDENTIFIER,))
+			self._match([(IDENTIFIER, "ASC"), (IDENTIFIER, "DESC")]) # ASC and DESC aren't KEYWORDs
+			if self._match((OPERATOR, ",")):
+				self._newline()
+			else:
+				break
+		self._outdent()
+		self._expect((OPERATOR, ")"))
+		# Parse optional include columns
+		if self._match((IDENTIFIER, "INCLUDE")): # INCLUDE isn't a KEYWORD
+			self._newline(-1)
+			self._expect((OPERATOR, "("))
+			self._indent()
+			while True:
+				self._keywordIdent()
+				self._expect((IDENTIFIER,))
+				if self._match((OPERATOR, ",")):
+					self._newline()
+				else:
+					break
+			self._outdent()
+			self._expect((OPERATOR, ")"))
+		# Parse index options
+		if self._match([(KEYWORD, "ALLOW"), (KEYWORD, "DISALLOW")]):
+			self._expect((IDENTIFIER, "REVERSE")) # REVERSE isn't a KEYWORD
+			self._expect((IDENTIFIER, "SCANS")) # SCANS isn't a KEYWORD
+
+	def _parseCreateViewStatement(self):
+		"""Parses a CREATE VIEW statement"""
+		# CREATE VIEW already matched
+		self._parseSchemaObjectName()
+		if self._match((OPERATOR, "(")):
+			self._indent()
+			while True:
+				self._keywordIdent()
+				self._expect((IDENTIFIER,))
+				if self._match((OPERATOR, ",")):
+					self._newline()
+				else:
+					break
+			self._outdent()
+			self._expect((OPERATOR, ")"))
+		self._expect((KEYWORD, "AS"))
+		self._newline()
+		self._parseSelectStatement()
+
+	def _parseCreateFunctionStatement(self):
+		"""Parses a CREATE FUNCTION statement"""
+		# CREATE FUNCTION already matched
+		self._parseSchemaObjectName()
+		# Parse parameter list
+		self._expect((OPERATOR, "("))
+		if not self._match((OPERATOR, ")")):
+			while True:
+				self._keywordIdent()
+				self._expect((IDENTIFIER,))
+				self._parseDataType()
+				if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
+					break
+		self._indent()
+		# Parse function options (which can appear in any order)
+		valid = [
+			((KEYWORD, "RETURNS")),
+			((KEYWORD, "SPECIFIC")),
+			((KEYWORD, "LANGUAGE")),
+			((KEYWORD, "PARAMETER")),
+			((KEYWORD, "NOT")),
+			((KEYWORD, "DETERMINISTIC")),
+			((KEYWORD, "NO")),
+			((KEYWORD, "EXTERNAL")),
+			((KEYWORD, "READS")),
+			((KEYWORD, "MODIFIES")),
+			((KEYWORD, "CONTAINS")),
+			((KEYWORD, "STATIC")),
+			((KEYWORD, "CALLED")),
+			((KEYWORD, "NULL")),
+			((KEYWORD, "INHERITS")),
+		]
+		while True:
+			t = self._match(valid)
+			if t:
+				t = t[:2]
+				valid.remove(t)
+			else:
+				break
+			if t == (KEYWORD, "RETURNS"):
+				if self._match([(KEYWORD, "ROW"), (KEYWORD, "TABLE")]):
+					self._expect((OPERATOR, "("))
+					while True:
+						self._keywordIdent()
+						self._expect((IDENTIFIER,))
+						self._parseDataType()
+						if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
+							break
+				else:
+					self._parseDataType()
+				self._newline()
+			elif t == (KEYWORD, "SPECIFIC"):
+				self._keywordIdent()
+				self._expect((IDENTIFIER,))
+				self._newline()
+			elif t == (KEYWORD, "LANGUAGE"):
+				self._expect((KEYWORD, "SQL"))
+				self._newline()
+			elif t == (KEYWORD, "PARAMETER"):
+				self._expect((KEYWORD, "CCSID"))
+				self._expect([
+					(IDENTIFIER, "ASCII"), # ASCII is not a KEYWORD
+					(IDENTIFIER, "UNICODE"), # UNICODE is not a KEYWORD
+				])
+				self._newline()
+			elif t == (KEYWORD, "NOT"):
+				self._expect((KEYWORD, "DETERMINISTIC"))
+				valid.remove((KEYWORD, "DETERMINISTIC"))
+				self._newline()
+			elif t == (KEYWORD, "DETERMINISTIC"):
+				valid.remove((KEYWORD, "NOT"))
+				self._newline()
+			elif t == (KEYWORD, "NO"):
+				self._expect((KEYWORD, "EXTERNAL"))
+				self._expect((IDENTIFIER, "ACTION")) # ACTION is not a KEYWORD
+				valid.remove((KEYWORD, "EXTERNAL"))
+				self._newline()
+			elif t == (KEYWORD, "EXTERNAL"):
+				self._expect((IDENTIFIER, "ACTION")) # ACTION is not a KEYWORD
+				valid.remove((KEYWORD, "NO"))
+				self._newline()
+			elif t == (KEYWORD, "READS"):
+				self._expect((KEYWORD, "SQL"))
+				self._expect((KEYWORD, "DATA"))
+				valid.remove((KEYWORD, "MODIFIES"))
+				valid.remove((KEYWORD, "CONTAINS"))
+				self._newline()
+			elif t == (KEYWORD, "MODIFIES"):
+				self._expect((KEYWORD, "SQL"))
+				self._expect((KEYWORD, "DATA"))
+				valid.remove((KEYWORD, "READS"))
+				valid.remove((KEYWORD, "CONTAINS"))
+				self._newline()
+			elif t == (KEYWORD, "CONTAINS"):
+				self._expect((KEYWORD, "SQL"))
+				valid.remove((KEYWORD, "READS"))
+				valid.remove((KEYWORD, "MODIFIES"))
+				self._newline()
+			elif t == (KEYWORD, "STATIC"):
+				self._expect((IDENTIFIER, "DISPATCH")) # DISPATCH is not a KEYWORD
+				self._newline()
+			elif t == (KEYWORD, "CALLED"):
+				self._expect((KEYWORD, "ON"))
+				self._expect((KEYWORD, "NULL"))
+				self._expect((IDENTIFIER, "INPUT")) # INPUT is not a KEYWORD
+				valid.remove((KEYWORD, "NULL"))
+				self._newline()
+			elif t == (KEYWORD, "NULL"):
+				self._expect((KEYWORD, "CALL"))
+				valid.remove((KEYWORD, "CALLED"))
+				self._newline()
+			elif t == (KEYWORD, "INHERITS"):
+				self._expect((IDENTIFIER, "SPECIAL")) # SPECIAL is not a KEYWORD
+				self._expect((IDENTIFIER, "REGISTERS")) # REGISTERS is not a KEYWORD
+				self._newline()
+		# Parse optional PREDICATES clause
+		if self._match((IDENTIFIER, "PREDICATES")): # PREDICATES is not a KEYWORD
+			# XXX Implement the (horribly complex) PREDICATES clause
+			pass
+			self._newline()
+		if self._match((KEYWORD, "INHERIT")):
+			self._expect((KEYWORD, "ISOLATION"))
+			self._expect((IDENTIFIER, "LEVEL")) # LEVEL is not a KEYWORD
+			self._expect([
+				(KEYWORD, "WITH"),
+				(IDENTIFIER, "WITHOUT"), # WITHOUT is not a KEYWORD
+			])
+			self._expect((KEYWORD, "LOCK"))
+			self._expect((IDENTIFIER, "REQUEST")) # REQUEST is not a KEYWORD
+		# Parse the function body
+		self._outdent()
+		if self._expect([(KEYWORD, "BEGIN"), (KEYWORD, "RETURN")])[:2] == (KEYWORD, "BEGIN"):
+			self._parseDynamicCompoundStatement()
+		else:
+			self._indent()
+			self._parseReturnStatement()
+			self._outdent()
+
+	def _parseDropStatement(self):
+		"""Parses a DROP statement"""
+		# XXX Lots more things to implement here...
+		# DROP already matched
+		if self._match((KEYWORD, "ALIAS")):
+			self._parseSchemaObjectName()
+		elif self._match([(KEYWORD, "TABLE"), (KEYWORD, "VIEW")]):
+			self._match((IDENTIFIER, "HIERARCHY")) # HIERARCHY is not a KEYWORD
+			self._parseSchemaObjectName()
+		elif self._match((KEYWORD, "INDEX")):
+			if self._match((IDENTIFIER, "EXTENSION")): # EXTENSION is not a KEYWORD
+				self._parseSchemaObjectName()
+				self._expect((KEYWORD, "RESTRICT"))
+			else:
+				self._parseSchemaObjectName()
+		elif self._match((KEYWORD, "FUNCTION")):
+			self._parseSchemaObjectName()
+			if self._match((OPERATOR, "(")):
+				while True:
+					self._parseDataType()
+					if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
+						break
+			self._match((KEYWORD, "RESTRICT"))
+		elif self._match((KEYWORD, "SPECIFIC")):
+			self._parseSchemaObjectName()
+			self._match((KEYWORD, "RESTRICT"))
+		elif self._match([(KEYWORD, "DATA"), (KEYWORD, "DISTINCT")]):
+			self._expect((KEYWORD, "TYPE"))
+			self._parseSchemaObjectName()
+		elif self._match((KEYWORD, "TYPE")):
+			self._parseSchemaObjectName()
+		elif self._match((KEYWORD, "SCHEMA")):
+			self._keywordIdent()
+			self._expect((IDENTIFIER,))
+			# XXX Add CASCADE here for PostgreSQL?
+			self._match((KEYWORD, "RESTRICT"))
+		else:
+			self._expect([
+				(KEYWORD, "ALIAS"),
+				(KEYWORD, "TABLE"),
+				(KEYWORD, "VIEW"),
+				(KEYWORD, "INDEX"),
+				(KEYWORD, "FUNCTION"),
+				(KEYWORD, "SPECIFIC"),
+				(KEYWORD, "DISTINCT"),
+				(KEYWORD, "DATA"),
+				(KEYWORD, "TYPE"),
+				(KEYWORD, "SCHEMA"),
+			])
+
+	def _parseRoutineStatement(self):
+		"""Parses a statement in a routine/trigger/compound statement"""
+		# XXX Only permit RETURN when part of a function/method/trigger
+		# XXX Only permit ITERATE & LEAVE when part of a loop
+		if self._match((KEYWORD, "CALL")):
+			self._parseCallStatement()
+		elif self._match((KEYWORD, "GET")):
+			self._parseGetDiagnosticStatement()
+		elif self._match((KEYWORD, "SET")):
+			self._parseSetStatement()
+		elif self._match((KEYWORD, "FOR")):
+			self._parseForStatement()
+		elif self._match((KEYWORD, "WHILE")):
+			self._parseWhileStatement()
+		elif self._match((KEYWORD, "IF")):
+			self._parseIfStatement()
+		elif self._match((KEYWORD, "SIGNAL")):
+			self._parseSignalStatement()
+		elif self._match((KEYWORD, "RETURN")):
+			self._parseReturnStatement()
+		elif self._match((KEYWORD, "ITERATE")):
+			self._parseIterateStatement()
+		elif self._match((KEYWORD, "LEAVE")):
+			self._parseLeaveStatement()
+		elif self._match((KEYWORD, "INSERT")):
+			self._parseInsertStatement()
+		elif self._match((KEYWORD, "UPDATE")):
+			self._parseUpdateStatement()
+		elif self._match((KEYWORD, "DELETE")):
+			self._parseDeleteStatement()
+		elif self._match((KEYWORD, "MERGE")):
+			self._parseMergeStatement()
+		else:
+			self._parseSelectStatement()
+
+	def _parseTopLevelStatement(self):
+		"""Parses a top-level statement in an SQL script"""
+		# XXX Implement dynamic compound statements
+		# XXX Implement CREATE/DROP FUNCTION...
+		# XXX Implement CREATE/DROP DB...
+		# XXX Implement CREATE/DROP TABLESPACE...
+		if self._match((KEYWORD, "BEGIN")):
+			self._parseDynamicCompoundStatement()
+		if self._match((KEYWORD, "INSERT")):
+			self._parseInsertStatement()
+		elif self._match((KEYWORD, "UPDATE")):
+			self._parseUpdateStatement()
+		elif self._match((KEYWORD, "DELETE")):
+			self._parseDeleteStatement()
+		elif self._match((KEYWORD, "MERGE")):
+			self._parseMergeStatement()
+		elif self._match((KEYWORD, "ALTER")):
+			self._expect((KEYWORD, "TABLE"))
+			self._parseAlterTableStatement()
+		elif self._match((KEYWORD, "CREATE")):
+			if self._match((KEYWORD, "TABLE")):
+				self._parseCreateTableStatement()
+			elif self._match((KEYWORD, "VIEW")):
+				self._parseCreateViewStatement()
+			elif self._match((KEYWORD, "UNIQUE")):
+				self._expect((KEYWORD, "INDEX"))
+				self._parseCreateIndexStatement()
+			elif self._match((KEYWORD, "INDEX")):
+				self._parseCreateIndexStatement()
+			elif self._match((KEYWORD, "FUNCTION")):
+				self._parseCreateFunctionStatement()
+			else:
+				self._expect([(KEYWORD, "TABLE"), (KEYWORD, "VIEW"), (KEYWORD, "INDEX")])
+		elif self._match((KEYWORD, "DROP")):
+			self._parseDropStatement()
+		else:
+			self._parseSelectStatement()
+
+	def _parseInit(self, tokens):
+		"""Sets up the parser with the specified tokens as input"""
 		self._statestack = deque()
 		# Check that newline_split wasn't used in the tokenizer
 		if type(tokens[0]) == type([]):
@@ -1457,45 +1956,95 @@ class SQLFormatter(object):
 		self._index = 0
 		self._level = 0
 		self._output = []
+	
+	def _parseFinish(self):
+		"""Cleans up output tokens and recalculates line and column positions"""
+		# Format/convert all output tokens
+		self._output = [self._tokenOutput(token) for token in self._output]
+		# Recalculate line and column elements for all tokens
+		line = 1
+		column = 1
+		tokens = []
+		for token in self._output:
+			tokens.append(token + (line, column))
+			(_, _, source) = token
+			# Note that all line breaks are \n by this point
+			while '\n' in source:
+				line += 1
+				column = 1
+				source = source[source.index('\n') + 1:]
+			column += len(source)
+		self._output = tokens
+
+	def _parseError(self, exception):
+		"""Pretty-prints an ParseError exception with source context"""
+		# Print the error message
+		print "Error: %s" % (exception[0])
+		# Print some context lines from the source
+		(_, _, _, errorline, errorcol) = exception[1]
+		currline = 1
+		source = ''.join([s for (_, _, s, _, _) in self._tokens])
+		for line in source.splitlines():
+			if (currline >= errorline - 2) and (currline <= errorline + 2):
+				print line
+				# Highlight the position of the parse error
+				if currline == errorline:
+					print ' '*(errorcol-1) + '^'
+			currline += 1
+
+	def parseRoutinePrototype(self, tokens):
+		"""Parses a routine prototype"""
+		# It's a bit of hack sticking this here. This method doesn't really
+		# belong here and should probably be in a sub-class (it's only used
+		# for syntax highlighting function prototypes in the documentation
+		# system)
+		self._parseInit(tokens)
+		try:
+			# Skip leading whitespace
+			if self._token()[0] in (COMMENT, WHITESPACE):
+				self._skip()
+			# Parse the function name
+			self._parseSchemaObjectName()
+			# Parenthesized parameter list is mandatory
+			self._expect((OPERATOR, "("))
+			if not self._match((OPERATOR, ")")):
+				while True:
+					# Parse parameter name
+					self._keywordIdent()
+					self._expect((IDENTIFIER,))
+					# Parse parameter datatype
+					self._parseDataType()
+					if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
+						break
+			# Parse the return type
+			self._expect((KEYWORD, "RETURNS"))
+			if self._match([(KEYWORD, "ROW"), (KEYWORD, "TABLE")]):
+				self._expect((OPERATOR, "("))
+				while True:
+					# Parse return parameter name
+					self._keywordIdent()
+					self._expect((IDENTIFIER,))
+					# Parse return parameter datatype
+					self._parseDataType()
+					if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
+						break
+			else:
+				self._parseDataType()
+		except ParseError, e:
+			self._parseError(e)
+			raise
+		self._parseFinish()
+		return self._output
+
+	def parse(self, tokens):
+		"""Parses an arbitrary SQL statement or script"""
+		self._parseInit(tokens)
 		try:
 			while True:
-				# _skip leading whitespace
+				# Skip leading whitespace
 				if self._token()[0] in (COMMENT, WHITESPACE):
 					self._skip()
-				# Try and parse a statement
-				# XXX Implement ALTER TABLE...
-				if self._match((KEYWORD, "INSERT")):
-					self._parseInsertStatement()
-				elif self._match((KEYWORD, "UPDATE")):
-					self._parseUpdateStatement()
-				elif self._match((KEYWORD, "DELETE")):
-					self._parseDeleteStatement()
-				elif self._match((KEYWORD, "ALTER")):
-					self._expect((KEYWORD, "TABLE"))
-					self._parseAlterTableStatement()
-				elif self._match((KEYWORD, "CREATE")):
-					if self._match((KEYWORD, "TABLE")):
-						self._parseCreateTableStatement()
-					elif self._match((KEYWORD, "VIEW")):
-						self._parseCreateViewStatement()
-					elif self._match((KEYWORD, "UNIQUE")):
-						self._expect((KEYWORD, "INDEX"))
-						self._parseCreateIndexStatement()
-					elif self._match((KEYWORD, "INDEX")):
-						self._parseCreateIndexStatement()
-					else:
-						self._expect([(KEYWORD, "TABLE"), (KEYWORD, "VIEW"), (KEYWORD, "INDEX")])
-				elif self._match((KEYWORD, "DROP")):
-					if self._match((KEYWORD, "TABLE")):
-						self._parseDropTableStatement()
-					elif self._match((KEYWORD, "VIEW")):
-						self._parseDropViewStatement()
-					elif self._match((KEYWORD, "INDEX")):
-						self._parseDropIndexStatement()
-					else:
-						self._expect([(KEYWORD, "TABLE"), (KEYWORD, "VIEW"), (KEYWORD, "INDEX")])
-				else:
-					self._parseSelectStatement()
+				self._parseTopLevelStatement()
 				# Look for a terminator or EOF
 				if self._expect([(TERMINATOR,), (EOF,)])[:1] == (EOF,):
 					break
@@ -1511,33 +2060,10 @@ class SQLFormatter(object):
 					self._newline()
 					self._newline()
 		except ParseError, e:
-			print "Error: %s" % (e[0])
-			(_, _, _, errorline, errorcol) = e[1]
-			currline = 1
-			source = ''.join([s for (_, _, s, _, _) in tokens])
-			for line in source.splitlines():
-				if (currline >= errorline - 2) and (currline <= errorline + 2):
-					print line
-					if currline == errorline:
-						print ' '*(errorcol-1) + '^'
-				currline += 1
+			self._parseError(e)
 			raise
-		# Format/convert all output tokens
-		self._output = [self._tokenOutput(token) for token in self._output]
-		# Recalculate line and column elements for all tokens
-		line = 1
-		column = 1
-		tokens = []
-		for token in self._output:
-			tokens.append(token + (line, column))
-			source = token[2]
-			# Note that all line breaks are \n by this point
-			while '\n' in source:
-				line += 1
-				column = 1
-				source = source[source.index('\n') + 1:]
-			column += len(source)
-		return tokens
+		self._parseFinish()
+		return self._output
 
 if __name__ == "__main__":
 	# XXX Robust test cases
