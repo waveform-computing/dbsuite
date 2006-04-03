@@ -6,30 +6,9 @@ import sys
 import os.path
 import logging
 from output.w3.htmlutils import *
-
-def formatParam(param):
-	return "%s %s" % (makeTag('em', {}, escape(param.name)), escape(param.datatypeStr))
-
-def formatParams(params):
-	# XXX Handle anonymous parmeters here
-	return ', '.join([formatParam(param) for param in params])
-
-def formatReturns(function):
-	if len(function.returnList) == 0:
-		return ''
-	elif function.type == 'Row':
-		return ' RETURNS ROW(%s)' % (formatParams(function.returnList))
-	elif function.type == 'Table':
-		return ' RETURNS TABLE(%s)' % (formatParams(function.returnList))
-	else:
-		return ' RETURNS %s' % (escape(function.returnList[0].datatypeStr))
-
-def prototype(function, link=True):
-	return makeTag('code', {}, "%s(%s)%s" % (
-		escape(function.qualifiedName),
-		formatParams(function.paramList),
-		formatReturns(function))
-	)
+from sql.tokenizer import DB2UDBSQLTokenizer
+from sql.formatter import SQLFormatter
+from sql.htmlhighlighter import SQLHTMLHighlighter
 
 def write(self, functions):
 	"""Outputs the documentation for a function.
@@ -43,8 +22,8 @@ def write(self, functions):
 		logging.debug("Writing documentation for function %s to %s" % (function.name, filename(function)))
 		doc = self.newDocument(function)
 		doc.addSection(id='description', title='Description')
-		doc.addContent(prototype(function))
-		doc.addContent('<p>%s</p>' % (self.formatDescription(function.description)))
+		doc.addContent(makeTag('p', {}, makeTag('code', {'class': 'sql'}, self.formatPrototype(function.prototype))))
+		doc.addContent(makeTag('p', {}, self.formatDescription(function.description)))
 		params = list(function.paramList) # Take a copy of the parameter list
 		if function.type in ['Row', 'Table']:
 			# Extend the list with return parameters if the function is a
@@ -115,12 +94,32 @@ def write(self, functions):
 					{'colspan': 3, '': function.specificName},
 				),
 			]))
-		##doc.addSection('sql', 'SQL Definition')
-		##doc.addPara("""The SQL which can be used to create the function is given
-		##	below. Note that this is not necessarily the same as the actual
-		##	statement used to create the function (it has been reconstructed from
-		##	the content of the system catalog tables and may differ in a number
-		##	of areas).""")
-		##doc.addContent(makeTag('pre', {'class': 'sql'}, self.formatSql(function.createSql)))
+		if len(functions) > 1:
+			doc.addSection('overloads', 'Overloaded Versions')
+			doc.addPara("""Listed below are the prototypes of overloaded
+				versions of this function (i.e. functions with the same
+				qualified name, but different parameter lists). Click on a
+				specific name to view the entry for the overloaded
+				function.""")
+			doc.addContent(makeTable(
+				head=[(
+					'Prototype',
+					'Specific Name',
+				)],
+				data=[(
+					makeTag('code', {'class': 'sql'}, self.formatPrototype(overload.prototype)),
+					makeTag('a', {'href': filename(overload)}, escape(overload.specificName)),
+				) for overload in functions if overload != function]
+			))
+		if function.language == 'SQL':
+			doc.addSection('sql', 'SQL Definition')
+			doc.addPara("""The SQL which can be used to create the function is
+				given below. Note that, in the process of storing the
+				definition of a function, DB2 removes much of the formatting,
+				hence the formatting in the statement below (which this system
+				attempts to reconstruct) is not necessarily the formatting of
+				the original statement. The statement terminator used in the
+				SQL below is bang (!)""")
+			doc.addContent(makeTag('pre', {'class': 'sql'}, self.formatSql(function.createSql, terminator="!")))
 		doc.write(os.path.join(self._path, filename(function)))
 
