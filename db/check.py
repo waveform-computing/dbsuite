@@ -64,7 +64,7 @@ class Check(Constraint):
 		else:
 			return super(Check, self).getDescription()
 
-	def getDefinitionStr(self):
+	def getPrototype(self):
 		return 'CONSTRAINT %s CHECK (%s)' % (
 			formatIdentifier(self.name),
 			self.expression
