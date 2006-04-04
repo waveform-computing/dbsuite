@@ -190,7 +190,7 @@ class DocOutput(object):
 			elif index <= 3:
 				slice = selitem.parentList[:7]
 				morebot = True
-			elif index >= len(selitem.parentList) - 3:
+			elif index >= len(selitem.parentList) - 4:
 				slice = selitem.parentList[-7:]
 				moretop = True
 			else:
