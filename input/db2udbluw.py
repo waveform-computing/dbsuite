@@ -2,6 +2,17 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
+"""Input class for IBM DB2 UDB for Linux/UNIX/Windows.
+
+This input class supports extracting documentation information from IBM DB2
+UDB for Linux/UNIX/Windows version 8 or above. If the doccat parameter in
+the constructor of the Cache class is True (it is False by default) then the
+DOCCAT schema will be used instead of the SYSCAT schema for the queries.
+
+The content of the DOCCAT schema can be found in the doccat_create.sql script
+in the contrib/db2udbluw directory.
+"""
+
 import logging
 from util import makeDateTime, makeBoolean
 
@@ -14,61 +25,38 @@ def fetchDict(cursor):
 	"""
 	return [dict(zip([d[0] for d in cursor.description], row)) for row in cursor.fetchall()]
 
-# Instead of having each documentation class query the database for its data
-# (which would result in literally thousands of queries being run), we use a
-# Cache object which queries all the major catalog tables in its constructor
-# without filtering (resulting in far fewer queries -- basically one for each
-# sort of object a database can contain; views, tables, indexes, etc.)
-#
-# As the name suggests, the results are cached in this object, specifically
-# as dictionaries of dictionaries, which are then used to construct the objects
-# in the hierarchy by the Database class.
-#
-# The unique identifer of an object (e.g. a schema and name for a table) forms
-# the key of the "outer" dictionary for each cache, while the contained
-# dictionaries are keyed by result-set fieldnames. This rather goes against the
-# Python ethos of not using dictionaries for database result sets, but tuples
-# are immutable and we need to convert some of the values (like timestamps).
-# It's also useful as it enables us to use the inner dictionaries as keyword
-# args when constructing objects later.
-#
-# There are some exceptions to this dictionary of dictionaries structure - in
-# particular where "proxy" list/dict objects are used in the eventual object
-# hierarchy (in particular, see the cache for table dependencies, and the
-# indexes that apply to a given table)
-
 class Cache(object):
-	def __init__(self, connection):
+	def __init__(self, connection, doccat=False):
 		super(Cache, self).__init__()
 		# Get a cursor to run the queries
 		cursor = connection.cursor()
 		try:
-			self.getSchemas(cursor)
-			self.getDatatypes(cursor)
-			self.getTables(cursor)
-			self.getViews(cursor)
-			self.getAliases(cursor)
-			self.getDependencies(cursor)
-			self.getIndexes(cursor)
-			self.getIndexFields(cursor)
-			self.getTableIndexes(cursor)
-			self.getFields(cursor)
-			self.getUniqueKeys(cursor)
-			self.getUniqueKeyFields(cursor)
-			self.getForeignKeys(cursor)
-			self.getForeignKeyFields(cursor)
-			self.getChecks(cursor)
-			self.getCheckFields(cursor)
-			self.getFunctions(cursor)
-			self.getFunctionParams(cursor)
-			self.getTablespaces(cursor)
-			self.getTablespaceTables(cursor)
-			self.getTablespaceIndexes(cursor)
+			self.getSchemas(cursor, doccat)
+			self.getDatatypes(cursor, doccat)
+			self.getTables(cursor, doccat)
+			self.getViews(cursor, doccat)
+			self.getAliases(cursor, doccat)
+			self.getDependencies(cursor, doccat)
+			self.getIndexes(cursor, doccat)
+			self.getIndexFields(cursor, doccat)
+			self.getTableIndexes(cursor, doccat)
+			self.getFields(cursor, doccat)
+			self.getUniqueKeys(cursor, doccat)
+			self.getUniqueKeyFields(cursor, doccat)
+			self.getForeignKeys(cursor, doccat)
+			self.getForeignKeyFields(cursor, doccat)
+			self.getChecks(cursor, doccat)
+			self.getCheckFields(cursor, doccat)
+			self.getFunctions(cursor, doccat)
+			self.getFunctionParams(cursor, doccat)
+			self.getTablespaces(cursor, doccat)
+			self.getTablespaceTables(cursor, doccat)
+			self.getTablespaceIndexes(cursor, doccat)
 		finally:
 			cursor.close()
 			cursor = None
 
-	def getSchemas(self, cursor):
+	def getSchemas(self, cursor, doccat):
 		logging.debug("Retrieving schemas")
 		cursor.execute("""
 			SELECT
@@ -77,13 +65,13 @@ class Cache(object):
 				RTRIM(DEFINER)    AS "definer",
 				CHAR(CREATE_TIME) AS "created",
 				REMARKS           AS "description"
-			FROM SYSCAT.SCHEMATA
-			WITH UR""")
+			FROM %(schema)s.SCHEMATA
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 		self.schemas = dict([(row['name'], row) for row in fetchDict(cursor)])
 		for row in self.schemas.itervalues():
 			row['created'] = makeDateTime(row['created'])
 
-	def getDatatypes(self, cursor):
+	def getDatatypes(self, cursor, doccat):
 		logging.debug("Retrieving datatypes")
 		cursor.execute("""
 			SELECT
@@ -99,9 +87,9 @@ class Cache(object):
 				CHAR(CREATE_TIME)   AS "created",
 				FINAL               AS "final",
 				REMARKS             AS "description"
-			FROM SYSCAT.DATATYPES
+			FROM %(schema)s.DATATYPES
 			WHERE INSTANTIABLE = 'Y'
-			WITH UR""")
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 		self.datatypes = dict([((row['schemaName'], row['name']), row) for row in fetchDict(cursor)])
 		for row in self.datatypes.itervalues():
 			row['created'] = makeDateTime(row['created'])
@@ -116,7 +104,7 @@ class Cache(object):
 				'R': 'Structured'
 			}[row['type']]
 
-	def getTables(self, cursor):
+	def getTables(self, cursor, doccat):
 		logging.debug("Retrieving tables")
 		cursor.execute("""
 			SELECT
@@ -141,9 +129,9 @@ class Cache(object):
 				CLUSTERED            AS "clustered",
 				ACTIVE_BLOCKS        AS "activeBlocks",
 				REMARKS              AS "description"
-			FROM SYSCAT.TABLES
+			FROM %(schema)s.TABLES
 			WHERE TYPE = 'T'
-			WITH UR""")
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 		self.tables = dict([((row['schemaName'], row['name']), row) for row in fetchDict(cursor)])
 		for row in self.tables.itervalues():
 			row['created'] = makeDateTime(row['created'])
@@ -164,7 +152,7 @@ class Cache(object):
 				'F': 'Full Access'
 			}[row['accessMode']]
 
-	def getViews(self, cursor):
+	def getViews(self, cursor, doccat):
 		logging.debug("Retrieving views")
 		cursor.execute("""
 			SELECT
@@ -180,12 +168,12 @@ class Cache(object):
 				V.TEXT                AS "sql",
 				T.REMARKS             AS "description"
 			FROM
-				SYSCAT.TABLES T
-				INNER JOIN SYSCAT.VIEWS V
+				%(schema)s.TABLES T
+				INNER JOIN %(schema)s.VIEWS V
 				ON T.TABSCHEMA = V.VIEWSCHEMA
 				AND T.TABNAME = V.VIEWNAME
 				AND T.TYPE = 'V'
-			WITH UR""")
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 		self.views = dict([((row['schemaName'], row['name']), row) for row in fetchDict(cursor)])
 		for row in self.views.itervalues():
 			row['created'] = makeDateTime(row['created'])
@@ -198,12 +186,12 @@ class Cache(object):
 			}[row['check']]
 			row['sql'] = str(row['sql'])
 
-	def getAliases(self, cursor):
+	def getAliases(self, cursor, doccat):
 		# XXX Query aliases
 		logging.debug("Retrieving aliases")
 		self.aliases = {}
 
-	def getDependencies(self, cursor):
+	def getDependencies(self, cursor, doccat):
 		logging.debug("Retrieving relation dependencies")
 		cursor.execute("""
 			SELECT
@@ -211,8 +199,9 @@ class Cache(object):
 				RTRIM(BNAME)      AS "relationName",
 				RTRIM(TABSCHEMA)  AS "depSchema",
 				RTRIM(TABNAME)    AS "depName"
-			FROM SYSCAT.TABDEP
-			WITH UR""")
+			FROM %(schema)s.TABDEP
+			WHERE BTYPE IN ('A', 'S', 'T', 'U', 'V', 'W')
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 		self.dependents = {}
 		self.dependencies = {}
 		for (relationSchema, relationName, depSchema, depName) in cursor.fetchall():
@@ -223,7 +212,7 @@ class Cache(object):
 				self.dependencies[(depSchema, depName)] = []
 			self.dependencies[(depSchema, depName)].append((relationSchema, relationName))
 
-	def getIndexes(self, cursor):
+	def getIndexes(self, cursor, doccat):
 		logging.debug("Retrieving indexes")
 		cursor.execute("""
 			SELECT
@@ -253,10 +242,10 @@ class Cache(object):
 				I.REMARKS                      AS "description",
 				RTRIM(T.TBSPACE)               AS "tablespaceName"
 			FROM
-				SYSCAT.INDEXES I
-				INNER JOIN SYSCAT.TABLESPACES T
+				%(schema)s.INDEXES I
+				INNER JOIN %(schema)s.TABLESPACES T
 				ON I.TBSPACEID = T.TBSPACEID
-			WITH UR""")
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 		self.indexes = dict([((row['schemaName'], row['name']), row) for row in fetchDict(cursor)])
 		for row in self.indexes.itervalues():
 			row['created'] = makeDateTime(row['created'])
@@ -272,7 +261,7 @@ class Cache(object):
 				'BLOK': 'Block'
 			}[row['type']]
 
-	def getIndexFields(self, cursor):
+	def getIndexFields(self, cursor, doccat):
 		logging.debug("Retrieving index fields")
 		cursor.execute("""
 			SELECT
@@ -280,12 +269,12 @@ class Cache(object):
 				RTRIM(INDNAME)   AS "indexName",
 				RTRIM(COLNAME)   AS "fieldName",
 				COLORDER         AS "order"
-			FROM SYSCAT.INDEXCOLUSE
+			FROM %(schema)s.INDEXCOLUSE
 			ORDER BY
 				INDSCHEMA,
 				INDNAME,
 				COLSEQ
-			WITH UR""")
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 		self.indexFields = {}
 		for (indexSchema, indexName, fieldName, order) in cursor.fetchall():
 			if not (indexSchema, indexName) in self.indexFields:
@@ -293,7 +282,7 @@ class Cache(object):
 			order = {'A': 'Ascending', 'D': 'Descending', 'I': 'Include'}[order]
 			self.indexFields[(indexSchema, indexName)].append((fieldName, order))
 
-	def getTableIndexes(self, cursor):
+	def getTableIndexes(self, cursor, doccat):
 		logging.debug("Retrieving table indexes")
 		cursor.execute("""
 			SELECT
@@ -302,15 +291,15 @@ class Cache(object):
 				RTRIM(INDSCHEMA) AS "indexSchema",
 				RTRIM(INDNAME)   AS "indexName"
 			FROM
-				SYSCAT.INDEXES
-			WITH UR""")
+				%(schema)s.INDEXES
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 		self.tableIndexes = {}
 		for (tableSchema, tableName, indexSchema, indexName) in cursor.fetchall():
 			if not (tableSchema, tableName) in self.tableIndexes:
 				self.tableIndexes[(tableSchema, tableName)] = []
 			self.tableIndexes[(tableSchema, tableName)].append((indexSchema, indexName))
 
-	def getFields(self, cursor):
+	def getFields(self, cursor, doccat):
 		logging.debug("Retrieving fields")
 		cursor.execute("""
 			SELECT
@@ -336,9 +325,9 @@ class Cache(object):
 				COMPRESS          AS "compressDefault",
 				RTRIM(TEXT)       AS "generateExpression",
 				REMARKS           AS "description"
-			FROM SYSCAT.COLUMNS
+			FROM %(schema)s.COLUMNS
 			WHERE HIDDEN <> 'S'
-			WITH UR""")
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 		self.fields = dict([((row['schemaName'], row['tableName'], row['name']), row) for row in fetchDict(cursor)])
 		for row in self.fields.itervalues():
 			if row['cardinality'] < 0: row['cardinality'] = None
@@ -357,7 +346,7 @@ class Cache(object):
 			}[row['generated']]
 			row['generateExpression'] = str(row['generateExpression'])
 
-	def getUniqueKeys(self, cursor):
+	def getUniqueKeys(self, cursor, doccat):
 		logging.debug("Retrieving unique keys")
 		cursor.execute("""
 			SELECT
@@ -368,9 +357,9 @@ class Cache(object):
 				RTRIM(DEFINER)    AS "definer",
 				CHECKEXISTINGDATA AS "checkExisting",
 				REMARKS           AS "description"
-			FROM SYSCAT.TABCONST
+			FROM %(schema)s.TABCONST
 			WHERE TYPE IN ('U', 'P')
-			WITH UR""")
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 		self.uniqueKeys = dict([((row['schemaName'], row['tableName'], row['name']), row) for row in fetchDict(cursor)])
 		for row in self.uniqueKeys.itervalues():
 			row['checkExisting'] = {
@@ -379,7 +368,7 @@ class Cache(object):
 				'N': 'No check'
 			}[row['checkExisting']]
 
-	def getUniqueKeyFields(self, cursor):
+	def getUniqueKeyFields(self, cursor, doccat):
 		logging.debug("Retrieving unique key fields")
 		cursor.execute("""
 			SELECT
@@ -387,20 +376,20 @@ class Cache(object):
 				RTRIM(TABNAME)   AS "keyTable",
 				RTRIM(CONSTNAME) AS "keyName",
 				RTRIM(COLNAME)   AS "fieldName"
-			FROM SYSCAT.KEYCOLUSE
+			FROM %(schema)s.KEYCOLUSE
 			ORDER BY
 				TABSCHEMA,
 				TABNAME,
 				CONSTNAME,
 				COLSEQ
-			WITH UR""")
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 		self.uniqueKeyFields = {}
 		for (keySchema, keyTable, keyName, fieldName) in cursor.fetchall():
 			if not (keySchema, keyTable, keyName) in self.uniqueKeyFields:
 				self.uniqueKeyFields[(keySchema, keyTable, keyName)] = []
 			self.uniqueKeyFields[(keySchema, keyTable, keyName)].append(fieldName)
 
-	def getForeignKeys(self, cursor):
+	def getForeignKeys(self, cursor, doccat):
 		logging.debug("Retrieving foreign keys")
 		cursor.execute("""
 			SELECT
@@ -419,13 +408,13 @@ class Cache(object):
 				R.UPDATERULE          AS "updateRule",
 				T.REMARKS             AS "description"
 			FROM
-				SYSCAT.TABCONST T
-				INNER JOIN SYSCAT.REFERENCES R
+				%(schema)s.TABCONST T
+				INNER JOIN %(schema)s.REFERENCES R
 				ON T.TABSCHEMA = R.TABSCHEMA
 				AND T.TABNAME = R.TABNAME
 				AND T.CONSTNAME = R.CONSTNAME
 				AND T.TYPE = 'F'
-			WITH UR""")
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 		self.foreignKeys = dict([((row['schemaName'], row['tableName'], row['name']), row) for row in fetchDict(cursor)])
 		for row in self.foreignKeys.itervalues():
 			row['created'] = makeDateTime(row['created'])
@@ -447,7 +436,7 @@ class Cache(object):
 				'R': 'Restrict'
 			}[row['updateRule']]
 
-	def getForeignKeyFields(self, cursor):
+	def getForeignKeyFields(self, cursor, doccat):
 		logging.debug("Retrieving foreign key fields")
 		cursor.execute("""
 			SELECT
@@ -457,12 +446,12 @@ class Cache(object):
 				RTRIM(KF.COLNAME)  AS "foreignFieldName",
 				RTRIM(KP.COLNAME)  AS "parentFieldName"
 			FROM
-				SYSCAT.REFERENCES R
-				INNER JOIN SYSCAT.KEYCOLUSE KF
+				%(schema)s.REFERENCES R
+				INNER JOIN %(schema)s.KEYCOLUSE KF
 					ON R.TABSCHEMA = KF.TABSCHEMA
 					AND R.TABNAME = KF.TABNAME
 					AND R.CONSTNAME = KF.CONSTNAME
-				INNER JOIN SYSCAT.KEYCOLUSE KP
+				INNER JOIN %(schema)s.KEYCOLUSE KP
 					ON R.REFTABSCHEMA = KP.TABSCHEMA
 					AND R.REFTABNAME = KP.TABNAME
 					AND R.REFKEYNAME = KP.CONSTNAME
@@ -472,14 +461,14 @@ class Cache(object):
 				R.TABNAME,
 				R.CONSTNAME,
 				KF.COLSEQ
-			WITH UR""")
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 		self.foreignKeyFields = {}
 		for (keySchema, keyTable, keyName, foreignFieldName, parentFieldName) in cursor.fetchall():
 			if not (keySchema, keyTable, keyName) in self.foreignKeyFields:
 				self.foreignKeyFields[(keySchema, keyTable, keyName)] = []
 			self.foreignKeyFields[(keySchema, keyTable, keyName)].append((foreignFieldName, parentFieldName))
 
-	def getChecks(self, cursor):
+	def getChecks(self, cursor, doccat):
 		logging.debug("Retrieving check constraints")
 		cursor.execute("""
 			SELECT
@@ -497,13 +486,13 @@ class Cache(object):
 				C.TEXT                AS "expression",
 				T.REMARKS             AS "description"
 			FROM
-				SYSCAT.TABCONST T
-				INNER JOIN SYSCAT.CHECKS C
+				%(schema)s.TABCONST T
+				INNER JOIN %(schema)s.CHECKS C
 				ON T.TABSCHEMA = C.TABSCHEMA
 				AND T.TABNAME = C.TABNAME
 				AND T.CONSTNAME = C.CONSTNAME
 				AND T.TYPE = 'K'
-			WITH UR""")
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 		self.checks = dict([((row['schemaName'], row['tableName'], row['name']), row) for row in fetchDict(cursor)])
 		for row in self.checks.itervalues():
 			row['created'] = makeDateTime(row['created'])
@@ -522,7 +511,7 @@ class Cache(object):
 			}[row['type']]
 			row['expression'] = str(row['expression'])
 
-	def getCheckFields(self, cursor):
+	def getCheckFields(self, cursor, doccat):
 		logging.debug("Retrieving check fields")
 		logging.debug("Retrieving unique key fields")
 		cursor.execute("""
@@ -531,15 +520,15 @@ class Cache(object):
 				RTRIM(TABNAME)   AS "keyTable",
 				RTRIM(CONSTNAME) AS "keyName",
 				RTRIM(COLNAME)   AS "fieldName"
-			FROM SYSCAT.COLCHECKS
-			WITH UR""")
+			FROM %(schema)s.COLCHECKS
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 		self.checkFields = {}
 		for (keySchema, keyTable, keyName, fieldName) in cursor.fetchall():
 			if not (keySchema, keyTable, keyName) in self.checkFields:
 				self.checkFields[(keySchema, keyTable, keyName)] = []
 			self.checkFields[(keySchema, keyTable, keyName)].append(fieldName)
 
-	def getFunctions(self, cursor):
+	def getFunctions(self, cursor, doccat):
 		logging.debug("Retrieving functions")
 		cursor.execute("""
 			SELECT
@@ -567,9 +556,9 @@ class Cache(object):
 				RTRIM(FUNC_PATH)         AS "funcPath",
 				TEXT                     AS "sql",
 				REMARKS                  AS "description"
-			FROM SYSCAT.ROUTINES
+			FROM %(schema)s.ROUTINES
 			WHERE ROUTINETYPE = 'F'
-			WITH UR""")
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 		self.functions = dict([((row['schemaName'], row['specificName']), row) for row in fetchDict(cursor)])
 		for row in self.functions.itervalues():
 			row['created'] = makeDateTime(row['created'])
@@ -606,7 +595,7 @@ class Cache(object):
 			}[row['sqlAccess']]
 			row['sql'] = str(row['sql'])
 
-	def getFunctionParams(self, cursor):
+	def getFunctionParams(self, cursor, doccat):
 		logging.debug("Retrieving parameters")
 		cursor.execute("""
 			SELECT
@@ -623,8 +612,8 @@ class Cache(object):
 				SCALE                         AS "scale",
 				CODEPAGE                      AS "codepage",
 				REMARKS                       AS "description"
-			FROM SYSCAT.ROUTINEPARMS
-			WITH UR""")
+			FROM %(schema)s.ROUTINEPARMS
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 		self.parameters = dict([((row['schemaName'], row['specificName'], row['type'], row['position']), row) for row in fetchDict(cursor)])
 		for row in self.parameters.itervalues():
 			row['locator'] = makeBoolean(row['locator'])
@@ -639,7 +628,7 @@ class Cache(object):
 				'R': 'Result'
 			}[row['type']]
 
-	def getTablespaces(self, cursor):
+	def getTablespaces(self, cursor, doccat):
 		logging.debug("Retrieving tablespaces")
 		cursor.execute("""
 			SELECT
@@ -655,8 +644,8 @@ class Cache(object):
 				PAGESIZE          AS "pageSize",
 				DROP_RECOVERY     AS "dropRecovery",
 				REMARKS           AS "description"
-			FROM SYSCAT.TABLESPACES
-			WITH UR""")
+			FROM %(schema)s.TABLESPACES
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 		self.tablespaces = dict([(row['name'], row) for row in fetchDict(cursor)])
 		for row in self.tablespaces.itervalues():
 			row['created'] = makeDateTime(row['created'])
@@ -673,7 +662,7 @@ class Cache(object):
 				'U': 'User Temporary'
 			}[row['dataType']]
 
-	def getTablespaceTables(self, cursor):
+	def getTablespaceTables(self, cursor, doccat):
 		# Note: MUST be run after getTables and getTablespaces
 		self.tablespaceTables = dict([(tbspace, [(row['schemaName'], row['name'])
 			for row in self.tables.itervalues()
@@ -682,7 +671,7 @@ class Cache(object):
 			or row['longTbspace'] == tbspace])
 			for tbspace in self.tablespaces])
 
-	def getTablespaceIndexes(self, cursor):
+	def getTablespaceIndexes(self, cursor, doccat):
 		# Note: MUST be run after getIndexes and getTablespaces
 		self.tablespaceIndexes = dict([(tbspace, [(row['schemaName'], row['name'])
 			for row in self.indexes.itervalues() if row['tablespaceName'] == tbspace])
