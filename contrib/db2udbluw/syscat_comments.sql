@@ -19,6 +19,19 @@
 -- doesn't provide documentation for these objects (the SYSCAT and SYSSTAT
 -- comments are copied almost verbatim from the DB2 Info Center).
 --
+-- SYNTAX
+-- ======
+-- The comments are mostly simple text, but include some minor markup which
+-- should be transparent or unobtrusive to most readers. Specifically:
+--
+--   *Bold* words are enclosed in asterisks
+--   /Italic/ words are enclosed in slashes
+--   _Underlined_ words are enclosed in underscores
+--   Database object names are preceeded by @ (e.g. @SYSCAT.TABLES)
+--
+-- These conventions can be used by documentation systems to produce marked
+-- up output, including links from the comment on an object to another object.
+--
 -- INSTALLATION
 -- ============
 -- 1. Connect to the target database
