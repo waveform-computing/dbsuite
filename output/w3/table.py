@@ -104,7 +104,7 @@ def write(self, table):
 			)],
 			data=[(
 				escape(field.name),
-				self.formatDescription(field.description)
+				self.formatDescription(field.description, firstline=True)
 			) for field in fields]
 		))
 		doc.addSection(id='field_schema', title='Field Schema')
@@ -149,7 +149,7 @@ def write(self, table):
 				index.unique,
 				'<br />'.join([escape(ixfield.name) for (ixfield, ixorder) in index.fieldList]),
 				'<br />'.join([escape(ixorder) for (ixfield, ixorder) in index.fieldList]),
-				self.formatDescription(index.description)
+				self.formatDescription(index.description, firstline=True)
 			) for index in indexes]
 		))
 	if len(constraints) > 0:
@@ -166,7 +166,12 @@ def write(self, table):
 				expression = '<br />'.join([escape(cfield.name) for cfield in constraint.fields])
 			else:
 				expression = '&nbsp;'
-			rows.append((linkTo(constraint), constraint.typeName, expression, constraint.description))
+			rows.append((
+				linkTo(constraint),
+				constraint.typeName,
+				expression,
+				self.formatDescription(constraint.description, firstline=True)
+			))
 		doc.addContent(makeTable(
 			head=[(
 				"Name",
@@ -190,7 +195,7 @@ def write(self, table):
 		    data=[(
 				linkTo(dep, qualifiedName=True),
 				escape(dep.typeName),
-				self.formatDescription(dep.description)
+				self.formatDescription(dep.description, firstline=True)
 			) for dep in dependents]
 		))
 	doc.addSection('sql', 'SQL Definition')

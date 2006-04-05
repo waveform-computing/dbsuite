@@ -32,7 +32,7 @@ def write(self, database):
 			)],
 			data=[(
 				linkTo(schema),
-				self.formatDescription(schema.description)
+				self.formatDescription(schema.description, firstline=True)
 			) for schema in schemas]
 		))
 	if len(tbspaces) > 0:
@@ -49,7 +49,7 @@ def write(self, database):
 			)],
 			data=[(
 				linkTo(tbspace),
-				self.formatDescription(tbspace.description)
+				self.formatDescription(tbspace.description, firstline=True)
 			) for tbspace in tbspaces]
 		))
 	doc.write(os.path.join(self._path, filename(database)))

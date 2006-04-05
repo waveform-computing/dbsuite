@@ -69,7 +69,7 @@ def write(self, view):
 			)],
 			data=[(
 				escape(field.name),
-				self.formatDescription(field.description)
+				self.formatDescription(field.description, firstline=True)
 			) for field in fields]
 		))
 		doc.addSection(id='field_schema', title='Field Schema')
@@ -105,7 +105,7 @@ def write(self, view):
 		    data=[(
 				linkTo(dep, qualifiedName=True),
 				escape(dep.typeName),
-				self.formatDescription(dep.description)
+				self.formatDescription(dep.description, firstline=True)
 			) for dep in dependents]
 		))
 	if len(dependencies) > 0:
@@ -122,7 +122,7 @@ def write(self, view):
 			data=[(
 				linkTo(dep, qualifiedName=True),
 				escape(dep.typeName),
-				self.formatDescription(dep.description)
+				self.formatDescription(dep.description, firstline=True)
 			) for dep in dependencies]
 		))
 	doc.addSection('sql', 'SQL Definition')

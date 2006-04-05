@@ -103,7 +103,7 @@ def write(self, index):
 				position + 1,
 				escape(field.name),
 				ordering,
-				self.formatDescription(field.description)
+				self.formatDescription(field.description, firstline=True)
 			) for (field, ordering, position) in fields]
 		))
 	doc.addSection('sql', 'SQL Definition')

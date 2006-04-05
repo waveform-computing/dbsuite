@@ -36,7 +36,7 @@ def write(self, schema):
 			data=[(
 				linkTo(relation),
 				escape(relation.typeName),
-				self.formatDescription(relation.description)
+				self.formatDescription(relation.description, firstline=True)
 			) for relation in relations]
 		))
 	if len(routines) > 0:
@@ -54,7 +54,7 @@ def write(self, schema):
 			data=[(
 				linkTo(routine),
 				escape(routine.typeName),
-				self.formatDescription(routine.description)
+				self.formatDescription(routine.description, firstline=True)
 			) for routine in routines]
 		))
 	if len(indexes) > 0:
@@ -70,7 +70,7 @@ def write(self, schema):
 			data=[(
 				linkTo(index),
 				linkTo(index.table, qualifiedName=True),
-				self.formatDescription(index.description)
+				self.formatDescription(index.description, firstline=True)
 			) for index in indexes]
 		))
 	doc.write(os.path.join(self._path, filename(schema)))

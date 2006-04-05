@@ -73,7 +73,7 @@ def write(self, tbspace):
 			)],
 			data=[(
 				linkTo(table, qualifiedName=True),
-				self.formatDescription(table.description)
+				self.formatDescription(table.description, firstline=True)
 			) for table in tables]
 		))
 	if len(indexes) > 0:
@@ -90,7 +90,7 @@ def write(self, tbspace):
 			data=[(
 				linkTo(index, qualifiedName=True),
 				linkTo(index.table, qualifiedName=True),
-				self.formatDescription(index.description)
+				self.formatDescription(index.description, firstline=True)
 			) for index in indexes]
 		))
 	doc.write(os.path.join(self._path, filename(tbspace)))

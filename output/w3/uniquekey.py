@@ -55,7 +55,7 @@ def write(self, key):
 			data=[(
 				position + 1,
 				escape(field.name),
-				self.formatDescription(field.description)
+				self.formatDescription(field.description, firstline=True)
 			) for (field, position) in fields]
 		))
 	doc.addSection('sql', 'SQL Definition')

@@ -122,7 +122,7 @@ class DocOutput(object):
 	
 	findref = re.compile(r"@([A-Za-z_$#@][A-Za-z0-9_$#@]*(\.[A-Za-z_$#@][A-Za-z0-9_$#@]*){0,2})\b")
 	findfmt = re.compile(r"\B([/_*])(\w+)\1\B")
-	def formatDescription(self, text):
+	def formatDescription(self, text, firstline=False):
 		"""Converts simple prefix-based markup in text into HTML.
 		
 		References in the provided text (specified as @-prefix qualified names)
@@ -165,7 +165,10 @@ class DocOutput(object):
 				result += text[start:]
 				break
 		# Replace line breaks with line break tags
-		return result.replace('\n', '<br />')
+		if firstline:
+			return result.split('\n')[0]
+		else:
+			return result.replace('\n', '<br />')
 
 	def createMenu(self, item, active=True):
 		result = []
