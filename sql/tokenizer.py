@@ -484,6 +484,11 @@ class SQLTokenizerBase(object):
 		self._next()
 		self._addToken(OPERATOR, '+')
 
+	def _handleQuestionMark(self):
+		"""Parses question marks ("?") in the source."""
+		self._next()
+		self._addToken(PARAMETER, None)
+
 	def _handleQuote(self):
 		"""Parses single quote characters (') in the source."""
 		try:
@@ -555,6 +560,7 @@ class SQLTokenizerBase(object):
 			'.': self._handlePeriod,
 			',': self._handleComma,
 			':': self._handleColon,
+			'?': self._handleQuestionMark,
 			'<': self._handleLess,
 			'=': self._handleEqual,
 			'>': self._handleGreater,
