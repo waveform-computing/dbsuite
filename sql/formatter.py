@@ -16,10 +16,13 @@ ALTER TABLE
 CREATE TABLE
 CREATE VIEW
 CREATE INDEX
+CREATE FUNCTION
+DROP
 SELECT (*)
 INSERT
 UPDATE
 DELETE
+Dynamic-compound-statements
 
 (*) The SELECT implementation is reasonably complete, handling simply SELECTs,
 sub-SELECTs, common-table-expressions from SQL-99, calls to table functions,
@@ -49,10 +52,7 @@ class SQLFormatter(object):
 	"""Reformatter which breaks up and re-indents SQL.
 
 	This class is, at its core, a full blown SQL language parser that
-	understands many common SQL DML and DDL commands. By recognizing and
-	parsing these commands it attempts to reformat them in a vaguely sensible
-	manner (useful when a database engine has mangled SQL passed to it by,
-	for example, removing line breaks, etc).
+	understands many common SQL DML and DDL commands.
 
 	The class accepts input from one of the tokenizers in the sqltokenizer
 	unit, which in the form of a list of tokens, where tokens are tuples with
@@ -62,8 +62,8 @@ class SQLFormatter(object):
 
 	In other words, this class accepts the output of the SQLTokenizer class
 	in the tokenizer unit. To use the class simply pass such a list to the
-	parseScript method. The method will return a string containing the
-	reformatted SQL.
+	parse method. The method will return a list of tokens (just like the
+	list of tokens provided as input, but reformatted).
 
 	The token_type element gives the general "family" of the token (such as
 	OPERATOR, IDENTIFIER, etc), while the token_value element provides the
@@ -149,8 +149,10 @@ class SQLFormatter(object):
 				return ident
 		
 		def formatparam(param):
-			# XXX Like formatident above, only quote if necessary
-			return param
+			if param is None:
+				return "?"
+			else:
+				return ":%s" % (formatident(param))
 		
 		if token[0] == IDENTIFIER:
 			# Format identifiers using subroutine above
@@ -160,7 +162,7 @@ class SQLFormatter(object):
 			return (DATATYPE, token[1], formatident(token[1]))
 		elif token[0] == PARAMETER:
 			# Format parameters using subroutine above
-			return (PARAMETER, token[1], formatparam(token[2]))
+			return (PARAMETER, token[1], formatparam(token[1]))
 		elif token[0] == KEYWORD:
 			# All keywords converted to uppercase
 			return (KEYWORD, token[1], token[1])
@@ -1911,7 +1913,6 @@ class SQLFormatter(object):
 	def _parseTopLevelStatement(self):
 		"""Parses a top-level statement in an SQL script"""
 		# XXX Implement dynamic compound statements
-		# XXX Implement CREATE/DROP FUNCTION...
 		# XXX Implement CREATE/DROP DB...
 		# XXX Implement CREATE/DROP TABLESPACE...
 		if self._match((KEYWORD, "BEGIN")):
