@@ -41,12 +41,96 @@ from tokenizer import *
 	INDENT,    # Whitespace indentation at the start of a line
 ) = newTokens(2)
 
-class ParseError(Exception):
-		# XXX Implement __str__ to provide context
-		pass
+class Error(Exception):
+	"""Base class for errors in this module"""
 
-class ParseExpectedError(ParseError):
+	def __init__(self, msg=''):
+		"""Initializes an instance of the exception with an optional message"""
+		Exception.__init__(self, msg)
+		self.message = msg
+	
+	def __repr__(self):
+		return self.message
+
+	__str__ = __repr__
+
+class ParseError(Error):
+	"""Base class for errors encountered during parsing"""
 	pass
+
+class ParseBacktrack(ParseError):
+	"""Fake exception class raised internally when the parser needs to backtrack"""
+
+	def __init__(self):
+		"""Initializes an instance of the exception"""
+		# The message is irrelevant as this exception should never propogate
+		# outside the parser
+		ParseError.__init__(self, msg='')
+
+class ParseTokenError(ParseError):
+	"""Raised when a parsing error is encountered"""
+
+	def __init__(self, tokens, errtoken, msg):
+		"""Initializes an instance of the exception.
+
+		The parameters are as follows:
+		tokens -- The tokens forming the source being parsed
+		errtoken -- The token at which the error occurred
+		msg -- The descriptive error message
+		"""
+		# Store the error token
+		self.token = errtoken
+		# Split out the line and column of the error
+		(_, _, _, self.line, self.col) = errtoken
+		# Generate a block of context with an indicator showing the error
+		source = ''.join([s for (_, _, s, _, _) in tokens]).splitlines()
+		marker = ''.join([{'\t': '\t'}.get(c, ' ') for c in source[self.line-1][:self.col-1]]) + '^'
+		source.insert(self.line-1, marker)
+		context = source[self.line-2:self.line+2]
+		# Format the message with the context
+		msg = ("%s:\n"
+				"line   : %d\n"
+				"column : %d\n"
+				"context:\n%s" % (msg, self.line, self.col, context))
+		ParseError.__init__(self, msg)
+
+class ParseExpectedError(ParseTokenError):
+	"""Raised when the parser didn't find a token it was expecting"""
+
+	def __init__(self, tokens, errtoken, expected):
+		"""Initializes an instance of the exception.
+
+		The parameters are as follows:
+		tokens -- The tokens forming the source being parsed
+		errtoken -- The unexpected token that was found
+		expected -- A list of (partial) tokens that was expected at this location
+		"""
+
+		def tokenName(t):
+			if type(t) == type([]):
+				return ", ".join([tokenName(t) for t in t])
+			else:
+				if (len(t) == 1) or (t[0] in (EOF, WHITESPACE, TERMINATOR)):
+					return {
+						EOF:        '<eof>',
+						WHITESPACE: '<space>',
+						KEYWORD:    'keyword',
+						OPERATOR:   'operator',
+						IDENTIFIER: 'identifier',
+						DATATYPE:   'datatype',
+						COMMENT:    'comment',
+						NUMBER:     'number',
+						STRING:     'string',
+						TERMINATOR: '<statement-end>',
+					}[t[0]]
+				elif len(t) == 2:
+					return '"%s"' % (t[1])
+				else:
+					return '"%s"' % (t[2])
+
+		msg = ("Expected %s but found %s" %
+				(tokenName(expected), tokenName(errtoken)))
+		ParseTokenError.__init__(self, tokens, errtoken, msg)
 
 class SQLFormatter(object):
 	"""Reformatter which breaks up and re-indents SQL.
@@ -77,48 +161,11 @@ class SQLFormatter(object):
 
 	A set of internal utility methods are used to simplify this further. See
 	the match and expect methods in particular. The numerous parseX methods in
-	the unit define the grammar of the SQL language being parsed. The dialect
-	used by the class is the IBM DB2 UDB for LUW dialect, with a few extensions
-	and rarely used extensions removed (or at least, not yet implemented!)
+	the unit define the grammar of the SQL language being parsed.
 	"""
 
 	def __init__(self):
-		super(SQLFormatter, self).__init__()
 		self.indent = " "*4 # Default indent is 4 spaces
-
-	def _tokenName(self, token):
-		"""Reformats a token (or a partial matching token) for use in a message.
-
-		If the provided token is complete, the token_source element (the third
-		element in the tuple) is used. Otherwise, the second field (token_value)
-		or the first element (token_type, converted to a string) is used. If
-		the result is purely symbolic (such as a single space character, or a
-		comma), it will be placed within quotes.
-
-		If multiple tokens are passed in a list, the result contains all the
-		passed tokens, separated by commas.
-		"""
-		if type(token) == type([]):
-			return ",".join([self._tokenName(t) for t in token])
-		else:
-			if (len(token) == 1) or (token[0] in (EOF, WHITESPACE, TERMINATOR)):
-				result = {
-					EOF:        '<eof>',
-					WHITESPACE: '<space>',
-					KEYWORD:    'keyword',
-					OPERATOR:   'operator',
-					IDENTIFIER: 'identifier',
-					DATATYPE:   'datatype',
-					COMMENT:    'comment',
-					NUMBER:     'number',
-					STRING:     'string',
-					TERMINATOR: '<statement-end>',
-				}[token[0]]
-			elif len(token) == 2:
-				result = '"%s"' % (token[1])
-			elif len(token) >= 3:
-				result = '"%s"' % (token[2])
-			return result
 
 	def _tokenOutput(self, token):
 		"""Reformats an output token for use in the final output.
@@ -261,7 +308,7 @@ class SQLFormatter(object):
 
 		As a side effect it also appends the tokens it moves over to the output
 		list. However, the last two elements of each token (the line and column
-		in the original source) are discarded (as, by definition, the formatter
+		in the original source) are discarded (as, by definition, the parser
 		will invalidate these values anyway).
 		"""
 		if not self._token()[0] in (COMMENT, WHITESPACE):
@@ -271,7 +318,7 @@ class SQLFormatter(object):
 			self._output.append(self._token()[:3])
 			self._index += 1
 
-	def _match(self, tokens):
+	def _match(self, expected):
 		"""Attempt to match the current token against a selection of partial tokens.
 
 		If the current token matches ANY of the specified partial tokens,
@@ -281,12 +328,12 @@ class SQLFormatter(object):
 		result can be used to test *which* token of the choices provided was
 		matched).
 		"""
-		# Wrap tokens in a list if only one was specified
-		if type(tokens) != type([]):
-			tokens = [tokens]
+		# Wrap expected in a list if only one was specified
+		if type(expected) != type([]):
+			expected = [expected]
 		# Does the current token match any of the specified tokens? If so, set
 		# the result to the current token, otherwise None
-		if True in [self._token()[:len(token)] == token for token in tokens]:
+		if True in [self._token()[:len(token)] == token for token in expected]:
 			result = self._token()
 		else:
 			return None
@@ -294,7 +341,7 @@ class SQLFormatter(object):
 		self._skip()
 		return result
 
-	def _expect(self, tokens):
+	def _expect(self, expected):
 		"""Match the current token against a selection of partial tokens.
 
 		The _expect() method is essentially the same as _match() except that if
@@ -302,18 +349,16 @@ class SQLFormatter(object):
 		parser "expected" one of the specified tokens, but found something
 		else.
 		"""
-		result = self._match(tokens)
+		result = self._match(expected)
 		if not result:
-			t = self._token()
-			raise ParseError('Expected %s but found %s on line %d, column %d' %
-				(self._tokenName(tokens), self._tokenName(t), t[3], t[4]), t)
+			raise ParseExpectedError(self._tokens, self._token(), expected)
 		else:
 			return result
 
-	def _keywordIdent(self, dontconvert=[]):
+	def _toIdent(self, dontconvert=[]):
 		"""Convert the current token into an IDENTIFIER if it is a KEYWORD.
 
-		The _keywordIdent() method is used immediately prior to a call to
+		The _toIdent() method is used immediately prior to a call to
 		_expect() to match an IDENTIFIER token. If the current token is a
 		KEYWORD token it is converted to an IDENTIFIER token to allow the
 		match to succeed, unless the value of the KEYWORD token matches one
@@ -327,23 +372,69 @@ class SQLFormatter(object):
 			token = self._token()
 			self._tokens[self._index] = (IDENTIFIER, token[1], token[2], token[3], token[4])
 
-	def _identDatatype(self):
+	def _toDatatype(self):
 		"""Convert the current token into a DATATYPE if it is an IDENTIFIER.
 		
-		The _identDatatype() method is used immediately prior to a call to
+		The _toDatatype() method is used immediately prior to a call to
 		_expect() to match a DATATYPE token. If the current token is an
 		IDENTIFIER token (which might previously have been a KEYWORD token
-		converted by _keywordIdent() above), it is converted to a DATATYPE
+		converted by _toIdent() above), it is converted to a DATATYPE
 		token (a custom token type introduced by this unit).
 		
-		This is used to permit alternate highlighting for datatypes by the
-		SQLHighlighter class (which knows about the custom DATATYPE token
-		type).
+		This is used to permit alternate parsing for datatypes by classes
+		which handle the output of this class (which know about the DATATYPE
+		token type).
 		"""
 		# If the current token is an IDENTIFIER, convert it into a DATATYPE
-		if (self._token()[0] == IDENTIFIER):
+		if self._token()[0] == IDENTIFIER:
 			token = self._token()
 			self._tokens[self._index] = (DATATYPE, token[1], token[2], token[3], token[4])
+
+	def _toString(self):
+		"""Convert a series of non-WHITESPACE tokens into a single STRING.
+
+		The _toString() method is used immediately prior to a call to _expect()
+		to match a STRING token. It converts a series of tokens, terminated by
+		a WHITESPACE token, into a single STRING token.
+
+		This is used with the esoteric syntax of DB2 CLP commands like EXPORT,
+		CONNECT and LOAD which treat allow many of their parameters (which
+		really ought to be quoted strings) to be specified as identifiers.
+		
+		It's still not perfect as the way the real CLP works is to use it's own
+		parser for CLP commands (which is very different to the "real" SQL
+		parser), and pass anything it doesn't recognize on to the onto the
+		"real" SQL parser, hence the message "The command was processed as an
+		SQL statement because it was not a valid Command Line Processor
+		command..." However, it should be good enough for most things except
+		the odd edge case. If such cases are encountered, use quoted string
+		literals instead.
+		"""
+		def quotestr(s, qchar):
+			return "%s%s%s" % (qchar, s.replace(qchar, qchar*2), qchar)
+		
+		if self._token()[0] == IDENTIFIER and self._token()[2][0] == '"':
+			# Double quoted identifiers are converted to single quoted strings
+			token = self._token()
+			self._tokens[self._index] = (STRING, token[1], quotestr(token[1], "'"), token[3], token[4])
+		elif self._token()[0] != STRING:
+			# Otherwise, any run of tokens (not starting with a string) is
+			# converted to a single string token
+			start = self._index
+			while True:
+				token = self._token()
+				# Quotation marks are not permitted within the tokens
+				if token[0] == STRING:
+					raise ParseError(self._tokens, token, "Quotes (') not permitted in identifier")
+				if token[0] == IDENTIFIER and self._token()[2][0] == '"':
+					raise ParseError(self._tokens, token, 'Quotes (") not permitted in identifier')
+				# The run is terminated by whitespace, comments, a terminator, or EOF
+				if token[0] in (WHITESPACE, COMMENT, TERMINATOR, EOF):
+					break
+				self._index += 1
+			content = ''.join([token[2] for token in self._tokens[start:self._index]])
+			self._tokens[start:self._index] = [(STRING, content, quotestr(content, "'"), self._tokens[start][3], self._tokens[start][4])]
+			self._index = start
 
 	def _parseRelationObjectName(self):
 		"""Parses the (possibly qualified) name of a relation-owned object.
@@ -356,15 +447,15 @@ class SQLFormatter(object):
 		were found).
 		"""
 		# Parse the first (and possibly final) name
-		self._keywordIdent()
+		self._toIdent()
 		result = (self._expect((IDENTIFIER,))[1],)
 		# Check for a qualifier (without _skipping whitespace)
 		if self._match((OPERATOR, ".")):
-			self._keywordIdent()
+			self._toIdent()
 			result = (result[0], self._expect((IDENTIFIER,))[1])
 			# Check for another qualifier (without _skipping whitespace)
 			if self._match((OPERATOR, ".")):
-				self._keywordIdent()
+				self._toIdent()
 				result = (result[0], result[1], self._expect((IDENTIFIER,))[1])
 		return result
 
@@ -377,11 +468,11 @@ class SQLFormatter(object):
 		2 elements (depending on whether a qualifier was found).
 		"""
 		# Parse the first (and possibly final) name
-		self._keywordIdent()
+		self._toIdent()
 		result = (self._expect((IDENTIFIER,))[1],)
 		# Check for a qualifier (without _skipping whitespace)
 		if self._match((OPERATOR, ".")):
-			self._keywordIdent()
+			self._toIdent()
 			result = (result[0], self._expect((IDENTIFIER,))[1])
 		return result
 
@@ -405,13 +496,13 @@ class SQLFormatter(object):
 		the last element of the result tuple.
 		"""
 		# Parse the type name (or schema name)
-		self._keywordIdent()
-		self._identDatatype()
+		self._toIdent()
+		self._toDatatype()
 		result = [self._expect((DATATYPE,))[1]]
 		# Check for a qualifier (without _skipping whitespace)
 		if self._match((OPERATOR, ".")):
-			self._keywordIdent()
-			self._identDatatype()
+			self._toIdent()
+			self._toDatatype()
 			result = [result[0], self._expect((DATATYPE,))[1]]
 		# Parse the optional argument(s)
 		args = ()
@@ -463,7 +554,7 @@ class SQLFormatter(object):
 				self._parseFullSelect1()
 				self._expect((OPERATOR, ")"))
 			else:
-				raise ParseError()
+				raise ParseBacktrack()
 		except ParseError:
 			# If that fails, or we don't match an open parenthesis, parse an
 			# ordinary high-precedence predicate operator
@@ -600,7 +691,17 @@ class SQLFormatter(object):
 				self._parseSimpleCase()
 		elif self._match((KEYWORD, "CURRENT")):
 			self._expect([(KEYWORD,), (IDENTIFIER,)])
-		elif self._match([(NUMBER,), (STRING,), (PARAMETER,), (KEYWORD, "NULL")]):
+		elif self._match([(NUMBER,), (PARAMETER,)]):
+			# Parse an optional interval suffix
+			self._match([
+				(KEYWORD, "DAY"),
+				(KEYWORD, "DAYS"),
+				(KEYWORD, "MONTH"),
+				(KEYWORD, "MONTHS"),
+				(KEYWORD, "YEAR"),
+				(KEYWORD, "YEARS"),
+			])
+		elif self._match([(STRING,), (KEYWORD, "NULL")]):
 			pass
 		else:
 			self._saveState()
@@ -792,7 +893,7 @@ class SQLFormatter(object):
 		self._saveState()
 		try:
 			# Attempt to parse exposed-name.*
-			self._keywordIdent()
+			self._toIdent()
 			if self._match((IDENTIFIER,)):
 				self._expect((OPERATOR, "."))
 			self._expect((OPERATOR, "*"))
@@ -802,11 +903,11 @@ class SQLFormatter(object):
 			self._parseExpression1()
 			# Parse optional column alias
 			if self._match((KEYWORD, "AS")):
-				self._keywordIdent()
+				self._toIdent()
 				self._expect((IDENTIFIER,))
 			else:
 				# Ambiguity: FROM can legitimately appear in this position as a KEYWORD
-				self._keywordIdent(["FROM"])
+				self._toIdent(["FROM"])
 				self._match((IDENTIFIER,))
 		else:
 			self._forgetState()
@@ -815,16 +916,16 @@ class SQLFormatter(object):
 		"""Parses a table correlation clause (with optional column alias list)"""
 		# Parse the correlation clause
 		if self._match((KEYWORD, "AS")):
-			self._keywordIdent()
+			self._toIdent()
 			self._expect((IDENTIFIER,))
 		else:
 			# Ambiguity: Several KEYWORDs can legitimately appear in this position
-			self._keywordIdent(["WHERE", "GROUP", "HAVING", "ORDER", "FETCH", "UNION", "INTERSECT", "EXCEPT", "WITH", "ON"])
+			self._toIdent(["WHERE", "GROUP", "HAVING", "ORDER", "FETCH", "UNION", "INTERSECT", "EXCEPT", "WITH", "ON"])
 			self._expect((IDENTIFIER,))
 		# Parse optional column aliases
 		if self._match((OPERATOR, "(")):
 			while True:
-				self._keywordIdent()
+				self._toIdent()
 				self._expect((IDENTIFIER,))
 				if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
 					break
@@ -856,24 +957,21 @@ class SQLFormatter(object):
 		"""Parses join operators in a table-reference"""
 		self._parseTableRef2()
 		while True:
-			natural = bool(self._match((KEYWORD, "NATURAL")))
-			if natural:
+			if self._match((KEYWORD, "INNER")):
 				self._newline(-1)
-			if self._match([(KEYWORD, "INNER"), (KEYWORD, "CROSS")]):
-				if not natural: self._newline(-1)
 				self._expect((KEYWORD, "JOIN"))
 				self._parseTableRef2()
-				if not natural: self._parseJoinCondition()
+				self._parseJoinCondition()
 			elif self._match([(KEYWORD, "LEFT"), (KEYWORD, "RIGHT"), (KEYWORD, "FULL")]):
-				if not natural: self._newline(-1)
+				self._newline(-1)
 				self._match((KEYWORD, "OUTER"))
 				self._expect((KEYWORD, "JOIN"))
 				self._parseTableRef2()
-				if not natural: self._parseJoinCondition()
+				self._parseJoinCondition()
 			elif self._match((KEYWORD, "JOIN")):
-				if not natural: self._newline(-1)
+				self._newline(-1)
 				self._parseTableRef2()
-				if not natural: self._parseJoinCondition()
+				self._parseJoinCondition()
 			else:
 				break
 
@@ -942,7 +1040,7 @@ class SQLFormatter(object):
 				else:
 					self._forgetState()
 			else:
-				raise ParseError()
+				raise ParseBacktrack()
 		except ParseError:
 			self._restoreState()
 			self._parseSchemaObjectName()
@@ -959,17 +1057,8 @@ class SQLFormatter(object):
 	def _parseJoinCondition(self):
 		"""Parses the condition on an SQL-92 style join"""
 		self._indent()
-		if self._expect([(KEYWORD, "ON"), (KEYWORD, "USING")])[:2] == (KEYWORD, "ON"):
-			self._parsePredicate1()
-		else:
-			# XXX Is the USING method standard SQL?
-			self._expect((OPERATOR, "("))
-			while True:
-				self._keywordIdent()
-				self._expect((IDENTIFIER,))
-				if not self._match((OPERATOR, ",")):
-					break
-			self._expect((OPERATOR, ")"))
+		self._expect((KEYWORD, "ON"))
+		self._parsePredicate1()
 		self._outdent()
 
 	def _parseFullSelect1(self):
@@ -1016,7 +1105,7 @@ class SQLFormatter(object):
 	def _parseColumnDefinition(self):
 		"""Parses a column definition in a CREATE TABLE statement"""
 		# Parse a column definition
-		self._keywordIdent()
+		self._toIdent()
 		self._expect((IDENTIFIER,))
 		self._parseDataType()
 		# Parse column options
@@ -1082,7 +1171,7 @@ class SQLFormatter(object):
 		"""Parses a constraint attached to a specific column in a CREATE TABLE statement"""
 		# Parse the optional constraint name
 		if self._match((KEYWORD, "CONSTRAINT")):
-			self._keywordIdent()
+			self._toIdent()
 			self._expect((IDENTIFIER,))
 		# Parse the constraint definition
 		if self._match((KEYWORD, "PRIMARY")):
@@ -1092,7 +1181,7 @@ class SQLFormatter(object):
 		elif self._match((KEYWORD, "REFERENCES")):
 			self._parseSchemaObjectName()
 			if self._match((OPERATOR, "(")):
-				self._keywordIdent()
+				self._toIdent()
 				self._expect((IDENTIFIER,))
 				self._expect((OPERATOR, ")"))
 			t = [(KEYWORD, "DELETE"), (KEYWORD, "UPDATE")]
@@ -1128,20 +1217,20 @@ class SQLFormatter(object):
 	def _parseTableConstraint(self):
 		"""Parses a constraint attached to a table in a CREATE TABLE statement"""
 		if self._match((KEYWORD, "CONSTRAINT")):
-			self._keywordIdent()
+			self._toIdent()
 			self._expect((IDENTIFIER,))
 		if self._match((KEYWORD, "PRIMARY")):
 			self._expect((KEYWORD, "KEY"))
 			self._expect((OPERATOR, "("))
 			while True:
-				self._keywordIdent()
+				self._toIdent()
 				self._expect((IDENTIFIER,))
 				if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
 					break
 		elif self._match((KEYWORD, "UNIQUE")):
 			self._expect((OPERATOR, "("))
 			while True:
-				self._keywordIdent()
+				self._toIdent()
 				self._expect((IDENTIFIER,))
 				if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
 					break
@@ -1149,7 +1238,7 @@ class SQLFormatter(object):
 			self._expect((KEYWORD, "KEY"))
 			self._expect((OPERATOR, "("))
 			while True:
-				self._keywordIdent()
+				self._toIdent()
 				self._expect((IDENTIFIER,))
 				if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
 					break
@@ -1157,7 +1246,7 @@ class SQLFormatter(object):
 			self._parseSchemaObjectName()
 			self._expect((OPERATOR, "("))
 			while True:
-				self._keywordIdent()
+				self._toIdent()
 				self._expect((IDENTIFIER,))
 				if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
 					break
@@ -1208,7 +1297,7 @@ class SQLFormatter(object):
 			if self._match((OPERATOR, "(")):
 				# Parse tuple assignment ( (FIELD1,FIELD2)=(...) )
 				while True:
-					self._keywordIdent()
+					self._toIdent()
 					self._expect((IDENTIFIER,))
 					if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
 						break
@@ -1231,7 +1320,7 @@ class SQLFormatter(object):
 					self._forgetState()
 			else:
 				# Parse simple assignment (FIELD=VALUE)
-				self._keywordIdent()
+				self._toIdent()
 				self._expect((IDENTIFIER,))
 				self._expect((OPERATOR, "="))
 				self._parseExpression1()
@@ -1242,7 +1331,7 @@ class SQLFormatter(object):
 		"""Parses a FOR-loop in a dynamic compound statement"""
 		# XXX Implement support for labels
 		# FOR already matched
-		self._keywordIdent()
+		self._toIdent()
 		self._expect((IDENTIFIER,))
 		self._expect((KEYWORD, "AS"))
 		# XXX Implement support for CURSOR clause in procedures
@@ -1284,7 +1373,7 @@ class SQLFormatter(object):
 		if self._match((KEYWORD, "EXCEPTION")):
 			self._expect((NUMBER, 1))
 			while True:
-				self._keywordIdent()
+				self._toIdent()
 				self._expect((IDENTIFIER,))
 				self._expect((OPERATOR, "="))
 				self._expect([
@@ -1294,7 +1383,7 @@ class SQLFormatter(object):
 				if not self._match((OPERATOR, ",")):
 					break
 		else:
-			self._keywordIdent()
+			self._toIdent()
 			self._expect((IDENTIFIER,))
 			self._expect((OPERATOR, "="))
 			self._expect([
@@ -1341,10 +1430,10 @@ class SQLFormatter(object):
 		# SIGNAL already matched
 		if self._match((IDENTIFIER, "SQLSTATE")): # SQLSTATE is not a KEYWORD
 			self._match((IDENTIFIER, "VALUE")) # VALUE is not a KEYWORD
-			self._keywordIdent()
+			self._toIdent()
 			self._expect([(IDENTIFIER,), (STRING,)])
 		else:
-			self._keywordIdent()
+			self._toIdent()
 			self._expect((IDENTIFIER,))
 		if self._match((KEYWORD, "SET")):
 			self._expect((IDENTIFIER, "MESSAGE_TEXT"))
@@ -1356,13 +1445,13 @@ class SQLFormatter(object):
 	def _parseIterateStatement(self):
 		"""Parses an ITERATE statement within a loop"""
 		# ITERATE already matched
-		self._keywordIdent()
+		self._toIdent()
 		self._match((IDENTIFIER,))
 	
 	def _parseLeaveStatement(self):
 		"""Parses a LEAVE statement within a loop"""
 		# LEAVE already matched
-		self._keywordIdent()
+		self._toIdent()
 		self._match((IDENTIFIER,))
 	
 	def _parseReturnStatement(self):
@@ -1389,7 +1478,7 @@ class SQLFormatter(object):
 		# Parse optional variable/condition declarations
 		if self._match((KEYWORD, "DECLARE")):
 			while True:
-				self._keywordIdent()
+				self._toIdent()
 				self._expect((IDENTIFIER,))
 				if self._match((KEYWORD, "CONDITION")):
 					self._expect((KEYWORD, "FOR"))
@@ -1418,13 +1507,13 @@ class SQLFormatter(object):
 		# Parse the optional common-table-expression
 		if self._match((KEYWORD, "WITH")):
 			while True:
-				self._keywordIdent()
+				self._toIdent()
 				self._expect((IDENTIFIER,))
 				# Parse the optional column-alias list
 				if self._match((OPERATOR, "(")):
 					self._indent()
 					while True:
-						self._keywordIdent()
+						self._toIdent()
 						self._expect((IDENTIFIER,))
 						if self._match((OPERATOR, ",")):
 							self._newline()
@@ -1443,11 +1532,56 @@ class SQLFormatter(object):
 				else:
 					break
 			self._newline()
+		# Parse the actual full-select
 		self._parseFullSelect1()
-		# XXX Parse read-only-clause
-		# XXX Parse update-clause
-		# XXX Parse optimize-for-clause
-		# XXX Parse isolation-clause
+		# Parse optional SELECT attributes (FOR UPDATE, WITH isolation, etc.)
+		valid = [
+			(KEYWORD, "WITH"),
+			(KEYWORD, "FOR"),
+			(KEYWORD, "OPTIMIZE"),
+		]
+		while True:
+			if len(valid) == 0:
+				break
+			t = self._match(valid)
+			if t:
+				self._newline(-1)
+				t = t[:2]
+				valid.remove(t)
+			else:
+				break
+			if t == (KEYWORD, "FOR"):
+				if self._match([(KEYWORD, "READ"), (KEYWORD, "FETCH")]):
+					self._expect((IDENTIFIER, "ONLY")) # ONLY is not a KEYWORD
+				elif self._match((KEYWORD, "UPDATE")):
+					if self._match((KEYWORD, "OF")):
+						while True:
+							self._toIdent()
+							self._expect((IDENTIFIER,))
+							if not self._match((OPERATOR, ",")):
+								break
+				else:
+					self._expect([(KEYWORD, "READ"), (KEYWORD, "FETCH"), (KEYWORD, "UPDATE")])
+			elif t == (KEYWORD, "OPTIMIZE"):
+				self._expect((KEYWORD, "FOR"))
+				self._expect((NUMBER,))
+				self._expect([(KEYWORD, "ROW"), (KEYWORD, "ROWS")])
+			elif t == (KEYWORD, "WITH"):
+				if self._expect([
+					(IDENTIFIER, "RR"),
+					(IDENTIFIER, "RS"),
+					(IDENTIFIER, "CS"),
+					(IDENTIFIER, "UR"),
+				])[:2] in ((IDENTIFIER, "RR"), (IDENTIFIER, "RS")):
+					if self._match((IDENTIFIER, "USE")): # USE is not a KEYWORD
+						self._expect((KEYWORD, "AND"))
+						self._expect((IDENTIFIER, "KEEP")) # KEEP is not a KEYWORD
+						self._expect([
+							(IDENTIFIER, "SHARE"), # SHARE is not a KEYWORD
+							(IDENTIFIER, "EXCLUSIVE"), # EXCLUSIVE is not a KEYWORD
+							(KEYWORD, "UPDATE"),
+						])
+						self._expect((IDENTIFIER, "LOCKS")) # LOCKS is not a KEYWORD
 
 	def _parseInsertStatement(self):
 		"""Parses an INSERT statement"""
@@ -1459,7 +1593,7 @@ class SQLFormatter(object):
 		# Parse optional column list
 		if self._match((OPERATOR, "(")):
 			while True:
-				self._keywordIdent()
+				self._toIdent()
 				self._expect((IDENTIFIER,))
 				if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
 					break
@@ -1479,7 +1613,7 @@ class SQLFormatter(object):
 			if self._match((OPERATOR, "(")):
 				# Parse tuple assignment ( (FIELD1,FIELD2)=(...) )
 				while True:
-					self._keywordIdent()
+					self._toIdent()
 					self._expect((IDENTIFIER,))
 					if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
 						break
@@ -1501,7 +1635,7 @@ class SQLFormatter(object):
 					self._forgetState()
 			else:
 				# Parse simple assignment (FIELD=VALUE)
-				self._keywordIdent()
+				self._toIdent()
 				self._expect((IDENTIFIER,))
 				self._expect((OPERATOR, "="))
 				if not self._match((KEYWORD, "DEFAULT")):
@@ -1553,15 +1687,15 @@ class SQLFormatter(object):
 		self._expect((OPERATOR, ")"))
 		# Parse tablespaces
 		if self._match((KEYWORD, "IN")):
-			self._keywordIdent()
+			self._toIdent()
 			self._expect((IDENTIFIER,))
 			if self._match((KEYWORD, "INDEX")):
 				self._expect((KEYWORD, "IN"))
-				self._keywordIdent()
+				self._toIdent()
 				self._expect((IDENTIFIER,))
 			if self._match((KEYWORD, "LONG")):
 				self._expect((KEYWORD, "IN"))
-				self._keywordIdent()
+				self._toIdent()
 				self._expect((IDENTIFIER,))
 
 	def _parseAlterTableStatement(self):
@@ -1593,10 +1727,10 @@ class SQLFormatter(object):
 					self._expect((KEYWORD, "KEY"))
 				elif self._match((KEYWORD, "FOREIGN")):
 					self._expect((KEYWORD, "KEY"))
-					self._keywordIdent()
+					self._toIdent()
 					self._expect((IDENTIFIER,))
 				elif self._match([(KEYWORD, "UNIQUE"), (KEYWORD, "CHECK"), (KEYWORD, "CONSTRAINT")]):
-					self._keywordIdent()
+					self._toIdent()
 					self._expect((IDENTIFIER,))
 				elif self._match((KEYWORD, "RESTRICT")):
 					self._expect((KEYWORD, "ON"))
@@ -1640,7 +1774,7 @@ class SQLFormatter(object):
 		self._expect((OPERATOR, "("))
 		self._indent()
 		while True:
-			self._keywordIdent()
+			self._toIdent()
 			self._expect((IDENTIFIER,))
 			self._match([(IDENTIFIER, "ASC"), (IDENTIFIER, "DESC")]) # ASC and DESC aren't KEYWORDs
 			if self._match((OPERATOR, ",")):
@@ -1655,7 +1789,7 @@ class SQLFormatter(object):
 			self._expect((OPERATOR, "("))
 			self._indent()
 			while True:
-				self._keywordIdent()
+				self._toIdent()
 				self._expect((IDENTIFIER,))
 				if self._match((OPERATOR, ",")):
 					self._newline()
@@ -1675,7 +1809,7 @@ class SQLFormatter(object):
 		if self._match((OPERATOR, "(")):
 			self._indent()
 			while True:
-				self._keywordIdent()
+				self._toIdent()
 				self._expect((IDENTIFIER,))
 				if self._match((OPERATOR, ",")):
 					self._newline()
@@ -1695,7 +1829,7 @@ class SQLFormatter(object):
 		self._expect((OPERATOR, "("))
 		if not self._match((OPERATOR, ")")):
 			while True:
-				self._keywordIdent()
+				self._toIdent()
 				self._expect((IDENTIFIER,))
 				self._parseDataType()
 				if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
@@ -1720,6 +1854,8 @@ class SQLFormatter(object):
 			((KEYWORD, "INHERITS")),
 		]
 		while True:
+			if len(valid) == 0:
+				break
 			t = self._match(valid)
 			if t:
 				t = t[:2]
@@ -1730,7 +1866,7 @@ class SQLFormatter(object):
 				if self._match([(KEYWORD, "ROW"), (KEYWORD, "TABLE")]):
 					self._expect((OPERATOR, "("))
 					while True:
-						self._keywordIdent()
+						self._toIdent()
 						self._expect((IDENTIFIER,))
 						self._parseDataType()
 						if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
@@ -1739,7 +1875,7 @@ class SQLFormatter(object):
 					self._parseDataType()
 				self._newline()
 			elif t == (KEYWORD, "SPECIFIC"):
-				self._keywordIdent()
+				self._toIdent()
 				self._expect((IDENTIFIER,))
 				self._newline()
 			elif t == (KEYWORD, "LANGUAGE"):
@@ -1857,7 +1993,7 @@ class SQLFormatter(object):
 		elif self._match((KEYWORD, "TYPE")):
 			self._parseSchemaObjectName()
 		elif self._match((KEYWORD, "SCHEMA")):
-			self._keywordIdent()
+			self._toIdent()
 			self._expect((IDENTIFIER,))
 			# XXX Add CASCADE here for PostgreSQL?
 			self._match((KEYWORD, "RESTRICT"))
@@ -1910,11 +2046,10 @@ class SQLFormatter(object):
 		else:
 			self._parseSelectStatement()
 
-	def _parseTopLevelStatement(self):
+	def _parseStatement(self):
 		"""Parses a top-level statement in an SQL script"""
-		# XXX Implement dynamic compound statements
-		# XXX Implement CREATE/DROP DB...
-		# XXX Implement CREATE/DROP TABLESPACE...
+		# XXX Implement CREATE TABLESPACE...
+		# XXX Implement GRANT/REVOKE...
 		if self._match((KEYWORD, "BEGIN")):
 			self._parseDynamicCompoundStatement()
 		if self._match((KEYWORD, "INSERT")):
@@ -1952,7 +2087,7 @@ class SQLFormatter(object):
 		self._statestack = deque()
 		# Check that newline_split wasn't used in the tokenizer
 		if type(tokens[0]) == type([]):
-			raise ParseError("Tokens must not be organized by line")
+			raise Error("Tokens must not be organized by line")
 		self._tokens = list(tokens) # Take a COPY of the token list
 		self._index = 0
 		self._level = 0
@@ -1960,38 +2095,98 @@ class SQLFormatter(object):
 	
 	def _parseFinish(self):
 		"""Cleans up output tokens and recalculates line and column positions"""
-		# Format/convert all output tokens
-		self._output = [self._tokenOutput(token) for token in self._output]
-		# Recalculate line and column elements for all tokens
+		
+		def quotestr(s, qchar):
+			"""Quote a string, doubling all quotation characters within it"""
+			return "%s%s%s" % (qchar, s.replace(qchar, qchar*2), qchar)
+		
+		def formatident(ident):
+			"""Format an SQL identifier with quotes if required"""
+			identchars = set(ibmdb2udb_identchars)
+			quotedident = not ident[0] in (identchars - set("0123456789"))
+			if not quotedident:
+				for c in ident[1:]:
+					if not c in identchars:
+						quotedident = True
+						break
+			if quotedident:
+				return quotestr(ident, '"')
+			else:
+				return ident
+		
+		def formatparam(param):
+			"""Format a parameter with quotes if required"""
+			if param is None:
+				return "?"
+			else:
+				return ":%s" % (formatident(param))
+			
+		def tokenOutput(t):
+			"""Format a token for output"""
+			if t[0] == IDENTIFIER:
+				return (t[0], t[1], formatident(t[1]))
+			elif t[0] == DATATYPE:
+				return (t[0], t[1], formatident(t[1]))
+			elif t[0] == PARAMETER:
+				return (t[0], t[1], formatparam(t[2]))
+			elif t[0] == KEYWORD:
+				return (t[0], t[1], t[1])
+			elif t[0] == WHITESPACE:
+				return (t[0], None, " ")
+			elif t[0] == COMMENT:
+				return (t[0], t[1], "/*%s*/" % (t[1]))
+			elif t[0] == NUMBER:
+				return (t[0], t[1], str(t[1]))
+			elif t[0] == STRING:
+				return (t[0], t[1], quotestr(t[1], "'"))
+			elif t[0] == TERMINATOR:
+				return (t[0], None, t[2] + '\n')
+			elif token[0] == INDENT:
+				return (WHITESPACE, None, '\n' + self.indent*t[1])
+			else:
+				return t
+
+		# Format/convert all output tokens, recalculating line and column
+		# as we go
 		line = 1
 		column = 1
-		tokens = []
+		newoutput = []
 		for token in self._output:
-			tokens.append(token + (line, column))
-			(_, _, source) = token
+			token = tokenOutput(token) + (line, column)
+			newoutput.append(token)
+			source = token[2]
 			# Note that all line breaks are \n by this point
 			while '\n' in source:
 				line += 1
 				column = 1
 				source = source[source.index('\n') + 1:]
 			column += len(source)
-		self._output = tokens
+		self._output = newoutput
 
-	def _parseError(self, exception):
-		"""Pretty-prints an ParseError exception with source context"""
-		# Print the error message
-		print "Error: %s" % (exception[0])
-		# Print some context lines from the source
-		(_, _, _, errorline, errorcol) = exception[1]
-		currline = 1
-		source = ''.join([s for (_, _, s, _, _) in self._tokens])
-		for line in source.splitlines():
-			if (currline >= errorline - 2) and (currline <= errorline + 2):
-				print line
-				# Highlight the position of the parse error
-				if currline == errorline:
-					print ' '*(errorcol-1) + '^'
-			currline += 1
+	def parse(self, tokens):
+		"""Parses an arbitrary SQL statement or script"""
+		self._parseInit(tokens)
+		while True:
+			# Skip leading whitespace
+			if self._token()[0] in (COMMENT, WHITESPACE):
+				self._skip()
+			self._parseStatement()
+			# Look for a terminator or EOF
+			if self._expect([(TERMINATOR,), (EOF,)])[:1] == (EOF,):
+				break
+			else:
+				# Match any more terminators (blank statements)
+				while self._match((TERMINATOR,)):
+					pass
+				# Check if EOF occurs after the terminator
+				if self._match((EOF,)):
+					break
+				# Otherwise, reset the indent level and leave a blank line
+				self._level = 0
+				self._newline()
+				self._newline()
+		self._parseFinish()
+		return self._output
 
 	def parseRoutinePrototype(self, tokens):
 		"""Parses a routine prototype"""
@@ -2000,69 +2195,36 @@ class SQLFormatter(object):
 		# for syntax highlighting function prototypes in the documentation
 		# system)
 		self._parseInit(tokens)
-		try:
-			# Skip leading whitespace
-			if self._token()[0] in (COMMENT, WHITESPACE):
-				self._skip()
-			# Parse the function name
-			self._parseSchemaObjectName()
-			# Parenthesized parameter list is mandatory
-			self._expect((OPERATOR, "("))
-			if not self._match((OPERATOR, ")")):
-				while True:
-					# Parse parameter name
-					self._keywordIdent()
-					self._expect((IDENTIFIER,))
-					# Parse parameter datatype
-					self._parseDataType()
-					if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
-						break
-			# Parse the return type
-			self._expect((KEYWORD, "RETURNS"))
-			if self._match([(KEYWORD, "ROW"), (KEYWORD, "TABLE")]):
-				self._expect((OPERATOR, "("))
-				while True:
-					# Parse return parameter name
-					self._keywordIdent()
-					self._expect((IDENTIFIER,))
-					# Parse return parameter datatype
-					self._parseDataType()
-					if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
-						break
-			else:
-				self._parseDataType()
-		except ParseError, e:
-			self._parseError(e)
-			raise
-		self._parseFinish()
-		return self._output
-
-	def parse(self, tokens):
-		"""Parses an arbitrary SQL statement or script"""
-		self._parseInit(tokens)
-		try:
+		# Skip leading whitespace
+		if self._token()[0] in (COMMENT, WHITESPACE):
+			self._skip()
+		# Parse the function name
+		self._parseSchemaObjectName()
+		# Parenthesized parameter list is mandatory
+		self._expect((OPERATOR, "("))
+		if not self._match((OPERATOR, ")")):
 			while True:
-				# Skip leading whitespace
-				if self._token()[0] in (COMMENT, WHITESPACE):
-					self._skip()
-				self._parseTopLevelStatement()
-				# Look for a terminator or EOF
-				if self._expect([(TERMINATOR,), (EOF,)])[:1] == (EOF,):
+				# Parse parameter name
+				self._keywordIdent()
+				self._expect((IDENTIFIER,))
+				# Parse parameter datatype
+				self._parseDataType()
+				if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
 					break
-				else:
-					# Match any more terminators (blank statements)
-					while self._match((TERMINATOR,)):
-						pass
-					# Check if EOF occurs after the terminator
-					if self._match((EOF,)):
-						break
-					# Otherwise, reset the indent level and leave a blank line
-					self._level = 0
-					self._newline()
-					self._newline()
-		except ParseError, e:
-			self._parseError(e)
-			raise
+		# Parse the return type
+		self._expect((KEYWORD, "RETURNS"))
+		if self._match([(KEYWORD, "ROW"), (KEYWORD, "TABLE")]):
+			self._expect((OPERATOR, "("))
+			while True:
+				# Parse return parameter name
+				self._keywordIdent()
+				self._expect((IDENTIFIER,))
+				# Parse return parameter datatype
+				self._parseDataType()
+				if self._expect([(OPERATOR, ","), (OPERATOR, ")")])[:2] == (OPERATOR, ")"):
+					break
+		else:
+			self._parseDataType()
 		self._parseFinish()
 		return self._output
 
