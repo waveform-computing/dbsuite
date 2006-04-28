@@ -617,8 +617,8 @@ class Cache(object):
 		self.parameters = dict([((row['schemaName'], row['specificName'], row['type'], row['position']), row) for row in fetchDict(cursor)])
 		for row in self.parameters.itervalues():
 			row['locator'] = makeBoolean(row['locator'])
-			if not row['size']: row['size'] = None
-			if not row['scale']: row['scale'] = None # XXX Not entirely accurate (0 is a valid scale)
+			if row['size'] == 0: row['size'] = None
+			if row['scale'] == -1: row['scale'] = None
 			if not row['codepage']: row['codepage'] = None
 			row['type'] = {
 				'B': 'In/Out',
