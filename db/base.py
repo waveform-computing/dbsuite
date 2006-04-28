@@ -20,6 +20,15 @@ class DocBase(object):
 	def getParent(self):
 		return self.__parent
 	
+	def getParentList(self):
+		return None
+
+	def getParentIndex(self):
+		if self.parentList is None:
+			raise NotImplementedError
+		else:
+			return self.parentList.index(self)
+	
 	def getName(self):
 		return self.__name
 	
@@ -43,15 +52,6 @@ class DocBase(object):
 		else:
 			return False
 
-	def getParentList(self):
-		return None
-
-	def getParentIndex(self):
-		if self.parentList is None:
-			raise NotImplementedError
-		else:
-			return self.parentList.index(self)
-	
 	def getNext(self):
 		if self.parentList is None:
 			raise NotImplementedError
@@ -85,6 +85,8 @@ class DocBase(object):
 	# Use the lambda trick to make property getter methods "virtual"
 	database = property(lambda self: self.getDatabase(), doc="""The database that owns the object (the root of the hierarchy)""")
 	parent = property(lambda self: self.getParent(), doc="""Returns the parent database object (e.g. the parent of a table is a schema)""")
+	parentList = property(lambda self: self.getParentList(), doc="""Returns the list containing objects of the same type with the same parent, or None if the object is standalone""")
+	parentIndex = property(lambda self: self.getParentIndex(), doc="""Returns the index of this object within the parentList""")
 	identifier = property(lambda self: self.getIdentifier(), doc="""Returns a unique identifier for this object (suitable for use as the basis for a unique filename, for example)""")
 	name = property(lambda self: self.getName(), doc="""Returns the unqualified name of the database object""")
 	qualifiedName = property(lambda self: self.getQualifiedName(), doc="""Returns the fully qualified name of the database object""")
@@ -93,8 +95,6 @@ class DocBase(object):
 	system = property(lambda self: self.getSystem(), doc="""True if the object is a system-defined object""")
 	next = property(lambda self: self.getNext(), doc="""Returns the next object of the same type with the same parent, or None if this is the last such object""")
 	prior = property(lambda self: self.getPrior(), doc="""Returns the previous object of the same type with the same parent, or None if this is the last such object""")
-	parentList = property(lambda self:self.getParentList(), doc="""Returns the list containing objects of the same type with the same parent, or None if the object is standalone""")
-	parentIndex = property(lambda self:self.getParentIndex(), doc="""Returns the index of this object within the parentList""")
 	createSql = property(lambda self: self.getCreateSql(), doc="""The SQL that can be used to create the object""")
 	dropSql = property(lambda self: self.getDropSql(), doc="""The SQL that can be used to drop the object""")
 
