@@ -228,7 +228,7 @@ class BaseFormatter(object):
 				index += 1
 				if index >= 0: break
 			# Check the invariant is preserved (see _save_state())
-			assert len(self._output) + i >= self._statestack[-1][2]
+			assert (len(self._statestack) == 0) or (len(self._output) + i >= self._statestack[-1][2])
 			self._output.insert(i, token)
 
 	def _indent(self, index=0):
@@ -513,7 +513,7 @@ class BaseFormatter(object):
 		newoutput = []
 		for token in self._output:
 			# Add the recalculated line and column to the formatted token
-			token = self._format_token(token) + (line, column)
+			token = self._format_token(token)[:3] + (line, column)
 			newoutput.append(token)
 			source = token[2]
 			# Note that all line breaks are \n by this point
@@ -763,18 +763,18 @@ class SQLFormatter(BaseFormatter):
 			elif self._match_one_of([(DATATYPE, 'CHAR'), (DATATYPE, 'CHARACTER')]):
 				if self._match((DATATYPE, 'VARYING')):
 					typename = 'VARCHAR'
-					size = self._parse_size(optional=False)
+					size = self._parse_size(optional=False, suffix=SUFFIX_KMG)
 					self._match_sequence(['FOR', 'BIT', 'DATA'])
 				elif self._match_sequence([(DATATYPE, 'LARGE'), (DATATYPE, 'OBJECT')]):
 					typename = 'CLOB'
 					size = self._parse_size(optional=True, suffix=SUFFIX_KMG)
 				else:
 					typename = 'CHAR'
-					size = self._parse_size(optional=True)
+					size = self._parse_size(optional=True, suffix=SUFFIX_KMG)
 					self._match_sequence(['FOR', 'BIT', 'DATA'])
 			elif self._match((DATATYPE, 'VARCHAR')):
 				typename = 'VARCHAR'
-				size = self._parse_size(optional=False)
+				size = self._parse_size(optional=False, suffix=SUFFIX_KMG)
 				self._match_sequence(['FOR', 'BIT', 'DATA'])
 			elif self._match((DATATYPE, 'VARGRAPHIC')):
 				typename = 'VARGRAPHIC'
@@ -1229,7 +1229,7 @@ class SQLFormatter(BaseFormatter):
 				self._newline(-1)
 				break
 			elif self._match('END'):
-				self._outdent()
+				self._outdent(-1)
 				return
 			else:
 				self._expected_one_of(['WHEN', 'ELSE', 'END'])
@@ -1259,6 +1259,7 @@ class SQLFormatter(BaseFormatter):
 		"""Parses a super-group in a GROUP BY clause"""
 		# [ROLLUP|CUBE] already matched
 		self._expect('(')
+		self._indent()
 		while True:
 			if self._match('('):
 				self._parse_expression_list()
@@ -1267,12 +1268,16 @@ class SQLFormatter(BaseFormatter):
 				self._parse_expression1()
 			if not self._match(','):
 				break
+			else:
+				self._newline()
+		self._outdent()
 		self._expect(')')
 	
 	def _parse_grouping_sets(self):
 		"""Parses a GROUPING SETS expression in a GROUP BY clause"""
 		# GROUPING SETS already matched
 		self._expect('(')
+		self._indent()
 		while True:
 			if self._match('('):
 				while True:
@@ -1289,6 +1294,9 @@ class SQLFormatter(BaseFormatter):
 				self._parse_grouping_expression()
 			if not self._match(','):
 				break
+			else:
+				self._newline()
+		self._outdent()
 		self._expect(')')
 
 	def _parse_group_by(self):
@@ -1307,6 +1315,8 @@ class SQLFormatter(BaseFormatter):
 				self._parse_grouping_expression()
 			if not self._match(','):
 				break
+			else:
+				self._newline()
 		# Ambiguity: the WITH used in the alternate syntax for super-groups
 		# can be mistaken for the WITH defining isolation level at the end
 		# of a query. Hence we must use a sequence match here...
@@ -2492,9 +2502,11 @@ class SQLFormatter(BaseFormatter):
 		if self._match('WHEN'):
 			# Parse searched-case-statement
 			simple = False
+			self._indent(-1)
 		else:
 			# Parse simple-case-statement
 			self._parse_expression1()
+			self._indent()
 			self._expect('WHEN')
 			simple = True
 		# Parse WHEN clauses (only difference is predicate/expression after
@@ -2506,6 +2518,7 @@ class SQLFormatter(BaseFormatter):
 			else:
 				self._parse_predicate1()
 			self._expect('THEN')
+			self._indent()
 			while True:
 				if inproc:
 					self._parse_procedure_statement()
@@ -2514,11 +2527,16 @@ class SQLFormatter(BaseFormatter):
 				self._expect((TERMINATOR, ';'))
 				t = self._match_one_of(['WHEN', 'ELSE', 'END'])
 				if t:
+					self._outdent(-1)
+					t = t[1]
 					break
-			if t[1] != 'WHEN':
+				else:
+					self._newline()
+			if t != 'WHEN':
 				break
 		# Handle ELSE clause (common to both variations)
-		if t[1] == 'ELSE':
+		if t == 'ELSE':
+			self._indent()
 			while True:
 				if inproc:
 					self._parse_procedure_statement()
@@ -2526,7 +2544,11 @@ class SQLFormatter(BaseFormatter):
 					self._parse_routine_statement()
 				self._expect((TERMINATOR, ';'))
 				if self._match('END'):
+					self._outdent(-1)
 					break
+				else:
+					self._newline()
+		self._outdent(-1)
 		self._expect('CASE')
 	
 	def _parse_close_statement(self):
@@ -3374,7 +3396,7 @@ class SQLFormatter(BaseFormatter):
 		t = 'IF'
 		while True:
 			if t in ('IF', 'ELSEIF'):
-				self._parse_predicate1()
+				self._parse_predicate1(linebreaks=False)
 				self._expect('THEN')
 				self._indent()
 				while True:
@@ -3383,12 +3405,13 @@ class SQLFormatter(BaseFormatter):
 					else:
 						self._parse_routine_statement()
 					self._expect((TERMINATOR, ';'))
-					self._newline()
 					t = self._match_one_of(['ELSEIF', 'ELSE', 'END'])
 					if t:
 						self._outdent(-1)
 						t = t[1]
 						break
+					else:
+						self._newline()
 			elif t == 'ELSE':
 				self._indent()
 				while True:
@@ -3397,10 +3420,11 @@ class SQLFormatter(BaseFormatter):
 					else:
 						self._parse_routine_statement()
 					self._expect((TERMINATOR, ';'))
-					self._newline()
 					if self._match('END'):
 						self._outdent(-1)
 						break
+					else:
+						self._newline()
 				break
 			else:
 				break
@@ -3456,10 +3480,11 @@ class SQLFormatter(BaseFormatter):
 			else:
 				self._parse_routine_statement()
 			self._expect((TERMINATOR, ';'))
-			self._newline()
 			if self._match('END'):
+				self._outdent(-1)
 				break
-		self._outdent(-1)
+			else:
+				self._newline()
 		self._expect('LOOP')
 	
 	def _parse_merge_statement(self):
@@ -3551,6 +3576,8 @@ class SQLFormatter(BaseFormatter):
 			self._newline()
 			if self._match('UNTIL'):
 				break
+			else:
+				self._newline()
 		self._outdent(-1)
 		self._parse_predicate1()
 		self._expect_sequence(['END', 'REPEAT'])
@@ -4000,7 +4027,7 @@ class SQLFormatter(BaseFormatter):
 		"""Parses a WHILE-loop in a dynamic compound statement"""
 		# XXX Implement support for labels
 		# WHILE already matched
-		self._parse_predicate1()
+		self._parse_predicate1(linebreaks=False)
 		self._newline()
 		self._expect('DO')
 		self._indent()
@@ -4010,10 +4037,11 @@ class SQLFormatter(BaseFormatter):
 			else:
 				self._parse_routine_statement()
 			self._expect((TERMINATOR, ';'))
-			self._newline()
 			if self._match('END'):
+				self._outdent(-1)
 				break
-		self._outdent(-1)
+			else:
+				self._newline()
 		self._expect('WHILE')
 	
 	# COMPOUND STATEMENTS ####################################################
@@ -4081,9 +4109,10 @@ class SQLFormatter(BaseFormatter):
 		while True:
 			self._parse_routine_statement()
 			self._expect((TERMINATOR, ';'))
-			self._newline()
 			if self._match('END'):
 				break
+			else:
+				self._newline()
 		self._outdent(-1)
 	
 	def _parse_procedure_statement(self):
@@ -4313,9 +4342,10 @@ class SQLFormatter(BaseFormatter):
 		while True:
 			self._parse_procedure_statement()
 			self._expect((TERMINATOR, ';'))
-			self._newline()
 			if self._match('END'):
 				break
+			else:
+				self._newline()
 		self._outdent(-1)
 	
 	def _parse_statement(self):
@@ -4509,7 +4539,7 @@ class SQLFormatter(BaseFormatter):
 		elif t[0] == KEYWORD:
 			return (t[0], t[1], t[1])
 		elif t[0] == WHITESPACE:
-			return (t[0], None, t[2])
+			return (t[0], None, ' ')
 		elif t[0] == COMMENT:
 			return (t[0], t[1], '/*%s*/' % (t[1]))
 		elif t[0] == NUMBER:
@@ -4517,13 +4547,13 @@ class SQLFormatter(BaseFormatter):
 		elif t[0] == STRING:
 			return (t[0], t[1], quotestr(t[1], "'"))
 		elif t[0] == TERMINATOR:
-			return (t[0], None, t[2] + '\n')
-		elif t[0] == INDENT:
-			return (WHITESPACE, None, '\n' + self.indent*t[1])
+			return (t[0], None, ';')
 		elif t[0] == STATEMENT:
 			return (t[0], None, '@')
+		elif t[0] == INDENT:
+			return (WHITESPACE, None, '\n' + self.indent*t[1])
 		else:
-			return t
+			return t[:3]
 
 	def parseRoutinePrototype(self, tokens):
 		"""Parses a routine prototype"""
@@ -4542,13 +4572,13 @@ class SQLFormatter(BaseFormatter):
 			while True:
 				self._expect(IDENTIFIER)
 				self._parse_datatype()
-				if self._expect([',', ')'])[:2] == ')':
+				if self._expect_one_of([',', ')'])[1] == ')':
 					break
 		# Parse the return type
 		self._expect('RETURNS')
 		if self._match_one_of(['ROW', 'TABLE']):
 			self._expect('(')
-			self._parse_datatype_list()
+			self._parse_ident_type_list()
 			self._expect(')')
 		else:
 			self._parse_datatype()
