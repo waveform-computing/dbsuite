@@ -25,7 +25,7 @@ def main():
 		username="",
 		password="",
 		outputpath=".",
-		logfile=""
+		logfile="",
 		loglevel=logging.WARNING)
 	parser.add_option("-d", "--database", dest="database",
 		help="""specify the locally cataloged name of the database to create documentation for""")
@@ -80,9 +80,9 @@ def main():
 		# output layers
 		try:
 			logging.info("Building metadata cache")
-			data = input.db2udbluw.Cache(connection, doccat=True)
+			data = input.db2udbluw.Cache(connection)
 			logging.info("Building database object hierarchy")
-			database = db.database.Database(data, "DQSMS")
+			database = db.database.Database(data, options.database)
 			logging.info("Writing output with w3 handler")
 			output.w3.DocOutput(database, options.outputpath)
 		finally:
@@ -90,7 +90,6 @@ def main():
 			connection = None
 	except Exception, e:
 		logging.error(str(e))
-		raise
 		sys.exit(1)
 	else:
 		sys.exit(0)
