@@ -3097,6 +3097,12 @@ class SQLFormatter(BaseFormatter):
 						self._newline()
 				self._outdent()
 				self._expect(')')
+			else:
+				self._forget_state()
+		# XXX Try and handle the bizarre [WITH NO DATA/IN/copy-options]
+		# ordering when parsing CREATE TABLE ... AS
+		# XXX Implement additional options (VALUE COMPRESSION, REPLICATED, WITH
+		# RESTRICT, NOT LOGGED, ORGANIZE BY, etc.)
 		# Parse tablespaces
 		if self._match('IN'):
 			self._expect(IDENTIFIER)
@@ -3948,7 +3954,6 @@ class SQLFormatter(BaseFormatter):
 	
 	def _parse_update_statement(self):
 		"""Parses an UPDATE statement"""
-		# XXX Add INCLUDE column capability and correlation clauses for target
 		# UPDATE already matched
 		if self._match('('):
 			self._indent()
