@@ -14,6 +14,7 @@ pre.sql {
 .sql span.sql_comment    { color: green; }
 .sql span.sql_keyword    { font-weight: bold; color: blue; }
 .sql span.sql_datatype   { font-weight: bold; color: green; }
+.sql span.sql_register   { font-weight: bold; color: purple; }
 .sql span.sql_identifier { }
 .sql span.sql_number     { color: maroon; }
 .sql span.sql_string     { color: maroon; }
