@@ -1,26 +1,24 @@
 #!/bin/env python
+# vim: set noet sw=4 ts=4 fileencoding=ISO-8859-1 nomod:
 # $Header$
-# vim: set noet sw=4 ts=4:
 
 """Implements a highly configurable SQL tokenizer.
 
-This unit implements a configurable SQL tokenizer base class
-(SQLTokenizerBase) and several classes descended from this which
-implement parsing specific dialects of SQL, and their particular
-oddities (like PostgreSQL's $$ quoting mechanism, or MySQL's use of
-double-quotes for strings). From the input SQL, the tokenizer classes
-output tuples structured as follows:
+This unit implements a configurable SQL tokenizer base class (SQLTokenizerBase)
+and several classes descended from this which implement parsing specific
+dialects of SQL, and their particular oddities (like PostgreSQL's $$ quoting
+mechanism, or MySQL's use of double-quotes for strings). From the input SQL,
+the tokenizer classes output tuples structured as follows:
 
     (token_type, token_value, source, line, column)
 
-Where token_type is one of the token constants described below,
-token_value is the "value" of the token (depends on token_type,
-see below), source is the original source code parsed to construct
-the token, and line and column provide the 1-based line and column
-of the source.
+Where token_type is one of the token constants described below, token_value is
+the "value" of the token (depends on token_type, see below), source is the
+original source code parsed to construct the token, and line and column provide
+the 1-based line and column of the source.
 
-All source elements can be concatenated to reconstruct the original
-source verbatim. Hence:
+All source elements can be concatenated to reconstruct the original source
+verbatim. Hence:
 
     tokens = SQLTokenizer().tokenize(some_sql)
     some_sql == ''.join([source for (_, _, source, _, _) in tokens])
@@ -47,9 +45,9 @@ Depending on token_type, token_value has different values:
                    or None if it was an anonymous ? parameter
     TERMINATOR     None
 
-The base tokenizer also includes several options, primarily to ease
-the implementation of the dialect-specific subclasses, though they
-may be of use in other situations:
+The base tokenizer also includes several options, primarily to ease the
+implementation of the dialect-specific subclasses, though they may be of use in
+other situations:
 
     Attribute      Description
     --------------------------------------------------------------
@@ -75,9 +73,8 @@ may be of use in other situations:
     cpp_comments   If True, C++ style comments (//..EOL) will be
                    recognized. Defaults to False.
 
-A number of classes which tokenize specific SQL dialects are derived
-from the base SQLTokenizer class. Currently the following classes
-are defined:
+A number of classes which tokenize specific SQL dialects are derived from the
+base SQLTokenizer class. Currently the following classes are defined:
 
     Class               Dialect
     --------------------------------------------------------
@@ -91,7 +88,7 @@ are defined:
 
 import sys
 import decimal
-import dialects
+import sql.dialects
 
 _tokenval = 0
 
@@ -143,17 +140,22 @@ class SQLTokenizerBase(object):
 	
 	def __init__(self):
 		"""Initializes an instance of the class."""
-		self._terminator = ';'
-		self._savedhandler = None
-		self.keywords = set(dialects.sql92_keywords)
-		self.identchars = set(dialects.sql92_identchars)
+		self.keywords = set(sql.dialects.sql92_keywords)
+		self.identchars = set(sql.dialects.sql92_identchars)
 		self.spacechars = ' \t\r\n'
 		self.newline_split = False
 		self.sql_comments = True
 		self.c_comments = False
 		self.cpp_comments = False
+		self._terminator = None
+		self._savedhandler = None
+		self._jump = {}
+		self._init_handlers()
+		# Setting the terminator must be done after initializing the jump table
+		# as it re-writes it partially
+		self.terminator = ';'
 
-	def _addToken(self, tokentype, tokenvalue):
+	def _addtoken(self, tokentype, tokenvalue):
 		self._tokens.append((
 			tokentype,
 			tokenvalue,
@@ -168,15 +170,13 @@ class SQLTokenizerBase(object):
 	def _next(self, count=1):
 		"""Moves the position of the tokenizer forward count positions.
 
-		The _index variable should never be modified
-		directly by handler methods. Likewise, the _source
-		variable should never be directly read by handler
-		methods. Instead, use the next() method and the char
-		and nextchar properties. The next() method keeps
-		track of the current line and column positions,
-		while the char property handles reporting all line
-		breaks (CR, CR/LF, or just LF) as plain LF characters
-		(making handler coding easier).
+		The _index variable should never be modified directly by handler
+		methods. Likewise, the _source variable should never be directly read
+		by handler methods. Instead, use the next() method and the char and
+		nextchar properties. The next() method keeps track of the current line
+		and column positions, while the char property handles reporting all
+		line breaks (CR, CR/LF, or just LF) as plain LF characters (making
+		handler coding easier).
 		"""
 		while count > 0:
 			count -= 1
@@ -193,27 +193,23 @@ class SQLTokenizerBase(object):
 	def _mark(self):
 		"""Marks the current position in the source for later retrieval.
 
-		The mark() method is used with the markedchars
-		property. A handler can call mark to save the current
-		position in the source code, then query markedchars
-		to obtain a string of all characters from the marked
-		position to the current position (assuming the handler
-		has moved the current position forward since calling
-		mark().
+		The mark() method is used with the markedchars property. A handler can
+		call mark to save the current position in the source code, then query
+		markedchars to obtain a string of all characters from the marked
+		position to the current position (assuming the handler has moved the
+		current position forward since calling mark().
 
-		The markedtext property handles converting all line
-		breaks to LF (like the next() method and char/nextchar
-		properties).
+		The markedtext property handles converting all line breaks to LF (like
+		the next() method and char/nextchar properties).
 		"""
 		self._markedindex = self._index
 
-	def _getChar(self):
+	def _getchar(self):
 		"""Returns the current character at the position of the tokenizer.
 
-		The _getChar() method returns the character in
-		_source at _index, but converts all line breaks to
-		a single LF character as this makes handler code
-		slightly easier to write.
+		The _getchar() method returns the character in _source at _index, but
+		converts all line breaks to a single LF character as this makes handler
+		code slightly easier to write.
 		"""
 		try:
 			if self._source[self._index] == '\r':
@@ -223,13 +219,12 @@ class SQLTokenizerBase(object):
 		except IndexError:
 			return '\0'
 
-	def _getNextChar(self):
+	def _getnextchar(self):
 		"""Returns the character the next position of the tokenizer.
 
-		The _getNextChar() method returns the character
-		immediately after the current character in _source,
-		and (like _getChar()) handles converting all line
-		breaks into single LF characters.
+		The _getnextchar() method returns the character immediately after the
+		current character in _source, and (like _getchar()) handles converting
+		all line breaks into single LF characters.
 		"""
 		try:
 			if self._source[self._index] == '\r':
@@ -244,91 +239,86 @@ class SQLTokenizerBase(object):
 		except IndexError:
 			return '\0'
 
-	def _getMarkedChars(self):
+	def _getmarkedchars(self):
 		"""Returns the characters from the marked position to the current.
 
-		After calling _mark() at a starting position, a
-		handler can later use _getMarkedChars() to retrieve
-		all characters from that marked position to the
-		current position (useful for extracting the content
-		of large blocks of code like comments, strings, etc).
+		After calling _mark() at a starting position, a handler can later use
+		_getmarkedchars() to retrieve all characters from that marked position
+		to the current position (useful for extracting the content of large
+		blocks of code like comments, strings, etc).
 		"""
 		assert self._markedindex >= 0
-		return self._source[self._markedindex:self._index].replace('\r\n', '\n')
+		return self._source[self._markedindex:self._index].replace('\r\n', '\n').replace('\r', '\n')
 
-	def _getLine(self):
+	def _getline(self):
 		"""Returns the current 1-based line position."""
 		return self._line
 
-	def _getColumn(self):
+	def _getcolumn(self):
 		"""Returns the current 1-based column position."""
 		return (self._index - self._linestart) + 1
 
-	def _getTerminator(self):
+	def _getterminator(self):
 		"""Returns the current statement terminator string (or character)."""
 		return self._terminator
 
-	def _setTerminator(self, value):
+	def _setterminator(self, value):
 		"""Sets the current statement terminator string (or character).
 
-		The _setTerminator() method sets the current
-		terminator string (or character), and updates the
-		internal _jump table as necessary.
+		The _setterminator() method sets the current terminator string (or
+		character), and updates the internal jump table as necessary.
 		"""
-		# Restore the saved handler, if necessary. We don't need to do this if
-		# there was no prior terminator (such as in a new instance of the,
-		# class). If the saved handler is the default (error) handler, simply
-		# remove the first character of the terminator from the jump table
-		if len(value) == 0:
+		if not value:
 			raise ValueError("Statement terminator string must contain at least one character")
-		if len(self._terminator) > 0:
-			if self._savedhandler == self._handleDefault:
-				del self._jump[self._terminator[0]]
-			else:
-				self._jump[self._terminator[0]] = self._savedhandler
-		# Replace the handler (if any) for the statement terminator character
-		# (or the first character of the statement terminator string) with
-		# a special handler and save the original handler for use by the
-		# special handler
-		if (value == '\r\n') or (value == '\r'): value = '\n'
-		self._terminator = value
-		self._savedhandler = self._jump.get(value[0], self._handleDefault)
-		self._jump[value[0]] = self._handleStatementTerm
+		if self._terminator != value:
+			# Restore the saved handler, if necessary. We don't need to do this
+			# if there was no prior terminator (such as in a new instance of
+			# the, class). If the saved handler is the default handler (None),
+			# simply remove the first character of the terminator from the jump
+			# table
+			if self._terminator is not None:
+				if self._savedhandler is None:
+					del self._jump[self._terminator[0]]
+				else:
+					self._jump[self._terminator[0]] = self._savedhandler
+			# Replace the handler (if any) for the statement terminator
+			# character (or the first character of the statement terminator
+			# string) with a special handler and save the original handler for
+			# use by the special handler
+			if (value == '\r\n') or (value == '\r'): value = '\n'
+			self._terminator = value
+			self._savedhandler = self._jump.get(value[0], None)
+			self._jump[value[0]] = self._handle_terminator
 
-	char = property(_getChar, doc="""The current character the tokenizer is looking at, or the NULL character if EOF has been reached""")
-	nextchar = property(_getNextChar, doc="""The character immediately after the current character, or the NULL character if it is past the EOF""")
-	markedchars = property(_getMarkedChars, doc="""The characters between the marked position and the current position in the source code""")
-	line = property(_getLine, doc="""Returns the 1-based line of the position of the tokenizer in the source code""")
-	column = property(_getColumn, doc="""Returns the 1-based column of the position of the tokenizer in the source code""")
-	terminator = property(_getTerminator, _setTerminator, doc="""The current statement termination string. Defaults to ';'""")
+	char = property(_getchar, doc="""The current character the tokenizer is looking at, or the NULL character if EOF has been reached""")
+	nextchar = property(_getnextchar, doc="""The character immediately after the current character, or the NULL character if it is past the EOF""")
+	markedchars = property(_getmarkedchars, doc="""The characters between the marked position and the current position in the source code""")
+	line = property(_getline, doc="""Returns the 1-based line of the position of the tokenizer in the source code""")
+	column = property(_getcolumn, doc="""Returns the 1-based column of the position of the tokenizer in the source code""")
+	terminator = property(_getterminator, _setterminator, doc="""The current statement termination string. Defaults to ';'""")
 
-	def _extractQuotedString(self):
+	def _extract_string(self):
 		"""Extracts a quoted string from the source code.
 
-		Returns the content of a quoted string in the
-		source code. The current position (in _index)
-		is assumed to be the opening quote of the string
-		(either ' or " although the function doesn't confirm
-		this). Quotation characters can be escaped within
-		the string by doubling, for example:
+		Returns the content of a quoted string in the source code. The current
+		position (in _index) is assumed to be the opening quote of the string
+		(either ' or " although the function doesn't confirm this). Quotation
+		characters can be escaped within the string by doubling, for example:
 
 			'Doubled ''quotation'' characters'
 
-		The method returns the unescaped content of the
-		string. Hence, in the case above the method would
-		return "Doubled 'quotation' characters" (without the
-		double-quotes). The _index variable is incremented to
-		the character beyond the closing quote of the string.
+		The method returns the unescaped content of the string. Hence, in the
+		case above the method would return "Doubled 'quotation' characters"
+		(without the double-quotes). The _index variable is incremented to the
+		character beyond the closing quote of the string.
 
-		Strings may not span multiple lines. If a CR, LF
-		or NULL character is encountered in the string,
-		an exception is raised (calling methods convert
-		this exception into an ERROR token).
+		Strings may not span multiple lines. If a CR, LF or NULL character is
+		encountered in the string, an exception is raised (calling methods
+		convert this exception into an ERROR token).
 
-		This method should be overridden in descendent
-		classes to handle those SQL dialects which permit
-		additonal escaping mechanisms (like C backslash
-		escaping).
+		This method should be overridden in descendent classes to handle those
+		SQL dialects which permit additonal escaping mechanisms (like C
+		backslash escaping).
 		"""
 		qchar = self.char
 		qcount = 1
@@ -348,49 +338,56 @@ class SQLTokenizerBase(object):
 		self._next()
 		return content
 
-	def _handleAsterisk(self):
+	def _handle_apos(self):
+		"""Parses single quote characters (') in the source."""
+		try:
+			self._addtoken(STRING, self._extract_string())
+		except ValueError, e:
+			self._addtoken(ERROR, str(e))
+
+	def _handle_asterisk(self):
 		"""Parses an asterisk character ("*") in the source."""
 		self._next()
-		self._addToken(OPERATOR, '*')
+		self._addtoken(OPERATOR, '*')
 
-	def _handleBar(self):
+	def _handle_bar(self):
 		"""Parses a vertical bar character ("|") in the source."""
 		self._next()
 		if self.char == '|':
 			self._next()
-			self._addToken(OPERATOR, '||')
+			self._addtoken(OPERATOR, '||')
 		else:
-			self._addToken(ERROR, 'Invalid operator |')
+			self._addtoken(ERROR, 'Invalid operator |')
 
-	def _handleCloseParenthesis(self):
+	def _handle_close_parens(self):
 		"""Parses a closing parenthesis character (")") in the source."""
 		self._next()
-		self._addToken(OPERATOR, ')')
+		self._addtoken(OPERATOR, ')')
 
-	def _handleColon(self):
+	def _handle_colon(self):
 		"""Parses a colon character (":") in the source."""
 		self._next()
 		if self.char in ['"', "'"]:
 			try:
-				self._addToken(PARAMETER, self._extractQuotedString())
+				self._addtoken(PARAMETER, self._extract_string())
 			except ValueError, e:
-				self._addToken(ERROR, str(e))
+				self._addtoken(ERROR, str(e))
 		else:
 			self._mark()
 			while self.char in self.identchars: self._next()
-			self._addToken(PARAMETER, self.markedchars)
+			self._addtoken(PARAMETER, self.markedchars)
 
-	def _handleComma(self):
+	def _handle_comma(self):
 		"""Parses a comma character (",") in the source."""
 		self._next()
-		self._addToken(OPERATOR, ',')
+		self._addtoken(OPERATOR, ',')
 
-	def _handleDefault(self):
+	def _handle_default(self):
 		"""Parses unexpected characters, returning an error."""
 		self._next()
-		self._addToken(ERROR, 'Unexpected character %s' % (self.char))
+		self._addtoken(ERROR, 'Unexpected character %s' % (self.char))
 
-	def _handleDigit(self):
+	def _handle_digit(self):
 		"""Parses numeric digits (0..9) in the source."""
 		self._mark()
 		self._next()
@@ -404,55 +401,48 @@ class SQLTokenizerBase(object):
 					self._next()
 			self._next()
 		try:
-			self._addToken(NUMBER, decimal.Decimal(self.markedchars))
+			self._addtoken(NUMBER, decimal.Decimal(self.markedchars))
 		except ValueError, e:
-			self._addToken(ERROR, str(e))
+			self._addtoken(ERROR, str(e))
 
-	def _handleDoubleQuote(self):
-		"""Parses double quote characters (") in the source."""
-		try:
-			self._addToken(IDENTIFIER, self._extractQuotedString())
-		except ValueError, e:
-			self._addToken(ERROR, str(e))
-
-	def _handleEqual(self):
+	def _handle_equal(self):
 		"""Parses equality characters ("=") in the source."""
 		self._next()
-		self._addToken(OPERATOR, '=')
+		self._addtoken(OPERATOR, '=')
 
-	def _handleGreater(self):
+	def _handle_greater(self):
 		"""Parses greater-than characters (">") in the source."""
 		self._next()
 		if self.char == '=':
 			self._next()
-			self._addToken(OPERATOR, '>=')
+			self._addtoken(OPERATOR, '>=')
 		else:
-			self._addToken(OPERATOR, '>')
+			self._addtoken(OPERATOR, '>')
 
-	def _handleIdent(self):
+	def _handle_ident(self):
 		"""Parses unquoted identifier characters (variable) in the source."""
 		self._mark()
 		self._next()
 		while self.char in self.identchars: self._next()
 		ident = self.markedchars.upper()
 		if ident in self.keywords:
-			self._addToken(KEYWORD, ident)
+			self._addtoken(KEYWORD, ident)
 		else:
-			self._addToken(IDENTIFIER, ident)
+			self._addtoken(IDENTIFIER, ident)
 
-	def _handleLess(self):
+	def _handle_less(self):
 		"""Parses less-than characters ("<") in the source."""
 		self._next()
 		if self.char == '=':
 			self._next()
-			self._addToken(OPERATOR, '<=')
+			self._addtoken(OPERATOR, '<=')
 		elif self.char == '>':
 			self._next()
-			self._addToken(OPERATOR, '<>')
+			self._addtoken(OPERATOR, '<>')
 		else:
-			self._addToken(OPERATOR, '<')
+			self._addtoken(OPERATOR, '<')
 
-	def _handleMinus(self):
+	def _handle_minus(self):
 		"""Parses minus characters ("-") in the source."""
 		self._next()
 		if self.sql_comments and (self.char == '-'):
@@ -461,47 +451,47 @@ class SQLTokenizerBase(object):
 			while not self.char in '\0\n': self._next()
 			content = self.markedchars
 			self._next()
-			self._addToken(COMMENT, content)
+			self._addtoken(COMMENT, content)
 		else:
-			self._addToken(OPERATOR, '-')
+			self._addtoken(OPERATOR, '-')
 
-	def _handleOpenParenthesis(self):
+	def _handle_open_parens(self):
 		"""Parses open parenthesis characters ("(") in the source."""
 		self._next()
-		self._addToken(OPERATOR, '(')
+		self._addtoken(OPERATOR, '(')
 
-	def _handlePeriod(self):
+	def _handle_period(self):
 		"""Parses full-stop characters (".") in the source."""
 		if self.nextchar in '0123456789':
 			# Numbers can start with . in SQL
-			self._handleDigit()
+			self._handle_digit()
 		else:
 			self._next()
-			self._addToken(OPERATOR, '.')
+			self._addtoken(OPERATOR, '.')
 
-	def _handlePlus(self):
+	def _handle_plus(self):
 		"""Parses plus characters ("+") in the source."""
 		self._next()
-		self._addToken(OPERATOR, '+')
+		self._addtoken(OPERATOR, '+')
 
-	def _handleQuestionMark(self):
+	def _handle_question(self):
 		"""Parses question marks ("?") in the source."""
 		self._next()
-		self._addToken(PARAMETER, None)
+		self._addtoken(PARAMETER, None)
 
-	def _handleQuote(self):
-		"""Parses single quote characters (') in the source."""
+	def _handle_quote(self):
+		"""Parses double quote characters (") in the source."""
 		try:
-			self._addToken(STRING, self._extractQuotedString())
+			self._addtoken(IDENTIFIER, self._extract_string())
 		except ValueError, e:
-			self._addToken(ERROR, str(e))
+			self._addtoken(ERROR, str(e))
 
-	def _handleSemiColon(self):
+	def _handle_semicolon(self):
 		"""Parses semi-colon characters (;) in the source."""
 		self._next()
-		self._addToken(TERMINATOR, ';')
+		self._addtoken(TERMINATOR, ';')
 
-	def _handleSlash(self):
+	def _handle_slash(self):
 		"""Parses forward-slash characters ("/") in the source."""
 		self._next()
 		if self.cpp_comments and (self.char == '/'):
@@ -510,7 +500,7 @@ class SQLTokenizerBase(object):
 			while not self.char in '\0\n': self._next()
 			content = self.markedchars
 			self._next()
-			self._addToken(COMMENT, content)
+			self._addtoken(COMMENT, content)
 		elif self.c_comments and (self.char == '*'):
 			self._next()
 			self._mark()
@@ -520,64 +510,65 @@ class SQLTokenizerBase(object):
 						raise ValueError("Incomplete comment")
 					elif (self.char == '\n') and self.newline_split:
 						self._next()
-						self._addToken(COMMENT, self.markedchars)
+						self._addtoken(COMMENT, self.markedchars)
 						self._mark()
 					elif (self.char == '*') and (self.nextchar == '/'):
 						content = self.markedchars
 						self._next(2)
-						self._addToken(COMMENT, content)
+						self._addtoken(COMMENT, content)
 						break
 					else:
 						self._next()
 			except ValueError, e:
-				self._addToken(ERROR, str(e))
+				self._addtoken(ERROR, str(e))
 		else:
-			self._addToken(OPERATOR, '/')
+			self._addtoken(OPERATOR, '/')
 
-	def _handleStatementTerm(self):
+	def _handle_terminator(self):
 		"""Parses statement terminator characters (variable) in the source."""
 		if self._source.startswith(self._terminator, self._index):
 			self._next(len(self._terminator))
-			self._addToken(TERMINATOR, None)
-		else:
+			self._addtoken(TERMINATOR, None)
+		elif self._savedhandler is not None:
 			self._savedhandler()
 
-	def _handleWhitespace(self):
+	def _handle_space(self):
 		"""Parses whitespace characters in the source."""
 		while self.char in self.spacechars: self._next()
-		self._addToken(WHITESPACE, None)
+		self._addtoken(WHITESPACE, None)
 
-	def _initHandlers(self):
+	def _init_handlers(self):
 		"""Initializes a dictionary of character handlers."""
-		# Update the _jump dictionary of characters as a method table
-		self._jump.update({
-			'(': self._handleOpenParenthesis,
-			')': self._handleCloseParenthesis,
-			'+': self._handlePlus,
-			'-': self._handleMinus,
-			'*': self._handleAsterisk,
-			'/': self._handleSlash,
-			'.': self._handlePeriod,
-			',': self._handleComma,
-			':': self._handleColon,
-			'?': self._handleQuestionMark,
-			'<': self._handleLess,
-			'=': self._handleEqual,
-			'>': self._handleGreater,
-			"'": self._handleQuote,
-			'"': self._handleDoubleQuote,
-			'|': self._handleBar,
-			';': self._handleSemiColon,
-		})
 		for char in self.spacechars:
-			self._jump[char] = self._handleWhitespace
+			self._jump[char] = self._handle_space
 		for char in self.identchars:
-			self._jump[char] = self._handleIdent
+			self._jump[char] = self._handle_ident
 		# If numerals were included in identchars above, they will be
 		# overwritten by the next bit (numerals are never permitted as the
 		# first character in an identifier)
 		for char in '0123456789':
-			self._jump[char] = self._handleDigit
+			self._jump[char] = self._handle_digit
+		# Add jump entries for symbols. Descendent classes will add extra
+		# symbols that they handle after this
+		self._jump.update({
+			'(': self._handle_open_parens,
+			')': self._handle_close_parens,
+			'+': self._handle_plus,
+			'-': self._handle_minus,
+			'*': self._handle_asterisk,
+			'/': self._handle_slash,
+			'.': self._handle_period,
+			',': self._handle_comma,
+			':': self._handle_colon,
+			'?': self._handle_question,
+			'<': self._handle_less,
+			'=': self._handle_equal,
+			'>': self._handle_greater,
+			"'": self._handle_apos,
+			'"': self._handle_quote,
+			'|': self._handle_bar,
+			';': self._handle_semicolon,
+		})
 
 	def parse(self, source, terminator=';'):
 		"""Parses the provided source into a list of token tuples."""
@@ -591,7 +582,7 @@ class SQLTokenizerBase(object):
 		self._tokencolumn = self.column
 		self._tokens = []
 		self._jump = {}
-		self._initHandlers()
+		self._init_handlers()
 		# Note that setting terminator must be done AFTER initializing the
 		# jump table as doing so re-writes elements within that table
 		self.terminator = terminator
@@ -600,8 +591,8 @@ class SQLTokenizerBase(object):
 			try:
 				self._jump[self.char]()
 			except KeyError:
-				self._handleDefault()
-		self._addToken(EOF, None)
+				self._handle_default()
+		self._addtoken(EOF, None)
 		if self.newline_split:
 			# Split the list of tokens into a list of lines of lists of tokens
 			newtokens = []
@@ -629,26 +620,26 @@ class SQL99Tokenizer(SQLTokenizerBase):
 	
 	def __init__(self):
 		super(SQL99Tokenizer, self).__init__()
-		self.keywords = set(dialects.sql99_keywords)
-		self.identchars = set(dialects.sql99_identchars)
+		self.keywords = set(sql.dialects.sql99_keywords)
+		self.identchars = set(sql.dialects.sql99_identchars)
 
 class SQL2003Tokenizer(SQLTokenizerBase):
 	"""ANSI SQL-2003 tokenizer class."""
 	
 	def __init__(self):
 		super(SQL2003Tokenizer, self).__init__()
-		self.keywords = set(dialects.sql2003_keywords)
-		self.identchars = set(dialects.sql2003_identchars)
+		self.keywords = set(sql.dialects.sql2003_keywords)
+		self.identchars = set(sql.dialects.sql2003_identchars)
 
 class DB2ZOSSQLTokenizer(SQLTokenizerBase):
 	"""IBM DB2 UDB for z/OS tokenizer class."""
 	
 	def __init__(self):
 		super(DB2ZOSSQLTokenizer, self).__init__()
-		self.keywords = set(dialects.ibmdb2zos_keywords)
-		self.identchars = set(dialects.ibmdb2zos_identchars)
+		self.keywords = set(sql.dialects.ibmdb2zos_keywords)
+		self.identchars = set(sql.dialects.ibmdb2zos_identchars)
 
-	def _handleNot(self):
+	def _handle_not(self):
 		"""Parses characters meaning "NOT" (! and ^) in the source."""
 		self._next()
 		try:
@@ -658,35 +649,73 @@ class DB2ZOSSQLTokenizer(SQLTokenizerBase):
 				'<': '>=',
 			}[self.char]
 		except KeyError:
-			self._addToken(ERROR, "Expected >, <, or =, but found %s" % (self.char))
+			self._addtoken(ERROR, "Expected >, <, or =, but found %s" % (self.char))
 		else:
 			self._next()
-			self._addToken(OPERATOR, negatedop)
+			self._addtoken(OPERATOR, negatedop)
+	
+	def _handle_hexstring(self):
+		"""Parses a hexstring literal in the source."""
+		if self.nextchar == "'":
+			self._next()
+			try:
+				s = self._extract_string()
+				if len(s) % 2 != 0:
+					raise ValueError("Hex-string must have an even length")
+				s = ''.join(chr(int(s[i:i + 2], 16)) for i in xrange(0, len(s), 2))
+			except ValueError, e:
+				self._addtoken(ERROR, str(e))
+			else:
+				self._addtoken(STRING, s)
+		else:
+			self._handle_ident()
+	
+	def _handle_unistring(self):
+		"""Parses a Unicode string literal in the source."""
+		if self.nextchar == "'":
+			self._next()
+			try:
+				# XXX Needs testing ... what exactly is the Info Center on
+				# about with these Graphic String literals (mixing DBCS in an
+				# SBCS file?!)
+				s = self._extract_string()
+			except ValueError, e:
+				self._addtoken(ERROR, str(e))
+			else:
+				self._addtoken(STRING, s)
+		else:
+			self._handle_ident()
 
-	def _initHandlers(self):
-		self._jump['!'] = self._handleNot
-		self._jump['^'] = self._handleNot
+	def _init_handlers(self):
+		super(DB2ZOSSQLTokenizer, self)._init_handlers()
+		self._jump['!'] = self._handle_not
+		self._jump['^'] = self._handle_not
+		self._jump['x'] = self._handle_hexstring
+		self._jump['X'] = self._handle_hexstring
+		self._jump['n'] = self._handle_unistring
+		self._jump['N'] = self._handle_unistring
+		self._jump['g'] = self._handle_unistring
+		self._jump['G'] = self._handle_unistring
 		# XXX What about the hook character here ... how to encode?
-		super(DB2ZOSSQLTokenizer, self)._initHandlers()
 
 class DB2UDBSQLTokenizer(DB2ZOSSQLTokenizer):
 	"""IBM DB2 UDB for Linux/Unix/Windows tokenizer class."""
 
 	def __init__(self):
 		super(DB2UDBSQLTokenizer, self).__init__()
-		self.keywords = set(dialects.ibmdb2udb_keywords)
-		self.identchars = set(dialects.ibmdb2udb_identchars)
+		self.keywords = set(sql.dialects.ibmdb2udb_keywords)
+		self.identchars = set(sql.dialects.ibmdb2udb_identchars)
 		# Support for C-style /*..*/ comments add in DB2 UDB v8 FP9
 		self.c_comments = True
 	
-	def _handlePeriod(self):
+	def _handle_period(self):
 		"""Parses full-stop characters (".") in the source."""
 		# Override the base method to handle DB2 UDB's method qualifiers (..)
 		if self.nextchar == '.':
-			self._addToken(OPERATOR, '..')
+			self._addtoken(OPERATOR, '..')
 			self._next(2)
 		else:
-			super(DB2UDBSQLTokenizer, self)._handlePeriod()
+			super(DB2UDBSQLTokenizer, self)._handle_period()
 
 if __name__ == "__main__":
 	# XXX Robust test cases
