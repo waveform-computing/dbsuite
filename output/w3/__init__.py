@@ -37,6 +37,8 @@ from sql.htmlhighlighter import SQLHTMLHighlighter
 def _copytree(src, dst):
 	"""Utility function based on copytree in shutil"""
 	names = os.listdir(src)
+	if 'CVS' in names:
+		names.remove('CVS')
 	errors = []
 	if not os.path.isdir(dst):
 		try:
