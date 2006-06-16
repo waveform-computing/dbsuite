@@ -15,7 +15,6 @@ The class is capable of reformatting the vast majority of the DB2 SQL dialect
 
 """
 
-from collections import deque
 import re
 import sys
 from sql.dialects import *
@@ -163,7 +162,7 @@ class ParseExpectedSequenceError(ParseTokenError):
 		)
 		ParseTokenError.__init__(self, tokens, errtokens[0], msg)
 
-class BaseParser(object):
+class BaseFormatter(object):
 	"""Base class for parsers.
 
 	Do not use this class directly. Instead use one of the descendent classes
@@ -199,21 +198,67 @@ class BaseParser(object):
 
 	def __init__(self):
 		"""Initializes an instance of the class"""
-		super(BaseParser, self).__init__()
+		super(BaseFormatter, self).__init__()
+		self.indent = " "*4 # Default indent is 4 spaces
 		self.debugging = 0
+
+	def _newline(self, index=0):
+		"""Adds an INDENT token to the output.
+
+		The _newline() method is called to start a new line in the output. It
+		does this by appending (or inserting, depending on the index parameter)
+		an INDENT token to the output list. Such a token starts a new line,
+		indented to the current indentation level.
+
+		If the index parameter is False, 0, or ommitted, the new INDENT token
+		is appended to the output. If the index parameter is -1, the new INDENT
+		token is inserted immediately before the last non-ignorable
+		(non-whitespace or comment) token. If the index parameter is -2, it is
+		inserted before the second to last non-ignorable token and so on.
+
+		The index parameter, if specified, may not be greater than zero.
+		"""
+		token = (INDENT, self._level, "\n" + self.indent * self._level)
+		if not index:
+			self._output.append(token)
+		else:
+			i = -1
+			while True:
+				while self._output[i][0] in (COMMENT, WHITESPACE): i -= 1
+				index += 1
+				if index >= 0: break
+			# Check the invariant is preserved (see _save_state())
+			assert len(self._output) + i >= self._statestack[-1][2]
+			self._output.insert(i, token)
+
+	def _indent(self, index=0):
+		self._level += 1
+		self._newline(index)
+
+	def _outdent(self, index=0):
+		self._level -= 1
+		# Stop two or more consecutive outdent() calls from leaving blank lines
+		if self._output[-1][0] == INDENT:
+			del self._output[-1]
+		self._newline(index)
 
 	def _save_state(self):
 		"""Saves the current state of the parser on a stack for later retrieval."""
-		# XXX The invariant below is broken by the indent system ... revise accordingly
 		# An invariant observed throughout this class (and its descendents) is
-		# that the output list NEVER shrinks, it only ever grows. Hence, to be
-		# able to roll back to a prior state, we don't need to store the entire
-		# output list, merely its length will suffice.
-		self._statestack.append((self._index, len(self._output)))
+		# that the output list NEVER shrinks, and is only ever appended to.
+		# Hence, to be able to roll back to a prior state, we don't need to
+		# store the entire output list, merely its length will suffice.
+		#
+		# Note that the _newline() method does *insert* rather than append
+		# tokens (when called with a negative index).  However, provided the
+		# tokens are inserted *after* the in the output list where the state
+		# was last saved, this also maintains the invariant (the _newline()
+		# method includes an assertion to ensure this is the case).
+		self._statestack.append((self._index, self._level, len(self._output)))
 
 	def _restore_state(self):
 		"""Restores the state of the parser from the head of the save stack."""
-		(self._index, output_len) = self._statestack.pop()
+		(self._index, self._level, output_len) = self._statestack.pop()
 		del self._output[output_len:]
 
 	def _forget_state(self):
@@ -459,6 +504,7 @@ class BaseParser(object):
 		self._tokens = tokens
 		self._index = 0
 		self._output = []
+		self._level = 0
 	
 	def _parse_finish(self):
 		"""Cleans up output tokens and recalculates line and column positions"""
@@ -515,7 +561,7 @@ class BaseParser(object):
 		self._parse_finish()
 		return self._output
 
-class SQLFormatter(BaseParser):
+class SQLFormatter(BaseFormatter):
 	"""Reformatter which breaks up and re-indents SQL.
 
 	This class is, at its core, a full blown SQL language parser that
@@ -526,50 +572,6 @@ class SQLFormatter(BaseParser):
 
 	def __init__(self):
 		super(SQLFormatter, self).__init__()
-		self.indent = " "*4 # Default indent is 4 spaces
-
-	def _newline(self, index=0):
-		"""Adds an INDENT token to the output.
-
-		The _newline() method is called to start a new line
-		in the output. It does this by appending (or
-		inserting, depending on the index parameter) an
-		INDENT token to the output list. Such a token starts
-		a new line, indented to the current indentation
-		level.
-
-		If the index parameter is False, 0, or ommitted, the
-		new INDENT token is appended to the output. If the
-		index parameter is -1, the new INDENT token is
-		inserted immediately before the last non-ignorable
-		(non-whitespace or comment) token. If the index
-		parameter is -2, it is inserted before the second to
-		last non-ignorable token and so on.
-
-		The index parameter, if specified, may not be greater
-		than zero.
-		"""
-		token = (INDENT, self._level, "\n" + self.indent * self._level)
-		if not index:
-			self._output.append(token)
-		else:
-			i = -1
-			while True:
-				while self._output[i][0] in (COMMENT, WHITESPACE): i -= 1
-				index += 1
-				if index >= 0: break
-			self._output.insert(i, token)
-
-	def _indent(self, index=0):
-		self._level += 1
-		self._newline(index)
-
-	def _outdent(self, index=0):
-		self._level -= 1
-		# Stop two or more consecutive outdent() calls from leaving blank lines
-		if self._output[-1][0] == INDENT:
-			del self._output[-1]
-		self._newline(index)
 
 	# PATTERNS ###############################################################
 	
@@ -4457,11 +4459,6 @@ class SQLFormatter(BaseParser):
 		# Override _parse_top to make a 'statement' the top of the parse tree
 		self._parse_statement()
 
-	def _parse_init(self, tokens):
-		"""Sets up the parser with the specified tokens as input"""
-		super(SQLFormatter, self).__init__(tokens)
-		self._level = 0
-	
 	def _format_token(self, t):
 		"""Reformats tokens for output"""
 		
