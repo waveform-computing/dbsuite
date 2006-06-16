@@ -16,13 +16,14 @@ class Document(object):
 		self._sections = []
 		# Attribute                            Format
 		self.updated = datetime.date.today() # datetime object
-		self.author = ''                     # simple text
+		self.author = ''                     # text
 		self.authoremail = ''                # e-mail address
 		self.sitetitle = ''                  # HTML
 		self.title = ''                      # HTML
 		self.keywords = []                   # List of keywords
 		self.breadcrumbs = []                # List of (href, title) tuples
 		self.menu = []                       # List of (href, title, [children]) tuples
+		self.links = []                      # List of (rel, href, title) tuples
 
 	def addSection(self, id, title):
 		"""Starts a new section in the current document with the specified id and title"""
@@ -63,6 +64,11 @@ class Document(object):
 			index,
 			content
 		])
+		# Construct the head links
+		links = '\n'.join([
+			makeTag('link', {'rel': rel, 'href': href, 'title': title})
+			for (rel, href, title) in self.links
+		])
 		# Construct the breadcrumb links
 		crumbs = ' &raquo; '.join([
 			makeTag('a', {'href': crumbhref}, escape(crumbtitle))
@@ -102,6 +108,7 @@ class Document(object):
 			'bodydoctitle':    self.title,
 			'bodysitetitle':   self.sitetitle,
 			'bodyupdated':     escape(self.updated.strftime('%a, %d %b %Y')),
+			'links':           links,
 			'breadcrumbs':     crumbs,
 			'menu':            makeMenuDiv(0, self.menu),
 			'body':            body,

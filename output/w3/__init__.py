@@ -237,6 +237,15 @@ class DocOutput(object):
 		while not o is None:
 			doc.breadcrumbs.insert(0, (filename(o), '%s %s' % (o.typeName, o.name)))
 			o = o.parent
+		doc.links = [('home', 'index.html', 'Home')]
+		if object.parent is not None:
+			doc.links.append(('up', filename(object.parent), 'Up'))
+			if object.prior is not None:
+				doc.links.append(('prev', filename(object.prior), 'Prior'))
+				doc.links.append(('first', filename(object.first), 'First'))
+			if object.next is not None:
+				doc.links.append(('next', filename(object.next), 'Next'))
+				doc.links.append(('last', filename(object.last), 'Last'))
 		doc.breadcrumbs.insert(0, ('index.html', 'Home'))
 		doc.menu = self.createMenu(object)
 		return doc
