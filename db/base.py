@@ -54,23 +54,38 @@ class DocBase(object):
 
 	def getNext(self):
 		if self.parentList is None:
-			raise NotImplementedError
-		else:
-			i = self.parentIndex
-			if i < len(self.parentList) - 1:
-				return self.parentList[i + 1]
-			else:
-				return None
+			return None
+		try:
+			return self.parentList[self.parentIndex + 1]
+		except IndexError:
+			return None
 
 	def getPrior(self):
 		if self.parentList is None:
-			raise NotImplementedError
-		else:
-			i = self.parentIndex
-			if i > 0:
-				return self.parentList[i - 1]
+			return None
+		try:
+			if self.parentIndex > 0:
+				return self.parentList[self.parentIndex - 1]
 			else:
 				return None
+		except IndexError:
+			return None
+
+	def getFirst(self):
+		if self.parentList is None:
+			return None
+		try:
+			return self.parentList[0]
+		except IndexError:
+			return None
+	
+	def getLast(self):
+		if self.parentList is None:
+			return None
+		try:
+			return self.parentList[-1]
+		except IndexError:
+			return None
 
 	def getCreateSql(self):
 		raise NotImplementedError
@@ -94,7 +109,9 @@ class DocBase(object):
 	description = property(lambda self: self.getDescription(), doc="""Returns a brief description of the object""")
 	system = property(lambda self: self.getSystem(), doc="""True if the object is a system-defined object""")
 	next = property(lambda self: self.getNext(), doc="""Returns the next object of the same type with the same parent, or None if this is the last such object""")
-	prior = property(lambda self: self.getPrior(), doc="""Returns the previous object of the same type with the same parent, or None if this is the last such object""")
+	prior = property(lambda self: self.getPrior(), doc="""Returns the previous object of the same type with the same parent, or None if this is the first such object""")
+	first = property(lambda self: self.getFirst(), doc="""Returns the first object of the same type with the same parent, or None""")
+	last = property(lambda self: self.getLast(), doc="""Returns the last object of the same type with the same parent, or None""")
 	createSql = property(lambda self: self.getCreateSql(), doc="""The SQL that can be used to create the object""")
 	dropSql = property(lambda self: self.getDropSql(), doc="""The SQL that can be used to drop the object""")
 
