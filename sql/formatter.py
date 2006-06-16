@@ -4518,7 +4518,7 @@ class SQLFormatter(BaseFormatter):
 			return (t[0], t[1], quotestr(t[1], "'"))
 		elif t[0] == TERMINATOR:
 			return (t[0], None, t[2] + '\n')
-		elif token[0] == INDENT:
+		elif t[0] == INDENT:
 			return (WHITESPACE, None, '\n' + self.indent*t[1])
 		elif t[0] == STATEMENT:
 			return (t[0], None, '@')
