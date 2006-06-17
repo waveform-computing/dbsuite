@@ -2691,30 +2691,53 @@ class SQLFormatter(BaseFormatter):
 		# Parse parameter list
 		self._expect('(')
 		if not self._match(')'):
-			self._parse_ident_type_list()
+			while True:
+				self._save_state()
+				try:
+					self._expect(IDENTIFIER)
+					self._parse_datatype()
+				except ParseError:
+					self._restore_state()
+					self._parse_datatype()
+				else:
+					self._forget_state()
+				self._match_sequence(['AS', 'LOCATOR'])
+				if not self._match(','):
+					break
 			self._expect(')')
 		self._indent()
 		# Parse function options (which can appear in any order)
-		valid = [
-			'RETURNS',
-			'SPECIFIC',
-			'LANGUAGE',
-			'PARAMETER',
-			'NOT',
-			'DETERMINISTIC',
-			'NO',
-			'EXTERNAL',
-			'READS',
-			'MODIFIES',
-			'CONTAINS',
-			'STATIC',
+		valid = set([
+			'ALLOW',
 			'CALLED',
-			'NULL',
+			'CONTAINS',
+			'DBINFO',
+			'DETERMINISTIC',
+			'DISALLOW',
+			'EXTERNAL',
+			'FENCED',
+			'FINAL',
 			'INHERIT',
-		]
+			'LANGUAGE',
+			'MODIFIES',
+			'NO',
+			'NOT',
+			'NULL',
+			'PARAMETER',
+			'READS',
+			'RETURNS',
+			'SCRATCHPAD',
+			'SPECIFIC',
+			'STATIC',
+			'THREADSAFE',
+			'TRANSFORM',
+		])
+		# It's all too difficult trying to track exactly what can still be
+		# specified in a CREATE FUNCTION statement (given the different types
+		# of SQL, external scalar, external table, etc). Here we simply loop
+		# round accepting any valid argument without tracking which we've seen
+		# before
 		while True:
-			if not valid:
-				break
 			# Ambiguity: INHERIT SPECIAL REGISTERS (which appears in the
 			# variable order options) and INHERIT ISOLATION LEVEL (which must
 			# appear after the variable order options). See below.
@@ -2723,60 +2746,84 @@ class SQLFormatter(BaseFormatter):
 				t = self._match_one_of(valid)
 				if t:
 					t = t[1]
-					valid.remove(t)
 				else:
 					# break would skip the except and else blocks
 					raise ParseBacktrack()
-				if t == 'RETURNS':
-					if self._match_one_of(['ROW', 'TABLE']):
-						self._expect('(')
-						self._parse_ident_type_list()
-						self._expect(')')
-					else:
-						self._parse_datatype()
-				elif t == 'SPECIFIC':
-					self._expect(IDENTIFIER)
-				elif t == 'LANGUAGE':
-					self._expect('SQL')
-				elif t == 'PARAMETER':
-					self._expect('CCSID')
-					self._expect_one_of(['ASCII', 'UNICODE'])
-				elif t == 'NOT':
-					self._expect('DETERMINISTIC')
-					valid.remove('DETERMINISTIC')
-				elif t == 'DETERMINISTIC':
-					valid.remove('NOT')
-				elif t == 'NO':
-					self._expect_sequence(['EXTERNAL', 'ACTION'])
-					valid.remove('EXTERNAL')
-				elif t == 'EXTERNAL':
-					self._expect('ACTION')
-					valid.remove('NO')
-				elif t == 'READS':
-					self._expect_sequence(['SQL', 'DATA'])
-					valid.remove('MODIFIES')
-					valid.remove('CONTAINS')
-				elif t == 'MODIFIES':
-					self._expect_sequence(['SQL', 'DATA'])
-					valid.remove('READS')
-					valid.remove('CONTAINS')
-				elif t == 'CONTAINS':
-					self._expect('SQL')
-					valid.remove('READS')
-					valid.remove('MODIFIES')
-				elif t == 'STATIC':
-					self._expect('DISPATCH')
+				if t == 'ALLOW':
+					self._expect('PARALLEL')
 				elif t == 'CALLED':
 					self._expect_sequence(['ON', 'NULL', 'INPUT'])
-					valid.remove('NULL')
-				elif t == 'NULL':
+				elif t == 'CONTAINS':
+					self._expect('SQL')
+				elif t == 'DBINFO':
+					pass
+				elif t == 'DETERMINISTIC':
+					pass
+				elif t == 'DISALLOW':
+					self._expect('PARALLEL')
+				elif t == 'EXTERNAL':
+					if self._match('NAME'):
+						self._expect_one_of([STRING, IDENTIFIER])
+					else:
+						self._expect('ACTION')
+				elif t == 'FENCED':
+					pass
+				elif t == 'FINAL':
 					self._expect('CALL')
-					valid.remove('CALLED')
 				elif t == 'INHERIT':
 					# Try and parse INHERIT SPECIAL REGISTERS first
 					if not self._match('SPECIAL'):
 						raise ParseBacktrack()
 					self._expect('REGISTERS')
+				elif t == 'LANGUAGE':
+					self._expect_one_of(['SQL', 'C', 'JAVA', 'CLR', 'OLE'])
+				elif t == 'MODIFIES':
+					self._expect_sequence(['SQL', 'DATA'])
+				elif t == 'NO':
+					t = self._expect_one_of(['DBINFO', 'EXTERNAL', 'FINAL', 'SCRATCHPAD'])[1]
+					if t == 'EXTERNAL':
+						self._expect('ACTION')
+					elif t == 'FINAL':
+						self._expect('CALL')
+				elif t == 'NOT':
+					self._expect_one_of(['DETERMINISTIC', 'FENCED', 'THREADSAFE'])
+				elif t == 'NULL':
+					self._expect('CALL')
+				elif t == 'PARAMETER':
+					if self._match('CCSID'):
+						self._expect_one_of(['ASCII', 'UNICODE'])
+					else:
+						self._expect('STYLE')
+						self._expect_one_of(['DB2GENERAL', 'JAVA', 'SQL'])
+				elif t == 'READS':
+					self._expect_sequence(['SQL', 'DATA'])
+				elif t == 'RETURNS':
+					if self._match('NULL'):
+						self._expect_sequence(['ON', 'NULL', 'INPUT'])
+					elif self._match_one_of(['ROW', 'TABLE']):
+						self._expect('(')
+						while True:
+							self._expect(IDENTIFIER)
+							self._parse_datatype()
+							self._match_sequence(['AS', 'LOCATOR'])
+							if not self._match(','):
+								break
+						self._expect(')')
+					else:
+						self._parse_datatype()
+						if self._match_sequence(['CAST', 'FROM']):
+							self._parse_datatype()
+						self._match_sequence(['AS', 'LOCATOR'])
+				elif t == 'SCRATCHPAD':
+					self._expect(NUMBER)
+				elif t == 'SPECIFIC':
+					self._expect(IDENTIFIER)
+				elif t == 'STATIC':
+					self._expect('DISPATCH')
+				elif t == 'THREADSAFE':
+					pass
+				elif t == 'TRANSFORM':
+					self._expect_sequence(['GROUP', IDENTIFIER])
 				self._newline()
 			except ParseBacktrack:
 				# NOTE: This block only gets called for ParseBacktrack errors.
@@ -2852,85 +2899,101 @@ class SQLFormatter(BaseFormatter):
 		if self._match('('):
 			while True:
 				self._match_one_of(['IN', 'OUT', 'INOUT'])
-				self._expect(IDENTIFIER)
-				self._parse_datatype()
+				self._save_state()
+				try:
+					self._expect(IDENTIFIER)
+					self._parse_datatype()
+				except ParseError:
+					self._restore_state()
+					self._parse_datatype()
+				else:
+					self._forget_state()
 				if not self._match(','):
 					break
 			self._expect(')')
 		# Parse procedure options (which can appear in any order)
-		valid = [
-			'SPECIFIC',
-			'LANGUAGE',
-			'PARAMETER',
-			'NOT',
-			'DETERMINISTIC',
-			'NO',
-			'EXTERNAL',
-			'READS',
-			'MODIFIES',
-			'CONTAINS',
+		valid = set([
 			'CALLED',
-			'NULL',
-			'INHERIT',
+			'CONTAINS',
+			'DBINFO',
+			'DETERMINISTIC',
 			'DYNAMIC',
-			'OLD',
+			'EXTERNAL',
+			'FENCED',
+			'INHERIT',
+			'LANGUAGE',
+			'MODIFIES',
 			'NEW',
-		]
+			'NO',
+			'NOT',
+			'NOT',
+			'NULL',
+			'OLD',
+			'PARAMETER',
+			'PROGRAM',
+			'READS',
+			'SPECIFIC',
+			'THREADSAFE',
+		])
+		# It's all too difficult trying to track exactly what can still be
+		# specified in a CREATE PROCEDURE statement. Here we simply loop round
+		# accepting any valid argument without tracking which we've seen before
 		while True:
-			if not valid:
-				break
 			t = self._match_one_of(valid)
 			if t:
 				t = t[1]
-				valid.remove(t)
 			else:
 				break
-			if t == 'DYNAMIC':
-				self._expect_sequence(['RESULT', 'SETS', NUMBER])
-			elif t == 'SPECIFIC':
-				self._expect(IDENTIFIER)
-			elif t == 'LANGUAGE':
-				self._expect('SQL')
-			elif t == 'PARAMETER':
-				self._expect('CCSID')
-				self._expect_one_of(['ASCII', 'UNICODE'])
-			elif t == 'NOT':
-				self._expect('DETERMINISTIC')
-				valid.remove('DETERMINISTIC')
-			elif t == 'DETERMINISTIC':
-				valid.remove('NOT')
-			elif t == 'NO':
-				self._expect_sequence(['EXTERNAL', 'ACTION'])
-				valid.remove('EXTERNAL')
-			elif t == 'EXTERNAL':
-				self._expect('ACTION')
-				valid.remove('NO')
-			elif t == 'READS':
-				self._expect_sequence(['SQL', 'DATA'])
-				valid.remove('MODIFIES')
-				valid.remove('CONTAINS')
-			elif t == 'MODIFIES':
-				self._expect_sequence(['SQL', 'DATA'])
-				valid.remove('READS')
-				valid.remove('CONTAINS')
+			if t == 'CALLED':
+				self._expect_sequence(['ON', 'NULL', 'INPUT'])
 			elif t == 'CONTAINS':
 				self._expect('SQL')
-				valid.remove('READS')
-				valid.remove('MODIFIES')
-			elif t == 'CALLED':
-				self._expect_sequence(['ON', 'NULL', 'INPUT'])
-				valid.remove('NULL')
-			elif t == 'NULL':
-				self._expect('CALL')
-				valid.remove('CALLED')
+			elif t == 'DBINFO':
+				pass
+			elif t == 'DETERMINISTIC':
+				pass
+			elif t == 'DYNAMIC':
+				self._expect_sequence(['RESULT', 'SETS', NUMBER])
+			elif t == 'EXTERNAL':
+				if self._match('NAME'):
+					self._expect_one_of([STRING, IDENTIFIER])
+				else:
+					self._expect('ACTION')
+			elif t == 'FENCED':
+				pass
 			elif t == 'INHERIT':
 				self._expect_sequence(['SPECIAL', 'REGISTERS'])
-			elif t in ['OLD', 'NEW']:
+			elif t == 'LANGUAGE':
+				self._expect_one_of(['SQL', 'C', 'JAVA', 'COBOL', 'CLR', 'OLE'])
+			elif t == 'MODIFIES':
+				self._expect_sequence(['SQL', 'DATA'])
+			elif t in ['NEW', 'OLD']:
 				self._expect_sequence(['SAVEPOINT', 'LEVEL'])
-				if t == 'OLD':
-					valid.remove('NEW')
+			elif t == 'NO':
+				if self._match('EXTERNAL'):
+					self._expect('ACTION')
 				else:
-					valid.remove('OLD')
+					self._expect('DBINFO')
+			elif t == 'NOT':
+				self._expect_one_of(['DETERMINISTIC', 'FENCED', 'THREADSAFE'])
+			elif t == 'NULL':
+				self._expect('CALL')
+			elif t == 'PARAMETER':
+				if self._match('CCSID'):
+					self._expect_one_of(['ASCII', 'UNICODE'])
+				else:
+					self._expect('STYLE')
+					if self._expect_one_of(['DB2GENERAL', 'DB2SQL', 'GENERAL', 'JAVA', 'SQL'])[1] == 'GENERAL':
+						self._match_sequence(['WITH', 'NULLS'])
+			elif t == 'PROGRAM':
+				self._expect('TYPE')
+				self._expect_one_of(['SUB', 'MAIN'])
+			elif t == 'READS':
+				self._expect_sequence(['SQL', 'DATA'])
+			elif t == 'SPECIFIC':
+				self._expect(IDENTIFIER)
+			elif t == 'THREADSAFE':
+				pass
 		self._expect('BEGIN')
 		self._parse_procedure_compound_statement()
 	
