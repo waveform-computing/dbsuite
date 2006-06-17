@@ -64,11 +64,23 @@ class Schema(DocBase):
 			self.__specificRoutines[funcRec['specificName']] = func
 			self.__specificFunctions[funcRec['specificName']] = func
 		self.__functionList = sorted(self.__specificFunctions.itervalues(), key=lambda function:function.name)
+		for procRec in [cache.procedures[(schema, name)] for (schema, name) in cache.procedures if schema = self.name]:
+			proc = Procedure(self, cache, **procRec)
+			if not procRec['name'] in self.__routines:
+				self.__routines[procRec['name']] = []
+			self.__routines[procRec['name']].append(proc)
+			if not procRec['name'] in self.__procedures:
+				self.__procedures[procRec['name']] = []
+			self.__procedures[procRec['name']].append(proc)
+			self.__specificRoutines[procRec['specificName']] = proc
+			self.__specificProcedures[procRec['specificName']] = proc
+		self.__procedureList = sorted(self.__specificProcedures.itervalues(), key=lambda procedure:procedure.name)
 		# XXX Add support for methods
-		# XXX Add support for stored procedures
 		self.__routineList = sorted(self.__specificRoutines.itervalues(), key=lambda routine:routine.name)
 		# XXX Add support for sequences
-		# XXX Add support for triggers
+		for trigRec in [cache.triggers[(schema, name)] for (schema, name) in cache.triggers if schema = self.name]:
+			self.__triggers[trigRec['name']] = Trigger(self, cache, **trigRec)
+		self.__triggerList = sorted(self.__triggers.itervalues(), key=lambda trigger:trigger.name)
 
 	def getTypeName(self):
 		return "Schema"
@@ -139,6 +151,12 @@ class Schema(DocBase):
 	def __getIndexList(self):
 		return self.__indexList
 	
+	def __getTriggers(self):
+		return self.__triggers
+
+	def __getTriggerList(self):
+		return self.__triggerList
+	
 	def __getRoutines(self):
 		return self.__routines
 	
@@ -178,9 +196,6 @@ class Schema(DocBase):
 	def __getSequences(self):
 		return self.__sequences
 	
-	def __getTriggers(self):
-		return self.__triggers
-
 	def __getOwner(self):
 		return self.__owner
 
@@ -216,6 +231,7 @@ class Schema(DocBase):
 	specificProcedures = property(__getSpecificProcedures, doc="""The procedures contained in the schema indexed by specific name""")
 	sequences = property(__getSequences, doc="""The sequences contained in the schema""")
 	triggers = property(__getTriggers, doc="""The triggers contained in the schema""")
+	triggerList = property(__getTriggerList, doc="""The triggers contained in the schema, sorted by name""")
 	owner = property(__getOwner, doc="""The authorization ID of the schema""")
 	definer = property(__getDefiner, doc="""The user who created the schema""")
 	created = property(__getCreated, doc="""Timestamp indicating when the schema was created""")
