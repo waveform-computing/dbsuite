@@ -64,7 +64,7 @@ class Schema(DocBase):
 			self.__specificRoutines[funcRec['specificName']] = func
 			self.__specificFunctions[funcRec['specificName']] = func
 		self.__functionList = sorted(self.__specificFunctions.itervalues(), key=lambda function:function.name)
-		for procRec in [cache.procedures[(schema, name)] for (schema, name) in cache.procedures if schema = self.name]:
+		for procRec in [cache.procedures[(schema, name)] for (schema, name) in cache.procedures if schema == self.name]:
 			proc = Procedure(self, cache, **procRec)
 			if not procRec['name'] in self.__routines:
 				self.__routines[procRec['name']] = []
@@ -78,7 +78,7 @@ class Schema(DocBase):
 		# XXX Add support for methods
 		self.__routineList = sorted(self.__specificRoutines.itervalues(), key=lambda routine:routine.name)
 		# XXX Add support for sequences
-		for trigRec in [cache.triggers[(schema, name)] for (schema, name) in cache.triggers if schema = self.name]:
+		for trigRec in [cache.triggers[(schema, name)] for (schema, name) in cache.triggers if schema == self.name]:
 			self.__triggers[trigRec['name']] = Trigger(self, cache, **trigRec)
 		self.__triggerList = sorted(self.__triggers.itervalues(), key=lambda trigger:trigger.name)
 

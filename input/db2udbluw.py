@@ -853,8 +853,8 @@ class Cache(object):
 				FROM
 					%(schema)s.TRIGGERS
 				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
-			self.triggers = dict([(row['schemaName'], row['name']), row) for row in _fetch_dict(cursor)])
-		finally
+			self.triggers = dict([((row['schemaName'], row['name']), row) for row in _fetch_dict(cursor)])
+		finally:
 			del cursor
 		for row in self.triggers.itervalues():
 			row['created'] = makeDateTime(row['created'])
