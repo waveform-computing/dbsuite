@@ -37,8 +37,8 @@ class Function(Routine):
 		self.__params = {}
 		self.__returns = {}
 		myparams = [
-			cache.parameters[(schemaName, specificName, paramType, paramPos)]
-			for (schemaName, specificName, paramType, paramPos) in cache.parameters
+			cache.func_params[(schemaName, specificName, paramType, paramPos)]
+			for (schemaName, specificName, paramType, paramPos) in cache.func_params
 			if schemaName == schema.name and specificName == self.specificName
 		]
 		for row in myparams:
