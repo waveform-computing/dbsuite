@@ -60,6 +60,9 @@ class Cache(object):
 		self._get_check_fields(connection, doccat)
 		self._get_functions(connection, doccat)
 		self._get_function_params(connection, doccat)
+		self._get_procedures(connection, doccat)
+		self._get_procedure_params(connection, doccat)
+		self._get_triggers(connection, doccat)
 		self._get_tablespaces(connection, doccat)
 		self._get_tablespace_tables(connection, doccat)
 		self._get_tablespace_indexes(connection, doccat)
@@ -75,7 +78,8 @@ class Cache(object):
 					RTRIM(DEFINER)    AS "definer",
 					CHAR(CREATE_TIME) AS "created",
 					REMARKS           AS "description"
-				FROM %(schema)s.SCHEMATA
+				FROM
+					%(schema)s.SCHEMATA
 				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 			self.schemas = dict([(row['name'], row) for row in _fetch_dict(cursor)])
 		finally:
@@ -101,7 +105,8 @@ class Cache(object):
 					CHAR(CREATE_TIME)   AS "created",
 					FINAL               AS "final",
 					REMARKS             AS "description"
-				FROM %(schema)s.DATATYPES
+				FROM
+					%(schema)s.DATATYPES
 				WHERE INSTANTIABLE = 'Y'
 				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 			self.datatypes = dict([((row['schemaName'], row['name']), row) for row in _fetch_dict(cursor)])
@@ -147,8 +152,10 @@ class Cache(object):
 					CLUSTERED            AS "clustered",
 					ACTIVE_BLOCKS        AS "activeBlocks",
 					REMARKS              AS "description"
-				FROM %(schema)s.TABLES
-				WHERE TYPE = 'T'
+				FROM
+					%(schema)s.TABLES
+				WHERE
+					TYPE = 'T'
 				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 			self.tables = dict([((row['schemaName'], row['name']), row) for row in _fetch_dict(cursor)])
 		finally:
@@ -192,9 +199,9 @@ class Cache(object):
 				FROM
 					%(schema)s.TABLES T
 					INNER JOIN %(schema)s.VIEWS V
-					ON T.TABSCHEMA = V.VIEWSCHEMA
-					AND T.TABNAME = V.VIEWNAME
-					AND T.TYPE = 'V'
+						ON T.TABSCHEMA = V.VIEWSCHEMA
+						AND T.TABNAME = V.VIEWNAME
+						AND T.TYPE = 'V'
 				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 			self.views = dict([((row['schemaName'], row['name']), row) for row in _fetch_dict(cursor)])
 		finally:
@@ -202,7 +209,7 @@ class Cache(object):
 		for row in self.views.itervalues():
 			row['created'] = makeDateTime(row['created'])
 			row['readOnly'] = makeBoolean(row['readOnly'])
-			row['valid'] = makeBoolean(row['valid'])
+			row['valid'] = makeBoolean(row['valid'], falseValue='X')
 			row['check'] = {
 				'N': 'No Check',
 				'L': 'Local Check',
@@ -213,7 +220,6 @@ class Cache(object):
 	def _get_aliases(self, connection, doccat):
 		# XXX Query aliases
 		logging.debug("Retrieving aliases")
-		#cursor = connection.cursor()
 		self.aliases = {}
 
 	def _get_dependencies(self, connection, doccat):
@@ -226,8 +232,10 @@ class Cache(object):
 					RTRIM(BNAME)      AS "relationName",
 					RTRIM(TABSCHEMA)  AS "depSchema",
 					RTRIM(TABNAME)    AS "depName"
-				FROM %(schema)s.TABDEP
-				WHERE BTYPE IN ('A', 'S', 'T', 'U', 'V', 'W')
+				FROM
+					%(schema)s.TABDEP
+				WHERE
+					BTYPE IN ('A', 'S', 'T', 'U', 'V', 'W')
 				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 			self.dependents = {}
 			self.dependencies = {}
@@ -275,7 +283,7 @@ class Cache(object):
 				FROM
 					%(schema)s.INDEXES I
 					INNER JOIN %(schema)s.TABLESPACES T
-					ON I.TBSPACEID = T.TBSPACEID
+						ON I.TBSPACEID = T.TBSPACEID
 				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 			self.indexes = dict([((row['schemaName'], row['name']), row) for row in _fetch_dict(cursor)])
 		finally:
@@ -304,7 +312,8 @@ class Cache(object):
 					RTRIM(INDNAME)   AS "indexName",
 					RTRIM(COLNAME)   AS "fieldName",
 					COLORDER         AS "order"
-				FROM %(schema)s.INDEXCOLUSE
+				FROM
+					%(schema)s.INDEXCOLUSE
 				ORDER BY
 					INDSCHEMA,
 					INDNAME,
@@ -368,8 +377,10 @@ class Cache(object):
 					COMPRESS          AS "compressDefault",
 					RTRIM(TEXT)       AS "generateExpression",
 					REMARKS           AS "description"
-				FROM %(schema)s.COLUMNS
-				WHERE HIDDEN <> 'S'
+				FROM
+					%(schema)s.COLUMNS
+				WHERE
+					HIDDEN <> 'S'
 				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 			self.fields = dict([((row['schemaName'], row['tableName'], row['name']), row) for row in _fetch_dict(cursor)])
 		finally:
@@ -404,8 +415,10 @@ class Cache(object):
 					RTRIM(DEFINER)    AS "definer",
 					CHECKEXISTINGDATA AS "checkExisting",
 					REMARKS           AS "description"
-				FROM %(schema)s.TABCONST
-				WHERE TYPE IN ('U', 'P')
+				FROM
+					%(schema)s.TABCONST
+				WHERE
+					TYPE IN ('U', 'P')
 				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 			self.uniqueKeys = dict([((row['schemaName'], row['tableName'], row['name']), row) for row in _fetch_dict(cursor)])
 		finally:
@@ -427,7 +440,8 @@ class Cache(object):
 					RTRIM(TABNAME)   AS "keyTable",
 					RTRIM(CONSTNAME) AS "keyName",
 					RTRIM(COLNAME)   AS "fieldName"
-				FROM %(schema)s.KEYCOLUSE
+				FROM
+					%(schema)s.KEYCOLUSE
 				ORDER BY
 					TABSCHEMA,
 					TABNAME,
@@ -465,10 +479,10 @@ class Cache(object):
 				FROM
 					%(schema)s.TABCONST T
 					INNER JOIN %(schema)s.REFERENCES R
-					ON T.TABSCHEMA = R.TABSCHEMA
-					AND T.TABNAME = R.TABNAME
-					AND T.CONSTNAME = R.CONSTNAME
-					AND T.TYPE = 'F'
+						ON T.TABSCHEMA = R.TABSCHEMA
+						AND T.TABNAME = R.TABNAME
+						AND T.CONSTNAME = R.CONSTNAME
+						AND T.TYPE = 'F'
 				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 			self.foreignKeys = dict([((row['schemaName'], row['tableName'], row['name']), row) for row in _fetch_dict(cursor)])
 		finally:
@@ -514,7 +528,8 @@ class Cache(object):
 						ON R.REFTABSCHEMA = KP.TABSCHEMA
 						AND R.REFTABNAME = KP.TABNAME
 						AND R.REFKEYNAME = KP.CONSTNAME
-				WHERE KF.COLSEQ = KP.COLSEQ
+				WHERE
+					KF.COLSEQ = KP.COLSEQ
 				ORDER BY
 					R.TABSCHEMA,
 					R.TABNAME,
@@ -551,10 +566,10 @@ class Cache(object):
 				FROM
 					%(schema)s.TABCONST T
 					INNER JOIN %(schema)s.CHECKS C
-					ON T.TABSCHEMA = C.TABSCHEMA
-					AND T.TABNAME = C.TABNAME
-					AND T.CONSTNAME = C.CONSTNAME
-					AND T.TYPE = 'K'
+						ON T.TABSCHEMA = C.TABSCHEMA
+						AND T.TABNAME = C.TABNAME
+						AND T.CONSTNAME = C.CONSTNAME
+						AND T.TYPE = 'K'
 				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 			self.checks = dict([((row['schemaName'], row['tableName'], row['name']), row) for row in _fetch_dict(cursor)])
 		finally:
@@ -587,7 +602,8 @@ class Cache(object):
 					RTRIM(TABNAME)   AS "keyTable",
 					RTRIM(CONSTNAME) AS "keyName",
 					RTRIM(COLNAME)   AS "fieldName"
-				FROM %(schema)s.COLCHECKS
+				FROM
+					%(schema)s.COLCHECKS
 				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 			self.checkFields = {}
 			for (keySchema, keyTable, keyName, fieldName) in cursor.fetchall():
@@ -627,8 +643,10 @@ class Cache(object):
 					RTRIM(FUNC_PATH)         AS "funcPath",
 					TEXT                     AS "sql",
 					REMARKS                  AS "description"
-				FROM %(schema)s.ROUTINES
-				WHERE ROUTINETYPE = 'F'
+				FROM
+					%(schema)s.ROUTINES
+				WHERE
+					ROUTINETYPE = 'F'
 				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 			self.functions = dict([((row['schemaName'], row['specificName']), row) for row in _fetch_dict(cursor)])
 		finally:
@@ -669,7 +687,110 @@ class Cache(object):
 			row['sql'] = str(row['sql'])
 
 	def _get_function_params(self, connection, doccat):
-		logging.debug("Retrieving parameters")
+		logging.debug("Retrieving function parameters")
+		cursor = connection.cursor()
+		try:
+			cursor.execute("""
+				SELECT
+					P.RTRIM(ROUTINESCHEMA)          AS "schemaName",
+					P.RTRIM(ROUTINENAME)            AS "routineName",
+					P.RTRIM(SPECIFICNAME)           AS "specificName",
+					P.RTRIM(COALESCE(PARMNAME, '')) AS "name",
+					P.ORDINAL                       AS "position",
+					P.ROWTYPE                       AS "type",
+					P.RTRIM(TYPESCHEMA)             AS "datatypeSchema",
+					P.RTRIM(TYPENAME)               AS "datatypeName",
+					P.LOCATOR                       AS "locator",
+					P.LENGTH                        AS "size",
+					P.SCALE                         AS "scale",
+					P.CODEPAGE                      AS "codepage",
+					P.REMARKS                       AS "description"
+				FROM
+					%(schema)s.ROUTINEPARMS P
+					INNER JOIN %(schema)s.ROUTINES R
+						ON P.ROUTINESCHEMA = R.ROUTINESCHEMA
+						AND P.SPECIFICNAME = R.SPECIFICNAME
+				WHERE
+					R.ROUTINETYPE = 'F'
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+			self.func_params = dict([((row['schemaName'], row['specificName'], row['type'], row['position']), row) for row in _fetch_dict(cursor)])
+		finally:
+			del cursor
+		for row in self.func_params.itervalues():
+			row['locator'] = makeBoolean(row['locator'])
+			if row['size'] == 0: row['size'] = None
+			if row['scale'] == -1: row['scale'] = None
+			if not row['codepage']: row['codepage'] = None
+			row['type'] = {
+				'B': 'In/Out',
+				'O': 'Output',
+				'P': 'Input',
+				'C': 'Result',
+				'R': 'Result'
+			}[row['type']]
+	
+	def _get_procedures(self, connection, doccat):
+		logging.debug("Retrieving procedures")
+		cursor = connection.cursor()
+		try:
+			cursor.execute("""
+				SELECT
+					RTRIM(ROUTINESCHEMA)     AS "schemaName",
+					RTRIM(SPECIFICNAME)      AS "specificName",
+					RTRIM(ROUTINENAME)       AS "name",
+					RTRIM(DEFINER)           AS "definer",
+					RTRIM(RETURN_TYPESCHEMA) AS "rtypeSchema",
+					RTRIM(RETURN_TYPENAME)   AS "rtypeName",
+					ORIGIN                   AS "origin",
+					RTRIM(LANGUAGE)          AS "language",
+					DETERMINISTIC            AS "deterministic",
+					EXTERNAL_ACTION          AS "externalAction",
+					NULLCALL                 AS "nullCall",
+					FENCED                   AS "fenced",
+					SQL_DATA_ACCESS          AS "sqlAccess",
+					THREADSAFE               AS "threadSafe",
+					VALID                    AS "valid",
+					CHAR(CREATE_TIME)        AS "created",
+					RTRIM(QUALIFIER)         AS "qualifier",
+					RTRIM(FUNC_PATH)         AS "funcPath",
+					TEXT                     AS "sql",
+					REMARKS                  AS "description"
+				FROM
+					%(schema)s.ROUTINES
+				WHERE
+					ROUTINETYPE = 'P'
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+			self.procedures = dict([((row['schemaName'], row['specificName']), row) for row in _fetch_dict(cursor)])
+		finally:
+			del cursor
+		for row in self.functions.itervalues():
+			row['created'] = makeDateTime(row['created'])
+			row['deterministic'] = makeBoolean(row['deterministic'])
+			row['externalAction'] = makeBoolean(row['externalAction'], 'E')
+			row['nullCall'] = makeBoolean(row['nullCall'])
+			row['fenced'] = makeBoolean(row['fenced'])
+			row['threadSafe'] = makeBoolean(row['threadSafe'])
+			row['valid'] = makeBoolean(row['valid'])
+			row['origin'] = {
+				'B': 'Built-in',
+				'E': 'User-defined external',
+				'M': 'Template',
+				'Q': 'SQL body',
+				'U': 'User-defined source',
+				'S': 'System generated',
+				'T': 'System generated transform'
+			}[row['origin']]
+			row['sqlAccess'] = {
+				'C': 'Contains SQL',
+				'M': 'Modifies SQL',
+				'N': 'No SQL',
+				'R': 'Reads SQL',
+				' ': None
+			}[row['sqlAccess']]
+			row['sql'] = str(row['sql'])
+	
+	def _get_procedure_params(self, connection, doccat):
+		logging.debug("Retrieving procedure parameters")
 		cursor = connection.cursor()
 		try:
 			cursor.execute("""
@@ -682,18 +803,22 @@ class Cache(object):
 					ROWTYPE                       AS "type",
 					RTRIM(TYPESCHEMA)             AS "datatypeSchema",
 					RTRIM(TYPENAME)               AS "datatypeName",
-					LOCATOR                       AS "locator",
 					LENGTH                        AS "size",
 					SCALE                         AS "scale",
 					CODEPAGE                      AS "codepage",
 					REMARKS                       AS "description"
-				FROM %(schema)s.ROUTINEPARMS
+				FROM
+					%(schema)s.ROUTINEPARMS P
+					INNER JOIN %(schema)s.ROUTINES R
+						ON P.ROUTINESCHEMA = R.ROUTINESCHEMA
+						AND P.SPECIFICNAME = R.SPECIFICNAME
+				WHERE
+					R.ROUTINETYPE = 'P'
 				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
-			self.parameters = dict([((row['schemaName'], row['specificName'], row['type'], row['position']), row) for row in _fetch_dict(cursor)])
+			self.proc_params = dict([((row['schemaName'], row['specificName'], row['type'], row['position']), row) for row in _fetch_dict(cursor)])
 		finally:
 			del cursor
-		for row in self.parameters.itervalues():
-			row['locator'] = makeBoolean(row['locator'])
+		for row in self.proc_params.itervalues():
 			if row['size'] == 0: row['size'] = None
 			if row['scale'] == -1: row['scale'] = None
 			if not row['codepage']: row['codepage'] = None
@@ -702,8 +827,52 @@ class Cache(object):
 				'O': 'Output',
 				'P': 'Input',
 				'C': 'Result',
-				'R': 'Result'
+				'R': 'Result',
 			}[row['type']]
+	
+	def _get_triggers(self, connection, doccat):
+		logging.debug("Retrieving triggers")
+		cursor = connection.cursor()
+		try:
+			cursor.execute("""
+				SELECT
+					RTRIM(TRIGSCHEMA) AS "schemaName",
+					RTRIM(TRIGNAME)   AS "name",
+					RTRIM(DEFINER)    AS "definer",
+					RTRIM(TABSCHEMA)  AS "tableSchema",
+					RTRIM(TABNAME)    AS "tableName",
+					TRIGTIME          AS "triggerTime",
+					TRIGEVENT         AS "triggerEvent",
+					GRANULARITY       AS "granularity",
+					VALID             AS "valid",
+					CHAR(CREATE_TIME) AS "created",
+					RTRIM(QUALIFIER)  AS "qualifier",
+					RTRIM(FUNC_PATH)  AS "funcPath",
+					TEXT              AS "sql",
+					REMARKS           AS "description"
+				FROM
+					%(schema)s.TRIGGERS
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+			self.triggers = dict([(row['schemaName'], row['name']), row) for row in _fetch_dict(cursor)])
+		finally
+			del cursor
+		for row in self.triggers.itervalues():
+			row['created'] = makeDateTime(row['created'])
+			row['valid'] = makeBoolean(row['valid'], falseValue='X')
+			row['triggerTime'] = {
+				'A': 'After',
+				'B': 'Before',
+				'I': 'Instead Of',
+			}[row['triggerTime']]
+			row['triggerEvent'] = {
+				'I': 'Insert',
+				'U': 'Update',
+				'D': 'Delete',
+			}[row['triggerEvent']]
+			row['granularity'] = {
+				'S': 'Statement',
+				'R': 'Row',
+			}[row['granularity']]
 
 	def _get_tablespaces(self, connection, doccat):
 		logging.debug("Retrieving tablespaces")
