@@ -179,7 +179,7 @@ class Function(Routine):
 	sqlAccess = property(__getSqlAccess, doc="""Indicates whether the function executes any SQL statements and, if so, whether they are read-only or read-write""")
 	threadSafe = property(__getThreadSafe, doc="""True if the external function can be run in the same process space as other function invocations""")
 	valid = property(__getValid, doc="""True if the function is valid. Otherwise the function is invalid or inoperative and must be recreated""")
-	created = property(__getCreated, doc="""Timestamp indicating when the index was created""")
+	created = property(__getCreated, doc="""Timestamp indicating when the function was created""")
 	qualifier = property(__getQualifier, doc="""The current schema at the time the function was created""")
 	funcPath = property(__getFuncPath, doc="""The function resolution path at the time the function was created""")
 	sql = property(__getSql, doc="""The complete SQL statement that created the function, if language is SQL""")
