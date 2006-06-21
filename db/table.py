@@ -44,8 +44,8 @@ class Table(Relation):
 			if schemaName == schema.name and tableName == self.name]:
 			self.__fields[field['name']] = Field(self, cache, **field)
 		self.__fieldList = sorted(self.__fields.itervalues(), key=lambda field:field.position)
-		self.__dependents = RelationsDict(self.database, cache.dependents.get((schema.name, self.name)))
-		self.__dependentList = RelationsList(self.database, cache.dependents.get((schema.name, self.name)))
+		self.__dependents = RelationsDict(self.database, cache.relation_dependents.get((schema.name, self.name)))
+		self.__dependentList = RelationsList(self.database, cache.relation_dependents.get((schema.name, self.name)))
 		self.__indexes = IndexesDict(self.database, cache.tableIndexes.get((schema.name, self.name)))
 		self.__indexList = IndexesList(self.database, cache.tableIndexes.get((schema.name, self.name)))
 		self.__constraints = {}
