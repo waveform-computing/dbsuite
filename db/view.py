@@ -5,7 +5,7 @@
 import logging
 from string import Template
 from schemabase import Relation
-from proxies import RelationsDict, RelationsList
+from proxies import RelationsDict, RelationsList, TriggersDict, TriggersList
 from field import Field
 from util import formatIdentifier
 
@@ -33,6 +33,8 @@ class View(Relation):
 		self.__dependentList = RelationsList(self.database, cache.relation_dependents.get((schema.name, self.name)))
 		self.__dependencies = RelationsDict(self.database, cache.relation_dependencies.get((schema.name, self.name)))
 		self.__dependencyList = RelationsList(self.database, cache.relation_dependencies.get((schema.name, self.name)))
+		self.__triggers = TriggersDict(self.database, cache.relation_triggers.get((schema.name, self.name)))
+		self.__triggerList = TriggersList(self.database, cache.relation_triggers.get((schema.name, self.name)))
 
 	def getTypeName(self):
 		return "View"
@@ -65,6 +67,12 @@ class View(Relation):
 			'view': formatIdentifier(self.name)
 		})
 	
+	def __getTriggers(self):
+		return self.__triggers
+
+	def __getTriggerList(self):
+		return self.__triggerList
+
 	def __getDependencies(self):
 		return self.__dependencies
 	
@@ -92,6 +100,8 @@ class View(Relation):
 	def __getFuncPath(self):
 		return self.__funcPath
 	
+	triggers = property(__getTriggers, doc="""The triggers defined against this view in a dictionary""")
+	triggerList = property(__getTriggerList, doc="""The triggers defined against this view in a list""")
 	dependencies = property(__getDependencies, doc="""A dictionary of the relations (e.g. views) that this view depends upon (keyed by (schemaName, relationName) tuples)""")
 	dependencyList = property(__getDependencyList, doc="""A list of the relations (e.g. views) that this view depends upon""")
 	definer = property(__getDefiner, doc="""The user who created the view""")

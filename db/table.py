@@ -5,7 +5,7 @@
 import logging
 from string import Template
 from schemabase import Relation
-from proxies import IndexesDict, IndexesList, RelationsDict, RelationsList
+from proxies import IndexesDict, IndexesList, RelationsDict, RelationsList, TriggersDict, TriggersList
 from field import Field
 from uniquekey import UniqueKey, PrimaryKey
 from foreignkey import ForeignKey
@@ -48,6 +48,8 @@ class Table(Relation):
 		self.__dependentList = RelationsList(self.database, cache.relation_dependents.get((schema.name, self.name)))
 		self.__indexes = IndexesDict(self.database, cache.tableIndexes.get((schema.name, self.name)))
 		self.__indexList = IndexesList(self.database, cache.tableIndexes.get((schema.name, self.name)))
+		self.__triggers = TriggersDict(self.database, cache.relation_triggers.get((schema.name, self.name)))
+		self.__triggerList = TriggersList(self.database, cache.relation_triggers.get((schema.name, self.name)))
 		self.__constraints = {}
 		self.__uniqueKeys = {}
 		self.__primaryKey = None
@@ -133,6 +135,12 @@ $elements
 
 	def __getIndexList(self):
 		return self.__indexList
+
+	def __getTriggers(self):
+		return self.__triggers
+
+	def __getTriggerList(self):
+		return self.__triggerList
 
 	def __getConstraints(self):
 		return self.__constraints
@@ -223,6 +231,8 @@ $elements
 
 	indexes = property(__getIndexes, doc="""The indexes used by this table in a dictionary""")
 	indexList = property(__getIndexList, doc="""The indexes used by this table in a list""")
+	triggers = property(__getTriggers, doc="""The triggers defined against this table in a dictionary""")
+	triggerList = property(__getTriggerList, doc="""The triggers defined against this table in a list""")
 	constraints = property(__getConstraints, doc="""The constraints (keys, checks, etc.) contained in the table""")
 	constraintList = property(__getConstraintList, doc="""The constraints (keys, checks, etc.) contained in the table, in a sorted list""")
 	primaryKey = property(__getPrimaryKey, doc="""The primary key constraint of the table""")
