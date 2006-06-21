@@ -20,6 +20,7 @@ def write(self, table):
 	fields = [obj for (name, obj) in sorted(table.fields.items(), key=lambda (name, obj): name)]
 	indexes = [obj for (name, obj) in sorted(table.indexes.items(), key=lambda (name, obj): name)]
 	constraints = [obj for (name, obj) in sorted(table.constraints.items(), key=lambda (name, obj): name)]
+	triggers = [obj for (name, obj) in sorted(table.triggers.items(), key=lambda (name, obj): name)]
 	dependents = [obj for (name, obj) in sorted(table.dependents.items(), key=lambda (name, obj): name)]
 	doc = self.newDocument(table)
 	doc.addSection(id='description', title='Description')
@@ -131,7 +132,7 @@ def write(self, table):
 			) for field in fields]
 		))
 	if len(indexes) > 0:
-		doc.addSection('indexes', 'Index Descriptions')
+		doc.addSection('indexes', 'Indexes')
 		doc.addPara("""The following table details the indexes defined
 			against the table, including which fields each index targets.
 			For more information about an individual index (e.g. statistics,
@@ -181,6 +182,25 @@ def write(self, table):
 			)],
 			data=rows
 		))
+	if len(triggers) > 0:
+		doc.addSection('triggers', 'Triggers')
+		doc.addPara("""The following table details the triggers defined
+			against the table, including which actions fire the trigger
+			and when. For more information about an individual trigger
+			click on the trigger name.""")
+		doc.addContent(makeTable(
+			head=[(
+				"Name",
+				"Timing",
+				"Event",
+				"Description"
+			)],
+			data=[(
+				linkTo(trigger, qualifiedName=True),
+				escape(trigger.triggerTime),
+				escape(trigger.triggerEvent),
+				self.formatDescription(trigger.description, firstline=True)
+			) for trigger in triggers]
 	if len(dependents) > 0:
 		doc.addSection('dependents', 'Dependent Relations')
 		doc.addPara("""The following table lists all relations (views or

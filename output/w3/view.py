@@ -15,6 +15,7 @@ def write(self, view):
 	"""
 	logging.debug("Writing documentation for view %s to %s" % (view.name, filename(view)))
 	fields = [obj for (name, obj) in sorted(view.fields.items(), key=lambda (name, obj): name)]
+	triggers = [obj for (name, obj) in sorted(view.triggers.items(), key=lambda (name, obj): name)]
 	dependencies = [obj for (name, obj) in sorted(view.dependencies.items(), key=lambda (name, obj): name)]
 	dependents = [obj for (name, obj) in sorted(view.dependents.items(), key=lambda (name, obj): name)]
 	doc = self.newDocument(view)
@@ -91,6 +92,25 @@ def write(self, view):
 				field.nullable
 			) for field in fields]
 		))
+	if len(triggers) > 0:
+		doc.addSection('triggers', 'Triggers')
+		doc.addPara("""The following table details the triggers defined
+			against the view, including which actions fire the trigger
+			and when. For more information about an individual trigger
+			click on the trigger name.""")
+		doc.addContent(makeTable(
+			head=[(
+				"Name",
+				"Timing",
+				"Event",
+				"Description"
+			)],
+			data=[(
+				linkTo(trigger, qualifiedName=True),
+				escape(trigger.triggerTime),
+				escape(trigger.triggerEvent),
+				self.formatDescription(trigger.description, firstline=True)
+			) for trigger in triggers]
 	if len(dependents) > 0:
 		doc.addSection('dependents', 'Dependent Relations')
 		doc.addPara("""The following table lists all relations (views or
