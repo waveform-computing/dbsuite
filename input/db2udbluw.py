@@ -73,11 +73,11 @@ class Cache(object):
 		try:
 			cursor.execute("""
 				SELECT
-					RTRIM(SCHEMANAME) AS "name",
-					RTRIM(OWNER)      AS "owner",
-					RTRIM(DEFINER)    AS "definer",
-					CHAR(CREATE_TIME) AS "created",
-					REMARKS           AS "description"
+					RTRIM(SCHEMANAME)       AS "name",
+					RTRIM(OWNER)            AS "owner",
+					RTRIM(DEFINER)          AS "definer",
+					CHAR(CREATE_TIME, ISO)) AS "created",
+					REMARKS                 AS "description"
 				FROM
 					%(schema)s.SCHEMATA
 				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
@@ -93,18 +93,18 @@ class Cache(object):
 		try:
 			cursor.execute("""
 				SELECT
-					RTRIM(TYPESCHEMA)   AS "schemaName",
-					RTRIM(TYPENAME)     AS "name",
-					RTRIM(DEFINER)      AS "definer",
-					RTRIM(SOURCESCHEMA) AS "sourceSchema",
-					RTRIM(SOURCENAME)   AS "sourceName",
-					METATYPE            AS "type",
-					LENGTH              AS "size",
-					SCALE               AS "scale",
-					CODEPAGE            AS "codepage",
-					CHAR(CREATE_TIME)   AS "created",
-					FINAL               AS "final",
-					REMARKS             AS "description"
+					RTRIM(TYPESCHEMA)      AS "schemaName",
+					RTRIM(TYPENAME)        AS "name",
+					RTRIM(DEFINER)         AS "definer",
+					RTRIM(SOURCESCHEMA)    AS "sourceSchema",
+					RTRIM(SOURCENAME)      AS "sourceName",
+					METATYPE               AS "type",
+					LENGTH                 AS "size",
+					SCALE                  AS "scale",
+					CODEPAGE               AS "codepage",
+					CHAR(CREATE_TIME, ISO) AS "created",
+					FINAL                  AS "final",
+					REMARKS                AS "description"
 				FROM
 					%(schema)s.DATATYPES
 				WHERE INSTANTIABLE = 'Y'
@@ -131,27 +131,27 @@ class Cache(object):
 		try:
 			cursor.execute("""
 				SELECT
-					RTRIM(TABSCHEMA)     AS "schemaName",
-					RTRIM(TABNAME)       AS "name",
-					RTRIM(DEFINER)       AS "definer",
-					STATUS               AS "checkPending",
-					CHAR(CREATE_TIME)    AS "created",
-					CHAR(STATS_TIME)     AS "statsUpdated",
-					NULLIF(CARD, -1)     AS "cardinality",
-					NULLIF(NPAGES, -1)   AS "rowPages",
-					NULLIF(FPAGES, -1)   AS "totalPages",
-					NULLIF(OVERFLOW, -1) AS "overflow",
-					RTRIM(TBSPACE)       AS "dataTbspace",
-					RTRIM(INDEX_TBSPACE) AS "indexTbspace",
-					RTRIM(LONG_TBSPACE)  AS "longTbspace",
-					APPEND_MODE          AS "append",
-					LOCKSIZE             AS "lockSize",
-					VOLATILE             AS "volatile",
-					COMPRESSION          AS "compression",
-					ACCESS_MODE          AS "accessMode",
-					CLUSTERED            AS "clustered",
-					ACTIVE_BLOCKS        AS "activeBlocks",
-					REMARKS              AS "description"
+					RTRIM(TABSCHEMA)       AS "schemaName",
+					RTRIM(TABNAME)         AS "name",
+					RTRIM(DEFINER)         AS "definer",
+					STATUS                 AS "checkPending",
+					CHAR(CREATE_TIME, ISO) AS "created",
+					CHAR(STATS_TIME, ISO)  AS "statsUpdated",
+					NULLIF(CARD, -1)       AS "cardinality",
+					NULLIF(NPAGES, -1)     AS "rowPages",
+					NULLIF(FPAGES, -1)     AS "totalPages",
+					NULLIF(OVERFLOW, -1)   AS "overflow",
+					RTRIM(TBSPACE)         AS "dataTbspace",
+					RTRIM(INDEX_TBSPACE)   AS "indexTbspace",
+					RTRIM(LONG_TBSPACE)    AS "longTbspace",
+					APPEND_MODE            AS "append",
+					LOCKSIZE               AS "lockSize",
+					VOLATILE               AS "volatile",
+					COMPRESSION            AS "compression",
+					ACCESS_MODE            AS "accessMode",
+					CLUSTERED              AS "clustered",
+					ACTIVE_BLOCKS          AS "activeBlocks",
+					REMARKS                AS "description"
 				FROM
 					%(schema)s.TABLES
 				WHERE
@@ -185,17 +185,17 @@ class Cache(object):
 		try:
 			cursor.execute("""
 				SELECT
-					RTRIM(T.TABSCHEMA)    AS "schemaName",
-					RTRIM(T.TABNAME)      AS "name",
-					RTRIM(V.DEFINER)      AS "definer",
-					CHAR(T.CREATE_TIME)   AS "created",
-					V.VIEWCHECK           AS "check",
-					V.READONLY            AS "readOnly",
-					V.VALID               AS "valid",
-					RTRIM(V.QUALIFIER)    AS "qualifier",
-					RTRIM(V.FUNC_PATH)    AS "funcPath",
-					V.TEXT                AS "sql",
-					T.REMARKS             AS "description"
+					RTRIM(T.TABSCHEMA)       AS "schemaName",
+					RTRIM(T.TABNAME)         AS "name",
+					RTRIM(V.DEFINER)         AS "definer",
+					CHAR(T.CREATE_TIME, ISO) AS "created",
+					V.VIEWCHECK              AS "check",
+					V.READONLY               AS "readOnly",
+					V.VALID                  AS "valid",
+					RTRIM(V.QUALIFIER)       AS "qualifier",
+					RTRIM(V.FUNC_PATH)       AS "funcPath",
+					V.TEXT                   AS "sql",
+					T.REMARKS                AS "description"
 				FROM
 					%(schema)s.TABLES T
 					INNER JOIN %(schema)s.VIEWS V
@@ -275,8 +275,8 @@ class Cache(object):
 					NULLIF(I.DENSITY, -1)          AS "density",
 					I.USER_DEFINED                 AS "userDefined",
 					I.SYSTEM_REQUIRED              AS "required",
-					CHAR(I.CREATE_TIME)            AS "created",
-					CHAR(I.STATS_TIME)             AS "statsUpdated",
+					CHAR(I.CREATE_TIME, ISO)       AS "created",
+					CHAR(I.STATS_TIME, ISO)        AS "statsUpdated",
 					I.REVERSE_SCANS                AS "reverseScans",
 					I.REMARKS                      AS "description",
 					RTRIM(T.TBSPACE)               AS "tablespaceName"
@@ -462,20 +462,20 @@ class Cache(object):
 		try:
 			cursor.execute("""
 				SELECT
-					RTRIM(T.TABSCHEMA)    AS "schemaName",
-					RTRIM(T.TABNAME)      AS "tableName",
-					RTRIM(T.CONSTNAME)    AS "name",
-					RTRIM(R.REFTABSCHEMA) AS "refTableSchema",
-					RTRIM(R.REFTABNAME)   AS "refTableName",
-					RTRIM(R.REFKEYNAME)   AS "refKeyName",
-					R.CREATE_TIME         AS "created",
-					RTRIM(T.DEFINER)      AS "definer",
-					T.ENFORCED            AS "enforced",
-					T.CHECKEXISTINGDATA   AS "checkExisting",
-					T.ENABLEQUERYOPT      AS "queryOptimize",
-					R.DELETERULE          AS "deleteRule",
-					R.UPDATERULE          AS "updateRule",
-					T.REMARKS             AS "description"
+					RTRIM(T.TABSCHEMA)       AS "schemaName",
+					RTRIM(T.TABNAME)         AS "tableName",
+					RTRIM(T.CONSTNAME)       AS "name",
+					RTRIM(R.REFTABSCHEMA)    AS "refTableSchema",
+					RTRIM(R.REFTABNAME)      AS "refTableName",
+					RTRIM(R.REFKEYNAME)      AS "refKeyName",
+					CHAR(R.CREATE_TIME, ISO) AS "created",
+					RTRIM(T.DEFINER)         AS "definer",
+					T.ENFORCED               AS "enforced",
+					T.CHECKEXISTINGDATA      AS "checkExisting",
+					T.ENABLEQUERYOPT         AS "queryOptimize",
+					R.DELETERULE             AS "deleteRule",
+					R.UPDATERULE             AS "updateRule",
+					T.REMARKS                AS "description"
 				FROM
 					%(schema)s.TABCONST T
 					INNER JOIN %(schema)s.REFERENCES R
@@ -550,19 +550,19 @@ class Cache(object):
 		try:
 			cursor.execute("""
 				SELECT
-					RTRIM(T.TABSCHEMA)    AS "schemaName",
-					RTRIM(T.TABNAME)      AS "tableName",
-					RTRIM(T.CONSTNAME)    AS "name",
-					C.CREATE_TIME         AS "created",
-					RTRIM(T.DEFINER)      AS "definer",
-					T.ENFORCED            AS "enforced",
-					T.CHECKEXISTINGDATA   AS "checkExisting",
-					T.ENABLEQUERYOPT      AS "queryOptimize",
-					C.TYPE                AS "type",
-					RTRIM(C.QUALIFIER)    AS "qualifier",
-					RTRIM(C.FUNC_PATH)    AS "funcPath",
-					C.TEXT                AS "expression",
-					T.REMARKS             AS "description"
+					RTRIM(T.TABSCHEMA)       AS "schemaName",
+					RTRIM(T.TABNAME)         AS "tableName",
+					RTRIM(T.CONSTNAME)       AS "name",
+					CHAR(C.CREATE_TIME, ISO) AS "created",
+					RTRIM(T.DEFINER)         AS "definer",
+					T.ENFORCED               AS "enforced",
+					T.CHECKEXISTINGDATA      AS "checkExisting",
+					T.ENABLEQUERYOPT         AS "queryOptimize",
+					C.TYPE                   AS "type",
+					RTRIM(C.QUALIFIER)       AS "qualifier",
+					RTRIM(C.FUNC_PATH)       AS "funcPath",
+					C.TEXT                   AS "expression",
+					T.REMARKS                AS "description"
 				FROM
 					%(schema)s.TABCONST T
 					INNER JOIN %(schema)s.CHECKS C
@@ -638,7 +638,7 @@ class Cache(object):
 					SQL_DATA_ACCESS          AS "sqlAccess",
 					THREADSAFE               AS "threadSafe",
 					VALID                    AS "valid",
-					CHAR(CREATE_TIME)        AS "created",
+					CHAR(CREATE_TIME, ISO)   AS "created",
 					RTRIM(QUALIFIER)         AS "qualifier",
 					RTRIM(FUNC_PATH)         AS "funcPath",
 					TEXT                     AS "sql",
@@ -739,8 +739,6 @@ class Cache(object):
 					RTRIM(SPECIFICNAME)      AS "specificName",
 					RTRIM(ROUTINENAME)       AS "name",
 					RTRIM(DEFINER)           AS "definer",
-					RTRIM(RETURN_TYPESCHEMA) AS "rtypeSchema",
-					RTRIM(RETURN_TYPENAME)   AS "rtypeName",
 					ORIGIN                   AS "origin",
 					RTRIM(LANGUAGE)          AS "language",
 					DETERMINISTIC            AS "deterministic",
@@ -750,7 +748,7 @@ class Cache(object):
 					SQL_DATA_ACCESS          AS "sqlAccess",
 					THREADSAFE               AS "threadSafe",
 					VALID                    AS "valid",
-					CHAR(CREATE_TIME)        AS "created",
+					CHAR(CREATE_TIME, ISO)   AS "created",
 					RTRIM(QUALIFIER)         AS "qualifier",
 					RTRIM(FUNC_PATH)         AS "funcPath",
 					TEXT                     AS "sql",
@@ -836,20 +834,20 @@ class Cache(object):
 		try:
 			cursor.execute("""
 				SELECT
-					RTRIM(TRIGSCHEMA) AS "schemaName",
-					RTRIM(TRIGNAME)   AS "name",
-					RTRIM(DEFINER)    AS "definer",
-					RTRIM(TABSCHEMA)  AS "tableSchema",
-					RTRIM(TABNAME)    AS "tableName",
-					TRIGTIME          AS "triggerTime",
-					TRIGEVENT         AS "triggerEvent",
-					GRANULARITY       AS "granularity",
-					VALID             AS "valid",
-					CHAR(CREATE_TIME) AS "created",
-					RTRIM(QUALIFIER)  AS "qualifier",
-					RTRIM(FUNC_PATH)  AS "funcPath",
-					TEXT              AS "sql",
-					REMARKS           AS "description"
+					RTRIM(TRIGSCHEMA)      AS "schemaName",
+					RTRIM(TRIGNAME)        AS "name",
+					RTRIM(DEFINER)         AS "definer",
+					RTRIM(TABSCHEMA)       AS "tableSchema",
+					RTRIM(TABNAME)         AS "tableName",
+					TRIGTIME               AS "triggerTime",
+					TRIGEVENT              AS "triggerEvent",
+					GRANULARITY            AS "granularity",
+					VALID                  AS "valid",
+					CHAR(CREATE_TIME, ISO) AS "created",
+					RTRIM(QUALIFIER)       AS "qualifier",
+					RTRIM(FUNC_PATH)       AS "funcPath",
+					TEXT                   AS "sql",
+					REMARKS                AS "description"
 				FROM
 					%(schema)s.TRIGGERS
 				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
@@ -880,18 +878,18 @@ class Cache(object):
 		try:
 			cursor.execute("""
 				SELECT
-					RTRIM(TBSPACE)    AS "name",
-					RTRIM(DEFINER)    AS "definer",
-					CHAR(CREATE_TIME) AS "created",
-					TBSPACETYPE       AS "managedBy",
-					DATATYPE          AS "dataType",
-					EXTENTSIZE        AS "extentSize",
-					PREFETCHSIZE      AS "prefetchSize",
-					OVERHEAD          AS "overhead",
-					TRANSFERRATE      AS "transferRate",
-					PAGESIZE          AS "pageSize",
-					DROP_RECOVERY     AS "dropRecovery",
-					REMARKS           AS "description"
+					RTRIM(TBSPACE)         AS "name",
+					RTRIM(DEFINER)         AS "definer",
+					CHAR(CREATE_TIME, ISO) AS "created",
+					TBSPACETYPE            AS "managedBy",
+					DATATYPE               AS "dataType",
+					EXTENTSIZE             AS "extentSize",
+					PREFETCHSIZE           AS "prefetchSize",
+					OVERHEAD               AS "overhead",
+					TRANSFERRATE           AS "transferRate",
+					PAGESIZE               AS "pageSize",
+					DROP_RECOVERY          AS "dropRecovery",
+					REMARKS                AS "description"
 				FROM %(schema)s.TABLESPACES
 				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
 			self.tablespaces = dict([(row['name'], row) for row in _fetch_dict(cursor)])
