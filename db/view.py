@@ -29,10 +29,10 @@ class View(Relation):
 		for field in [cache.fields[(schemaName, viewName, fieldName)] for (schemaName, viewName, fieldName) in cache.fields if schemaName == schema.name and viewName == self.name]:
 			self.__fields[field['name']] = Field(self, cache, **field)
 		self.__fieldList = sorted(self.__fields.itervalues(), key=lambda field:field.position)
-		self.__dependents = RelationsDict(self.database, cache.dependents.get((schema.name, self.name)))
-		self.__dependentList = RelationsList(self.database, cache.dependents.get((schema.name, self.name)))
-		self.__dependencies = RelationsDict(self.database, cache.dependencies.get((schema.name, self.name)))
-		self.__dependencyList = RelationsList(self.database, cache.dependencies.get((schema.name, self.name)))
+		self.__dependents = RelationsDict(self.database, cache.relation_dependents.get((schema.name, self.name)))
+		self.__dependentList = RelationsList(self.database, cache.relation_dependents.get((schema.name, self.name)))
+		self.__dependencies = RelationsDict(self.database, cache.relation_dependencies.get((schema.name, self.name)))
+		self.__dependencyList = RelationsList(self.database, cache.relation_dependencies.get((schema.name, self.name)))
 
 	def getTypeName(self):
 		return "View"
