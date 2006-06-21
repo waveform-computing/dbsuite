@@ -5,7 +5,7 @@
 import logging
 from string import Template
 from schemabase import SchemaObject
-from procies import RelationsDict, RelationsList
+from proxies import RelationsDict, RelationsList
 from util import formatIdentifier
 
 class Trigger(SchemaObject):

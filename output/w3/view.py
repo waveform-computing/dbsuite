@@ -111,6 +111,7 @@ def write(self, view):
 				escape(trigger.triggerEvent),
 				self.formatDescription(trigger.description, firstline=True)
 			) for trigger in triggers]
+		))
 	if len(dependents) > 0:
 		doc.addSection('dependents', 'Dependent Relations')
 		doc.addPara("""The following table lists all relations (views or
