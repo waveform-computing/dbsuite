@@ -7,6 +7,7 @@ from base import DocBase
 from table import Table
 from view import View
 from index import Index
+from trigger import Trigger
 from datatype import Datatype
 from function import Function
 
@@ -31,6 +32,7 @@ class Schema(DocBase):
 		self.__functions = {}
 		self.__methods = {}
 		self.__procedures = {}
+		self.__triggers = {}
 		self.__specificRoutines = {}
 		self.__specificFunctions = {}
 		self.__specificMethods = {}
