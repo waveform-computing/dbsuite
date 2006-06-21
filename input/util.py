@@ -7,7 +7,6 @@ import datetime
 
 def makeDateTime(value):
 	"""Converts a date-time value from a database query to a datetime object"""
-	print value
 	if (value is None) or (value == ""):
 		return None
 	elif isinstance(value, basestring):
