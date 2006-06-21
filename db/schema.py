@@ -10,6 +10,7 @@ from index import Index
 from trigger import Trigger
 from datatype import Datatype
 from function import Function
+from procedure import Procedure
 
 class Schema(DocBase):
 	"""Class representing a schema in a DB2 database"""
