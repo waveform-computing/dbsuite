@@ -47,7 +47,7 @@ class Cache(object):
 		self._get_tables(connection, doccat)
 		self._get_views(connection, doccat)
 		self._get_aliases(connection, doccat)
-		self._get_dependencies(connection, doccat)
+		self._get_relation_dependencies(connection, doccat)
 		self._get_indexes(connection, doccat)
 		self._get_index_fields(connection, doccat)
 		self._get_table_indexes(connection, doccat)
@@ -222,7 +222,7 @@ class Cache(object):
 		logging.debug("Retrieving aliases")
 		self.aliases = {}
 
-	def _get_dependencies(self, connection, doccat):
+	def _get_relation_dependencies(self, connection, doccat):
 		logging.debug("Retrieving relation dependencies")
 		cursor = connection.cursor()
 		try:
@@ -237,15 +237,15 @@ class Cache(object):
 				WHERE
 					BTYPE IN ('A', 'S', 'T', 'U', 'V', 'W')
 				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
-			self.dependents = {}
-			self.dependencies = {}
+			self.relation_dependents = {}
+			self.relation_dependencies = {}
 			for (relationSchema, relationName, depSchema, depName) in cursor.fetchall():
-				if not (relationSchema, relationName) in self.dependents:
-					self.dependents[(relationSchema, relationName)] = []
-				self.dependents[(relationSchema, relationName)].append((depSchema, depName))
-				if not (depSchema, depName) in self.dependencies:
-					self.dependencies[(depSchema, depName)] = []
-				self.dependencies[(depSchema, depName)].append((relationSchema, relationName))
+				if not (relationSchema, relationName) in self.relation_dependents:
+					self.relation_dependents[(relationSchema, relationName)] = []
+				self.relation_dependents[(relationSchema, relationName)].append((depSchema, depName))
+				if not (depSchema, depName) in self.relation_dependencies:
+					self.relation_dependencies[(depSchema, depName)] = []
+				self.relation_dependencies[(depSchema, depName)].append((relationSchema, relationName))
 		finally:
 			del cursor
 
@@ -612,7 +612,7 @@ class Cache(object):
 				self.checkFields[(keySchema, keyTable, keyName)].append(fieldName)
 		finally:
 			del cursor
-
+	
 	def _get_functions(self, connection, doccat):
 		logging.debug("Retrieving functions")
 		cursor = connection.cursor()
