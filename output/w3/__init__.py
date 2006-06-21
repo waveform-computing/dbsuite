@@ -30,6 +30,8 @@ from output.w3 import uniquekey
 from output.w3 import foreignkey
 from output.w3 import check
 from output.w3 import function
+from output.w3 import procedure
+from output.w3 import trigger
 from sql.tokenizer import DB2UDBSQLTokenizer
 from sql.formatter import SQLFormatter
 from sql.htmlhighlighter import SQLHTMLHighlighter
@@ -92,6 +94,10 @@ class DocOutput(object):
 				self.writeIndex(index)
 			for function in schema.functions.itervalues():
 				self.writeFunction(function)
+			for procedure in schema.procedures.itervalues():
+				self.writeProcedure(procedure)
+			for trigger in schema.triggers.itervalues():
+				self.writeTrigger(trigger)
 		for tablespace in database.tablespaces.itervalues():
 			self.writeTablespace(tablespace)
 	
@@ -262,6 +268,8 @@ class DocOutput(object):
 	writeForeignKey = foreignkey.write
 	writeCheck = check.write
 	writeFunction = function.write
+	writeProcedure = procedure.write
+	writeTrigger = trigger.write
 
 	def writeRelation(self, relation):
 		if isinstance(relation, Table):
