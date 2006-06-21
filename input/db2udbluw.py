@@ -63,6 +63,7 @@ class Cache(object):
 		self._get_procedures(connection, doccat)
 		self._get_procedure_params(connection, doccat)
 		self._get_triggers(connection, doccat)
+		self._get_relation_triggers(connection, doccat)
 		self._get_tablespaces(connection, doccat)
 		self._get_tablespace_tables(connection, doccat)
 		self._get_tablespace_indexes(connection, doccat)
@@ -330,24 +331,15 @@ class Cache(object):
 
 	def _get_table_indexes(self, connection, doccat):
 		logging.debug("Retrieving table indexes")
-		cursor = connection.cursor()
-		try:
-			cursor.execute("""
-				SELECT
-					RTRIM(TABSCHEMA) AS "tableSchema",
-					RTRIM(TABNAME)   AS "tableName",
-					RTRIM(INDSCHEMA) AS "indexSchema",
-					RTRIM(INDNAME)   AS "indexName"
-				FROM
-					%(schema)s.INDEXES
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
-			self.tableIndexes = {}
-			for (tableSchema, tableName, indexSchema, indexName) in cursor.fetchall():
-				if not (tableSchema, tableName) in self.tableIndexes:
-					self.tableIndexes[(tableSchema, tableName)] = []
-				self.tableIndexes[(tableSchema, tableName)].append((indexSchema, indexName))
-		finally:
-			del cursor
+		# Note: Must be run AFTER _get_indexes and _get_tables
+		self.tableIndexes = dict([
+			((tableSchema, tableName), [(row['schemaName'], row['name'])
+				for row in self.indexes.itervalues()
+				if row['tableSchema'] == tableSchema
+				and row['tableName'] == tableName
+			])
+			for (tableSchema, tableName) in self.tables
+		])
 
 	def _get_fields(self, connection, doccat):
 		logging.debug("Retrieving fields")
@@ -872,6 +864,27 @@ class Cache(object):
 				'R': 'Row',
 			}[row['granularity']]
 
+	def _get_relation_triggers(self, connection, doccat):
+		logging.debug("Retrieving table triggers")
+		cursor = connection.cursor()
+		try:
+			cursor.execute("""
+				SELECT
+					RTRIM(TABSCHEMA)  AS "tableSchema",
+					RTRIM(TABNAME)    AS "tableName",
+					RTRIM(TRIGSCHEMA) AS "triggerSchema",
+					RTRIM(TRIGNAME)   AS "triggerName"
+				FROM
+					%(schema)s.TRIGGERS
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+			self.relation_triggers = {}
+			for (tableSchema, tableName, triggerSchema, triggerName) in cursor.fetchall():
+				if not (tableSchema, tableName) in self.relation_triggers:
+					self.relation_triggers[(tableSchema, tableName)] = []
+				self.relation_triggers[(tableSchema, tableName)].append((triggerSchema, triggerName))
+		finally:
+			del cursor
+
 	def _get_tablespaces(self, connection, doccat):
 		logging.debug("Retrieving tablespaces")
 		cursor = connection.cursor()
@@ -911,22 +924,29 @@ class Cache(object):
 			}[row['dataType']]
 
 	def _get_tablespace_tables(self, connection, doccat):
-		# Note: MUST be run after _get_tables and _get_tablespaces
-		self.tablespaceTables = dict([(tbspace, [(row['schemaName'], row['name'])
-			for row in self.tables.itervalues()
-			if row['dataTbspace'] == tbspace
-			or row['indexTbspace'] == tbspace
-			or row['longTbspace'] == tbspace])
-			for tbspace in self.tablespaces])
+		# Note: Must be run AFTER _get_tables and _get_tablespaces
+		logging.debug("Retrieving tablespace tables")
+		self.tablespaceTables = dict([
+			(tbspace, [(row['schemaName'], row['name'])
+				for row in self.tables.itervalues()
+				if row['dataTbspace'] == tbspace
+				or row['indexTbspace'] == tbspace
+				or row['longTbspace'] == tbspace
+			])
+			for tbspace in self.tablespaces
+		])
 
 	def _get_tablespace_indexes(self, connection, doccat):
-		# Note: MUST be run after _get_indexes and _get_tablespaces
-		self.tablespaceIndexes = dict([(tbspace, [(row['schemaName'], row['name'])
-			for row in self.indexes.itervalues() if row['tablespaceName'] == tbspace])
-			for tbspace in self.tablespaces])
+		# Note: Must be run AFTER _get_indexes and _get_tablespaces
+		logging.debug("Retrieving tablespace indexes")
+		self.tablespaceIndexes = dict([
+			(tbspace, [(row['schemaName'], row['name'])
+				for row in self.indexes.itervalues() if row['tablespaceName'] == tbspace
+			])
+			for tbspace in self.tablespaces
+		])
 
 def main():
-	# XXX Test cases
 	pass
 
 if __name__ == "__main__":
