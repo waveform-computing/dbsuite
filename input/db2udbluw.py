@@ -692,14 +692,14 @@ class Cache(object):
 		try:
 			cursor.execute("""
 				SELECT
-					P.RTRIM(ROUTINESCHEMA)          AS "schemaName",
-					P.RTRIM(ROUTINENAME)            AS "routineName",
-					P.RTRIM(SPECIFICNAME)           AS "specificName",
-					P.RTRIM(COALESCE(PARMNAME, '')) AS "name",
+					RTRIM(P.ROUTINESCHEMA)          AS "schemaName",
+					RTRIM(P.ROUTINENAME)            AS "routineName",
+					RTRIM(P.SPECIFICNAME)           AS "specificName",
+					RTRIM(COALESCE(P.PARMNAME, '')) AS "name",
 					P.ORDINAL                       AS "position",
 					P.ROWTYPE                       AS "type",
-					P.RTRIM(TYPESCHEMA)             AS "datatypeSchema",
-					P.RTRIM(TYPENAME)               AS "datatypeName",
+					RTRIM(P.TYPESCHEMA)             AS "datatypeSchema",
+					RTRIM(P.TYPENAME)               AS "datatypeName",
 					P.LOCATOR                       AS "locator",
 					P.LENGTH                        AS "size",
 					P.SCALE                         AS "scale",
@@ -795,18 +795,18 @@ class Cache(object):
 		try:
 			cursor.execute("""
 				SELECT
-					RTRIM(ROUTINESCHEMA)          AS "schemaName",
-					RTRIM(ROUTINENAME)            AS "routineName",
-					RTRIM(SPECIFICNAME)           AS "specificName",
-					RTRIM(COALESCE(PARMNAME, '')) AS "name",
-					ORDINAL                       AS "position",
-					ROWTYPE                       AS "type",
-					RTRIM(TYPESCHEMA)             AS "datatypeSchema",
-					RTRIM(TYPENAME)               AS "datatypeName",
-					LENGTH                        AS "size",
-					SCALE                         AS "scale",
-					CODEPAGE                      AS "codepage",
-					REMARKS                       AS "description"
+					RTRIM(P.ROUTINESCHEMA)          AS "schemaName",
+					RTRIM(P.ROUTINENAME)            AS "routineName",
+					RTRIM(P.SPECIFICNAME)           AS "specificName",
+					RTRIM(COALESCE(P.PARMNAME, '')) AS "name",
+					P.ORDINAL                       AS "position",
+					P.ROWTYPE                       AS "type",
+					RTRIM(P.TYPESCHEMA)             AS "datatypeSchema",
+					RTRIM(P.TYPENAME)               AS "datatypeName",
+					P.LENGTH                        AS "size",
+					P.SCALE                         AS "scale",
+					P.CODEPAGE                      AS "codepage",
+					P.REMARKS                       AS "description"
 				FROM
 					%(schema)s.ROUTINEPARMS P
 					INNER JOIN %(schema)s.ROUTINES R
