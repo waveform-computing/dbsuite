@@ -2,6 +2,7 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
+import re
 import logging
 from relationbase import Constraint
 from util import formatIdentifier
@@ -65,10 +66,10 @@ class Check(Constraint):
 			return super(Check, self).getDescription()
 
 	def getPrototype(self):
-		return 'CONSTRAINT %s CHECK (%s)' % (
-			formatIdentifier(self.name),
-			self.expression
-		)
+		sql = 'CHECK (%s)' % self.expression
+		if not re.match('^SQL\d{15}$', self.name):
+			sql = 'CONSTRAINT %s %s' % (self.name, sql)
+		return sql
 
 	def __getCreated(self):
 		return self.__created

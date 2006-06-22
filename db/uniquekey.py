@@ -2,6 +2,7 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
+import re
 import logging
 from relationbase import Constraint
 from util import formatIdentifier
@@ -57,10 +58,10 @@ class UniqueKey(Constraint):
 			return super(UniqueKey, self).getDescription()
 	
 	def getPrototype(self):
-		return 'CONSTRAINT %s UNIQUE (%s)' % (
-			formatIdentifier(self.name),
-			', '.join([formatIdentifier(field.name) for field in self.fields])
-		)
+		sql = 'UNIQUE (%s)' % ', '.join([formatIdentifier(field.name) for field in self.fields])
+		if not re.match('^SQL\d{15}$', self.name):
+			sql = 'CONSTRAINT %s %s' % (self.name, sql)
+		return sql
 
 	def __getDefiner(self):
 		return self.__definer
@@ -78,10 +79,10 @@ class PrimaryKey(UniqueKey):
 		return "Primary Key"
 
 	def getPrototype(self):
-		return "CONSTRAINT %s PRIMARY KEY (%s)" % (
-			formatIdentifier(self.name),
-			', '.join([formatIdentifier(field.name) for field in self.fields])
-		)
+		sql = 'PRIMARY KEY (%s)' % ', '.join([formatIdentifier(field.name) for field in self.fields])
+		if not re.match('^SQL\d{15}$', self.name):
+			sql = 'CONSTRAINT %s %s' % (self.name, sql)
+		return sql
 
 def main():
 	pass

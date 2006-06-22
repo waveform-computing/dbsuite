@@ -2,6 +2,7 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
+import re
 import logging
 from relationbase import Constraint
 from util import formatIdentifier
@@ -71,8 +72,7 @@ class ForeignKey(Constraint):
 			return super(ForeignKey, self).getDescription()
 	
 	def getPrototype(self):
-		sql = 'CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s.%s(%s)' % (
-			formatIdentifier(self.name),
+		sql = 'FOREIGN KEY (%s) REFERENCES %s.%s(%s)' % (
 			', '.join([formatIdentifier(myfield.name) for (myfield, reffield) in self.fields]),
 			formatIdentifier(self.refTable.schema.name),
 			formatIdentifier(self.refTable.name),
@@ -90,6 +90,8 @@ class ForeignKey(Constraint):
 				'No Action': 'NO ACTION',
 				'Restrict': 'RESTRICT',
 			})
+		if not re.match('^SQL\d{15}$', self.name):
+			sql = 'CONSTRAINT %s %s' % (self.name, sql)
 		return sql
 
 	def __getRefTable(self):
