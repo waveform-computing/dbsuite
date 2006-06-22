@@ -32,12 +32,13 @@ class Procedure(Routine):
 		self.__description = row['description']
 		self.__params = {}
 		myparams = [
-			cache.func_params[(schemaName, specificName, paramType, paramPos)]
-			for (schemaName, specificName, paramType, paramPos) in cache.func_params
+			cache.proc_params[(schemaName, specificName, paramType, paramPos)]
+			for (schemaName, specificName, paramType, paramPos) in cache.proc_params
 			if schemaName == schema.name and specificName == self.specificName
 		]
 		for row in myparams:
-			self.__params[param.name] = Param(self, cache, **row)
+			param = Param(self, cache, **row)
+			self.__params[param.name] = param
 		self.__paramList = sorted(self.__params.itervalues(), key=lambda param:param.position)
 
 	def getTypeName(self):
@@ -62,9 +63,13 @@ class Procedure(Routine):
 		return self.__paramList
 
 	def getPrototype(self):
+		prefix = {'Input': 'IN', 'Output': 'OUT', 'In/Out': 'INOUT'}
 		
 		def formatParams(params):
-			return ', '.join(['%s %s' % (param.name, param.datatypeStr) for param in params])
+			return ', '.join([
+				'%s %s %s' % (prefix[param.type], param.name, param.datatypeStr)
+				for param in params
+			])
 
 		return "%s(%s)" % (
 			self.qualifiedName,

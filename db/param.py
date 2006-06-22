@@ -17,7 +17,9 @@ class Param(DocBase):
 		self.__type = row['type']
 		self.__datatypeSchema = row['datatypeSchema']
 		self.__datatypeName = row['datatypeName']
-		self.__locator = row['locator']
+		# Procedure parameters are never locators and do not have a locator
+		# element in their cache entry
+		self.__locator = row.get('locator', False)
 		self.__size = row['size']
 		self.__scale = row['scale']
 		self.__codepage = row['codepage']
