@@ -3044,6 +3044,7 @@ class SQLFormatter(BaseFormatter):
 				if not self._match(','):
 					break
 			self._expect(')')
+		self._indent()
 		# Parse procedure options (which can appear in any order)
 		valid = set([
 			'CALLED',
@@ -3127,6 +3128,8 @@ class SQLFormatter(BaseFormatter):
 				self._expect(IDENTIFIER)
 			elif t == 'THREADSAFE':
 				pass
+			self._newline()
+		self._outdent()
 		self._expect('BEGIN')
 		self._parse_procedure_compound_statement()
 	
@@ -4719,10 +4722,18 @@ class SQLFormatter(BaseFormatter):
 		if not self._match(')'):
 			while True:
 				self._match_one_of(['IN', 'OUT', 'INOUT'])
-				self._expect(IDENTIFIER)
-				self._parse_datatype()
-				if self._expect_one_of([',', ')'])[1] == ')':
+				self._save_state()
+				try:
+					self._expect(IDENTIFIER)
+					self._parse_datatype()
+				except ParseError:
+					self._restore_state()
+					self._parse_datatype()
+				else:
+					self._forget_state()
+				if not self._match(','):
 					break
+			self._expect(')')
 		# Parse the return type
 		if self._match('RETURNS'):
 			if self._match_one_of(['ROW', 'TABLE']):
