@@ -43,7 +43,7 @@ class Trigger(SchemaObject):
 		return self.schema.triggerList
 
 	def getCreateSql(self):
-		return self.sql
+		return self.__sql + '!'
 
 	def getDropSql(self):
 		sql = Template('DROP TRIGGER $schema.$trigger;')
@@ -76,6 +76,9 @@ class Trigger(SchemaObject):
 	def __getFuncPath(self):
 		return self.__funcPath
 	
+	def __getSql(self):
+		return self.__sql
+
 	relation = property(__getRelation, doc="""The relation (table or view) that the trigger is defined for""")
 	definer = property(__getDefiner, doc="""The user who created the trigger""")
 	created = property(__getCreated, doc="""Timestamp indicating when the trigger was created""")
@@ -84,6 +87,7 @@ class Trigger(SchemaObject):
 	valid = property(__getValid, doc="""Specifies whether the trigger is active or inoperative""")
 	qualifier = property(__getQualifier, doc="""Specifies the current schema at the time the trigger was created""")
 	funcPath = property(__getFuncPath, doc="""Specifies the function resolution path at the time the trigger was created""")
+	sql = property(__getSql, doc="""The complete SQL statement that created the trigger""")
 
 def main():
 	pass

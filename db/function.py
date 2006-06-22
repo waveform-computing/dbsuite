@@ -100,7 +100,7 @@ class Function(Routine):
 	
 	def getCreateSql(self):
 		if self.language == 'SQL':
-			return self.sql + '!'
+			return self.__sql + '!'
 		else:
 			raise NotImplementedError
 	

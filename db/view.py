@@ -100,6 +100,9 @@ class View(Relation):
 	def __getFuncPath(self):
 		return self.__funcPath
 	
+	def __getSql(self):
+		return self.__sql
+
 	triggers = property(__getTriggers, doc="""The triggers defined against this view in a dictionary""")
 	triggerList = property(__getTriggerList, doc="""The triggers defined against this view in a list""")
 	dependencies = property(__getDependencies, doc="""A dictionary of the relations (e.g. views) that this view depends upon (keyed by (schemaName, relationName) tuples)""")
@@ -111,6 +114,7 @@ class View(Relation):
 	valid = property(__getValid, doc="""Specifies whether the view is accessible or inoperative""")
 	qualifier = property(__getQualifier, doc="""Specifies the current schema at the time the view was created""")
 	funcPath = property(__getFuncPath, doc="""Specifies the function resolution path at the time the view was created""")
+	sql = property(__getSql, doc="""The complete SQL statement that created the view""")
 	
 def main():
 	pass
