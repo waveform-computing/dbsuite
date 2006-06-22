@@ -53,6 +53,6 @@ def write(self, trigger):
 		DB2 removes much of the formatting, hence the formatting in the 
 		statement below (which this system attempts to reconstruct) is
 		not necessarily the formatting of the original statement.""")
-	doc.addContent(makeTag('pre', {'class': 'sql'}, self.formatSql(trigger.createSql)))
+	doc.addContent(makeTag('pre', {'class': 'sql'}, self.formatSql(trigger.createSql, terminator="!")))
 	doc.write(os.path.join(self._path, filename(trigger)))
 
