@@ -991,7 +991,7 @@ class SQLFormatter(BaseFormatter):
 			elif newlines:
 				self._newline()
 	
-	def _parse_datatype_list(self):
+	def _parse_datatype_list(self, newlines=False):
 		"""Parses a comma separated list of data-types.
 
 		This is another common pattern in SQL, found when trying to define
@@ -1002,8 +1002,10 @@ class SQLFormatter(BaseFormatter):
 			self._parse_datatype()
 			if not self._match(','):
 				break
+			elif newlines:
+				self._newline()
 	
-	def _parse_ident_type_list(self):
+	def _parse_ident_type_list(self, newlines=False):
 		"""Parses a comma separated list of identifiers and data-types.
 
 		This is a common pattern in SQL, found in the prototype of SQL
@@ -1014,6 +1016,8 @@ class SQLFormatter(BaseFormatter):
 			self._parse_datatype()
 			if not self._match(','):
 				break
+			elif newlines:
+				self._newline()
 
 	def _parse_tuple(self, allowdefault=False):
 		"""Parses a full-select or a tuple (list) of expressions.
@@ -3388,7 +3392,6 @@ class SQLFormatter(BaseFormatter):
 			self._newline(-1)
 			self._expect('DB2SQL')
 		if self._match('WHEN'):
-			self._outdent(-1)
 			self._expect('(')
 			self._indent()
 			self._parse_predicate1()
@@ -3445,10 +3448,13 @@ class SQLFormatter(BaseFormatter):
 			# Try and parse a mandatory table correlation followed by a
 			# mandatory INCLUDE
 			self._parse_table_correlation(optional=False)
+			self._newline()
 			self._expect('INCLUDE')
 			reraise = True
 			self._expect('(')
-			self._parse_ident_type_list()
+			self._indent()
+			self._parse_ident_type_list(newlines=True)
+			self._outdent()
 			self._expect(')')
 			if self._match('SET'):
 				self._parse_set_clause(allowdefault=False)
@@ -3458,20 +3464,26 @@ class SQLFormatter(BaseFormatter):
 			self._restore_state()
 			if reraise: raise
 			if self._match('INCLUDE'):
+				self._newline(-1)
 				self._expect('(')
-				self._parse_ident_type_list()
+				self._indent()
+				self._parse_ident_type_list(newlines=True)
+				self._outdent()
 				self._expect(')')
 				if self._match('SET'):
+					self._newline(-1)
 					self._parse_set_clause(allowdefault=False)
 			else:
 				self._parse_table_correlation()
 		else:
 			self._forget_state()
 		if self._match('WHERE'):
+			self._newline(-1)
 			self._indent()
 			self._parse_predicate1()
 			self._outdent()
 		if self._match('WITH'):
+			self._newline(-1)
 			self._expect_one_of(['RR', 'RS', 'CS', 'UR'])
 	
 	def _parse_drop_statement(self):
@@ -3649,20 +3661,30 @@ class SQLFormatter(BaseFormatter):
 		# INSERT already matched
 		self._expect('INTO')
 		if self._match('('):
+			self._indent()
 			self._parse_full_select1()
+			self._outdent()
+			self._expect(')')
 		else:
 			self._parse_subschema_name()
 		if self._match('('):
-			self._parse_ident_list()
+			self._indent()
+			self._parse_ident_list(newlines=True)
+			self._outdent()
 			self._expect(')')
 		if self._match('INCLUDE'):
+			self._newline(-1)
 			self._expect('(')
-			self._parse_ident_type_list()
+			self._indent()
+			self._parse_ident_type_list(newlines=True)
+			self._outdent()
 			self._expect(')')
 		# Parse a full-select with optional common-table-expression, allowing
 		# the DEFAULT keyword in (for example) a VALUES clause
+		self._newline()
 		self._parse_query(allowdefault=True)
 		if self._match('WITH'):
+			self._newline(-1)
 			self._expect_one_of(['RR', 'RS', 'CS', 'UR'])
 
 	def _parse_iterate_statement(self):
@@ -4213,10 +4235,13 @@ class SQLFormatter(BaseFormatter):
 			# Try and parse a mandatory table correlation followed by a
 			# mandatory INCLUDE
 			self._parse_table_correlation(optional=False)
+			self._newline()
 			self._expect('INCLUDE')
 			reraise = True
 			self._expect('(')
-			self._parse_ident_type_list()
+			self._indent()
+			self._parse_ident_type_list(newlines=True)
+			self._outdent()
 			self._expect(')')
 		except ParseError:
 			# If that fails, rewind and parse an optional INCLUDE or an
@@ -4224,8 +4249,11 @@ class SQLFormatter(BaseFormatter):
 			self._restore_state()
 			if reraise: raise
 			if self._match('INCLUDE'):
+				self._newline(-1)
 				self._expect('(')
-				self._parse_ident_type_list()
+				self._indent()
+				self._parse_ident_type_list(newlines=True)
+				self._outdent()
 				self._expect(')')
 			else:
 				self._parse_table_correlation()
@@ -4233,9 +4261,13 @@ class SQLFormatter(BaseFormatter):
 			self._forget_state()
 		# Parse mandatory assignment clause allow DEFAULT values
 		self._expect('SET')
+		self._indent()
 		self._parse_set_clause(allowdefault=True)
+		self._outdent()
 		if self._match('WHERE'):
+			self._indent()
 			self._parse_predicate1()
+			self._outdent()
 		if self._match('WITH'):
 			self._expect_one_of(['RR', 'RS', 'CS', 'UR'])
 
