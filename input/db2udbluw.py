@@ -863,6 +863,7 @@ class Cache(object):
 				'S': 'Statement',
 				'R': 'Row',
 			}[row['granularity']]
+			row['sql'] = str(row['sql'])
 
 	def _get_relation_triggers(self, connection, doccat):
 		logging.debug("Retrieving table triggers")
