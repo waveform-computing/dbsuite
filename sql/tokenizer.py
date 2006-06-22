@@ -270,25 +270,24 @@ class SQLTokenizerBase(object):
 		"""
 		if not value:
 			raise ValueError("Statement terminator string must contain at least one character")
-		if self._terminator != value:
-			# Restore the saved handler, if necessary. We don't need to do this
-			# if there was no prior terminator (such as in a new instance of
-			# the, class). If the saved handler is the default handler (None),
-			# simply remove the first character of the terminator from the jump
-			# table
-			if self._terminator is not None:
-				if self._savedhandler is None:
-					del self._jump[self._terminator[0]]
-				else:
-					self._jump[self._terminator[0]] = self._savedhandler
-			# Replace the handler (if any) for the statement terminator
-			# character (or the first character of the statement terminator
-			# string) with a special handler and save the original handler for
-			# use by the special handler
-			if (value == '\r\n') or (value == '\r'): value = '\n'
-			self._terminator = value
-			self._savedhandler = self._jump.get(value[0], None)
-			self._jump[value[0]] = self._handle_terminator
+		# Restore the saved handler, if necessary. We don't need to do this
+		# if there was no prior terminator (such as in a new instance of
+		# the, class). If the saved handler is the default handler (None),
+		# simply remove the first character of the terminator from the jump
+		# table
+		if self._terminator is not None:
+			if self._savedhandler is None:
+				del self._jump[self._terminator[0]]
+			else:
+				self._jump[self._terminator[0]] = self._savedhandler
+		# Replace the handler (if any) for the statement terminator
+		# character (or the first character of the statement terminator
+		# string) with a special handler and save the original handler for
+		# use by the special handler
+		if (value == '\r\n') or (value == '\r'): value = '\n'
+		self._terminator = value
+		self._savedhandler = self._jump.get(value[0], None)
+		self._jump[value[0]] = self._handle_terminator
 
 	char = property(_getchar, doc="""The current character the tokenizer is looking at, or the NULL character if EOF has been reached""")
 	nextchar = property(_getnextchar, doc="""The character immediately after the current character, or the NULL character if it is past the EOF""")
