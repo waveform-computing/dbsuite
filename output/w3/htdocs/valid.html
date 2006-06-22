@@ -45,11 +45,17 @@
 		<div id="fourth-level">
 			<h1>Valid</h1>
 		</div>
+		<p><strong>Views</strong></p>
 		<p>If True, the view is accessible by users with the necessary
 		authorization. If False, the view is currently marked inaccessible
 		(usually because a table or view that this view references has been
 		altered), and needs to be dropped and recreated before users can
 		access it.</p>
+		<p><strong>Triggers</strong></p>
+		<p>If True, the trigger is active and will fire when the associated
+		event occurs. If False, the trigger is currently inactive (usually
+		because a table, view or routine this trigger relies upon has been
+		dropped), and needs to be dropped and recreated to reactivate it.</p>
 
 		<!-- start popup footer //////////////////////////////////////////// -->
 		<div id="popup-footer">
