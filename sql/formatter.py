@@ -26,7 +26,9 @@ from sql.tokenizer import *
 	REGISTER,  # Special registers (e.g. CURRENT DATE) converted from KEYWORD or IDENTIFIER
 	STATEMENT, # Statement terminator
 	INDENT,    # Whitespace indentation at the start of a line
-) = newTokens(4)
+	VALIGN,    # Whitespace indentation within a line to vertically align blocks of text
+	VAPPLY,    # Mark the end of a run of VALIGN tokens
+) = newTokens(6)
 
 # Token labels used for formatting error messages
 TOKEN_LABELS = {
@@ -201,6 +203,32 @@ class BaseFormatter(object):
 		super(BaseFormatter, self).__init__()
 		self.indent = " "*4 # Default indent is 4 spaces
 		self.debugging = 0
+	
+	def _insert_output(self, token, index):
+		"""Inserts the specified token into the output.
+
+		This utility routine is used by _newline() and other formatting routines
+		to insert tokens into the output sometime prior to the current end of
+		the output. The index parameter (which is always negative) specifies
+		how many non-junk tokens are to be skipped over before inserting the
+		specified token.
+
+		Note that the method takes care to preserve the invariants that the
+		state save/restore methods rely upon.
+		"""
+		if not index:
+			self._output.append(token)
+		else:
+			i = -1
+			while True:
+				while self._output[i][0] in (COMMENT, WHITESPACE):
+					i -= 1
+				index += 1
+				if index >= 0:
+					break
+			# Check that the invariant is preserved (see _save_state())
+			assert (len(self._statestack) == 0) or (len(self._output) + i >= self._statestack[-1][2])
+			self._output.insert(i, token)
 
 	def _newline(self, index=0):
 		"""Adds an INDENT token to the output.
@@ -209,38 +237,32 @@ class BaseFormatter(object):
 		does this by appending (or inserting, depending on the index parameter)
 		an INDENT token to the output list. Such a token starts a new line,
 		indented to the current indentation level.
-
-		If the index parameter is False, 0, or ommitted, the new INDENT token
-		is appended to the output. If the index parameter is -1, the new INDENT
-		token is inserted immediately before the last non-ignorable
-		(non-whitespace or comment) token. If the index parameter is -2, it is
-		inserted before the second to last non-ignorable token and so on.
-
-		The index parameter, if specified, may not be greater than zero.
 		"""
 		token = (INDENT, self._level, "\n" + self.indent * self._level)
-		if not index:
-			self._output.append(token)
-		else:
-			i = -1
-			while True:
-				while self._output[i][0] in (COMMENT, WHITESPACE): i -= 1
-				index += 1
-				if index >= 0: break
-			# Check the invariant is preserved (see _save_state())
-			assert (len(self._statestack) == 0) or (len(self._output) + i >= self._statestack[-1][2])
-			self._output.insert(i, token)
+		self._insert_output(token, index)
 
 	def _indent(self, index=0):
+		"""Increments the indentation level and starts a new line."""
 		self._level += 1
 		self._newline(index)
 
 	def _outdent(self, index=0):
+		"""Decrements the indentation level and starts a new line."""
 		self._level -= 1
 		# Stop two or more consecutive outdent() calls from leaving blank lines
 		if self._output[-1][0] == INDENT:
 			del self._output[-1]
 		self._newline(index)
+	
+	def _valign(self, index=0):
+		"""Inserts a VALIGN token into the output."""
+		token = (VALIGN, None, '')
+		self._insert_output(token, index)
+	
+	def _vapply(self, index=0):
+		"""Inserts a VAPPLY token into the output."""
+		token = (VAPPLY, None, '')
+		self._insert_output(token, index)
 
 	def _save_state(self):
 		"""Saves the current state of the parser on a stack for later retrieval."""
@@ -487,14 +509,130 @@ class BaseFormatter(object):
 		raise ParseExpectedOneOfError(self._tokens, self._token(self._index), templates)
 
 	def _format_token(self, t):
-		"""Reformats a token for output"""
-		# Override this method in descendent classes to transform the token
-		# in whatever manner you wish. Return the transformed token without
-		# the line and column elements (the last two) as these will be
-		# recalculated in _parse_finish. The default implementation here
-		# performs no transformation
-		return t[:3]
+		"""Reformats tokens for output"""
 		
+		def quote_str(s, qchar):
+			"""Quote a string, doubling all quotation characters within it"""
+			ctrlchars = set(chr(c) for c in xrange(32))
+			if ctrlchars & set(s):
+				# If the string contains non-printable control characters,
+				# format it as a hexstring
+				return 'X%s%s%s' % (qchar, ''.join('%.2X' % (ord(c),) for c in s), qchar)
+			else:
+				return '%s%s%s' % (qchar, s.replace(qchar, qchar*2), qchar)
+		
+		def format_ident(ident):
+			"""Format an SQL identifier with quotes if required"""
+			identchars = set(ibmdb2udb_identchars)
+			quotedident = not ident[0] in (identchars - set('0123456789'))
+			if not quotedident:
+				for c in ident[1:]:
+					if not c in identchars:
+						quotedident = True
+						break
+			if quotedident:
+				return quote_str(ident, '"')
+			else:
+				return ident
+		
+		def format_param(param):
+			"""Format a parameter with quotes if required"""
+			if param is None:
+				return '?'
+			else:
+				return ':%s' % (format_ident(param))
+			
+		# Override this method in descendent classes to transform the token in
+		# whatever manner you wish. Return the transformed token without the
+		# line and column elements (the last two) as these will be recalculated
+		# in _recalc_positions(). To remove a token from the output, return
+		# None.
+		if t[0] == IDENTIFIER:
+			return (t[0], t[1], format_ident(t[1]))
+		elif t[0] == REGISTER:
+			return (t[0], t[1], format_ident(t[1]))
+		elif t[0] == DATATYPE:
+			return (t[0], t[1], format_ident(t[1]))
+		elif t[0] == PARAMETER:
+			return (t[0], t[1], format_param(t[1]))
+		elif t[0] == KEYWORD:
+			return (t[0], t[1], t[1])
+		elif t[0] == WHITESPACE:
+			return (t[0], None, ' ')
+		elif t[0] == COMMENT:
+			return (t[0], t[1], '/*%s*/' % (t[1]))
+		elif t[0] == NUMBER:
+			return (t[0], t[1], str(t[1]))
+		elif t[0] == STRING:
+			return (t[0], t[1], quote_str(t[1], "'"))
+		elif t[0] == TERMINATOR:
+			return (t[0], None, ';')
+		elif t[0] == STATEMENT:
+			return (t[0], None, '!')
+		elif t[0] == INDENT:
+			return (WHITESPACE, None, '\n' + self.indent*t[1])
+		else:
+			return t[:3]
+	
+	def _reformat_output(self):
+		"""Reformats all output tokens with _format_token()"""
+		newoutput = []
+		for token in self._output:
+			token = self._format_token(token)
+			if token:
+				newoutput.append(token)
+		self._output = newoutput
+	
+	def _convert_valign(self):
+		"""Converts the first VALIGN token on each line into a WHITESPACE token"""
+		result = False
+		indexes = []
+		aligncol = 0
+		i = 0
+		while i < len(self._output):
+			(tokentype, _, _, line, col) = self._output[i]
+			if tokentype == VALIGN:
+				indexes.append(i)
+				aligncol = max(aligncol, col)
+				# Skip to the next line (to ignore any further VALIGN tokens on
+				# this line)
+				while (self._output[i][3] == line) and (self._output[i][0] != VAPPLY):
+					i += 1
+			elif tokentype == VAPPLY:
+				if indexes:
+					result = True
+					for j in indexes:
+						# Convert each VALIGN token into an aligned WHITESPACE
+						# token
+						(_, _, _, line, col) = self._output[j]
+						self._output[j] = (WHITESPACE, None, ' '*(aligncol - col), line, col)
+					indexes = []
+					aligncol = 0
+					i += 1
+				else:
+					# No more VALIGN tokens found in the range, so remove the
+					# VAPPLY token (no need to increment i here)
+					del self._output[i]
+			else:
+				i += 1
+		return result
+	
+	def _recalc_positions(self):
+		"""Recalculates the line and col elements of all output tokens"""
+		line = 1
+		column = 1
+		newoutput = []
+		for token in self._output:
+			token = token[:3] + (line, column)
+			newoutput.append(token)
+			source = token[2]
+			while '\n' in source:
+				line += 1
+				column = 1
+				source = source[source.index('\n') + 1:]
+			column += len(source)
+		self._output = newoutput
+
 	def _parse_init(self, tokens):
 		"""Sets up the parser with the specified tokens as input"""
 		self._statestack = list()
@@ -508,21 +646,10 @@ class BaseFormatter(object):
 	
 	def _parse_finish(self):
 		"""Cleans up output tokens and recalculates line and column positions"""
-		line = 1
-		column = 1
-		newoutput = []
-		for token in self._output:
-			# Add the recalculated line and column to the formatted token
-			token = self._format_token(token)[:3] + (line, column)
-			newoutput.append(token)
-			source = token[2]
-			# Note that all line breaks are \n by this point
-			while '\n' in source:
-				line += 1
-				column = 1
-				source = source[source.index('\n') + 1:]
-			column += len(source)
-		self._output = newoutput
+		self._reformat_output()
+		self._recalc_positions()
+		while self._convert_valign():
+			self._recalc_positions()
 
 	def _parse_top(self):
 		"""Top level of the parser"""
@@ -572,6 +699,10 @@ class SQLFormatter(BaseFormatter):
 
 	def __init__(self):
 		super(SQLFormatter, self).__init__()
+
+	def _parse_top(self):
+		# Override _parse_top to make a 'statement' the top of the parse tree
+		self._parse_statement()
 
 	# PATTERNS ###############################################################
 	
@@ -1681,10 +1812,12 @@ class SQLFormatter(BaseFormatter):
 				validno.remove(t)
 				valid.remove(t)
 	
-	def _parse_column_definition(self):
+	def _parse_column_definition(self, aligntypes=False):
 		"""Parses a column definition in a CREATE TABLE statement"""
 		# Parse a column definition
 		self._expect(IDENTIFIER)
+		if aligntypes:
+			self._valign()
 		self._parse_datatype()
 		# Parse column options
 		while True:
@@ -3173,7 +3306,7 @@ class SQLFormatter(BaseFormatter):
 					except ParseError:
 						# If that fails, rewind and try and parse a column definition
 						self._restore_state()
-						self._parse_column_definition()
+						self._parse_column_definition(aligntypes=True)
 					else:
 						self._forget_state()
 					if not self._match(','):
@@ -3181,6 +3314,7 @@ class SQLFormatter(BaseFormatter):
 					else:
 						self._newline()
 				self._outdent()
+				self._vapply()
 				self._expect(')')
 			else:
 				self._forget_state()
@@ -3202,6 +3336,7 @@ class SQLFormatter(BaseFormatter):
 		"""Parses a CREATE TRIGGER statement"""
 		# CREATE TRIGGER already matched
 		self._parse_trigger_name()
+		self._indent()
 		if self._match_sequence(['NO', 'CASCADE', 'BEFORE']):
 			pass
 		elif self._match_sequence(['INSTEAD', 'OF']):
@@ -3212,12 +3347,15 @@ class SQLFormatter(BaseFormatter):
 			self._expected_one_of(['AFTER', 'NO', 'INSTEAD'])
 		if self._match('UPDATE'):
 			if self._match('OF'):
-				self._parse_ident_list()
+				self._indent()
+				self._parse_ident_list(newlines=True)
+				self._outdent()
 		else:
 			self._expect_one_of(['INSERT', 'DELETE', 'UPDATE'])
 		self._expect('ON')
 		self._parse_table_name()
 		if self._match('REFERENCING'):
+			self._newline(-1)
 			valid = ['OLD', 'NEW', 'OLD_TABLE', 'NEW_TABLE']
 			while True:
 				if not valid:
@@ -3239,19 +3377,29 @@ class SQLFormatter(BaseFormatter):
 					if 'NEW' in valid: valid.remove('NEW')
 				self._match('AS')
 				self._expect(IDENTIFIER)
+		self._newline()
 		self._expect_sequence(['FOR', 'EACH'])
 		self._expect_one_of(['ROW', 'STATEMENT'])
 		# XXX MODE DB2SQL appears to be deprecated syntax
-		self._match_sequence(['MODE', 'DB2SQL'])
+		if self._match('MODE'):
+			self._newline(-1)
+			self._expect('DB2SQL')
 		if self._match('WHEN'):
+			self._outdent(-1)
 			self._expect('(')
+			self._indent()
 			self._parse_predicate1()
+			self._outdent()
 			self._expect(')')
 		if self._match('BEGIN'):
+			self._outdent(-1)
 			self._parse_dynamic_compound_statement()
 		else:
 			# XXX Add support for label
+			self._indent()
 			self._parse_routine_statement()
+			self._outdent()
+			self._outdent()
 
 	def _parse_create_view_statement(self):
 		"""Parses a CREATE VIEW statement"""
@@ -4039,8 +4187,10 @@ class SQLFormatter(BaseFormatter):
 		if self._match('SET'):
 			self._expect_sequence(['MESSAGE_TEXT', '='])
 			self._parse_expression1()
-		# We deliberately don't parse the deprecated parenthesized expression
-		# syntax here
+		elif self._match('('):
+			# XXX Ensure syntax only valid within a trigger
+			self._parse_expression1()
+			self._expect(')')
 	
 	def _parse_update_statement(self):
 		"""Parses an UPDATE statement"""
@@ -4553,71 +4703,6 @@ class SQLFormatter(BaseFormatter):
 		else:
 			self._parse_select_statement()
 
-	def _parse_top(self):
-		# Override _parse_top to make a 'statement' the top of the parse tree
-		self._parse_statement()
-
-	def _format_token(self, t):
-		"""Reformats tokens for output"""
-		
-		def quotestr(s, qchar):
-			"""Quote a string, doubling all quotation characters within it"""
-			ctrlchars = set(chr(c) for c in xrange(32))
-			if ctrlchars & set(s):
-				# If the string contains non-printable control characters,
-				# format it as a hexstring
-				return 'X%s%s%s' % (qchar, ''.join('%.2X' % (ord(c),) for c in s), qchar)
-			else:
-				return '%s%s%s' % (qchar, s.replace(qchar, qchar*2), qchar)
-		
-		def formatident(ident):
-			"""Format an SQL identifier with quotes if required"""
-			identchars = set(ibmdb2udb_identchars)
-			quotedident = not ident[0] in (identchars - set('0123456789'))
-			if not quotedident:
-				for c in ident[1:]:
-					if not c in identchars:
-						quotedident = True
-						break
-			if quotedident:
-				return quotestr(ident, '"')
-			else:
-				return ident
-		
-		def formatparam(param):
-			"""Format a parameter with quotes if required"""
-			if param is None:
-				return '?'
-			else:
-				return ':%s' % (formatident(param))
-			
-		if t[0] == IDENTIFIER:
-			return (t[0], t[1], formatident(t[1]))
-		elif t[0] == REGISTER:
-			return (t[0], t[1], formatident(t[1]))
-		elif t[0] == DATATYPE:
-			return (t[0], t[1], formatident(t[1]))
-		elif t[0] == PARAMETER:
-			return (t[0], t[1], formatparam(t[1]))
-		elif t[0] == KEYWORD:
-			return (t[0], t[1], t[1])
-		elif t[0] == WHITESPACE:
-			return (t[0], None, ' ')
-		elif t[0] == COMMENT:
-			return (t[0], t[1], '/*%s*/' % (t[1]))
-		elif t[0] == NUMBER:
-			return (t[0], t[1], str(t[1]))
-		elif t[0] == STRING:
-			return (t[0], t[1], quotestr(t[1], "'"))
-		elif t[0] == TERMINATOR:
-			return (t[0], None, ';')
-		elif t[0] == STATEMENT:
-			return (t[0], None, '@')
-		elif t[0] == INDENT:
-			return (WHITESPACE, None, '\n' + self.indent*t[1])
-		else:
-			return t[:3]
-
 	def parseRoutinePrototype(self, tokens):
 		"""Parses a routine prototype"""
 		# It's a bit of hack sticking this here. This method doesn't really
@@ -4633,18 +4718,19 @@ class SQLFormatter(BaseFormatter):
 		self._expect('(')
 		if not self._match(')'):
 			while True:
+				self._match_one_of(['IN', 'OUT', 'INOUT'])
 				self._expect(IDENTIFIER)
 				self._parse_datatype()
 				if self._expect_one_of([',', ')'])[1] == ')':
 					break
 		# Parse the return type
-		self._expect('RETURNS')
-		if self._match_one_of(['ROW', 'TABLE']):
-			self._expect('(')
-			self._parse_ident_type_list()
-			self._expect(')')
-		else:
-			self._parse_datatype()
+		if self._match('RETURNS'):
+			if self._match_one_of(['ROW', 'TABLE']):
+				self._expect('(')
+				self._parse_ident_type_list()
+				self._expect(')')
+			else:
+				self._parse_datatype()
 		self._parse_finish()
 		return self._output
 
