@@ -1544,6 +1544,7 @@ class SQLFormatter(BaseFormatter):
 					'ON',
 					'USING',
 					'SET',
+					'DO',
 				]):
 				self._expect(IDENTIFIER)
 			# Parse optional column aliases
