@@ -44,9 +44,6 @@ class Procedure(Routine):
 	def getTypeName(self):
 		return "Procedure"
 			
-	def getIdentifier(self):
-		return "proc_%s_%s" % (self.schema.name, self.specificName)
-
 	def getDescription(self):
 		if self.__description:
 			return self.__description

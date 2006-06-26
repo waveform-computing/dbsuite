@@ -53,9 +53,6 @@ class Function(Routine):
 	def getTypeName(self):
 		return "Function"
 			
-	def getIdentifier(self):
-		return "func_%s_%s" % (self.schema.name, self.specificName)
-
 	def getDescription(self):
 		if self.__description:
 			return self.__description
