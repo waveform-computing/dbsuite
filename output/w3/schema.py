@@ -41,7 +41,6 @@ def write(self, schema):
 			) for relation in relations]
 		))
 	if len(routines) > 0:
-		# XXX Add "Specific Name" column
 		doc.addSection(id='routines', title='Routines')
 		doc.addPara("""The following table contains all the routines
 			(functions, stored procedures, and methods) that the schema
@@ -50,17 +49,18 @@ def write(self, schema):
 		doc.addContent(makeTable(
 			head=[(
 				"Name",
+				"Specific Name",
 				"Type",
 				"Description"
 			)],
 			data=[(
 				linkTo(routine),
+				escape(routine.specificName),
 				escape(routine.typeName),
 				self.formatDescription(routine.description, firstline=True)
 			) for routine in routines]
 		))
 	if len(indexes) > 0:
-		# XXX Add "Unique" column
 		doc.addSection(id='indexes', title='Indexes')
 		doc.addPara("""The following table contains all the indexes that
 			the schema contains. Click on an index name to view the
@@ -68,10 +68,12 @@ def write(self, schema):
 		doc.addContent(makeTable(
 			head=[(
 				"Name",
+				"Unique",
 				"Applies To",
 				"Description")],
 			data=[(
 				linkTo(index),
+				index.unique,
 				linkTo(index.table, qualifiedName=True),
 				self.formatDescription(index.description, firstline=True)
 			) for index in indexes]
@@ -85,10 +87,14 @@ def write(self, schema):
 		doc.addContent(makeTable(
 			head=[(
 				"Name",
+				"Timing",
+				"Event",
 				"Applies To",
 				"Description")],
 			data=[(
 				linkTo(trigger),
+				escape(trigger.triggerTime),
+				escape(trigger.triggerEvent),
 				linkTo(trigger.relation, qualifiedName=True),
 				self.formatDescription(trigger.description, firstline=True)
 			) for trigger in triggers]
