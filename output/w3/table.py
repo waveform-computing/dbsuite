@@ -162,7 +162,15 @@ def write(self, table):
 		rows = []
 		for constraint in constraints:
 			if isinstance(constraint, ForeignKey):
-				expression = '<br />'.join([escape("%s -> %s" % (cfield.name, pfield.name)) for (cfield, pfield) in constraint.fields])
+				expression = '<br />'.join(
+					[
+						"References " + linkTo(constraint.refTable)
+					] +
+					[
+						escape("%s -> %s" % (cfield.name, pfield.name))
+						for (cfield, pfield) in constraint.fields
+					]
+				)
 			elif isinstance(constraint, PrimaryKey) or isinstance(constraint, UniqueKey) or isinstance(constraint, Check):
 				expression = '<br />'.join([escape(cfield.name) for cfield in constraint.fields])
 			else:
