@@ -3034,20 +3034,21 @@ class SQLFormatter(BaseFormatter):
 		# CREATE PROCEDURE already matched
 		self._parse_procedure_name()
 		if self._match('('):
-			while True:
-				self._match_one_of(['IN', 'OUT', 'INOUT'])
-				self._save_state()
-				try:
-					self._expect(IDENTIFIER)
-					self._parse_datatype()
-				except ParseError:
-					self._restore_state()
-					self._parse_datatype()
-				else:
-					self._forget_state()
-				if not self._match(','):
-					break
-			self._expect(')')
+			if not self._match(')'):
+				while True:
+					self._match_one_of(['IN', 'OUT', 'INOUT'])
+					self._save_state()
+					try:
+						self._expect(IDENTIFIER)
+						self._parse_datatype()
+					except ParseError:
+						self._restore_state()
+						self._parse_datatype()
+					else:
+						self._forget_state()
+					if not self._match(','):
+						break
+				self._expect(')')
 		self._indent()
 		# Parse procedure options (which can appear in any order)
 		valid = set([
