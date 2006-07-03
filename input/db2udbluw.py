@@ -239,6 +239,8 @@ class Cache(object):
 			self.aliases = dict([((row['schemaName'], row['name']), row) for row in _fetch_dict(cursor)])
 		finally:
 			del cursor
+		for row in self.aliases.itervalues():
+			row['created'] = makeDateTime(row['created'])
 
 	def _get_relation_dependencies(self, connection, doccat):
 		logging.debug("Retrieving relation dependencies")

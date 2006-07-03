@@ -16,6 +16,7 @@ from document import Document
 from db.database import Database
 from db.table import Table
 from db.view import View
+from db.alias import Alias
 from db.check import Check
 from db.uniquekey import UniqueKey, PrimaryKey
 from db.foreignkey import ForeignKey
@@ -25,6 +26,7 @@ from output.w3 import schema
 from output.w3 import tablespace
 from output.w3 import table
 from output.w3 import view
+from output.w3 import alias
 from output.w3 import index
 from output.w3 import uniquekey
 from output.w3 import foreignkey
@@ -263,6 +265,7 @@ class DocOutput(object):
 	writeTablespace = tablespace.write
 	writeTable = table.write
 	writeView = view.write
+	writeAlias = alias.write
 	writeIndex = index.write
 	writeUniqueKey = uniquekey.write
 	writeForeignKey = foreignkey.write
@@ -276,6 +279,8 @@ class DocOutput(object):
 			self.writeTable(relation)
 		elif isinstance(relation, View):
 			self.writeView(relation)
+		elif isinstance(relation, Alias):
+			self.writeAlias(relation)
 
 	def writeConstraint(self, constraint):
 		if isinstance(constraint, UniqueKey):
