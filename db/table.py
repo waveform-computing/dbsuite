@@ -112,7 +112,7 @@ $elements
 			'table': formatIdentifier(self.name),	
 			'elements': ',\n'.join(
 				[field.prototype for field in self.fieldList] + 
-				[constraint.prototype for constraint in self.constraints.itervalues()]
+				[constraint.prototype for constraint in self.constraints.itervalues() if constraint.type != 'System Generated']
 			),
 			'tbspaces': 'IN ' + formatIdentifier(self.dataTablespace.name),
 			'indexes': ''.join(['\n' + index.createSql for index in self.indexList])
