@@ -6,6 +6,7 @@ import logging
 from base import DocBase
 from table import Table
 from view import View
+from alias import Alias
 from index import Index
 from trigger import Trigger
 from datatype import Datatype
@@ -51,7 +52,11 @@ class Schema(DocBase):
 			self.__views[viewRec['name']] = view
 			self.__relations[viewRec['name']] = view
 		self.__viewList = sorted(self.__views.itervalues(), key=lambda view:view.name)
-		# XXX Add support for aliases
+		for aliasRec in [cache.aliases[(schema, name)] for (schema, name) in cache.aliases if schema == self.name]:
+			alias = Alias(self, cache, **aliasRec)
+			self.__aliases[aliasRec['name']] = alias
+			self.__relations[aliasRec['name']] = alias
+		self.__aliasList = sorted(self.__aliases.itervalues(), key=lambda alias:alias.name)
 		self.__relationList = sorted(self.__relations.itervalues(), key=lambda relation:relation.name)
 		for indexRec in [cache.indexes[(schema, name)] for (schema, name) in cache.indexes if schema == self.name]:
 			self.__indexes[indexRec['name']] = Index(self, cache, **indexRec)

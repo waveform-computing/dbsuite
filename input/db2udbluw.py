@@ -219,9 +219,26 @@ class Cache(object):
 			row['sql'] = str(row['sql'])
 
 	def _get_aliases(self, connection, doccat):
-		# XXX Query aliases
 		logging.debug("Retrieving aliases")
-		self.aliases = {}
+		cursor = connection.cursor()
+		try:
+			cursor.execute("""
+				SELECT
+					RTRIM(TABSCHEMA)      AS "schemaName",
+					RTRIM(TABNAME)        AS "name",
+					RTRIM(DEFINER)        AS "definer",
+					CHAR(CREATE_TIME)     AS "created",
+					RTRIM(BASE_TABSCHEMA) AS "relationSchema",
+					RTRIM(BASE_TABNAME)   AS "relationName",
+					REMARKS               AS "description"
+				FROM
+					%(schema)s.TABLES
+				WHERE
+					TYPE = 'A'
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+			self.aliases = dict([((row['schemaName'], row['name']), row) for row in _fetch_dict(cursor)])
+		finally:
+			del cursor
 
 	def _get_relation_dependencies(self, connection, doccat):
 		logging.debug("Retrieving relation dependencies")
