@@ -21,7 +21,7 @@ def main():
 	version = "%%prog %s" % (__version__,)
 	parser = optparse.OptionParser(usage=usage, version=version)
 	parser.set_defaults(
-		database="",
+		database=None,
 		username="",
 		password="",
 		outputpath=".",
@@ -44,6 +44,8 @@ def main():
 	(options, args) = parser.parse_args()
 	if len(args) > 0:
 		parser.error("you may not specify any filenames")
+	if options.database is None:
+		parser.error("you must specify a database with --database or -d")
 	# Set up some logging objects
 	console = logging.StreamHandler(sys.stderr)
 	console.setFormatter(logging.Formatter('%(message)s'))
