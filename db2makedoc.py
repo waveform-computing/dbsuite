@@ -11,7 +11,7 @@ import logging
 
 import db.database
 import input.db2udbluw
-import output.w3
+import output.html.w3
 
 __version__ = "0.1"
 
@@ -86,12 +86,13 @@ def main():
 			logging.info("Building database object hierarchy")
 			database = db.database.Database(data, options.database)
 			logging.info("Writing output with w3 handler")
-			output.w3.DocOutput(database, options.outputpath)
+			output.html.w3.Output(database, options.outputpath)
 		finally:
 			connection.close()
 			connection = None
 	except Exception, e:
 		logging.error(str(e))
+		raise
 		sys.exit(1)
 	else:
 		sys.exit(0)
