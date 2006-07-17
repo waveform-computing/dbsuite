@@ -2,13 +2,13 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-import db.schema
-import output.html.w3
+from db.schema import Schema
+from output.html.w3.document import W3Document
 
-class W3SchemaDocument(output.html.w3.W3Document):
-	def __init__(self, dbobject, htmlver=XHTML10, htmlstyle=STRICT):
-		assert isinstance(self.dbobject, db.schema.Schema)
-		super(W3SchemaDocument, self).__init__(dbobject, htmlver, htmlstyle)
+class W3SchemaDocument(W3Document):
+	def __init__(self, site, schema):
+		assert isinstance(schema, Schema)
+		super(W3SchemaDocument, self).__init__(site, schema)
 
 	def create_sections(self):
 		relations = [obj for (name, obj) in sorted(self.dbobject.relations.items(), key=lambda (name, obj): name)]
@@ -60,7 +60,7 @@ class W3SchemaDocument(output.html.w3.W3Document):
 			self.section('indexes', 'Indexes')
 			self.add(self.p("""The following table contains all the indexes
 				that the schema contains. Click on an index name to view the
-				documentation for that index.""")
+				documentation for that index."""))
 			self.add(self.table(
 				head=[(
 					"Name",
@@ -90,7 +90,7 @@ class W3SchemaDocument(output.html.w3.W3Document):
 					self.a_to(trigger),
 					trigger.triggerTime,
 					trigger.triggerEvent,
-					self.a_to(trigger.relation, qualifiedName=True),
+					self.a_to(trigger.relation, qualifiedname=True),
 					self.format_description(trigger.description, firstline=True)
 				) for trigger in triggers]
 			))

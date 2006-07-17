@@ -2,13 +2,13 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-import db.foreignkey
-import output.html.w3
+from db.foreignkey import ForeignKey
+from output.html.w3.document import W3Document
 
-class W3ForeignKeyDocument(output.html.w3.W3Document):
-	def __init__(self, dbobject, htmlver=XHTML10, htmlstyle=STRICT):
-		assert isinstance(self.dbobject, db.foreignkey.ForeignKey)
-		super(W3ForeignKeyDocument, self).__init__(dbobject, htmlver, htmlstyle)
+class W3ForeignKeyDocument(W3Document):
+	def __init__(self, site, foreignkey):
+		assert isinstance(foreignkey, ForeignKey)
+		super(W3ForeignKeyDocument, self).__init__(site, foreignkey)
 	
 	def create_sections(self):
 		self.section('description', 'Description')

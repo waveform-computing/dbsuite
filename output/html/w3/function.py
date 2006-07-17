@@ -2,13 +2,13 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-import db.function
-import output.html.w3
+from db.function import Function
+from output.html.w3.document import W3Document
 
-class W3FunctionDocument(output.html.w3.W3Document):
-	def __init__(self, dbobject, htmlver=XHTML10, htmlstyle=STRICT):
-		assert isinstance(self.dbobject, db.function.Function)
-		super(W3FunctionDocument, self).__init__(dbobject, htmlver, htmlstyle)
+class W3FunctionDocument(W3Document):
+	def __init__(self, site, function):
+		assert isinstance(function, Function)
+		super(W3FunctionDocument, self).__init__(site, function)
 	
 	def create_sections(self):
 		overloads = self.dbobject.schema.functions[self.dbobject.name]

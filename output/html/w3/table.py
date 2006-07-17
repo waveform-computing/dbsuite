@@ -2,13 +2,13 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-import db.table
-import output.html.w3
+from db.table import Table
+from output.html.w3.document import W3Document
 
-class W3TableDocument(output.html.w3.W3Document):
-	def __init__(self, dbobject, htmlver=XHTML10, htmlstyle=STRICT):
-		assert isinstance(self.dbobject, db.table.Table)
-		super(W3TableDocument, self).__init__(dbobject, htmlver, htmlstyle)
+class W3TableDocument(W3Document):
+	def __init__(self, site, table):
+		assert isinstance(table, Table)
+		super(W3TableDocument, self).__init__(site, table)
 
 	def create_sections(self):
 		fields = [obj for (name, obj) in sorted(self.dbobject.fields.items(), key=lambda (name, obj): name)]

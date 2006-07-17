@@ -2,13 +2,13 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-import db.check
-import output.html.w3
+from db.check import Check
+from output.html.w3.document import W3Document
 
-class W3CheckDocument(output.html.w3.W3Document):
-	def __init__(self, dbobject, htmlver=XHTML10, htmlstyle=STRICT):
-		assert isinstance(self.dbobject, db.check.Check)
-		super(W3CheckDocument, self).__init__(dbobject, htmlver, htmlstyle)
+class W3CheckDocument(W3Document):
+	def __init__(self, site, check):
+		assert isinstance(check, Check)
+		super(W3CheckDocument, self).__init__(site, check)
 
 	def create_sections(self):
 		fields = sorted(list(self.dbobject.fields), key=lambda field: field.name)
@@ -22,7 +22,7 @@ class W3CheckDocument(output.html.w3.W3Document):
 				"Value",
 				"Attribute",
 				"Value"
-			)]
+			)],
 			data=[
 				(
 					self.a("created.html", "Created", popup=True),
@@ -47,7 +47,7 @@ class W3CheckDocument(output.html.w3.W3Document):
 				head=[(
 					"Field",
 					"Description"
-				)]
+				)],
 				data=[(
 					field.name,
 					self.format_description(field.description, firstline=True)

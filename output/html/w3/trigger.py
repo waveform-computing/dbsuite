@@ -2,13 +2,13 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-import db.trigger
-import output.html.w3
+from db.trigger import Trigger
+from output.html.w3.document import W3Document
 
-class W3TriggerDocument(output.html.w3.W3Document):
-	def __init__(self, dbobject, htmlver=XHTML10, htmlstyle=STRICT):
-		assert isinstance(self.dbobject, db.trigger.Trigger)
-		super(W3TriggerDocument, self).__init__(dbobject, htmlver, htmlstyle)
+class W3TriggerDocument(W3Document):
+	def __init__(self, site, trigger):
+		assert isinstance(trigger, Trigger)
+		super(W3TriggerDocument, self).__init__(site, trigger)
 
 	def create_sections(self):
 		self.section('description', 'Description')

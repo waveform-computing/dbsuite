@@ -2,13 +2,13 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-import db.procedure
-import output.html.w3
+from db.procedure import Procedure
+from output.html.w3.document import W3Document
 
-class W3ProcedureDocument(output.html.w3.W3Document):
-	def __init__(self, dbobject, htmlver=XHTML10, htmlstyle=STRICT):
-		assert isinstance(self.dbobject, db.procedure.Procedure)
-		super(W3ProcedureDocument, self).__init__(dbobject, htmlver, htmlstyle)
+class W3ProcedureDocument(W3Document):
+	def __init__(self, site, procedure):
+		assert isinstance(procedure, Procedure)
+		super(W3ProcedureDocument, self).__init__(site, procedure)
 	
 	def create_sections(self):
 		overloads = self.dbobject.schema.procedures[self.dbobject.name]

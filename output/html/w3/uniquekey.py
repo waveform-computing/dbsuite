@@ -2,13 +2,13 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-import db.uniquekey
-import output.html.w3
+from db.uniquekey import UniqueKey
+from output.html.w3.document import W3Document
 
-class W3UniqueKeyDocument(output.html.w3.W3Document):
-	def __init__(self, dbobject, htmlver=XHTML10, htmlstyle=STRICT):
-		assert isinstance(self.dbobject, db.uniquekey.UniqueKey)
-		super(W3UniqueKeyDocument, self).__init__(dbobject, htmlver, htmlstyle)
+class W3UniqueKeyDocument(W3Document):
+	def __init__(self, site, uniquekey):
+		assert isinstance(uniquekey, UniqueKey)
+		super(W3UniqueKeyDocument, self).__init__(site, uniquekey)
 
 	def create_sections(self):
 		fields = [(field, position) for (position, field) in enumerate(self.dbobject.fields)]
