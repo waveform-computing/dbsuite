@@ -12,11 +12,16 @@ not output a full document is that this raises too many questions (which
 version of HTML, how should the CSS rules be included, what's the title of the
 document, etc); it's up to you to wrap the output in an HTML document.
 
-To use the highlighter, construct an instance of SQLHighlighter, then call the
+Two highlighter classes are implemented: SQLHTMLHighlighter which returns the
+generated HTML as a string (basically a mess of <span> elements and content),
+and SQLDOMHighlighter which generates a list of DOM nodes (belonging to the
+specified document but without a parent) which you can then splice into the
+document tree.
+
+To use the highlighter, construct an instance of either class, then call the
 parse method passing the output of a tokenizer from the sqltokenizer unit, i.e.
 a list of token tuples (or a list of lists of token tuples if newline_split was
-active on the tokenizer). The method will return a string containing HTML with
-the various CSS classes applied with <span> elements.
+active on the tokenizer).
 
 The following attributes can be used to control the output of the highlighter:
 
@@ -83,6 +88,7 @@ token will not be highlighted. Thus, in the example above, the name qualifier
 operator (.) will not be highlighted.
 """
 
+import xml.dom
 from xml.sax.saxutils import quoteattr, escape
 from tokenizer import *
 from formatter import *
@@ -142,6 +148,51 @@ class SQLHTMLHighlighter(object):
 			return '\n'.join([self._format_line(line) for line in tokens])
 		else:
 			return ''.join([self._format_token(token) for token in tokens])
+
+class SQLDOMHighlighter(object):
+	def __init__(self):
+		super(SQLDOMHighlighter, self).__init__()
+		self.css_classes = default_css_classes
+		self.number_lines = False
+		self.number_class = 'num_cell'
+		self.sql_class = 'sql_cell'
+	
+	def _format_token(self, token, doc):
+		(token_type, token_value, source, _, _) = token
+		try:
+			css_class = self.css_classes[(token_type, token_value)]
+		except KeyError:
+			css_class = self.css_classes.get(token_type, None)
+		if css_class is not None:
+			spannode = doc.createElement('span')
+			spannode.setAttribute('class', css_class)
+			spannode.appendChild(doc.createTextNode(source))
+			return spannode
+		else:
+			return doc.createTextNode(source)
+
+	def _format_line(self, linetokens, doc):
+		row = doc.createElement('tr')
+		cell1 = doc.createElement('td')
+		if self.number_class:
+			cell1.setAttribute('class', self.number_class)
+		cell2 = doc.createElement('td')
+		if self.sql_class:
+			cell2.setAttribute('class', self.sql_class)
+		row.appendChild(cell1)
+		row.appendChild(cell2)
+		for token in linetokens:
+			cell2.appendChild(self._format_token(token))
+		return row
+		
+	def parse(self, tokens, document):
+		assert document.nodeType == xml.dom.DOCUMENT_NODE
+		# Return a sequence of nodes with no parent (for the caller to splice
+		# into the document tree)
+		if isinstance(tokens[0], list):
+			return [self._format_line(line, document) for line in tokens]
+		else:
+			return [self._format_token(token, document) for token in tokens]
 
 if __name__ == "__main__":
 	pass
