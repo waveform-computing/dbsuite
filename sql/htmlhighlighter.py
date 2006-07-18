@@ -186,7 +186,7 @@ class SQLDOMHighlighter(object):
 		return row
 		
 	def parse(self, tokens, document):
-		assert document.nodeType == xml.dom.DOCUMENT_NODE
+		assert document.nodeType == xml.dom.Node.DOCUMENT_NODE
 		# Return a sequence of nodes with no parent (for the caller to splice
 		# into the document tree)
 		if isinstance(tokens[0], list):
