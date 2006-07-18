@@ -4,6 +4,8 @@
 
 import os
 import os.path
+import codecs
+import re
 import datetime
 import shutil
 import xml.dom
@@ -24,7 +26,267 @@ import xml.dom
 	FRAMESET,     # Frameset DTD
 ) = range(3)
 
+# Global DOM implementation
+
 DOM = xml.dom.getDOMImplementation()
+
+# HTML character entities from the HTML4.01 spec
+# <http://www.w3.org/TR/REC-html40/sgml/entities.html> (see
+# HTMLDocument.write() for usage)
+
+HTML_ENTITIES = {
+# Section 24.2 (ISO-8859-1 characters)
+	160: 'nbsp',
+	161: 'iexcl',
+	162: 'cent',
+	163: 'pound',
+	164: 'curren',
+	165: 'yen',
+	166: 'brvbar',
+	167: 'sect',
+	168: 'uml',
+	169: 'copy',
+	170: 'ordf',
+	171: 'laquo',
+	172: 'not',
+	173: 'shy',
+	174: 'reg',
+	175: 'macr',
+	176: 'deg',
+	177: 'plusmn',
+	178: 'sup2',
+	179: 'sup3',
+	180: 'acute',
+	181: 'micro',
+	182: 'para',
+	183: 'middot',
+	184: 'cedil',
+	185: 'sup1',
+	186: 'ordm',
+	187: 'raquo',
+	188: 'frac14',
+	189: 'frac12',
+	190: 'frac34',
+	191: 'iquest',
+	192: 'Agrave',
+	193: 'Aacute',
+	194: 'Acirc',
+	195: 'Atilde',
+	196: 'Auml',
+	197: 'Aring',
+	198: 'AElig',
+	199: 'Ccedil',
+	200: 'Egrave',
+	201: 'Eacute',
+	202: 'Ecirc',
+	203: 'Euml',
+	204: 'Igrave',
+	205: 'Iacute',
+	206: 'Icirc',
+	207: 'Iuml',
+	208: 'ETH',
+	209: 'Ntilde',
+	210: 'Ograve',
+	211: 'Oacute',
+	212: 'Ocirc',
+	213: 'Otilde',
+	214: 'Ouml',
+	215: 'times',
+	216: 'Oslash',
+	217: 'Ugrave',
+	218: 'Uacute',
+	219: 'Ucirc',
+	220: 'Uuml',
+	221: 'Yacute',
+	222: 'THORN',
+	223: 'szlig',
+	224: 'agrave',
+	225: 'aacute',
+	226: 'acirc',
+	227: 'atilde',
+	228: 'auml',
+	229: 'aring',
+	230: 'aelig',
+	231: 'ccedil',
+	232: 'egrave',
+	233: 'eacute',
+	234: 'ecirc',
+	235: 'euml',
+	236: 'igrave',
+	237: 'iacute',
+	238: 'icirc',
+	239: 'iuml',
+	240: 'eth',
+	241: 'ntilde',
+	242: 'ograve',
+	243: 'oacute',
+	244: 'ocirc',
+	245: 'otilde',
+	246: 'ouml',
+	247: 'divide',
+	248: 'oslash',
+	249: 'ugrave',
+	250: 'uacute',
+	251: 'ucirc',
+	252: 'uuml',
+	253: 'yacute',
+	254: 'thorn',
+	255: 'yuml',
+# Section 24.3 (symbols, mathematical symbols, and greek letters)
+	402: 'fnof',
+	913: 'Alpha',
+	914: 'Beta',
+	915: 'Gamma',
+	916: 'Delta',
+	917: 'Epsilon',
+	918: 'Zeta',
+	919: 'Eta',
+	920: 'Theta',
+	921: 'Iota',
+	922: 'Kappa',
+	923: 'Lambda',
+	924: 'Mu',
+	925: 'Nu',
+	926: 'Xi',
+	927: 'Omicron',
+	928: 'Pi',
+	929: 'Rho',
+	931: 'Sigma',
+	932: 'Tau',
+	933: 'Upsilon',
+	934: 'Phi',
+	935: 'Chi',
+	936: 'Psi',
+	937: 'Omega',
+	945: 'alpha',
+	946: 'beta',
+	947: 'gamma',
+	948: 'delta',
+	949: 'epsilon',
+	950: 'zeta',
+	951: 'eta',
+	952: 'theta',
+	953: 'iota',
+	954: 'kappa',
+	955: 'lambda',
+	956: 'mu',
+	957: 'nu',
+	958: 'xi',
+	959: 'omicron',
+	960: 'pi',
+	961: 'rho',
+	962: 'sigmaf',
+	963: 'sigma',
+	964: 'tau',
+	965: 'upsilon',
+	966: 'phi',
+	967: 'chi',
+	968: 'psi',
+	969: 'omega',
+	977: 'thetasym',
+	978: 'upsih',
+	982: 'piv',
+	8226: 'bull',
+	8230: 'hellip',
+	8242: 'prime',
+	8243: 'Prime',
+	8254: 'oline',
+	8250: 'frasl',
+	8472: 'weierp',
+	8465: 'image',
+	8476: 'real',
+	8482: 'trade',
+	8501: 'alefsym',
+	8592: 'larr',
+	8593: 'uarr',
+	8594: 'rarr',
+	8595: 'darr',
+	8596: 'harr',
+	8629: 'crarr',
+	8656: 'lArr',
+	8657: 'uArr',
+	8658: 'rArr',
+	8659: 'dArr',
+	8660: 'hArr',
+	8704: 'forall',
+	8706: 'part',
+	8707: 'exist',
+	8709: 'empty',
+	8711: 'nabla',
+	8712: 'isin',
+	8713: 'notin',
+	8715: 'ni',
+	8719: 'prod',
+	8721: 'sum',
+	8722: 'minus',
+	8727: 'lowast',
+	8730: 'radic',
+	8733: 'prop',
+	8734: 'infin',
+	8736: 'ang',
+	8743: 'and',
+	8744: 'or',
+	8745: 'cap',
+	8746: 'cup',
+	8747: 'int',
+	8756: 'there4',
+	8764: 'sim',
+	8773: 'cong',
+	8776: 'asymp',
+	8800: 'ne',
+	8801: 'equiv',
+	8804: 'le',
+	8805: 'ge',
+	8834: 'sub',
+	8835: 'sup',
+	8836: 'nsub',
+	8838: 'sube',
+	8839: 'supe',
+	8853: 'oplus',
+	8855: 'otimes',
+	8869: 'perp',
+	8901: 'sdot',
+	8968: 'lceil',
+	8969: 'rceil',
+	8970: 'lfloor',
+	8971: 'rfloor',
+	9001: 'lang',
+	9002: 'rang',
+	9674: 'loz',
+	9824: 'spades',
+	9827: 'clubs',
+	9829: 'hearts',
+	9830: 'diams',
+# Section 24.4 (markup-significant and I18N characters)
+	338: 'OElig',
+	339: 'oelig',
+	352: 'Scaron',
+	353: 'scaron',
+	376: 'Yuml',
+	710: 'circ',
+	732: 'tidle',
+	8194: 'ensp',
+	8195: 'emsp',
+	8201: 'thinsp',
+	8204: 'zwnj',
+	8205: 'zwj',
+	8206: 'lrm',
+	8207: 'rlm',
+	8211: 'ndash',
+	8212: 'mdash',
+	8216: 'lsquo',
+	8217: 'rsquo',
+	8218: 'sbquo',
+	8220: 'ldquo',
+	8221: 'rdquo',
+	8222: 'bdquo',
+	8224: 'dagger',
+	8225: 'Dagger',
+	8240: 'permil',
+	8249: 'lsaquo',
+	8250: 'rsaquo',
+	8364: 'euro',
+}
 
 def copytree(src, dst, dontcopy=['CVS']):
 	"""Utility function based on copytree in shutil.
@@ -113,6 +375,7 @@ class HTMLSite(object):
 		self.sublang = 'US'
 		self.copyright = None
 		self.documents = []
+		self.encoding = 'ISO-8859-1'
 
 class HTMLDocument(object):
 	"""Represents a simple HTML document.
@@ -145,7 +408,6 @@ class HTMLDocument(object):
 		except KeyError:
 			raise KeyError('Invalid HTML version and style (XHTML11 only supports the STRICT style)')
 		self.doc = DOM.createDocument(namespace, 'html', DOM.createDocumentType('html', public_id, system_id))
-		self.written = False
 		# XXX Do we need to do something with self.site.baseurl here?
 		self.url = url
 		self.link_first = None
@@ -184,17 +446,46 @@ class HTMLDocument(object):
 		else:
 			return super(HTMLDocument, self).__getattribute__(name)
 
+	# Regex which finds characters within the range of characters capable of
+	# being encoded as HTML entities
+	entitiesre = re.compile(u'[%s-%s]' % (
+		unichr(min(HTML_ENTITIES.iterkeys())),
+		unichr(max(HTML_ENTITIES.iterkeys()))
+	))
+
+	# Regex which finds the XML PI at the start of an XML document
+	xmlpire = re.compile(ur'^<\?xml version="1\.0" \?>')
+
 	def write(self, pretty=False):
 		"""Writes this document to a file in the site's path"""
+
+		def subfunc(match):
+			if ord(match.group()) in HTML_ENTITIES:
+				return u'&%s;' % HTML_ENTITIES[ord(match.group())]
+			else:
+				return match.group()
+
 		f = open(os.path.join(self.site.basepath, self.url), 'w')
 		try:
-			if not self.written:
-				self.create_content()
-				written = True
-			if pretty:
-				f.write(self.doc.toprettyxml(encoding='UTF-8'))
-			else:
-				f.write(self.doc.toxml(encoding='UTF-8'))
+			self.create_content()
+			try:
+				# "Pure XML" DOM won't handle HTML character entities. So we do
+				# it manually... First, get the XML as a Unicode string
+				s = self.doc.toxml()
+				# Convert any characters into HTML entities that can be
+				s = self.entitiesre.sub(subfunc, s)
+				# Patch the XML PI at the start to reflect the target encoding
+				s = self.xmlpire.sub(u'<?xml version="1.0" encoding="%s" ?>' % self.site.encoding, s)
+				# Transcode the XML into the target encoding
+				s = codecs.getencoder(self.site.encoding)(s)[0]
+				f.write(s)
+			finally:
+				# XXX Because DOM takes up a truly stupid amount of memory, and
+				# because this class is used in a one-shot manner, we unlink
+				# (destroy) the document contents as soon as they're written.
+				# Without this, in practice, db2makedoc can easily chew up 1Gb
+				# of RAM (!) even with relatively small databases
+				self.doc.unlink()
 		finally:
 			f.close()
 
@@ -223,15 +514,15 @@ class HTMLDocument(object):
 		# Add some navigation <link> elements
 		content.append(self.link('home', 'index.html'))
 		if self.link_first is not None:
-			content.append(self.link('first', self.link_first))
+			content.append(self.link('first', self.link_first.url))
 		if self.link_prior is not None:
-			content.append(self.link('prev', self.link_prior))
+			content.append(self.link('prev', self.link_prior.url))
 		if self.link_next is not None:
-			content.append(self.link('next', self.link_next))
+			content.append(self.link('next', self.link_next.url))
 		if self.link_last is not None:
-			content.append(self.link('last', self.link_last))
+			content.append(self.link('last', self.link_last.url))
 		if self.link_up is not None:
-			content.append(self.link('up', self.link_up))
+			content.append(self.link('up', self.link_up.url))
 		# Add the title
 		if self.title is not None:
 			titlenode = self.doc.createElement('title')
@@ -250,6 +541,9 @@ class HTMLDocument(object):
 		elif isinstance(content, datetime.datetime):
 			# Format timestamps as ISO8601
 			return content.strftime('%Y-%m-%d %H:%M:%S')
+		elif isinstance(content, bool):
+			# Format booleans as Yes/No
+			return ['No', 'Yes'][content]
 		elif isinstance(content, (int, long)):
 			# Format integer number with , as a thousand separator
 			s = str(content)
@@ -264,7 +558,6 @@ class HTMLDocument(object):
 	
 	def append_content(self, node, content):
 		"""Adds content (string, node, node-list, etc.) to a node"""
-		print repr(content)
 		if content == '':
 			pass
 		elif isinstance(content, xml.dom.Node) or hasattr(content, 'nodeType'):
@@ -298,6 +591,7 @@ class HTMLDocument(object):
 		node = self.doc.createElement(name)
 		for name, value in attrs.iteritems():
 			if value is not None:
+				assert isinstance(value, basestring)
 				node.setAttribute(name, value)
 		self.append_content(node, content)
 		return node
