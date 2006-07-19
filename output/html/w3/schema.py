@@ -36,8 +36,8 @@ class W3SchemaDocument(W3Document):
 					self.format_description(relation.description, firstline=True)
 				) for relation in relations]
 			))
-			if len(routines) > 0:
-				self.section('routines', 'Routines')
+		if len(routines) > 0:
+			self.section('routines', 'Routines')
 			self.add(self.p("""The following table contains all the routines
 				(functions, stored procedures, and methods) that the schema
 				contains. Click on a routine name to view the documentation for

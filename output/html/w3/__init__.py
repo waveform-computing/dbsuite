@@ -7,6 +7,7 @@ from output.html.w3.database import W3DatabaseDocument
 from output.html.w3.schema import W3SchemaDocument
 from output.html.w3.table import W3TableDocument
 from output.html.w3.view import W3ViewDocument
+from output.html.w3.alias import W3AliasDocument
 from output.html.w3.uniquekey import W3UniqueKeyDocument
 from output.html.w3.foreignkey import W3ForeignKeyDocument
 from output.html.w3.check import W3CheckDocument
@@ -36,6 +37,8 @@ def Output(database, outputpath):
 				W3CheckDocument(site, check)
 		for view in schema.views.itervalues():
 			W3ViewDocument(site, view)
+		for alias in schema.aliases.itervalues():
+			W3AliasDocument(site, alias)
 		for index in schema.indexes.itervalues():
 			W3IndexDocument(site, index)
 		for function in schema.specificFunctions.itervalues():

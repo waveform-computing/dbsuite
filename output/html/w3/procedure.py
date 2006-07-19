@@ -63,7 +63,7 @@ class W3ProcedureDocument(W3Document):
 				),
 				(
 					self.a("specificname.html", "Specific Name", popup=True),
-					{'colspan': 3, '': self.dbobject.specificName},
+					{'colspan': '3', '': self.dbobject.specificName},
 				),
 			]
 		))

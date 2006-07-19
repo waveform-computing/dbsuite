@@ -2,13 +2,13 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-import db.alias
-import output.html.w3
+from db.alias import Alias
+from output.html.w3.document import W3Document
 
-class W3AliasDocument(output.html.w3.W3Document):
-	def __init__(self, dbobject, htmlver=XHTML10, htmlstyle=STRICT):
-		assert isinstance(self.dbobject, db.alias.Alias)
-		super(W3AliasDocument, self).__init__(dbobject, htmlver, htmlstyle)
+class W3AliasDocument(W3Document):
+	def __init__(self, site, alias):
+		assert isinstance(alias, Alias)
+		super(W3AliasDocument, self).__init__(site, alias)
 
 	def create_sections(self):
 		self.section('description', 'Description')
@@ -21,7 +21,7 @@ class W3AliasDocument(output.html.w3.W3Document):
 				'Value',
 				'Attribute',
 				'Value'
-			)]
+			)],
 			data=[
 				(
 					self.a('created.html', 'Created', popup=True),
@@ -31,7 +31,7 @@ class W3AliasDocument(output.html.w3.W3Document):
 				),
 				(
 					'Alias For',
-					{'colspan': 3, '': self.a_to(self.dbobject.relation, qualifiedname=True)},
+					{'colspan': '3', '': self.a_to(self.dbobject.relation, qualifiedname=True)},
 				),
 			]
 		))

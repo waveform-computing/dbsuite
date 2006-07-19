@@ -3,6 +3,9 @@
 # vim: set noet sw=4 ts=4:
 
 from db.table import Table
+from db.foreignkey import ForeignKey
+from db.uniquekey import PrimaryKey, UniqueKey
+from db.check import Check
 from output.html.w3.document import W3Document
 
 class W3TableDocument(W3Document):
@@ -225,5 +228,5 @@ class W3TableDocument(W3Document):
 			used to create the table (it has been reconstructed from the
 			content of the system catalog tables and may differ in a number of
 			areas)."""))
-		selc.add(self.pre(self.format_sql(table.createSql), attrs={'class': 'sql'}))
+		self.add(self.pre(self.format_sql(self.dbobject.createSql), attrs={'class': 'sql'}))
 

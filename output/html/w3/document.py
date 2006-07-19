@@ -5,6 +5,7 @@
 import os.path
 import logging
 import re
+import codecs
 import xml.dom
 import xml.dom.minidom
 import db.base
@@ -28,7 +29,7 @@ class W3Site(HTMLSite):
 		# into a DOM tree, grafted onto the generated document and then filled
 		# in by searching for elements by id in the create_content() method of
 		# the W3Document class below.
-		self.template = """<?xml version="1.0" encoding="ISO-8859-1"?>
+		self.template = xml.dom.minidom.parseString(codecs.getencoder('UTF-8')(u"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html
 	PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
 	"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
@@ -81,7 +82,7 @@ class W3Site(HTMLSite):
 	<!-- start content head -->
 	<div id="content-head">
 		<p id="date-stamp" />
-		<div class="hrule-dots">&nbsp;</div>    
+		<div class="hrule-dots">\u00A0</div>
 		<p id="breadcrumbs" />
 	</div>
 	<!-- stop content head -->
@@ -118,7 +119,7 @@ class W3Site(HTMLSite):
 
 </body>
 </html>
-"""
+""")[0])
 
 class W3Document(HTMLDocument):
 	"""Document class representing a database object (table, view, index, etc.)"""
@@ -270,11 +271,9 @@ class W3Document(HTMLDocument):
 		headnode.appendChild(self.style(src='//w3.ibm.com/ui/v8/css/print.css', media='print'))
 		# Parse the HTML in template and graft the <body> element onto the
 		# <body> element in self.doc
-		template = xml.dom.minidom.parseString(self.site.template)
 		oldbodynode = self.doc.getElementsByTagName('body')[0]
-		newbodynode = template.getElementsByTagName('body')[0]
+		newbodynode = self.site.template.getElementsByTagName('body')[0]
 		newbodynode = self.doc.importNode(newbodynode, deep=True)
-		template.unlink()
 		self.doc.documentElement.replaceChild(newbodynode, oldbodynode)
 		# Fill in the template
 		self.append_content(self.find_element('div', 'site-title-only'), '%s Documentation' % self.dbobject.database.name)
@@ -325,7 +324,7 @@ class W3Document(HTMLDocument):
 				if len(selitem.parentList) <= 10:
 					slice = selitem.parentList
 				elif index <= 3:
-					slice = selitem.parenList[:7]
+					slice = selitem.parentList[:7]
 					morebot = True
 				elif index >= len(selitem.parentList) - 4:
 					slice = selitem.parentList[-7:]
@@ -397,8 +396,8 @@ class W3Document(HTMLDocument):
 				link = parent.appendChild(self.a(url, content, title))
 				if active:
 					link.setAttribute('class', 'active')
-				if len(children) > 0:
-					make_menu_dom(link, children, level + 1)
+				if len(children) > 0 and level + 1 < len(classes):
+					make_menu_dom(parent, children, level + 1)
 
 		make_menu_dom(self.find_element('div', 'left-nav'), make_menu_tree(self.dbobject))
 

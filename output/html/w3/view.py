@@ -16,11 +16,11 @@ class W3ViewDocument(W3Document):
 		dependencies = [obj for (name, obj) in sorted(self.dbobject.dependencies.items(), key=lambda (name, obj): name)]
 		dependents = [obj for (name, obj) in sorted(self.dbobject.dependents.items(), key=lambda (name, obj): name)]
 		self.section('description', 'Description')
-		self.add('<p>%s</p>' % (self.format_description(self.dbobject.description)))
+		self.add(self.p(self.format_description(self.dbobject.description)))
 		self.section('attributes', 'Attributes')
 		self.add(self.p("""The following table notes various "vital statistics"
 			of the view."""))
-		self.add(makeTable(
+		self.add(self.table(
 			head=[(
 				'Attribute',
 				'Value',
@@ -59,7 +59,7 @@ class W3ViewDocument(W3Document):
 				view (in alphabetical order) along with the description of each
 				field.  For information on the structure and attributes of each
 				field see the Field Schema section below."""))
-			self.add(makeTable(
+			self.add(self.table(
 				head=[(
 					'Name',
 					'Description'
@@ -74,7 +74,7 @@ class W3ViewDocument(W3Document):
 				the fields of the view (again, fields are in alphabetical
 				order, though the # column indicates the 1-based position of
 				the field within the view)."""))
-			self.add(makeTable(
+			self.add(self.table(
 				head=[(
 					'#',
 					'Name',
@@ -94,7 +94,7 @@ class W3ViewDocument(W3Document):
 				against the view, including which actions fire the trigger and
 				when. For more information about an individual trigger click on
 				the trigger name."""))
-			self.add(makeTable(
+			self.add(self.table(
 				head=[(
 					'Name',
 					'Timing',
@@ -113,7 +113,7 @@ class W3ViewDocument(W3Document):
 			self.add(self.p("""The following table lists all relations (views
 				or materialized query tables) which reference this view in
 				their associated SQL statement."""))
-			self.add(makeTable(
+			self.add(self.table(
 				head=[(
 					'Name',
 					'Type',
@@ -130,7 +130,7 @@ class W3ViewDocument(W3Document):
 			self.add(self.p("""The following table lists all relations (tables,
 				views, materialized query tables, etc.) which this view
 				references in it's SQL statement."""))
-			self.add(makeTable(
+			self.add(self.table(
 				head=[(
 					'Name',
 					'Type',

@@ -68,8 +68,8 @@ class W3IndexDocument(W3Document):
 			(
 				self.a("cardinality.html", "Cardinality", popup=True),
 				self.dbobject.cardinality[0],
-				{'rowspan': len(self.dbobject.cardinality[1]) + 1, '': self.a("levels.html", "Levels", popup=True)},
-				{'rowspan': len(self.dbobject.cardinality[1]) + 1, '': self.dbobject.levels},
+				{'rowspan': str(len(self.dbobject.cardinality[1]) + 1), '': self.a("levels.html", "Levels", popup=True)},
+				{'rowspan': str(len(self.dbobject.cardinality[1]) + 1), '': self.dbobject.levels},
 			),
 		]
 		for (cardix, card) in enumerate(self.dbobject.cardinality[1]):
