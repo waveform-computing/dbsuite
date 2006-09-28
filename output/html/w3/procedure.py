@@ -3,9 +3,9 @@
 # vim: set noet sw=4 ts=4:
 
 from db.procedure import Procedure
-from output.html.w3.document import W3Document
+from output.html.w3.document import W3MainDocument
 
-class W3ProcedureDocument(W3Document):
+class W3ProcedureDocument(W3MainDocument):
 	def __init__(self, site, procedure):
 		assert isinstance(procedure, Procedure)
 		super(W3ProcedureDocument, self).__init__(site, procedure)

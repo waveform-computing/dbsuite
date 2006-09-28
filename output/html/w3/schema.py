@@ -3,9 +3,9 @@
 # vim: set noet sw=4 ts=4:
 
 from db.schema import Schema
-from output.html.w3.document import W3Document
+from output.html.w3.document import W3MainDocument
 
-class W3SchemaDocument(W3Document):
+class W3SchemaDocument(W3MainDocument):
 	def __init__(self, site, schema):
 		assert isinstance(schema, Schema)
 		super(W3SchemaDocument, self).__init__(site, schema)

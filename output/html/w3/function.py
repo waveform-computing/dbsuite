@@ -3,9 +3,9 @@
 # vim: set noet sw=4 ts=4:
 
 from db.function import Function
-from output.html.w3.document import W3Document
+from output.html.w3.document import W3MainDocument
 
-class W3FunctionDocument(W3Document):
+class W3FunctionDocument(W3MainDocument):
 	def __init__(self, site, function):
 		assert isinstance(function, Function)
 		super(W3FunctionDocument, self).__init__(site, function)

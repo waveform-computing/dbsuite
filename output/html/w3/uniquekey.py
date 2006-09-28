@@ -3,9 +3,9 @@
 # vim: set noet sw=4 ts=4:
 
 from db.uniquekey import UniqueKey
-from output.html.w3.document import W3Document
+from output.html.w3.document import W3MainDocument
 
-class W3UniqueKeyDocument(W3Document):
+class W3UniqueKeyDocument(W3MainDocument):
 	def __init__(self, site, uniquekey):
 		assert isinstance(uniquekey, UniqueKey)
 		super(W3UniqueKeyDocument, self).__init__(site, uniquekey)

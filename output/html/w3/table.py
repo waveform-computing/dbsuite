@@ -6,9 +6,9 @@ from db.table import Table
 from db.foreignkey import ForeignKey
 from db.uniquekey import PrimaryKey, UniqueKey
 from db.check import Check
-from output.html.w3.document import W3Document
+from output.html.w3.document import W3MainDocument
 
-class W3TableDocument(W3Document):
+class W3TableDocument(W3MainDocument):
 	def __init__(self, site, table):
 		assert isinstance(table, Table)
 		super(W3TableDocument, self).__init__(site, table)

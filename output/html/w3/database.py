@@ -3,9 +3,9 @@
 # vim: set noet sw=4 ts=4:
 
 from db.database import Database
-from output.html.w3.document import W3Document
+from output.html.w3.document import W3MainDocument
 
-class W3DatabaseDocument(W3Document):
+class W3DatabaseDocument(W3MainDocument):
 	def __init__(self, site, database):
 		assert isinstance(database, Database)
 		super(W3DatabaseDocument, self).__init__(site, database)

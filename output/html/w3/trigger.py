@@ -3,9 +3,9 @@
 # vim: set noet sw=4 ts=4:
 
 from db.trigger import Trigger
-from output.html.w3.document import W3Document
+from output.html.w3.document import W3MainDocument
 
-class W3TriggerDocument(W3Document):
+class W3TriggerDocument(W3MainDocument):
 	def __init__(self, site, trigger):
 		assert isinstance(trigger, Trigger)
 		super(W3TriggerDocument, self).__init__(site, trigger)

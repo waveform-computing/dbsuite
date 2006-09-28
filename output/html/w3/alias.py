@@ -3,9 +3,9 @@
 # vim: set noet sw=4 ts=4:
 
 from db.alias import Alias
-from output.html.w3.document import W3Document
+from output.html.w3.document import W3MainDocument
 
-class W3AliasDocument(W3Document):
+class W3AliasDocument(W3MainDocument):
 	def __init__(self, site, alias):
 		assert isinstance(alias, Alias)
 		super(W3AliasDocument, self).__init__(site, alias)

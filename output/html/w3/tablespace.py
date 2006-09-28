@@ -3,9 +3,9 @@
 # vim: set noet sw=4 ts=4:
 
 from db.tablespace import Tablespace
-from output.html.w3.document import W3Document
+from output.html.w3.document import W3MainDocument
 
-class W3TablespaceDocument(W3Document):
+class W3TablespaceDocument(W3MainDocument):
 	def __init__(self, site, tablespace):
 		assert isinstance(tablespace, Tablespace)
 		super(W3TablespaceDocument, self).__init__(site, tablespace)
