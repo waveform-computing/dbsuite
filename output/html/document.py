@@ -288,36 +288,6 @@ HTML_ENTITIES = {
 	8364: 'euro',
 }
 
-def copytree(src, dst, dontcopy=['CVS']):
-	"""Utility function based on copytree in shutil.
-	
-	Parameters:
-	src -- The root of the directory tree to copy
-	dst -- The destination directory to copy into
-	dontcopy -- A list of file/directory names not to copy.
-	"""
-	names = list(set(os.listdir(src)) - set(dontcopy))
-	errors = []
-	if not os.path.isdir(dst):
-		try:
-			os.unlink(dst)
-		except OSError:
-			os.mkdir(dst)
-	for name in names:
-		srcname = os.path.join(src, name)
-		dstname = os.path.join(dst, name)
-		try:
-			if os.path.isdir(srcname):
-				copytree(srcname, dstname)
-			else:
-				shutil.copy(srcname, dstname)
-		except (IOError, os.error), why:
-			errors.append((srcname, dstname, why))
-		except Error, err:
-			errors.extend(err.args[0])
-	if errors:
-		raise Error, errors
-
 class AttrDict(dict):
 	"""A dictionary which supports the + operator for combining two dictionaries.
 	
@@ -348,7 +318,7 @@ class AttrDict(dict):
 	def __iadd__(self, other):
 		self.update(other)
 
-class HTMLSite(object):
+class WebSite(object):
 	"""Represents a collection of HTML documents (a website).
 
 	This is the base class for a related collection of HTML documents,such as a
@@ -359,7 +329,7 @@ class HTMLSite(object):
 
 	def __init__(self):
 		"""Initializes an instance of the class."""
-		super(HTMLSite, self).__init__()
+		super(WebSite, self).__init__()
 		# Set various defaults
 		self.htmlver = XHTML10
 		self.htmlstyle = STRICT
@@ -374,10 +344,31 @@ class HTMLSite(object):
 		self.lang = 'en'
 		self.sublang = 'US'
 		self.copyright = None
-		self.documents = []
+		self.documents = {}
 		self.encoding = 'ISO-8859-1'
+	
+	def add_document(self, document):
+		assert isinstance(document, WebSiteDocument)
+		self.documents[document.url] = document
 
-class HTMLDocument(object):
+class WebSiteDocument(object):
+	"""Represents a document in a website (e.g. HTML, CSS, image, etc.)"""
+
+	def __init__(self, site, url):
+		"""Initializes an instance of the class."""
+		assert isinstance(site, WebSite)
+		super(Document, self).__init__()
+		self.site = site
+		self.url = url
+		self.filename = os.path.join(self.site.basepath, self.url)
+		self.site.add_document(self)
+	
+	def write(self):
+		"""Writes this document to a file in the site's path"""
+		# Stub method to be overridden in descendent classes
+		pass
+
+class HTMLDocument(WebSiteDocument):
 	"""Represents a simple HTML document.
 
 	This is the base class for HTML documents. It provides several utility
@@ -387,10 +378,8 @@ class HTMLDocument(object):
 
 	def __init__(self, site, url="index.html"):
 		"""Initializes an instance of the class."""
-		assert isinstance(site, HTMLSite)
-		super(HTMLDocument, self).__init__()
-		self.site = site
-		self.site.documents.append(self)
+		assert isinstance(site, WebSite)
+		super(HTMLDocument, self).__init__(site, url)
 		if self.site.htmlver >= XHTML10:
 			namespace = 'http://www.w3.org/1999/xhtml'
 		else:
@@ -408,8 +397,6 @@ class HTMLDocument(object):
 		except KeyError:
 			raise KeyError('Invalid HTML version and style (XHTML11 only supports the STRICT style)')
 		self.doc = DOM.createDocument(namespace, 'html', DOM.createDocumentType('html', public_id, system_id))
-		# XXX Do we need to do something with self.site.baseurl here?
-		self.url = url
 		self.link_first = None
 		self.link_prior = None
 		self.link_next = None
@@ -417,9 +404,9 @@ class HTMLDocument(object):
 		self.link_up = None
 		self.robots_index = True
 		self.robots_follow = True
-		# The following attributes mirror those in the HTMLSite class. If any
+		# The following attributes mirror those in the WebSite class. If any
 		# are set to something other than None, their value will override the
-		# corresponding value in the owning HTMLSite instance (see the
+		# corresponding value in the owning WebSite instance (see the
 		# overridden __getattribute__ implementation for more details).
 		self.title = None
 		self.description = None
@@ -456,7 +443,7 @@ class HTMLDocument(object):
 	# Regex which finds the XML PI at the start of an XML document
 	xmlpire = re.compile(ur'^<\?xml version="1\.0" \?>')
 
-	def write(self, pretty=False):
+	def write(self):
 		"""Writes this document to a file in the site's path"""
 
 		def subfunc(match):
@@ -465,7 +452,7 @@ class HTMLDocument(object):
 			else:
 				return match.group()
 
-		f = open(os.path.join(self.site.basepath, self.url), 'w')
+		f = open(self.filename, 'w')
 		try:
 			self.create_content()
 			try:
@@ -513,15 +500,15 @@ class HTMLDocument(object):
 			content.append(self.link('author', 'mailto:%s' % self.author_email, self.author_name))
 		# Add some navigation <link> elements
 		content.append(self.link('home', 'index.html'))
-		if self.link_first is not None:
+		if isinstance(self.link_first, HTMLDocument):
 			content.append(self.link('first', self.link_first.url))
-		if self.link_prior is not None:
+		if isinstance(self.link_prior, HTMLDocument):
 			content.append(self.link('prev', self.link_prior.url))
-		if self.link_next is not None:
+		if isinstance(self.link_next, HTMLDocument):
 			content.append(self.link('next', self.link_next.url))
-		if self.link_last is not None:
+		if isinstance(self.link_last, HTMLDocument):
 			content.append(self.link('last', self.link_last.url))
-		if self.link_up is not None:
+		if isinstance(self.link_up, HTMLDocument):
 			content.append(self.link('up', self.link_up.url))
 		# Add the title
 		if self.title is not None:
@@ -603,7 +590,13 @@ class HTMLDocument(object):
 	# reasonably generic and would likely fit most applications that need to
 	# generate HTML.
 
-	def a(self, href, content, title=None, attrs={}):
+	def a(self, href, content=None, title=None, attrs={}):
+		if isinstance(href, HTMLDocument):
+			if content is None:
+				content = href.title
+			if title is None:
+				title = href.title
+			href = href.url
 		return self.element('a', AttrDict(href=href, title=title) + attrs, content)
 
 	def abbr(self, content, title, attrs={}):
@@ -814,4 +807,34 @@ class HTMLDocument(object):
 
 	def var(self, content, attrs={}):
 		return self.element('var', attrs, content)
+	
+class CSSDocument(WebSiteDocument):
+	"""Represents a simple CSS document.
+
+	This is the base class for CSS stylesheets. It provides no methods for
+	constructing or editing CSS; it simply contains a "text" property which
+	stores the CSS to write to the file when write() is called.
+	"""
+
+	def __init__(self, site, url="default.css"):
+		"""Initializes an instance of the class."""
+		assert isinstance(site, WebSite)
+		super(CSSDocument, self).__init__(site, url)
+		self.text = ''
+		self.doc = ''
+	
+	def write(self):
+		"""Writes this document to a file in the site's path"""
+		f = open(self.filename, 'w')
+		try:
+			# Transcode the CSS into the target encoding and write to the file
+			self.create_content()
+			f.write(codecs.getencoder(self.site.encoding)(self.doc)[0])
+		finally:
+			f.close()
+
+	def create_content(self):
+		"""Constructs the content of the document."""
+		# In this base class the method is brutally simplistic...
+		self.doc = self.text
 	
