@@ -29,8 +29,8 @@
 --   This schema contains several simple tables named after their counterparts
 --   in the SYSCAT schema (e.g. COLUMNS, TABLES, TABCONST, etc). Each table
 --   contains a unique key (e.g. TABSCHEMA, TABNAME, COLNAME for COLUMNS) plus
---   a LONG VARCHAR REMARKS field which can hold considerably longer comments
---   than the typical VARCHAR(254) REMARKS fields in the SYSCAT schema.
+--   a CLOB(32K) REMARKS field which can hold considerably longer comments than
+--   the typical VARCHAR(254) REMARKS fields in the SYSCAT schema.
 --
 -- DOCCAT schema
 --   This schema duplicates all the views from SYSCAT schema, replacing the
@@ -39,11 +39,9 @@
 --   view if the DOCDATA table doesn't contain an entry for the target object).
 --
 -- DOCTOOLS schema
---   Contains a stored procedure called COMMENTS_TO_DOC which, if called, will
---   copy all non-NULL, non-blank remarks from the SYSCAT views to the
---   corresponding DOCDATA tables. Also contains a view called DOC_TO_COMMENTS
---   which generates "COMMENT ON" statements for the purpose of copying the
---   contents of the DOCDATA tables back to the SYSCAT views.
+--   Contains stored procedures for copying comments between the SYSCAT and
+--   DOCCAT systems, and views which produce the source code for all comments
+--   in the database.
 --
 -- USAGE
 -- =====
@@ -52,25 +50,27 @@
 -- no other alterations should be necessary).
 --
 -- To document objects in your database, simply INSERT rows into the DOCDATA
--- tables instead of using COMMENT ON. You may find it easier to use 
+-- tables instead of using COMMENT ON. You may find it easier to use instead of
+-- the COMMENT statement (since you can duplicate comments by using INSERT ...
+-- SELECT FROM ...)
 --
 -- To support applications which can only query SYSCAT, periodically update the
--- original comments in SYSCAT by querying the DOCTOOLS.DOC_TO_COMMENTS view,
--- redirecting the results to a file, then execute the file. Comments longer
--- than 254 characters will be truncated to 251 characters with ellipsis (...)
--- appended to indicate truncation has occurred.
+-- original comments in SYSCAT by using the DOCTOOLS.DOCCAT_TO_SYSCAT procedure
+-- to update the SYSCAT REMARKS columns.  Comments longer than 254 characters
+-- will be truncated to 251 characters with ellipsis (...) appended to indicate
+-- truncation has occurred.
 --
 -- INSTALLATION
 -- ============
 -- 1. Connect to the database you wish to install these features in
 -- 2. Execute this file using bang (!) as the statement terminator
--- 3. Optionally CALL the DOCTOOLS.COMMENTS_TO_DOC stored procedure (with
+-- 3. Optionally CALL the DOCTOOLS.SYSCAT_TO_DOCCAT stored procedure (with
 --    no arguments) to copy any existing comments to the DOCDATA tables
 -- 4. Insert or update rows in the DOCDATA tables
 --
 -- NOTES
 -- =====
--- The DOCTOOLS.COMMENTS_TO_DOC stored procedure deletes the contents of the
+-- The DOCTOOLS.SYSCAT_TO_DOCCAT stored procedure deletes the contents of the
 -- DOCDATA tables prior to inserting data from the SYSCAT views. Therefore if
 -- you have any extended comments (longer than 254 characters), or comments
 -- which exist only in the DOCDATA tables, but not the SYSCAT views, you will
@@ -196,7 +196,7 @@ DROP VIEW DOCCAT.TABLES!
 DROP VIEW DOCCAT.TABLESPACES!
 DROP SCHEMA DOCCAT RESTRICT!
 DROP VIEW DOCTOOLS.DOC_TO_COMMENTS!
-DROP SPECIFIC PROCEDURE DOCTOOLS.COMMENTS_TO_DOC!
+DROP SPECIFIC PROCEDURE DOCTOOLS.SYSCAT_TO_DOCCAT!
 DROP SPECIFIC PROCEDURE DOCTOOLS.COPY_ROUTINE!
 DROP SPECIFIC PROCEDURE DOCTOOLS.COPY_ROUTINEPARMS!
 DROP SCHEMA DOCTOOLS RESTRICT!
@@ -216,7 +216,7 @@ CREATE SCHEMA DOCTOOLS!
 CREATE TABLE DOCDATA.DATATYPES (
 	TYPESCHEMA     VARCHAR(128)    NOT NULL,
 	TYPENAME       VARCHAR(18)     NOT NULL,
-	REMARKS        LONG VARCHAR    DEFAULT NULL
+	REMARKS        CLOB(32K)       DEFAULT NULL
 )!
 
 CREATE UNIQUE INDEX DOCDATA.DATATYPES_PK
@@ -233,7 +233,7 @@ CREATE TABLE DOCDATA.COLUMNS (
 	TABSCHEMA      VARCHAR(128)    NOT NULL,
 	TABNAME        VARCHAR(128)    NOT NULL,
 	COLNAME        VARCHAR(128)    NOT NULL,
-	REMARKS        LONG VARCHAR    DEFAULT NULL
+	REMARKS        CLOB(32K)       DEFAULT NULL
 )!
 
 CREATE UNIQUE INDEX DOCDATA.COLUMNS_PK
@@ -250,7 +250,7 @@ CREATE TABLE DOCDATA.TABCONST (
 	TABSCHEMA      VARCHAR(128)    NOT NULL,
 	TABNAME        VARCHAR(128)    NOT NULL,
 	CONSTNAME      VARCHAR(18)     NOT NULL,
-	REMARKS        LONG VARCHAR    DEFAULT NULL
+	REMARKS        CLOB(32K)       DEFAULT NULL
 )!
 
 CREATE UNIQUE INDEX DOCDATA.TABCONST_PK
@@ -266,7 +266,7 @@ ALTER TABLE DOCDATA.TABCONST
 CREATE TABLE DOCDATA.INDEXES (
 	INDSCHEMA      VARCHAR(128)    NOT NULL,
 	INDNAME        VARCHAR(18)     NOT NULL,
-	REMARKS        LONG VARCHAR    DEFAULT NULL
+	REMARKS        CLOB(32K)       DEFAULT NULL
 )!
 
 CREATE UNIQUE INDEX DOCDATA.INDEXES_PK
@@ -282,7 +282,7 @@ ALTER TABLE DOCDATA.INDEXES
 CREATE TABLE DOCDATA.ROUTINES (
 	ROUTINESCHEMA  VARCHAR(128)    NOT NULL,
 	SPECIFICNAME   VARCHAR(128)    NOT NULL,
-	REMARKS        LONG VARCHAR    DEFAULT NULL
+	REMARKS        CLOB(32K)       DEFAULT NULL
 )!
 
 CREATE UNIQUE INDEX DOCDATA.ROUTINES_PK
@@ -301,7 +301,7 @@ CREATE TABLE DOCDATA.ROUTINEPARMS (
 	PARMNAME       VARCHAR(128)    DEFAULT NULL,
 	ROWTYPE        CHAR(1)         NOT NULL,
 	ORDINAL        SMALLINT        NOT NULL,
-	REMARKS        LONG VARCHAR    DEFAULT NULL
+	REMARKS        CLOB(32K)       DEFAULT NULL
 )!
 
 CREATE UNIQUE INDEX DOCDATA.ROUTINEPARMS_PK
@@ -318,7 +318,7 @@ ALTER TABLE DOCDATA.ROUTINEPARMS
 -------------------------------------------------------------------------------
 CREATE TABLE DOCDATA.SCHEMATA (
 	SCHEMANAME     VARCHAR(128)    NOT NULL,
-	REMARKS        LONG VARCHAR    DEFAULT NULL
+	REMARKS        CLOB(32K)       DEFAULT NULL
 )!
 
 CREATE UNIQUE INDEX DOCDATA.SCHEMATA_PK
@@ -334,7 +334,7 @@ ALTER TABLE DOCDATA.SCHEMATA
 CREATE TABLE DOCDATA.TABLES (
 	TABSCHEMA      VARCHAR(128)    NOT NULL,
 	TABNAME        VARCHAR(128)    NOT NULL,
-	REMARKS        LONG VARCHAR    DEFAULT NULL
+	REMARKS        CLOB(32K)       DEFAULT NULL
 )!
 
 CREATE UNIQUE INDEX DOCDATA.TABLES_PK
@@ -349,7 +349,7 @@ ALTER TABLE DOCDATA.TABLES
 -------------------------------------------------------------------------------
 CREATE TABLE DOCDATA.TABLESPACES (
 	TBSPACE        VARCHAR(18)     NOT NULL,
-	REMARKS        LONG VARCHAR    DEFAULT NULL
+	REMARKS        CLOB(32K)       DEFAULT NULL
 )!
 
 CREATE UNIQUE INDEX DOCDATA.TABLESPACES_PK
@@ -503,6 +503,34 @@ CREATE VIEW DOCCAT.COLUMNS AS
 			ON S.TABSCHEMA = D.TABSCHEMA
 			AND S.TABNAME = D.TABNAME
 			AND S.COLNAME = D.COLNAME!
+
+CREATE TRIGGER DOCCAT.COLUMNS
+	INSTEAD OF UPDATE OF REMARKS ON DOCCAT.COLUMNS
+	REFERENCING OLD AS OLD NEW AS NEW
+	FOR EACH ROW
+BEGIN ATOMIC
+	IF 0 = (
+		SELECT COUNT(*)
+		FROM DOCDATA.COLUMNS
+		WHERE TABSCHEMA = OLD.TABSCHEMA
+		AND TABNAME = OLD.TABNAME
+	) THEN
+		IF NEW.REMARKS IS NOT NULL THEN
+			INSERT INTO DOCDATA.COLUMNS (TABSCHEMA, TABNAME, REMARKS)
+			VALUES (NEW.TABSCHEMA, NEW.TABNAME, NEW.REMARKS);
+		END IF;
+	ELSE
+		IF NEW.REMARKS IS NULL THEN
+			DELETE FROM DOCDATA.COLUMNS
+			WHERE TABSCHEMA = OLD.TABSCHEMA
+			AND TABNAME = OLD.TABNAME;
+		ELSE
+			UPDATE DOCDATA.COLUMNS SET REMARKS = NEW.REMARKS
+			WHERE TABSCHEMA = OLD.TABSCHEMA
+			AND TABNAME = OLD.TABNAME;
+		END IF;
+	END IF;
+END!
 
 CREATE VIEW DOCCAT.DATATYPES AS
 	SELECT
@@ -1070,10 +1098,133 @@ BEGIN ATOMIC
 			AND SPECIFICNAME = OLD_SPECIFICNAME;
 END!
 
-CREATE PROCEDURE DOCTOOLS.COMMENTS_TO_DOC()
-	SPECIFIC COMMENTS_TO_DOC
+CREATE PROCEDURE DOCTOOLS.DOCCAT_TO_SYSCAT()
+	SPECIFIC DOCCAT_TO_SYSCAT
 	MODIFIES SQL DATA
 	NO EXTERNAL ACTION
+	NOT DETERMINISTIC
+	LANGUAGE SQL
+BEGIN ATOMIC
+	FOR D AS
+		WITH DATA (TYPE, ID, REMARKS) AS (
+			SELECT
+				'TABLESPACE',
+				D.TBSPACE,
+				D.REMARKS
+			FROM
+				SYSCAT.TABLESPACES S
+				INNER JOIN DOCDATA.TABLESPACES D
+					ON S.TBSPACE = D.TBSPACE
+
+			UNION ALL
+
+			SELECT
+				'SCHEMA',
+				D.SCHEMANAME,
+				D.REMARKS
+			FROM
+				SYSCAT.SCHEMATA S
+				INNER JOIN DOCDATA.SCHEMATA D
+					ON S.SCHEMANAME = D.SCHEMANAME
+
+			UNION ALL
+
+			SELECT
+				'TABLE',
+				RTRIM(D.TABSCHEMA) || '.' || D.TABNAME,
+				D.REMARKS
+			FROM
+				SYSCAT.TABLES S
+				INNER JOIN DOCDATA.TABLES D
+					ON S.TABSCHEMA = D.TABSCHEMA
+					AND S.TABNAME = D.TABNAME
+
+			UNION ALL
+
+			SELECT
+				'COLUMN',
+				RTRIM(D.TABSCHEMA) || '.' || RTRIM(D.TABNAME) || '.' || D.COLNAME,
+				D.REMARKS
+			FROM
+				SYSCAT.COLUMNS S
+				INNER JOIN DOCDATA.COLUMNS D
+					ON S.TABSCHEMA = D.TABSCHEMA
+					AND S.TABNAME = D.TABNAME
+					AND S.COLNAME = D.COLNAME
+
+			UNION ALL
+
+			SELECT
+				'CONSTRAINT',
+				RTRIM(D.TABSCHEMA) || '.' || RTRIM(D.TABNAME) || '.' || D.CONSTNAME,
+				D.REMARKS
+			FROM
+				SYSCAT.TABCONST S
+				INNER JOIN DOCDATA.TABCONST D
+					ON S.TABSCHEMA = D.TABSCHEMA
+					AND S.TABNAME = D.TABNAME
+					AND S.CONSTNAME = D.CONSTNAME
+
+			UNION ALL
+
+			SELECT
+				'INDEX',
+				RTRIM(D.INDSCHEMA) || '.' || D.INDNAME,
+				D.REMARKS
+			FROM
+				SYSCAT.INDEXES S
+				INNER JOIN DOCDATA.INDEXES D
+					ON S.INDSCHEMA = D.INDSCHEMA
+					AND S.INDNAME = D.INDNAME
+
+			UNION ALL
+
+			SELECT
+				CASE WHEN S.ROUTINETYPE = 'P'
+					THEN 'SPECIFIC PROCEDURE'
+					ELSE 'SPECIFIC FUNCTION'
+				END,
+				RTRIM(D.ROUTINESCHEMA) || '.' || D.SPECIFICNAME,
+				D.REMARKS
+			FROM
+				SYSCAT.ROUTINES S
+				INNER JOIN DOCDATA.ROUTINES D
+					ON S.ROUTINESCHEMA = D.ROUTINESCHEMA
+					AND S.SPECIFICNAME = D.SPECIFICNAME
+
+			UNION ALL
+
+			SELECT
+				'TYPE',
+				RTRIM(D.TYPESCHEMA) || '.' || D.TYPENAME,
+				D.REMARKS
+			FROM
+				SYSCAT.DATATYPES S
+				INNER JOIN DOCDATA.DATATYPES D
+					ON S.TYPESCHEMA = D.TYPESCHEMA
+					AND S.TYPENAME = D.TYPENAME
+		)
+		SELECT
+			'COMMENT ON ' || TYPE || ' ' || ID || ' IS ''' ||
+				REPLACE(CAST(CASE WHEN LENGTH(REMARKS) <= 254
+					THEN REMARKS
+					ELSE LEFT(REMARKS, 251) || '...'
+				END AS VARCHAR(254)), '''', '''''') || '''' AS CMD
+		FROM
+			DATA
+		WHERE
+			REMARKS IS NOT NULL
+	DO
+		EXECUTE IMMEDIATE D.CMD;
+	END FOR;
+END!
+
+CREATE PROCEDURE DOCTOOLS.SYSCAT_TO_DOCCAT()
+	SPECIFIC SYSCAT_TO_DOCCAT
+	MODIFIES SQL DATA
+	NO EXTERNAL ACTION
+	NOT DETERMINISITC
+	LANGUAGE SQL
 BEGIN ATOMIC
 	DELETE FROM DOCDATA.DATATYPES;
 	INSERT INTO DOCDATA.DATATYPES (TYPESCHEMA, TYPENAME, REMARKS)
