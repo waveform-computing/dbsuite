@@ -2,6 +2,14 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
+"""Output plugin for w3v8 style web pages.
+
+This output plugin supports generating XHTML documentation conforming to the
+internal IBM w3v8 style. It includes syntax highlighted SQL information on
+various objects in the database (views, tables, etc.) and SVG diagrams of the
+schema.
+"""
+
 from output.html.w3.document import W3Site
 from output.html.w3.database import W3DatabaseDocument
 from output.html.w3.schema import W3SchemaDocument
@@ -17,11 +25,17 @@ from output.html.w3.function import W3FunctionDocument
 from output.html.w3.procedure import W3ProcedureDocument
 from output.html.w3.tablespace import W3TablespaceDocument
 
+options = {
+	'path': 'The root folder into which all files (HTML, CSS, SVG, etc.) will be written',
+}
+
 def Output(database, outputpath):
 	# Construct the site object
 	site = W3Site(database)
 	site.baseurl = ''
 	site.basepath = outputpath
+	# XXX Construct the SQL stylesheet
+	# XXX Construct all popups
 	# Construct all document objects (the document objects will add themselves
 	# to the documents attribute of the site object)
 	W3DatabaseDocument(site, database)
