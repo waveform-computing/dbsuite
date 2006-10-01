@@ -2,16 +2,22 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-"""Input class for IBM DB2 UDB for Linux/UNIX/Windows.
+"""Input plugin for IBM DB2 UDB for Linux/UNIX/Windows.
 
-This input class supports extracting documentation information from IBM DB2
+This input plugin supports extracting documentation information from IBM DB2
 UDB for Linux/UNIX/Windows version 8 or above. If the DOCCAT schema (see the
 doccat_create.sql script in the contrib/db2udbluw directory) is present, it
 will be used to source documentation data instead of SYSCAT.
 """
 
 import logging
-from util import makeDateTime, makeBoolean
+from input.util import makeDateTime, makeBoolean
+
+options = {
+	'database': 'The locally cataloged name of the database to connect to',
+	'username': 'The username to connect with (optional: if ommitted an implicit connection will be made)',
+	'password': 'The password associated with the user given by the username option',
+}
 
 def _fetch_dict(cursor):
 	"""Returns rows from a cursor as a list of dictionaries.
@@ -22,9 +28,9 @@ def _fetch_dict(cursor):
 	"""
 	return [dict(zip([d[0] for d in cursor.description], row)) for row in cursor.fetchall()]
 
-class Cache(object):
+class Input(object):
 	def __init__(self, connection):
-		super(Cache, self).__init__()
+		super(Input, self).__init__()
 		logging.info("Initializing DB2 UDB for LUW input module")
 		# Get a cursor to run the queries
 		cursor = connection.cursor()
