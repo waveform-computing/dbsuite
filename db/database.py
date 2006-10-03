@@ -10,17 +10,17 @@ from tablespace import Tablespace
 class Database(DocBase):
 	"""Class representing a DB2 database"""
 	
-	def __init__(self, cache, name):
+	def __init__(self, input):
 		"""Initializes an instance of the class"""
-		super(Database, self).__init__(None, name)
+		super(Database, self).__init__(None, input.name)
 		logging.debug("Building database")
 		self.__tablespaces = {}
-		for row in cache.tablespaces.itervalues():
-			self.__tablespaces[row['name']] = Tablespace(self, cache, **row)
+		for row in input.tablespaces.itervalues():
+			self.__tablespaces[row['name']] = Tablespace(self, input, **row)
 		self.__tablespaceList = sorted(self.__tablespaces.itervalues(), key=lambda tbspace:tbspace.name)
 		self.__schemas = {}
-		for row in cache.schemas.itervalues():
-			self.__schemas[row['name']] = Schema(self, cache, **row)
+		for row in input.schemas.itervalues():
+			self.__schemas[row['name']] = Schema(self, input, **row)
 		self.__schemaList = sorted(self.__schemas.itervalues(), key=lambda schema:schema.name)
 
 	def find(self, qualifiedName):
