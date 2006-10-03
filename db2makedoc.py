@@ -2,10 +2,9 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
+# Standard modules
 import sys
 mswindows = sys.platform == "win32"
-
-# Standard modules
 import optparse
 import ConfigParser
 import logging
@@ -14,49 +13,65 @@ import os
 import imp
 import textwrap
 
+# Constants
 __version__ = "0.1"
+PLUGIN_OPTION = 'plugin'
+
+# Localizable strings
+USAGE_TEMPLATE = '%prog [options] configs...'
+VERSION_TEMPLATE = '%%prog %s Database Documentation Generator' % __version__
+
+CONFIG_HELP = 'specify the configuration file from which to read settings'
+QUIET_HELP = 'produce less console output'
+VERBOSE_HELP = 'produce more console output'
+LOG_FILE_HELP = 'log messages to the specified file'
+HELP_PLUGINS_HELP = 'list the available input and output plugins'
+HELP_PLUGIN_HELP = 'display information about the specified plugin'
+DEBUG_HELP = 'enables debug mode'
+
+NO_FILES_ERR = 'you did not specify any filenames'
+MISSING_VALUE_ERR = '%s: [%s]: missing a "%s" value'
+INVALID_PLUGIN_ERR = '%s: [%s]: invalid plugin name "%s" (plugin names must be fully qualified; must begin with "input." or "output.")'
+PLUGIN_IMPORT_ERR = '%s: [%s]: plugin "%s" not found or failed to load (error: %s)'
+PLUGIN_NOT_INPUT_ERR = '%s: [%s]: plugin "%s" is not a valid input plugin'
+PLUGIN_NOT_OUTPUT_ERR = '%s: [%s]: plugin "%s" is not a valid output plugin'
+PLUGIN_EXEC_ERR = '%s: [%s]: plugin "%s" failed (error: %s)'
+
+READING_INPUT_MSG = '%s: [%s]: Reading input (%s)'
+WRITING_OUTPUT_MSG = '%s: [%s]: Generating output (%s)'
 
 def main():
 	# Parse the command line arguments
-	usage = "%prog [options]"
-	version = "%%prog %s Database Documentation Generator" % (__version__,)
+	usage = USAGE_TEMPLATE
+	version = VERSION_TEMPLATE
 	parser = optparse.OptionParser(usage=usage, version=version)
 	parser.set_defaults(
+		debug=False,
 		config=None,
 		listplugins=None,
 		plugin=None,
 		logfile="",
-		loglevel=logging.WARNING)
-	parser.add_option("-c", "--config", dest="config",
-		help="""specify the configuration file from which to read settings""")
-	parser.add_option("-q", "--quiet", dest="loglevel", action="store_const", const=logging.ERROR,
-		help="""produce less console output""")
-	parser.add_option("-v", "--verbose", dest="loglevel", action="store_const", const=logging.INFO,
-		help="""produce more console output""")
-	parser.add_option("-l", "--log-file", dest="logfile",
-		help="""log messages to the specified file""")
-	parser.add_option("", "--help-plugins", dest="listplugins", action="store_true",
-		help="""list the available input and output plugins""")
-	parser.add_option("", "--help-plugin", dest="plugin",
-		help="""display information about the specified plugin""")
+		loglevel=logging.WARNING
+	)
+	parser.add_option("-c", "--config", dest="config", help=CONFIG_HELP)
+	parser.add_option("-q", "--quiet", dest="loglevel", action="store_const", const=logging.ERROR, help=QUIET_HELP)
+	parser.add_option("-v", "--verbose", dest="loglevel", action="store_const", const=logging.INFO, help=VERBOSE_HELP)
+	parser.add_option("-l", "--log-file", dest="logfile", help=LOG_FILE_HELP)
+	parser.add_option("", "--help-plugins", dest="listplugins", action="store_true", help=HELP_PLUGINS_HELP)
+	parser.add_option("", "--help-plugin", dest="plugin", help=HELP_PLUGIN_HELP)
+	parser.add_option("-D", "--debug", dest="debug", help=DEBUG_HELP)
 	(options, args) = parser.parse_args()
-	# Check for list/help actions
+	# Deal with one-shot actions (help/whatever)
 	if options.listplugins:
 		list_plugins()
 		return
 	elif options.plugin:
 		help_plugin(options.plugin)
 		return
-	# Check the options
-	if len(args) > 0:
-		parser.error("you may not specify any filenames")
-	if options.database is None:
-		parser.error("you must specify a database with --database or -d")
-	if not options.username:
-		logging.info("Username not specified, using implicit login")
-	elif not options.password:
-		parser.error("Username was specified, but password was not (try running again with --pass)")
-	# Set up some logging objects
+	# Check the options & args
+	if len(args) == 0:
+		parser.error(NO_FILES_ERR)
+	# Set up some logging stuff
 	console = logging.StreamHandler(sys.stderr)
 	console.setFormatter(logging.Formatter('%(message)s'))
 	console.setLevel(options.loglevel)
@@ -66,44 +81,85 @@ def main():
 		logfile.setFormatter(logging.Formatter('%(asctime)s, %(levelname)s, %(message)s'))
 		logfile.setLevel(logging.INFO) # Log file always logs at INFO level
 		logging.getLogger().addHandler(logfile)
-	logging.getLogger().setLevel(logging.DEBUG)
-	try:
-		import db.database
-		import input.db2udbluw
-		import output.html.w3
-		# Find a suitable connection library and create a database connection
-		try:
-			import DB2
-			if options.username:
-				connection = DB2.Connection(options.database, options.username, options.password)
-			else:
-				connection = DB2.Connection(options.database)
-		except ImportError:
-			import dbi
-			import odbc
-			if options.username:
-				connection = odbc.odbc("%s/%s/%s" % (options.database, options.username, options.password))
-			else:
-				connection = odbc.odbc(options.database)
-		# Build the output
-		# XXX Add configuration options to allow use of different input and
-		# output layers
-		try:
-			logging.info("Building metadata cache")
-			data = input.db2udbluw.Input(connection)
-			logging.info("Building database object hierarchy")
-			database = db.database.Database(data, options.database)
-			logging.info("Writing output with w3 handler")
-			output.html.w3.Output(database, options.outputpath)
-		finally:
-			connection.close()
-			connection = None
-	except Exception, e:
-		logging.error(str(e))
-		raise
-		sys.exit(1)
+	# Set up the exceptions hook for uncaught exceptions and the file-based
+	# logging level
+	if options.debug:
+		logging.getLogger().setLevel(logging.DEBUG)
 	else:
-		sys.exit(0)
+		logging.getLogger().setLevel(logging.INFO)
+		sys.excepthook = production_excepthook
+	# Loop over each provided configuration file
+	import db.database
+	for config_file in args:
+		# Read the configuration file
+		parser = ConfigParser.SafeConfigParser()
+		parser.read(config_file)
+		# Sort sections into input and output sections
+		input_sections = []
+		output_sections = []
+		for section in parser.sections():
+			if not parser.has_option(section, PLUGIN_OPTION):
+				raise Exception(MISSING_VALUE_ERR % (config_file, section, PLUGIN_OPTION))
+			s = parser.get(section, PLUGIN_OPTION)
+			if s[:6] == 'input.':
+				input_sections.append(s)
+			elif s[:7] == 'output.':
+				output_sections.append(s)
+			else:
+				raise Exception(INVALID_PLUGIN_ERR % (config_file, section, s))
+		# Run each output section for each input section
+		for input_section in input_sections:
+			s = parser.get(input_section, PLUGIN_OPTION)
+			try:
+				input_plugin = load_plugin(s)
+			except ImportError, e:
+				raise Exception(PLUGIN_IMPORT_ERR % (config_file, input_section, s, str(e)))
+			if not is_input_plugin(module):
+				raise Exception(PLUGIN_NOT_INPUT_ERR % (config_file, input_section, s))
+			# Get input_plugin to read data from the source specified by the
+			# configuration values from input_section
+			logging.info(READING_INPUT_MSG % (config_file, input_section, s))
+			try:
+				input = input_plugin.Input(dict(parser.items(input_section)))
+			except Exception, e:
+				# Unless we're in debug mode, just log errors and continue on
+				# to the next input section
+				logging.error(PLUGIN_EXEC_ERR % (config_file, input_section, s, str(e)))
+				if options.debug:
+					raise
+				continue
+			# Construct the internal representation of the metadata
+			db = db.database.Database(input)
+			for output_section in output_sections:
+				s = parser.get(output_section, PLUGIN_OPTION)
+				try:
+					output_plugin = load_plugin(plugin_name)
+				except ImportError, e:
+					raise Exception(PLUGIN_IMPORT_ERR % (config_file, output_section, s, str(e)))
+				if not is_output_plugin(module):
+					raise Exception(PLUGIN_NOT_OUTPUT_ERR % (config_file, output_section, s))
+				# Get the output_plugin to generate output from db
+				logging.info(WRITING_OUTPUT_MSG % (config_file, output_section, s))
+				try:
+					output_plugin.Output(db, dict(parser.items(output_section)))
+				except Exception, e:
+					# Again, just log errors and continue onto the next output
+					# section unless in debug mode
+					logging.error(PLUGIN_EXEC_ERR % (config_file, output_section, s, str(e)))
+					if options.debug:
+						raise
+
+def production_excepthook(type, value, traceback):
+	"""Exception hook for non-debug mode.
+
+	This exception hook uses the logging infrastructure set up by main to
+	record fatal (uncaught) exceptions. It also sets the app's exit code to an
+	appropriate value (currently 1 for any uncaught exception), and avoids
+	printing the stack trace (which'd just confuse most users). Users can
+	enable the normal exception hook by using the --debug or -D args.
+	"""
+	logging.critical(str(e))
+	sys.exit(1)
 
 def list_plugins():
 	"""Pretty-print a list of the available input and output plugins."""
@@ -214,21 +270,16 @@ def load_plugin(name):
 	root = None
 	parts = name.split('.')
 	for p in parts:
+		(modfile, modpath, moddesc) = imp.find_module(p, root)
 		try:
-			(modfile, modpath, moddesc) = imp.find_module(p, root)
-			try:
-				module = imp.load_module(p, modfile, modpath, moddesc)
-				if hasattr(module, '__path__'):
-					root = module.__path__
-			finally:
-				# Caller is responsible for closing the file object returned by
-				# find_module()
-				if isinstance(modfile, file) and not modfile.closed:
-					modfile.close()
-		except ImportError:
-			raise Exception('Unable to locate or load plugin %s' % name)
-	if not is_plugin(module):
-		raise Exception('Module %s does not appear to be an input or output plugin' % name)
+			module = imp.load_module(p, modfile, modpath, moddesc)
+			if hasattr(module, '__path__'):
+				root = module.__path__
+		finally:
+			# Caller is responsible for closing the file object returned by
+			# find_module()
+			if isinstance(modfile, file) and not modfile.closed:
+				modfile.close()
 	return module
 
 if __name__ == '__main__':
