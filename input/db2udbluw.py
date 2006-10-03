@@ -10,14 +10,51 @@ doccat_create.sql script in the contrib/db2udbluw directory) is present, it
 will be used to source documentation data instead of SYSCAT.
 """
 
+# Standard modules
+import sys
+mswindows = sys.platform == 'win32'
 import logging
-from input.util import makeDateTime, makeBoolean
 
+# Constants
+DATABASE_OPTION = 'database'
+USERNAME_OPTION = 'username'
+PASSWORD_OPTION = 'password'
+
+# Localizable strings
+DATABASE_MISSING = 'The "%s" option must be specified' % DATABASE_OPTION
+PASSWORD_MISSING = 'If the "%s" option is given, the "%s" option must also be provided' % (USERNAME_OPTION, PASSWORD_OPTION)
+
+CONNECTING_MSG = 'Connecting to database %s'
+USING_DOCCAT = 'DOCCAT extension schema found, using DOCCAT instead of SYSCAT'
+USING_SYSCAT = 'DOCCAT extension schema not found, using SYSCAT'
+
+# Plugin options dictionary
 options = {
-	'database': 'The locally cataloged name of the database to connect to',
-	'username': 'The username to connect with (optional: if ommitted an implicit connection will be made)',
-	'password': 'The password associated with the user given by the username option',
+	DATABASE_OPTION: 'The locally cataloged name of the database to connect to',
+	USERNAME_OPTION: 'The username to connect with (optional: if ommitted an implicit connection will be made)',
+	PASSWORD_OPTION: 'The password associated with the user given by the username option',
 }
+
+def _make_datetime(value):
+	"""Converts a date-time value from a database query to a datetime object"""
+	if (value is None) or (value == ""):
+		return None
+	elif isinstance(value, basestring):
+		return datetime.datetime(*([int(x) for x in re.match(r"(\d{4})-(\d{2})-(\d{2})[T -](\d{2})[:.](\d{2})[:.](\d{2})\.(\d{6})\d*", value).groups()]))
+	elif hasattr(value, 'value') and isinstance(value.value, int):
+		return datetime.datetime.fromtimestamp(value.value)
+	else:
+		raise ValueError('Unable to convert date-time value "%s"' % str(value))
+
+def _make_bool(value, trueValue='Y', falseValue='N', noneValue=' ', unknownError=False, unknownResult=None):
+	"""Converts a character-based value into a boolean value"""
+	try:
+		return {trueValue: True, falseValue: False, noneValue: None}[value]
+	except KeyError:
+		if unknownError:
+			raise
+		else:
+			return unknownResult
 
 def _fetch_dict(cursor):
 	"""Returns rows from a cursor as a list of dictionaries.
@@ -29,54 +66,122 @@ def _fetch_dict(cursor):
 	return [dict(zip([d[0] for d in cursor.description], row)) for row in cursor.fetchall()]
 
 class Input(object):
-	def __init__(self, connection):
+	def __init__(self, config):
 		super(Input, self).__init__()
-		logging.info("Initializing DB2 UDB for LUW input module")
-		# Get a cursor to run the queries
-		cursor = connection.cursor()
+		# Check the config dictionary for missing stuff
+		if not DATABASE_OPTION in config:
+			raise Exception(DATABASE_MISSING)
+		if USERNAME_OPTION in config and not PASSWORD_OPTION in config:
+			raise Exception(USERNAME_MISSING)
+		logging.info(CONNECTING_MSG % config[DATABASE_OPTION])
+		self.connection = self._connect(
+			config[DATABASE_OPTION],
+			config.get(USERNAME_OPTION, None),
+			config.get(PASsWORD_OPTION, None)
+		)
 		try:
+			self.name = config[DATABASE_OPTION]
 			# Test whether the DOCCAT extension is installed
-			cursor.execute("""SELECT COUNT(*)
-				FROM SYSCAT.SCHEMATA
-				WHERE SCHEMANAME = 'DOCCAT'
-				WITH UR""")
-			doccat = bool(cursor.fetchall()[0][0])
-			if doccat:
-				logging.info("DOCCAT schema found, using DOCCAT instead of SYSCAT")
-			else:
-				logging.info("DOCCAT schema not found, using SYSCAT instead")
+			cursor = self.connection.cursor()
+			try:
+				cursor.execute("""
+					SELECT COUNT(*)
+					FROM SYSCAT.SCHEMATA
+					WHERE SCHEMANAME = 'DOCCAT'
+					WITH UR""")
+				self.doccat = bool(cursor.fetchall()[0][0])
+				if self.doccat:
+					logging.info(USING_DOCCAT)
+				else:
+					logging.info(USING_SYSCAT)
+			finally:
+				cursor.close()
+				del cursor
+			# Run all the queries, using DOCCAT extensions if available
+			self._get_schemas()
+			self._get_datatypes()
+			self._get_tables()
+			self._get_views()
+			self._get_aliases()
+			self._get_relation_dependencies()
+			self._get_indexes()
+			self._get_index_fields()
+			self._get_table_indexes()
+			self._get_fields()
+			self._get_unique_keys()
+			self._get_unique_key_fields()
+			self._get_foreign_keys()
+			self._get_foreign_key_fields()
+			self._get_checks()
+			self._get_check_fields()
+			self._get_functions()
+			self._get_function_params()
+			self._get_procedures()
+			self._get_procedure_params()
+			self._get_triggers()
+			self._get_relation_triggers()
+			self._get_tablespaces()
+			self._get_tablespace_tables()
+			self._get_tablespace_indexes()
 		finally:
-			del cursor
-		# Run all the queries, using DOCCAT extensions if available
-		self._get_schemas(connection, doccat)
-		self._get_datatypes(connection, doccat)
-		self._get_tables(connection, doccat)
-		self._get_views(connection, doccat)
-		self._get_aliases(connection, doccat)
-		self._get_relation_dependencies(connection, doccat)
-		self._get_indexes(connection, doccat)
-		self._get_index_fields(connection, doccat)
-		self._get_table_indexes(connection, doccat)
-		self._get_fields(connection, doccat)
-		self._get_unique_keys(connection, doccat)
-		self._get_unique_key_fields(connection, doccat)
-		self._get_foreign_keys(connection, doccat)
-		self._get_foreign_key_fields(connection, doccat)
-		self._get_checks(connection, doccat)
-		self._get_check_fields(connection, doccat)
-		self._get_functions(connection, doccat)
-		self._get_function_params(connection, doccat)
-		self._get_procedures(connection, doccat)
-		self._get_procedure_params(connection, doccat)
-		self._get_triggers(connection, doccat)
-		self._get_relation_triggers(connection, doccat)
-		self._get_tablespaces(connection, doccat)
-		self._get_tablespace_tables(connection, doccat)
-		self._get_tablespace_indexes(connection, doccat)
+			self.connection.close()
+			del self.connection
+	
+	def _connect(dsn, username=None, password=None):
+		"""Create a connection to the specified database.
 
-	def _get_schemas(self, connection, doccat):
+		This utility method attempts to connect to the database named by dsn
+		using the (optional) username and password provided. The method
+		attempts to use a variety of connection frameworks (PyDB2, PythonWin's
+		ODBC stuff and mxODBC) depending on the underlying platform.
+
+		Note that the queries in the methods below are written to be agnostic
+		to the quirks of the various connection frameworks (e.g. PythonWin's
+		ODBC module doesn't correctly handle certain dates hence why all DATE
+		and TIMESTAMP fields are CAST to CHAR in the queries below).
+		"""
+		try:
+			# Try the PyDB2 framework
+			import DB2
+		except ImportError:
+			try:
+				# Try the PythonWin ODBC framework
+				if mswindows:
+					import dbi
+					import odbc
+				else:
+					raise ImportError('')
+			except ImportError:
+				try:
+					# Try the mxODBC framework
+					import mx.ODBC
+				except ImportError:
+					raise
+				else:
+					# Connect using mxODBC (different driver depending on
+					# platform)
+					if mswindows:
+						import mx.ODBC.Windows
+						return mx.ODBC.Windows.DriverConnect('DSN=%s;UID=%s;PWD=%s')
+					else:
+						import mx.ODBC.iODBC
+						return mx.ODBC.iODBC.DriverConnect('DSN=%s;UID=%s;PWD=%s')
+			else:
+				# Connect using PythonWin ODBC
+				if username:
+					return odbc.odbc("%s/%s/%s" % (dsn, username, password))
+				else:
+					return odbc.odbc(dsn)
+		else:
+			# Connect using PyDB2
+			if username:
+				return DB2.Connection(dsn, username, password)
+			else:
+				return DB2.Connection(dsn)
+
+	def _get_schemas(self):
 		logging.debug("Retrieving schemas")
-		cursor = connection.cursor()
+		cursor = self.connection.cursor()
 		try:
 			cursor.execute("""
 				SELECT
@@ -87,17 +192,18 @@ class Input(object):
 					REMARKS           AS "description"
 				FROM
 					%(schema)s.SCHEMATA
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
 			self.schemas = dict([(row['name'], row) for row in _fetch_dict(cursor)])
 		finally:
+			cursor.close()
 			del cursor
 		for row in self.schemas.itervalues():
-			row['created'] = makeDateTime(row['created'])
+			row['created'] = _make_datetime(row['created'])
 
-	def _get_datatypes(self, connection, doccat):
+	def _get_datatypes(self):
 		logging.debug("Retrieving datatypes")
-		cursor = connection.cursor()
-		try:
+		cursor = self.connection.cursor()
+		try)
 			cursor.execute("""
 				SELECT
 					RTRIM(TYPESCHEMA)   AS "schemaName",
@@ -115,14 +221,15 @@ class Input(object):
 				FROM
 					%(schema)s.DATATYPES
 				WHERE INSTANTIABLE = 'Y'
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
 			self.datatypes = dict([((row['schemaName'], row['name']), row) for row in _fetch_dict(cursor)])
 		finally:
+			cursor.close()
 			del cursor
 		for row in self.datatypes.itervalues():
-			row['created'] = makeDateTime(row['created'])
-			row['final'] = makeBoolean(row['final'])
-			row['systemType'] = makeBoolean(row['type'], 'S')
+			row['created'] = _make_datetime(row['created'])
+			row['final'] = _make_bool(row['final'])
+			row['systemType'] = _make_bool(row['type'], 'S')
 			if not row['size']: row['size'] = None
 			if not row['scale']: row['scale'] = None # XXX Not necessarily unknown (0 is a valid scale)
 			if not row['codepage']: row['codepage'] = None
@@ -132,9 +239,9 @@ class Input(object):
 				'R': 'Structured'
 			}[row['type']]
 
-	def _get_tables(self, connection, doccat):
+	def _get_tables(self):
 		logging.debug("Retrieving tables")
-		cursor = connection.cursor()
+		cursor = self.connection.cursor()
 		try:
 			cursor.execute("""
 				SELECT
@@ -163,18 +270,19 @@ class Input(object):
 					%(schema)s.TABLES
 				WHERE
 					TYPE = 'T'
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
 			self.tables = dict([((row['schemaName'], row['name']), row) for row in _fetch_dict(cursor)])
 		finally:
+			cursor.close()
 			del cursor
 		for row in self.tables.itervalues():
-			row['created'] = makeDateTime(row['created'])
-			row['statsUpdated'] = makeDateTime(row['statsUpdated'])
-			row['checkPending'] = makeBoolean(row['checkPending'], 'C')
-			row['append'] = makeBoolean(row['append'])
-			row['volatile'] = makeBoolean(row['volatile'], 'C', ' ', None)
-			row['compression'] = makeBoolean(row['compression'], 'V')
-			row['clustered'] = makeBoolean(row['clustered'])
+			row['created'] = _make_datetime(row['created'])
+			row['statsUpdated'] = _make_datetime(row['statsUpdated'])
+			row['checkPending'] = _make_bool(row['checkPending'], 'C')
+			row['append'] = _make_bool(row['append'])
+			row['volatile'] = _make_bool(row['volatile'], 'C', ' ', None)
+			row['compression'] = _make_bool(row['compression'], 'V')
+			row['clustered'] = _make_bool(row['clustered'])
 			row['lockSize'] = {
 				'T': 'Table',
 				'R': 'Row'
@@ -186,9 +294,9 @@ class Input(object):
 				'F': 'Full Access'
 			}[row['accessMode']]
 
-	def _get_views(self, connection, doccat):
+	def _get_views(self):
 		logging.debug("Retrieving views")
-		cursor = connection.cursor()
+		cursor = self.connection.cursor()
 		try:
 			cursor.execute("""
 				SELECT
@@ -209,14 +317,15 @@ class Input(object):
 						ON T.TABSCHEMA = V.VIEWSCHEMA
 						AND T.TABNAME = V.VIEWNAME
 						AND T.TYPE = 'V'
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
 			self.views = dict([((row['schemaName'], row['name']), row) for row in _fetch_dict(cursor)])
 		finally:
+			cursor.close()
 			del cursor
 		for row in self.views.itervalues():
-			row['created'] = makeDateTime(row['created'])
-			row['readOnly'] = makeBoolean(row['readOnly'])
-			row['valid'] = makeBoolean(row['valid'], falseValue='X')
+			row['created'] = _make_datetime(row['created'])
+			row['readOnly'] = _make_bool(row['readOnly'])
+			row['valid'] = _make_bool(row['valid'], falseValue='X')
 			row['check'] = {
 				'N': 'No Check',
 				'L': 'Local Check',
@@ -224,9 +333,9 @@ class Input(object):
 			}[row['check']]
 			row['sql'] = str(row['sql'])
 
-	def _get_aliases(self, connection, doccat):
+	def _get_aliases(self):
 		logging.debug("Retrieving aliases")
-		cursor = connection.cursor()
+		cursor = self.connection.cursor()
 		try:
 			cursor.execute("""
 				SELECT
@@ -241,16 +350,17 @@ class Input(object):
 					%(schema)s.TABLES
 				WHERE
 					TYPE = 'A'
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
 			self.aliases = dict([((row['schemaName'], row['name']), row) for row in _fetch_dict(cursor)])
 		finally:
+			cursor.close()
 			del cursor
 		for row in self.aliases.itervalues():
-			row['created'] = makeDateTime(row['created'])
+			row['created'] = _make_datetime(row['created'])
 
-	def _get_relation_dependencies(self, connection, doccat):
+	def _get_relation_dependencies(self):
 		logging.debug("Retrieving relation dependencies")
-		cursor = connection.cursor()
+		cursor = self.connection.cursor()
 		try:
 			cursor.execute("""
 				SELECT
@@ -262,7 +372,7 @@ class Input(object):
 					%(schema)s.TABDEP
 				WHERE
 					BTYPE IN ('A', 'S', 'T', 'U', 'V', 'W')
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
 			self.relation_dependents = {}
 			self.relation_dependencies = {}
 			for (relationSchema, relationName, depSchema, depName) in cursor.fetchall():
@@ -273,11 +383,12 @@ class Input(object):
 					self.relation_dependencies[(depSchema, depName)] = []
 				self.relation_dependencies[(depSchema, depName)].append((relationSchema, relationName))
 		finally:
+			cursor.close()
 			del cursor
 
-	def _get_indexes(self, connection, doccat):
+	def _get_indexes(self):
 		logging.debug("Retrieving indexes")
-		cursor = connection.cursor()
+		cursor = self.connection.cursor()
 		try:
 			cursor.execute("""
 				SELECT
@@ -310,14 +421,15 @@ class Input(object):
 					%(schema)s.INDEXES I
 					INNER JOIN %(schema)s.TABLESPACES T
 						ON I.TBSPACEID = T.TBSPACEID
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
 			self.indexes = dict([((row['schemaName'], row['name']), row) for row in _fetch_dict(cursor)])
 		finally:
+			cursor.close()
 			del cursor
 		for row in self.indexes.itervalues():
-			row['created'] = makeDateTime(row['created'])
-			row['statsUpdated'] = makeDateTime(row['statsUpdated'])
-			row['reverseScans'] = makeBoolean(row['reverseScans'])
+			row['created'] = _make_datetime(row['created'])
+			row['statsUpdated'] = _make_datetime(row['statsUpdated'])
+			row['reverseScans'] = _make_bool(row['reverseScans'])
 			row['unique'] = row['unique'] != 'D'
 			row['userDefined'] = row['userDefined'] != 0
 			row['required'] = row['required'] != 0
@@ -328,9 +440,9 @@ class Input(object):
 				'BLOK': 'Block'
 			}[row['type']]
 
-	def _get_index_fields(self, connection, doccat):
+	def _get_index_fields(self):
 		logging.debug("Retrieving index fields")
-		cursor = connection.cursor()
+		cursor = self.connection.cursor()
 		try:
 			cursor.execute("""
 				SELECT
@@ -344,7 +456,7 @@ class Input(object):
 					INDSCHEMA,
 					INDNAME,
 					COLSEQ
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
 			self.indexFields = {}
 			for (indexSchema, indexName, fieldName, order) in cursor.fetchall():
 				if not (indexSchema, indexName) in self.indexFields:
@@ -352,9 +464,10 @@ class Input(object):
 				order = {'A': 'Ascending', 'D': 'Descending', 'I': 'Include'}[order]
 				self.indexFields[(indexSchema, indexName)].append((fieldName, order))
 		finally:
+			cursor.close()
 			del cursor
 
-	def _get_table_indexes(self, connection, doccat):
+	def _get_table_indexes(self):
 		logging.debug("Retrieving table indexes")
 		# Note: Must be run AFTER _get_indexes and _get_tables
 		self.tableIndexes = dict([
@@ -366,9 +479,9 @@ class Input(object):
 			for (tableSchema, tableName) in self.tables
 		])
 
-	def _get_fields(self, connection, doccat):
+	def _get_fields(self):
 		logging.debug("Retrieving fields")
-		cursor = connection.cursor()
+		cursor = self.connection.cursor()
 		try:
 			cursor.execute("""
 				SELECT
@@ -398,20 +511,21 @@ class Input(object):
 					%(schema)s.COLUMNS
 				WHERE
 					HIDDEN <> 'S'
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
 			self.fields = dict([((row['schemaName'], row['tableName'], row['name']), row) for row in _fetch_dict(cursor)])
 		finally:
+			cursor.close()
 			del cursor
 		for row in self.fields.itervalues():
 			if row['cardinality'] < 0: row['cardinality'] = None
 			if row['averageSize'] < 0: row['averageSize'] = None
 			if row['nullCardinality'] < 0: row['nullCardinality'] = None
 			if not row['codepage']: row['codepage'] = None
-			row['logged'] = makeBoolean(row['logged'])
-			row['compact'] = makeBoolean(row['compact'])
-			row['nullable'] = makeBoolean(row['nullable'])
-			row['identity'] = makeBoolean(row['identity'])
-			row['compressDefault'] = makeBoolean(row['compressDefault'], 'S')
+			row['logged'] = _make_bool(row['logged'])
+			row['compact'] = _make_bool(row['compact'])
+			row['nullable'] = _make_bool(row['nullable'])
+			row['identity'] = _make_bool(row['identity'])
+			row['compressDefault'] = _make_bool(row['compressDefault'], 'S')
 			row['generated'] = {
 				'D': 'By Default',
 				'A': 'Always',
@@ -419,9 +533,9 @@ class Input(object):
 			}[row['generated']]
 			row['generateExpression'] = str(row['generateExpression'])
 
-	def _get_unique_keys(self, connection, doccat):
+	def _get_unique_keys():
 		logging.debug("Retrieving unique keys")
-		cursor = connection.cursor()
+		cursor = self.connection.cursor()
 		try:
 			cursor.execute("""
 				SELECT
@@ -436,9 +550,10 @@ class Input(object):
 					%(schema)s.TABCONST
 				WHERE
 					TYPE IN ('U', 'P')
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
 			self.uniqueKeys = dict([((row['schemaName'], row['tableName'], row['name']), row) for row in _fetch_dict(cursor)])
 		finally:
+			cursor.close()
 			del cursor
 		for row in self.uniqueKeys.itervalues():
 			row['checkExisting'] = {
@@ -447,9 +562,9 @@ class Input(object):
 				'N': 'No check'
 			}[row['checkExisting']]
 
-	def _get_unique_key_fields(self, connection, doccat):
+	def _get_unique_key_fields(self):
 		logging.debug("Retrieving unique key fields")
-		cursor = connection.cursor()
+		cursor = self.connection.cursor()
 		try:
 			cursor.execute("""
 				SELECT
@@ -464,18 +579,19 @@ class Input(object):
 					TABNAME,
 					CONSTNAME,
 					COLSEQ
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
 			self.uniqueKeyFields = {}
 			for (keySchema, keyTable, keyName, fieldName) in cursor.fetchall():
 				if not (keySchema, keyTable, keyName) in self.uniqueKeyFields:
 					self.uniqueKeyFields[(keySchema, keyTable, keyName)] = []
 				self.uniqueKeyFields[(keySchema, keyTable, keyName)].append(fieldName)
 		finally:
+			cursor.close()
 			del cursor
 
-	def _get_foreign_keys(self, connection, doccat):
+	def _get_foreign_keys(self):
 		logging.debug("Retrieving foreign keys")
-		cursor = connection.cursor()
+		cursor = self.connection.cursor()
 		try:
 			cursor.execute("""
 				SELECT
@@ -500,14 +616,15 @@ class Input(object):
 						AND T.TABNAME = R.TABNAME
 						AND T.CONSTNAME = R.CONSTNAME
 						AND T.TYPE = 'F'
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
 			self.foreignKeys = dict([((row['schemaName'], row['tableName'], row['name']), row) for row in _fetch_dict(cursor)])
 		finally:
+			cursor.close()
 			del cursor
 		for row in self.foreignKeys.itervalues():
-			row['created'] = makeDateTime(row['created'])
-			row['enforced'] = makeBoolean(row['enforced'])
-			row['queryOptimize'] = makeBoolean(row['queryOptimize'])
+			row['created'] = _make_datetime(row['created'])
+			row['enforced'] = _make_bool(row['enforced'])
+			row['queryOptimize'] = _make_bool(row['queryOptimize'])
 			row['checkExisting'] = {
 				'D': 'Defer',
 				'I': 'Immediate',
@@ -524,9 +641,9 @@ class Input(object):
 				'R': 'Restrict'
 			}[row['updateRule']]
 
-	def _get_foreign_key_fields(self, connection, doccat):
+	def _get_foreign_key_fields(self):
 		logging.debug("Retrieving foreign key fields")
-		cursor = connection.cursor()
+		cursor = self.connection.cursor()
 		try:
 			cursor.execute("""
 				SELECT
@@ -552,18 +669,19 @@ class Input(object):
 					R.TABNAME,
 					R.CONSTNAME,
 					KF.COLSEQ
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
 			self.foreignKeyFields = {}
 			for (keySchema, keyTable, keyName, foreignFieldName, parentFieldName) in cursor.fetchall():
 				if not (keySchema, keyTable, keyName) in self.foreignKeyFields:
 					self.foreignKeyFields[(keySchema, keyTable, keyName)] = []
 				self.foreignKeyFields[(keySchema, keyTable, keyName)].append((foreignFieldName, parentFieldName))
 		finally:
+			cursor.close()
 			del cursor
 
-	def _get_checks(self, connection, doccat):
+	def _get_checks(self):
 		logging.debug("Retrieving check constraints")
-		cursor = connection.cursor()
+		cursor = self.connection.cursor()
 		try:
 			cursor.execute("""
 				SELECT
@@ -587,14 +705,15 @@ class Input(object):
 						AND T.TABNAME = C.TABNAME
 						AND T.CONSTNAME = C.CONSTNAME
 						AND T.TYPE = 'K'
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
 			self.checks = dict([((row['schemaName'], row['tableName'], row['name']), row) for row in _fetch_dict(cursor)])
 		finally:
+			cursor.close()
 			del cursor
 		for row in self.checks.itervalues():
-			row['created'] = makeDateTime(row['created'])
-			row['enforced'] = makeBoolean(row['enforced'])
-			row['queryOptimize'] = makeBoolean(row['queryOptimize'])
+			row['created'] = _make_datetime(row['created'])
+			row['enforced'] = _make_bool(row['enforced'])
+			row['queryOptimize'] = _make_bool(row['queryOptimize'])
 			row['checkExisting'] = {
 				'D': 'Defer',
 				'I': 'Immediate',
@@ -609,9 +728,9 @@ class Input(object):
 			}[row['type']]
 			row['expression'] = str(row['expression'])
 
-	def _get_check_fields(self, connection, doccat):
+	def _get_check_fields(self):
 		logging.debug("Retrieving check fields")
-		cursor = connection.cursor()
+		cursor = self.connection.cursor()
 		try:
 			cursor.execute("""
 				SELECT
@@ -621,18 +740,19 @@ class Input(object):
 					RTRIM(COLNAME)   AS "fieldName"
 				FROM
 					%(schema)s.COLCHECKS
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
 			self.checkFields = {}
 			for (keySchema, keyTable, keyName, fieldName) in cursor.fetchall():
 				if not (keySchema, keyTable, keyName) in self.checkFields:
 					self.checkFields[(keySchema, keyTable, keyName)] = []
 				self.checkFields[(keySchema, keyTable, keyName)].append(fieldName)
 		finally:
+			cursor.close()
 			del cursor
 	
-	def _get_functions(self, connection, doccat):
+	def _get_functions(self):
 		logging.debug("Retrieving functions")
-		cursor = connection.cursor()
+		cursor = self.connection.cursor()
 		try:
 			cursor.execute("""
 				SELECT
@@ -664,21 +784,22 @@ class Input(object):
 					%(schema)s.ROUTINES
 				WHERE
 					ROUTINETYPE = 'F'
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
 			self.functions = dict([((row['schemaName'], row['specificName']), row) for row in _fetch_dict(cursor)])
 		finally:
+			cursor.close()
 			del cursor
 		for row in self.functions.itervalues():
-			row['created'] = makeDateTime(row['created'])
-			row['deterministic'] = makeBoolean(row['deterministic'])
-			row['externalAction'] = makeBoolean(row['externalAction'], 'E')
-			row['nullCall'] = makeBoolean(row['nullCall'])
-			row['castFunction'] = makeBoolean(row['castFunction'])
-			row['assignFunction'] = makeBoolean(row['assignFunction'])
-			row['parallel'] = makeBoolean(row['parallel'])
-			row['fenced'] = makeBoolean(row['fenced'])
-			row['threadSafe'] = makeBoolean(row['threadSafe'])
-			row['valid'] = makeBoolean(row['valid'])
+			row['created'] = _make_datetime(row['created'])
+			row['deterministic'] = _make_bool(row['deterministic'])
+			row['externalAction'] = _make_bool(row['externalAction'], 'E')
+			row['nullCall'] = _make_bool(row['nullCall'])
+			row['castFunction'] = _make_bool(row['castFunction'])
+			row['assignFunction'] = _make_bool(row['assignFunction'])
+			row['parallel'] = _make_bool(row['parallel'])
+			row['fenced'] = _make_bool(row['fenced'])
+			row['threadSafe'] = _make_bool(row['threadSafe'])
+			row['valid'] = _make_bool(row['valid'])
 			row['origin'] = {
 				'B': 'Built-in',
 				'E': 'User-defined external',
@@ -703,9 +824,9 @@ class Input(object):
 			}[row['sqlAccess']]
 			row['sql'] = str(row['sql'])
 
-	def _get_function_params(self, connection, doccat):
+	def _get_function_params(self):
 		logging.debug("Retrieving function parameters")
-		cursor = connection.cursor()
+		cursor = self.connection.cursor()
 		try:
 			cursor.execute("""
 				SELECT
@@ -729,12 +850,13 @@ class Input(object):
 						AND P.SPECIFICNAME = R.SPECIFICNAME
 				WHERE
 					R.ROUTINETYPE = 'F'
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
 			self.func_params = dict([((row['schemaName'], row['specificName'], row['type'], row['position']), row) for row in _fetch_dict(cursor)])
 		finally:
+			cursor.close()
 			del cursor
 		for row in self.func_params.itervalues():
-			row['locator'] = makeBoolean(row['locator'])
+			row['locator'] = _make_bool(row['locator'])
 			if row['size'] == 0: row['size'] = None
 			if row['scale'] == -1: row['scale'] = None
 			if not row['codepage']: row['codepage'] = None
@@ -746,9 +868,9 @@ class Input(object):
 				'R': 'Result'
 			}[row['type']]
 	
-	def _get_procedures(self, connection, doccat):
+	def _get_procedures(self):
 		logging.debug("Retrieving procedures")
-		cursor = connection.cursor()
+		cursor = self.connection.cursor()
 		try:
 			cursor.execute("""
 				SELECT
@@ -774,18 +896,19 @@ class Input(object):
 					%(schema)s.ROUTINES
 				WHERE
 					ROUTINETYPE = 'P'
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
 			self.procedures = dict([((row['schemaName'], row['specificName']), row) for row in _fetch_dict(cursor)])
 		finally:
+			cursor.close()
 			del cursor
 		for row in self.procedures.itervalues():
-			row['created'] = makeDateTime(row['created'])
-			row['deterministic'] = makeBoolean(row['deterministic'])
-			row['externalAction'] = makeBoolean(row['externalAction'], 'E')
-			row['nullCall'] = makeBoolean(row['nullCall'])
-			row['fenced'] = makeBoolean(row['fenced'])
-			row['threadSafe'] = makeBoolean(row['threadSafe'])
-			row['valid'] = makeBoolean(row['valid'])
+			row['created'] = _make_datetime(row['created'])
+			row['deterministic'] = _make_bool(row['deterministic'])
+			row['externalAction'] = _make_bool(row['externalAction'], 'E')
+			row['nullCall'] = _make_bool(row['nullCall'])
+			row['fenced'] = _make_bool(row['fenced'])
+			row['threadSafe'] = _make_bool(row['threadSafe'])
+			row['valid'] = _make_bool(row['valid'])
 			row['origin'] = {
 				'B': 'Built-in',
 				'E': 'User-defined external',
@@ -804,9 +927,9 @@ class Input(object):
 			}[row['sqlAccess']]
 			row['sql'] = str(row['sql'])
 	
-	def _get_procedure_params(self, connection, doccat):
+	def _get_procedure_params(self):
 		logging.debug("Retrieving procedure parameters")
-		cursor = connection.cursor()
+		cursor = self.connection.cursor()
 		try:
 			cursor.execute("""
 				SELECT
@@ -829,9 +952,10 @@ class Input(object):
 						AND P.SPECIFICNAME = R.SPECIFICNAME
 				WHERE
 					R.ROUTINETYPE = 'P'
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
 			self.proc_params = dict([((row['schemaName'], row['specificName'], row['type'], row['position']), row) for row in _fetch_dict(cursor)])
 		finally:
+			cursor.close()
 			del cursor
 		for row in self.proc_params.itervalues():
 			if row['size'] == 0: row['size'] = None
@@ -845,9 +969,9 @@ class Input(object):
 				'R': 'Result',
 			}[row['type']]
 	
-	def _get_triggers(self, connection, doccat):
+	def _get_triggers(self):
 		logging.debug("Retrieving triggers")
-		cursor = connection.cursor()
+		cursor = self.connection.cursor()
 		try:
 			cursor.execute("""
 				SELECT
@@ -867,13 +991,14 @@ class Input(object):
 					REMARKS           AS "description"
 				FROM
 					%(schema)s.TRIGGERS
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
 			self.triggers = dict([((row['schemaName'], row['name']), row) for row in _fetch_dict(cursor)])
 		finally:
+			cursor.close()
 			del cursor
 		for row in self.triggers.itervalues():
-			row['created'] = makeDateTime(row['created'])
-			row['valid'] = makeBoolean(row['valid'], falseValue='X')
+			row['created'] = _make_datetime(row['created'])
+			row['valid'] = _make_bool(row['valid'], falseValue='X')
 			row['triggerTime'] = {
 				'A': 'After',
 				'B': 'Before',
@@ -890,9 +1015,9 @@ class Input(object):
 			}[row['granularity']]
 			row['sql'] = str(row['sql'])
 
-	def _get_relation_triggers(self, connection, doccat):
+	def _get_relation_triggers(self):
 		logging.debug("Retrieving table triggers")
-		cursor = connection.cursor()
+		cursor = self.connection.cursor()
 		try:
 			cursor.execute("""
 				SELECT
@@ -902,18 +1027,19 @@ class Input(object):
 					RTRIM(TRIGNAME)   AS "triggerName"
 				FROM
 					%(schema)s.TRIGGERS
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
 			self.relation_triggers = {}
 			for (tableSchema, tableName, triggerSchema, triggerName) in cursor.fetchall():
 				if not (tableSchema, tableName) in self.relation_triggers:
 					self.relation_triggers[(tableSchema, tableName)] = []
 				self.relation_triggers[(tableSchema, tableName)].append((triggerSchema, triggerName))
 		finally:
+			cursor.close()
 			del cursor
 
-	def _get_tablespaces(self, connection, doccat):
+	def _get_tablespaces(self):
 		logging.debug("Retrieving tablespaces")
-		cursor = connection.cursor()
+		cursor = self.connection.cursor()
 		try:
 			cursor.execute("""
 				SELECT
@@ -930,13 +1056,14 @@ class Input(object):
 					DROP_RECOVERY     AS "dropRecovery",
 					REMARKS           AS "description"
 				FROM %(schema)s.TABLESPACES
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][doccat]})
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
 			self.tablespaces = dict([(row['name'], row) for row in _fetch_dict(cursor)])
 		finally:
+			cursor.close()
 			del cursor
 		for row in self.tablespaces.itervalues():
-			row['created'] = makeDateTime(row['created'])
-			row['dropRecovery'] = makeBoolean(row['dropRecovery'])
+			row['created'] = _make_datetime(row['created'])
+			row['dropRecovery'] = _make_bool(row['dropRecovery'])
 			if row['prefetchSize'] < 0: row['prefetchSize'] = 'Auto'
 			row['managedBy'] = {
 				'S': 'System',
@@ -949,7 +1076,7 @@ class Input(object):
 				'U': 'User Temporary'
 			}[row['dataType']]
 
-	def _get_tablespace_tables(self, connection, doccat):
+	def _get_tablespace_tables(self):
 		# Note: Must be run AFTER _get_tables and _get_tablespaces
 		logging.debug("Retrieving tablespace tables")
 		self.tablespaceTables = dict([
@@ -962,7 +1089,7 @@ class Input(object):
 			for tbspace in self.tablespaces
 		])
 
-	def _get_tablespace_indexes(self, connection, doccat):
+	def _get_tablespace_indexes(self):
 		# Note: Must be run AFTER _get_indexes and _get_tablespaces
 		logging.debug("Retrieving tablespace indexes")
 		self.tablespaceIndexes = dict([
