@@ -1,11 +1,13 @@
-#!/bin/env python
 # $Header$
 # vim: set noet sw=4 ts=4:
 
+# Standard modules
 import re
 import logging
-from relationbase import Constraint
-from util import formatIdentifier
+
+# Application-specific modules
+from db.relationbase import Constraint
+from db.util import format_ident
 
 class UniqueKeyFieldsList(object):
 	"""Presents a list of fields in a unique key"""
@@ -13,19 +15,19 @@ class UniqueKeyFieldsList(object):
 	def __init__(self, table, fields):
 		"""Initializes the list from a list of field names"""
 		assert type(fields) == type([])
-		self.__table = table
-		self.__items = fields
+		self._table = table
+		self._items = fields
 
 	def __len__(self):
-		return len(self.__items)
+		return len(self._items)
 
 	def __getItem__(self, key):
 		assert type(key) == int
-		return self.__table.fields[self.__items[key]]
+		return self._table.fields[self._items[key]]
 
 	def __iter__(self):
-		for fieldName in self.__items:
-			yield self.__table.fields[fieldName]
+		for i in self._items:
+			yield self._table.fields[i]
 
 	def __contains__(self, key):
 		for i in self:
@@ -36,56 +38,37 @@ class UniqueKeyFieldsList(object):
 class UniqueKey(Constraint):
 	"""Class representing a unique key in a table in a DB2 database"""
 
-	def __init__(self, table, cache, **row):
-		"""Initializes an instance of the class from a cache row"""
+	def __init__(self, table, input, **row):
+		"""Initializes an instance of the class from a input row"""
 		super(UniqueKey, self).__init__(table, row['name'])
-		logging.debug("Building unique key %s" % (self.qualifiedName))
-		self.__definer = row['definer']
-		self.__checkExisting = row['checkExisting']
-		self.__description = row['description']
-		self.__fields = UniqueKeyFieldsList(table, cache.uniqueKeyFields[(table.schema.name, table.name, self.name)])
+		logging.debug("Building unique key %s" % (self.qualified_name))
+		self.type_name = 'Unique Key'
+		self.description = row.get('description', None) or self.description
+		self.definer = row.get('definer', None)
+		self.check_existing = row.get('checkExisting', None)
+		self._fields = UniqueKeyFieldsList(table, input.unique_key_fields[(table.schema.name, table.name, self.name)])
+		# XXX DB2 specific
+		self._anonymous = re.match('^SQL\d{15}$', self.name)
 
-	def getTypeName(self):
-		return "Unique Key"
+	def _get_fields(self):
+		return self._fields
 
-	def getFields(self):
-		return self.__fields
-
-	def getDescription(self):
-		if self.__description:
-			return self.__description
-		else:
-			return super(UniqueKey, self).getDescription()
-	
-	def getPrototype(self):
-		sql = 'UNIQUE (%s)' % ', '.join([formatIdentifier(field.name) for field in self.fields])
-		if not re.match('^SQL\d{15}$', self.name):
+	def _get_prototype(self):
+		sql = 'UNIQUE (%s)' % ', '.join([format_ident(field.name) for field in self.fields])
+		if not self._anonymous:
 			sql = 'CONSTRAINT %s %s' % (self.name, sql)
 		return sql
-
-	def __getDefiner(self):
-		return self.__definer
-
-	def __getCheckExisting(self):
-		return self.__checkExisting
-
-	definer = property(__getDefiner, doc="""The user who created the key""")
-	checkExisting = property(__getCheckExisting, doc="""Indicates when existing data is to be checked (if at all)""")
 
 class PrimaryKey(UniqueKey):
 	"""Class representing a primary key in a table in a DB2 database"""
 
-	def getTypeName(self):
-		return "Primary Key"
+	def __init__(self, table, input, **row):
+		"""Initializes an instance of the class from a input row"""
+		super(PrimaryKey, self).__init__(table, input, row)
+		self.type_name = 'Primary Key'
 
-	def getPrototype(self):
-		sql = 'PRIMARY KEY (%s)' % ', '.join([formatIdentifier(field.name) for field in self.fields])
-		if not re.match('^SQL\d{15}$', self.name):
+	def _get_prototype(self):
+		sql = 'PRIMARY KEY (%s)' % ', '.join([format_ident(field.name) for field in self.fields])
+		if not self._anonymous:
 			sql = 'CONSTRAINT %s %s' % (self.name, sql)
 		return sql
-
-def main():
-	pass
-
-if __name__ == "__main__":
-	main()

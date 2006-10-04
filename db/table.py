@@ -1,272 +1,152 @@
-#!/bin/env python
 # $Header$
 # vim: set noet sw=4 ts=4:
 
+# Standard modules
 import logging
 from string import Template
-from schemabase import Relation
-from proxies import IndexesDict, IndexesList, RelationsDict, RelationsList, TriggersDict, TriggersList
-from field import Field
-from uniquekey import UniqueKey, PrimaryKey
-from foreignkey import ForeignKey
-from check import Check
-from util import formatIdentifier
+
+# Application-specific modules
+from db.schemabase import Relation
+from db.proxies import IndexesDict, IndexesList, RelationsDict, RelationsList, TriggersDict, TriggersList
+from db.field import Field
+from db.uniquekey import UniqueKey, PrimaryKey
+from db.foreignkey import ForeignKey
+from db.check import Check
+from db.util import format_ident
 
 class Table(Relation):
 	"""Class representing a table in a DB2 database"""
 
-	def __init__(self, schema, cache, **row):
-		"""Initializes an instance of the class from a cache row"""
+	def __init__(self, schema, input, **row):
+		"""Initializes an instance of the class from a input row"""
 		super(Table, self).__init__(schema, row['name'])
-		logging.debug("Building table %s" % (self.qualifiedName))
-		self.__definer = row['definer']
-		self.__checkPending = row['checkPending']
-		self.__created = row['created']
-		self.__statsUpdated = row['statsUpdated']
-		self.__cardinality = row['cardinality']
-		self.__rowPages = row['rowPages']
-		self.__totalPages = row['totalPages']
-		self.__overflow = row['overflow']
-		self.__dataTbspace = row['dataTbspace']
-		self.__indexTbspace = row['indexTbspace']
-		self.__longTbspace = row['longTbspace']
-		self.__append = row['append']
-		self.__lockSize = row['lockSize']
-		self.__volatile = row['volatile']
-		self.__compression = row['compression']
-		self.__accessMode = row['accessMode']
-		self.__clustered = row['clustered']
-		self.__activeBlocks = row['activeBlocks']
-		self.__description = row['description']
-		self.__fields = {}
-		for field in [cache.fields[(schemaName, tableName, fieldName)]
-			for (schemaName, tableName, fieldName) in cache.fields
-			if schemaName == schema.name and tableName == self.name]:
-			self.__fields[field['name']] = Field(self, cache, **field)
-		self.__fieldList = sorted(self.__fields.itervalues(), key=lambda field:field.position)
-		self.__dependents = RelationsDict(self.database, cache.relation_dependents.get((schema.name, self.name)))
-		self.__dependentList = RelationsList(self.database, cache.relation_dependents.get((schema.name, self.name)))
-		self.__indexes = IndexesDict(self.database, cache.tableIndexes.get((schema.name, self.name)))
-		self.__indexList = IndexesList(self.database, cache.tableIndexes.get((schema.name, self.name)))
-		self.__triggers = TriggersDict(self.database, cache.relation_triggers.get((schema.name, self.name)))
-		self.__triggerList = TriggersList(self.database, cache.relation_triggers.get((schema.name, self.name)))
-		self.__constraints = {}
-		self.__uniqueKeys = {}
-		self.__primaryKey = None
-		for key in [cache.uniqueKeys[(schemaName, tableName, constName)]
-			for (schemaName, tableName, constName) in cache.uniqueKeys
-			if schemaName == schema.name and tableName == self.name]:
+		logging.debug("Building table %s" % (self.qualified_name))
+		self.type_name = 'Table'
+		self.description = row.get('description', None) or self.description
+		self.definer = row.get('definer', None)
+		self.check_pending = row.get('checkPending', None)
+		self.created = row.get('created', None)
+		self.stats_updated = row.get('statsUpdated', None)
+		self.cardinality = row.get('cardinality', None)
+		self.row_pages = row.get('rowPages', None)
+		self.total_pages = row.get('totalPages', None)
+		self.overflow = row.get('overflow', None)
+		self.append = row.get('append', None)
+		self.lock_size = row.get('lockSize', None)
+		self.volatile = row.get('volatile', None)
+		self.compression = row.get('compression', None)
+		self.access_mode = row.get('accessMode', None)
+		self.clustered = row.get('clustered', None)
+		self.active_blocks = row.get('activeBlocks', None)
+		self._fields = {}
+		for field in [input.fields[(schema_name, table_name, field_name)]
+			for (schema_name, table_name, field_name) in input.fields
+			if schema_name == schema.name and table_name == self.name]:
+			self._fields[field['name']] = Field(self, input, **field)
+		self._field_list = sorted(self._fields.itervalues(), key=lambda field:field.position)
+		self._dependents = RelationsDict(self.database, input.relation_dependents.get((schema.name, self.name)))
+		self._dependent_list = RelationsList(self.database, input.relation_dependents.get((schema.name, self.name)))
+		self.indexes = IndexesDict(self.database, input.table_indexes.get((schema.name, self.name)))
+		self.index_list = IndexesList(self.database, input.table_indexes.get((schema.name, self.name)))
+		self.triggers = TriggersDict(self.database, input.relation_triggers.get((schema.name, self.name)))
+		self.trigger_list = TriggersList(self.database, input.relation_triggers.get((schema.name, self.name)))
+		self.constraints = {}
+		self.unique_keys = {}
+		self.primary_key = None
+		for key in [input.unique_keys[(schema_name, table_name, const_name)]
+			for (schema_name, table_name, const_name) in input.unique_keys
+			if schema_name == schema.name and table_name == self.name]:
 			if key['type'] == 'P':
-				constraint = PrimaryKey(self, cache, **key)
-				self.__primaryKey = constraint
+				constraint = PrimaryKey(self, input, **key)
+				self.primary_key = constraint
 			else:
-				constraint = UniqueKey(self, cache, **key)
-			self.__constraints[key['name']] = constraint
-			self.__uniqueKeys[key['name']] = constraint
-		self.__uniqueKeyList = sorted(self.__uniqueKeys.itervalues(), key=lambda key:key.name)
-		self.__foreignKeys = {}
-		for key in [cache.foreignKeys[(schemaName, tableName, constName)]
-			for (schemaName, tableName, constName) in cache.foreignKeys
-			if schemaName == schema.name and tableName == self.name]:
-			constraint = ForeignKey(self, cache, **key)
-			self.__constraints[key['name']] = constraint
-			self.__foreignKeys[key['name']] = constraint
-		self.__foreignKeyList = sorted(self.__foreignKeys.itervalues(), key=lambda key:key.name)
-		self.__checks = {}
-		for check in [cache.checks[(schemaName, tableName, constName)]
-			for (schemaName, tableName, constName) in cache.checks
-			if schemaName == schema.name and tableName == self.name]:
-			constraint = Check(self, cache, **check)
-			self.__constraints[check['name']] = constraint
-			self.__checks[check['name']] = constraint
-		self.__checkList = sorted(self.__checks.itervalues(), key=lambda check:check.name)
-		self.__constraintList = sorted(self.__constraints.itervalues(), key=lambda constraint:constraint.name)
+				constraint = UniqueKey(self, input, **key)
+			self.constraints[key['name']] = constraint
+			self.unique_keys[key['name']] = constraint
+		self.unique_key_list = sorted(self.unique_keys.itervalues(), key=lambda key:key.name)
+		self.foreign_keys = {}
+		for key in [input.foreign_keys[(schema_name, table_name, const_name)]
+			for (schema_name, table_name, const_name) in input.foreign_keys
+			if schema_name == schema.name and table_name == self.name]:
+			constraint = ForeignKey(self, input, **key)
+			self.constraints[key['name']] = constraint
+			self.foreign_keys[key['name']] = constraint
+		self.foreign_key_list = sorted(self.foreign_keys.itervalues(), key=lambda key:key.name)
+		self.checks = {}
+		for check in [input.checks[(schema_name, table_name, const_name)]
+			for (schema_name, table_name, const_name) in input.checks
+			if schema_name == schema.name and table_name == self.name]:
+			constraint = Check(self, input, **check)
+			self.constraints[check['name']] = constraint
+			self.checks[check['name']] = constraint
+		self.check_list = sorted(self.checks.itervalues(), key=lambda check:check.name)
+		self.constraint_list = sorted(self.constraints.itervalues(), key=lambda constraint:constraint.name)
+		self._data_tablespace = row['dataTbspace']
+		self._index_tablespace = row.get('indexTbspace', None)
+		self._long_tablespace = row.get('longTbspace', None)
 
-	def getTypeName(self):
-		return "Table"
+	def _get_fields(self):
+		return self._fields
 
-	def getDescription(self):
-		if self.__description:
-			return self.__description
-		else:
-			return super(Table, self).getDescription()
+	def _get_field_list(self):
+		return self._field_list
 
-	def getFields(self):
-		return self.__fields
-
-	def getFieldList(self):
-		return self.__fieldList
-
-	def getDependents(self):
+	def _get_dependents(self):
 		return self.__dependents
 
-	def getDependentList(self):
-		return self.__dependentList
+	def _get_dependent_list(self):
+		return self.__dependent_list
 
-	def getCreateSql(self):
-		sql = Template("""CREATE TABLE $schema.$table (
+	def _get_create_sql(self):
+		sql = Template("""\
+CREATE TABLE $schema.$table (
 $elements
 ) $tbspaces;$indexes""")
 		values = {
-			'schema': formatIdentifier(self.schema.name),
-			'table': formatIdentifier(self.name),	
+			'schema': format_ident(self.schema.name),
+			'table': format_ident(self.name),	
 			'elements': ',\n'.join(
-				[field.prototype for field in self.fieldList] + 
+				[field.prototype for field in self.field_list] + 
 				[
 					constraint.prototype
 					for constraint in self.constraints.itervalues()
 					if not isinstance(constraint, Check) or constraint.type != 'System Generated'
 				]
 			),
-			'tbspaces': 'IN ' + formatIdentifier(self.dataTablespace.name),
-			'indexes': ''.join(['\n' + index.createSql for index in self.indexList])
+			'tbspaces': 'IN ' + format_ident(self.data_tablespace.name),
+			'indexes': ''.join(['\n' + index.create_sql for index in self.index_list])
 		}
-		if self.indexTablespace != self.dataTablespace:
-			values['tbspaces'] += ' INDEX IN ' + formatIdentifier(self.indexTablespace.name)
-		if self.longTablespace != self.dataTablespace:
-			values['tbspaces'] += ' LONG IN ' + formatIdentifier(self.longTablespace.name)
+		if self.index_tablespace != self.data_tablespace:
+			values['tbspaces'] += ' INDEX IN ' + format_ident(self.index_tablespace.name)
+		if self.long_tablespace != self.data_tablespace:
+			values['tbspaces'] += ' LONG IN ' + format_ident(self.long_tablespace.name)
 		return sql.substitute(values)
 	
-	def getDropSql(self):
+	def _get_drop_sql(self):
 		sql = Template('DROP TABLE $schema.$table;')
 		return sql.substitute({
-			'schema': formatIdentifier(self.schema.name),
-			'table': formatIdentifier(self.name)
+			'schema': format_ident(self.schema.name),
+			'table': format_ident(self.name)
 		})
 	
-	def __getIndexes(self):
-		return self.__indexes
+	def _get_data_tablespace(self):
+		"""Returns the tablespace in which the table's data is stored"""
+		return self.database.tablespaces[self._data_tablespace]
 
-	def __getIndexList(self):
-		return self.__indexList
-
-	def __getTriggers(self):
-		return self.__triggers
-
-	def __getTriggerList(self):
-		return self.__triggerList
-
-	def __getConstraints(self):
-		return self.__constraints
-
-	def __getConstraintList(self):
-		return self.__constraintList
-
-	def __getPrimaryKey(self):
-		return self.__primaryKey
-
-	def __getUniqueKeys(self):
-		return self.__uniqueKeys
-
-	def __getUniqueKeyList(self):
-		return self.__uniqueKeyList
-
-	def __getForeignKeys(self):
-		return self.__foreignKeys
-
-	def __getForeignKeyList(self):
-		return self.__foreignKeyList
-
-	def __getChecks(self):
-		return self.__checks
-
-	def __getCheckList(self):
-		return self.__checkList
-
-	def __getDefiner(self):
-		return self.__definer
-
-	def __getCheckPending(self):
-		return self.__checkPending
-
-	def __getCreated(self):
-		return self.__created
-
-	def __getStatsUpdated(self):
-		return self.__statsUpdated
-
-	def __getCardinality(self):
-		return self.__cardinality
-
-	def __getRowPages(self):
-		return self.__rowPages
-
-	def __getTotalPages(self):
-		return self.__totalPages
-
-	def __getOverflow(self):
-		return self.__overflow
-
-	def __getDataTablespace(self):
-		return self.database.tablespaces[self.__dataTbspace]
-
-	def __getIndexTablespace(self):
-		if self.__indexTbspace:
-			return self.database.tablespaces[self.__indexTbspace]
+	def _get_index_tablespace(self):
+		"""Returns the tablespace in which the table's indexes are stored"""
+		if self._index_tablespace:
+			return self.database.tablespaces[self._index_tablespace]
 		else:
-			return self.dataTablespace
+			return self.data_tablespace
 
-	def __getLongTablespace(self):
-		if self.__longTbspace:
-			return self.database.tablespaces[self.__longTbspace]
+	def _get_long_tablespace(self):
+		"""Returns the tablespace in which the table's LOB values are stored"""
+		if self._long_tablespace:
+			return self.database.tablespaces[self._long_tablespace]
 		else:
-			return self.dataTablespace
+			return self.data_tablespace
 
-	def __getAppend(self):
-		return self.__append
-
-	def __getLockSize(self):
-		return self.__lockSize
-
-	def __getVolatile(self):
-		return self.__volatile
-
-	def __getCompression(self):
-		return self.__compression
-
-	def __getAccessMode(self):
-		return self.__accessMode
-
-	def __getClustered(self):
-		return self.__clustered
-
-	def __getActiveBlocks(self):
-		return self.__activeBlocks
-
-	indexes = property(__getIndexes, doc="""The indexes used by this table in a dictionary""")
-	indexList = property(__getIndexList, doc="""The indexes used by this table in a list""")
-	triggers = property(__getTriggers, doc="""The triggers defined against this table in a dictionary""")
-	triggerList = property(__getTriggerList, doc="""The triggers defined against this table in a list""")
-	constraints = property(__getConstraints, doc="""The constraints (keys, checks, etc.) contained in the table""")
-	constraintList = property(__getConstraintList, doc="""The constraints (keys, checks, etc.) contained in the table, in a sorted list""")
-	primaryKey = property(__getPrimaryKey, doc="""The primary key constraint of the table""")
-	uniqueKeys = property(__getUniqueKeys, doc="""The unique key constraints (including the primary key, if any) contained in the table""")
-	uniqueKeyList = property(__getUniqueKeyList, doc="""The unique key constraints (including the primary key, if any) contained in the table, in a sorted list""")
-	foreignKeys = property(__getForeignKeys, doc="""The foreign key constraints contained in the table""")
-	foreignKeyList = property(__getForeignKeyList, doc="""The foreign key constraints contained in the table, in a sorted list""")
-	checks = property(__getChecks, doc="""The check constraints contained in the table""")
-	checkList = property(__getCheckList, doc="""The check constraints contained in the table, in a sorted list""")
-	definer = property(__getDefiner, doc="""The user who created the table""")
-	checkPending = property(__getCheckPending, doc="""True if the table is in check-pending state""")
-	created = property(__getCreated, doc="""Timestamp indicating when the table was created""")
-	statsUpdated = property(__getStatsUpdated, doc="""Timestamp indicating when the statistics were last updated""")
-	cardinality = property(__getCardinality, doc="""The number of rows in the table (when the statistics were last updated)""")
-	rowPages = property(__getRowPages, doc="""The number of pages used for row data (when the statistics were last updated)""")
-	totalPages = property(__getTotalPages, doc="""The number of pages used by the table overall (when the statistics were last updated)""")
-	overflow = property(__getOverflow, doc="""The number of overflow records""")
-	dataTablespace = property(__getDataTablespace, doc="""The tablespace containing the table's data""")
-	indexTablespace = property(__getIndexTablespace, doc="""The tablespace containing the table's indexes""")
-	longTablespace = property(__getLongTablespace, doc="""The tablespace containing the table's BLOB and LONG data""")
-	append = property(__getAppend, doc="""True if the table always appends records instead of inserting them""")
-	lockSize = property(__getLockSize, doc="""The preferred lock size for the table""")
-	volatile = property(__getVolatile, doc="""True if the cardinality of the table varies greatly""")
-	compression = property(__getCompression, doc="""True if the table is using the compressed field format""")
-	accessMode = property(__getAccessMode, doc="""The current access mode for the table""")
-	clustered = property(__getClustered, doc="""True if the table is a multi-dimensional clustering table""")
-	activeBlocks = property(__getActiveBlocks, doc="""The number of active blocks for multi-dimensional clustering tables""")
-
-def main():
-	pass
-
-if __name__ == "__main__":
-	main()
+	data_tablespace = property(__get_data_tablespace)
+	index_tablespace = property(__get_index_tablespace)
+	long_tablespace = property(__get_long_tablespace)

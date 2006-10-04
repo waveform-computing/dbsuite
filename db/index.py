@@ -1,67 +1,69 @@
-#!/bin/env python
 # $Header$
 # vim: set noet sw=4 ts=4:
 
+# Standard modules
 import logging
 from string import Template
-from schemabase import SchemaObject
-from util import formatIdentifier
+
+# Application-specific modules
+from db.schemabase import SchemaObject
+from db.util import format_ident
 
 class IndexFieldsDict(object):
-	"""Presents a dictionary of (field, indexOrder) tuples keyed by fieldName"""
+	"""Presents a dictionary of (field, index_order) tuples keyed by field_name"""
 
-	def __init__(self, database, schemaName, tableName, fields):
-		"""Initializes the dict from a list of (fieldName, indexOrder) tuples"""
-		assert type(fields) == type([])
-		self.__database = database
-		self.__schemaName = schemaName
-		self.__tableName = tableName
-		self.__keys = [fieldName for (fieldName, indexOrder) in fields]
-		self.__items = {}
-		for (fieldName, indexOrder) in fields:
-			self.__items[fieldName] = indexOrder
+	def __init__(self, database, schema_name, table_name, fields):
+		"""Initializes the dict from a list of (field_name, index_order) tuples"""
+		assert isinstance(fields, list)
+		self._database = database
+		self._schema_name = schema_name
+		self._table_name = table_name
+		self._keys = [field_name for (field_name, index_order) in fields]
+		self._items = {}
+		for (field_name, index_order) in fields:
+			self._items[field_name] = index_order
 
 	def keys(self):
-		return self.__keys
+		return self._keys
 
 	def has_key(self, key):
-		return key in self.__keys
+		return key in self._keys
 
 	def __len__(self):
-		return len(self.__keys)
+		return len(self._keys)
 
 	def __getItem__(self, key):
-		return (self.__database.schemas[self.__schemaName].tables[self.__tableName].fields[key], self.__items[key])
+		return (self._database.schemas[self._schema_name].tables[self._table_name].fields[key], self._items[key])
 
 	def __iter__(self):
-		for k in self.__keys:
+		for k in self._keys:
 			yield k
 
 	def __contains__(self, key):
-		return key in self.__keys
+		return key in self._keys
 
 class IndexFieldsList(object):
-	"""Presents a list of (field, indexOrder) tuples"""
+	"""Presents a list of (field, index_order) tuples"""
 
-	def __init__(self, database, schemaName, tableName, fields):
-		"""Initializes the list from a list of (fieldName, indexOrder) tuples"""
-		assert type(fields) == type([])
-		self.__database = database
-		self.__schemaName = schemaName
-		self.__tableName = tableName
-		self.__items = fields
+	def __init__(self, database, schema_name, table_name, fields):
+		"""Initializes the list from a list of (field_name, index_order) tuples"""
+		assert isinstance(fields, list)
+		self._database = database
+		self._schema_name = schema_name
+		self._table_name = table_name
+		self._items = fields
 
 	def __len__(self):
-		return len(self.__items)
+		return len(self._items)
 
 	def __getItem__(self, key):
 		assert type(key) == int
-		(fieldName, indexOrder) = self.__items[key]
-		return (self.__database.schemas[self.__schemaName].tables[self.__tableName].fields[fieldName], indexOrder)
+		(field_name, index_order) = self._items[key]
+		return (self._database.schemas[self._schema_name].tables[self._table_name].fields[field_name], index_order)
 
 	def __iter__(self):
-		for (fieldName, indexOrder) in self.__items:
-			yield (self.__database.schemas[self.__schemaName].tables[self.__tableName].fields[fieldName], indexOrder)
+		for (field_name, index_order) in self._items:
+			yield (self._database.schemas[self._schema_name].tables[self._table_name].fields[field_name], index_order)
 
 	def __contains__(self, key):
 		for i in self:
@@ -72,67 +74,63 @@ class IndexFieldsList(object):
 class Index(SchemaObject):
 	"""Class representing an index in a DB2 database"""
 
-	def __init__(self, schema, cache, **row):
-		"""Initializes an instance of the class from a cache row"""
+	def __init__(self, schema, input, **row):
+		"""Initializes an instance of the class from a input row"""
 		super(Index, self).__init__(schema, row['name'])
-		logging.debug("Building index %s" % (self.qualifiedName))
-		self.__definer = row['definer']
-		self.__tableSchema = row['tableSchema']
-		self.__tableName = row['tableName']
-		self.__unique = row['unique']
-		self.__type = row['type']
-		self.__leafPages = row['leafPages']
-		self.__levels = row['levels']
-		self.__cardinality1 = row['cardinality1']
-		self.__cardinality2 = row['cardinality2']
-		self.__cardinality3 = row['cardinality3']
-		self.__cardinality4 = row['cardinality4']
-		self.__cardinality = row['cardinality']
-		self.__clusterRatio = row['clusterRatio']
-		self.__clusterFactor = row['clusterFactor']
-		self.__sequentialPages = row['sequentialPages']
-		self.__density = row['density']
-		self.__userDefined = row['userDefined']
-		self.__required = row['required']
-		self.__created = row['created']
-		self.__statsUpdated = row['statsUpdated']
-		self.__reverseScans = row['reverseScans']
-		self.__description = row['description']
-		self.__tablespaceName = row['tablespaceName']
-		self.__fields = IndexFieldsDict(self.database, row['tableSchema'], row['tableName'], cache.indexFields[(schema.name, self.name)])
-		self.__fieldList = IndexFieldsList(self.database, row['tableSchema'], row['tableName'], cache.indexFields[(schema.name, self.name)])
+		logging.debug("Building index %s" % (self.qualified_name))
+		self.type_name = 'Index'
+		self.description = row.get('description', None) or self.description
+		self.definer = row.get('definer', None)
+		self.type = row.get('type', None)
+		self.leaf_pages = row.get('leafPages', None)
+		self.levels = row.get('levels', None)
+		self.cluster_ratio = row.get('clusterRatio', None)
+		self.cluster_factor = row.get('clusterFactor', None)
+		self.sequential_pages = row.get('sequentialPages', None)
+		self.density = row.get('density', None)
+		self.user_defined = row.get('userDefined', None)
+		self.required = row.get('required', None)
+		self.created = row.get('created', None)
+		self.stats_updated = row.get('statsUpdated', None)
+		self.reverse_scans = row.get('reverseScans', None)
+		self.unique = row['unique']
+		self._table_schema = row['tableSchema']
+		self._table_name = row['tableName']
+		self._tablespace_name = row['tablespaceName']
+		self.fields = IndexFieldsDict(self.database, self._table_schema, self._table_name, input.index_fields[(schema.name, self.name)])
+		self.field_list = IndexFieldsList(self.database, self._table_schema, self._table_name, input.index_fields[(schema.name, self.name)])
+		self.cardinality = (
+			row.get('cardinality', None),
+			[
+				row.get('cardinality1', None),
+				row.get('cardinality2', None),
+				row.get('cardinality3', None),
+				row.get('cardinality4', None),
+			][:len(self.field_list)]
+		)
 
-	def getTypeName(self):
-		return "Index"
-
-	def getIdentifier(self):
+	def _get_identifier(self):
 		return "index_%s_%s" % (self.schema.name, self.name)
 
-	def getDescription(self):
-		if self.__description:
-			return self.__description
-		else:
-			return super(Index, self).getDescription()
+	def _get_parent_list(self):
+		return self.schema.index_list
 
-	def getParentList(self):
-		return self.schema.indexList
-
-	def getCreateSql(self):
+	def _get_create_sql(self):
 		sql = """CREATE $type $schema.$index
 ON $tbschema.$tbname ($fields)"""
 		values = {
 			'type': {False: 'INDEX', True: 'UNIQUE INDEX'}[self.unique],
-			'schema': formatIdentifier(self.schema.name),
-			'index': formatIdentifier(self.name),
-			'tbschema': formatIdentifier(self.table.schema.name),
-			'tbname': formatIdentifier(self.table.name),
+			'schema': format_ident(self.schema.name),
+			'index': format_ident(self.name),
+			'tbschema': format_ident(self.table.schema.name),
+			'tbname': format_ident(self.table.name),
 			'fields': ', '.join(['%s%s' % (field.name, {
-				'Ascending': '',
-				'Descending': ' DESC'
-			}[order]) for (field, order) in self.fieldList if order != 'Include'])
+				'ASCENDING': '',
+				'DESCENDING': ' DESC'
+			}[order]) for (field, order) in self.field_list if order != 'INCLUDE'])
 		}
 		if self.unique:
-			incfields = [field for (field, order) in self.fieldList if order == 'Include']
+			incfields = [field for (field, order) in self.field_list if order == 'INCLUDE']
 			if len(incfields) > 0:
 				sql += '\nINCLUDE ($incfields)'
 				values['incfields'] = ', '.join([field.name for field in incfields])
@@ -141,97 +139,20 @@ ON $tbschema.$tbname ($fields)"""
 		sql += ';'
 		return Template(sql).substitute(values)
 
-	def getDropSql(self):
+	def _get_drop_sql(self):
 		sql = Template('DROP INDEX $schema.$index;')
 		return sql.substitute({
-			'schema': formatIdentifier(self.schema.name),
-			'index': formatIdentifier(self.name)
+			'schema': format_ident(self.schema.name),
+			'index': format_ident(self.name)
 		})
 
-	def __getFields(self):
-		return self.__fields
+	def _get_table(self):
+		"""Returns the table that index is defined against"""
+		return self.database.schemas[self._table_schema].tables[self._table_name]
 
-	def __getFieldList(self):
-		return self.__fieldList
+	def _get_tablespace(self):
+		"""Returns the tablespace that contains the index's data"""
+		return self.database.tablespaces[self._tablespace_name]
 
-	def __getTable(self):
-		return self.database.schemas[self.__tableSchema].tables[self.__tableName]
-
-	def __getTablespace(self):
-		return self.database.tablespaces[self.__tablespaceName]
-
-	def __getDefiner(self):
-		return self.__definer
-
-	def __getCreated(self):
-		return self.__created
-
-	def __getStatsUpdated(self):
-		return self.__statsUpdated
-
-	def __getUnique(self):
-		return self.__unique
-
-	def __getType(self):
-		return self.__type
-
-	def __getLeafPages(self):
-		return self.__leafPages
-
-	def __getLevels(self):
-		return self.__levels
-
-	def __getCardinality(self):
-		return (self.__cardinality, [
-			self.__cardinality1,
-			self.__cardinality2,
-			self.__cardinality3,
-			self.__cardinality4
-			][:len(self.__fieldList)])
-
-	def __getClusterRatio(self):
-		return self.__clusterRatio
-
-	def __getClusterFactor(self):
-		return self.__clusterFactor
-
-	def __getSequentialPages(self):
-		return self.__sequentialPages
-
-	def __getDensity(self):
-		return self.__density
-
-	def __getUserDefined(self):
-		return self.__userDefined
-
-	def __getRequired(self):
-		return self.__required
-
-	def __getReverseScans(self):
-		return self.__reverseScans
-
-	fields = property(__getFields, doc="""The fields that the index references, each entry is a tuple (field, order)""")
-	fieldList = property(__getFieldList, doc="""The fields that the index references in an ordered list, each entry is a tuple (field, order)""")
-	table = property(__getTable, doc="""The table that the index is defined for""")
-	tablespace = property(__getTablespace, doc="""The tablespace that the index exists within""")
-	definer = property(__getDefiner, doc="""The user who created the index""")
-	created = property(__getCreated, doc="""Timestamp indicating when the index was created""")
-	statsUpdated = property(__getStatsUpdated, doc="""Timestamp indicating when the statistics were last updated""")
-	unique = property(__getUnique, doc="""True if the index only permits unique combinations of values""")
-	type = property(__getType, doc="""Indicates the type of index (clustering, regular, etc)""")
-	leafPages = property(__getLeafPages, doc="""The number of pages used by leaf nodes in the index""")
-	levels = property(__getLevels, doc="""The number of levels in the index tree""")
-	cardinality = property(__getCardinality, doc="""A tuple containing (index cardinality, [list of partial key cardinalities])""")
-	clusterRatio = property(__getClusterRatio, doc="""A crude measure of clustering, used with basic index statistics""")
-	clusterFactor = property(__getClusterFactor, doc="""A precise measure of clustering, used with detailed index statistics""")
-	sequentialPages = property(__getSequentialPages, doc="""The number of approximately contiguous leaf pages which are in index order""")
-	density = property(__getDensity, doc="""The ratio of sequential pages to total pages used by the index""")
-	userDefined = property(__getUserDefined, doc="""True if the index is user defined, False if system defined""")
-	required = property(__getRequired, doc="""True if the index is required to enforce another object like a primary key or unique constraint""")
-	reverseScans = property(__getReverseScans, doc="""True if the index supports bidirectional scans""")
-
-def main():
-	pass
-
-if __name__ == "__main__":
-	main()
+	table = property(_get_table)
+	tablespace = property(_get_tablespace)

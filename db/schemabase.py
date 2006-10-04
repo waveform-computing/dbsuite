@@ -1,85 +1,132 @@
-#!/bin/env python
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-from base import DocBase
+# Application-specific modules
+from db.base import DocBase
 
 class SchemaObject(DocBase):
 	"""Base class for database objects that belong directly to a schema"""
+
+	def __init__(self, parent, name):
+		"""Initializes an instance of the class"""
+		super(SchemaObject, self).__init__(parent, name)
+		self.schema = parent
 	
-	def getDatabase(self):
+	def _get_database(self):
 		return self.parent.parent
 	
-	def __getSchema(self):
-		return self.parent
-	
-	schema = property(__getSchema, doc="""The schema that owns the object""")
-
 class Relation(SchemaObject):
 	"""Base class for relations that belong in a schema (e.g. tables, views, etc.)"""
+
+	def __init__(self, parent, name):
+		"""Initializes an instance of the class"""
+		super(Relation, self).__init__(parent, name)
+		self.type_name = 'Relation'
 	
-	def getIdentifier(self):
+	def _get_identifier(self):
 		return "relation_%s_%s" % (self.schema.name, self.name)
 
-	def getDependents(self):
+	def _get_dependents(self):
+		"""Returns a dictionary of the dependent relations.
+
+		This property provides a dictionary (keyed on a 2-tuple of (schema,
+		name)) of the relations which depend on this relation in some manner
+		(e.g. a table which is depended on by a view).
+		"""
 		raise NotImplementedError
 
-	def getDependentList(self):
+	def _get_dependent_list(self):
+		"""Returns a list of the dependent relations.
+
+		This property provides a list of the relations which depend on this
+		relation in some manner (e.g. a table which is depended on by a view).
+		"""
 		raise NotImplementedError
 
-	def getFields(self):
+	def _get_fields(self):
+		"""Returns a dictionary of fields.
+
+		This property provides a dictionary (keyed by name) of the fields
+		contained by this relation.
+		"""
 		raise NotImplementedError
 
-	def getFieldList(self):
+	def _get_field_list(self):
+		"""Returns an ordered list of fields.
+
+		This property provides an ordered list of the fields contained by this
+		relation (the contents are ordered by their position in the relation).
+		"""
 		raise NotImplementedError
 
-	def getParentList(self):
+	def _get_parent_list(self):
 		return self.schema.relationList
 
 	# Use the lambda trick to allow property getter methods to be overridden
-	dependents = property(lambda self: self.getDependents(), doc="""A dictionary of the relations that depend on this relation (keyed by (schemaName, relationName) tuples)""")
-	dependentList = property(lambda self: self.getDependentList(), doc="""A list of the relations that depend on this relation""")
-	fields = property(lambda self: self.getFields(), doc="""The fields contained in the relation""")
-	fieldList = property(lambda self: self.getFieldList(), doc="""The fields contained in the relation in an ordered list""")
+	dependents = property(lambda self: self._get_dependents())
+	dependent_list = property(lambda self: self._get_dependent_list())
+	fields = property(lambda self: self._get_fields())
+	field_list = property(lambda self: self._get_field_list())
 
 class Routine(SchemaObject):
 	"""Base class for routines that belong in a schema (functions, procedures, etc.)"""
 
-	def __init__(self, parent, name, specificName):
+	def __init__(self, parent, name, specific_name):
 		super(Routine, self).__init__(parent, name)
-		self.__specificName = specificName
+		self.specific_name = specific_name
 		
-	def __getSpecificName(self):
-		return self.__specificName
+	def _get_identifier(self):
+		return "routine_%s_%s" % (self.schema.name, self.specific_name)
 
-	def getIdentifier(self):
-		return "routine_%s_%s" % (self.schema.name, self.specificName)
+	def _get_params(self):
+		"""Returns a dictionary of parameters.
 
-	def getParams(self):
+		This property provides a dictionary (keyed by name) of the parameters
+		that must be provided to this routine.
+		"""
 		raise NotImplementedError
 
-	def getParamList(self):
+	def _get_param_list(self):
+		"""Returns an ordered list of parameters.
+
+		This property provides an ordered list of the parameters that must be
+		provided to this routine (the contents are ordered by their position in
+		the routine prototype).
+		"""
 		raise NotImplementedError
 
-	def getReturns(self):
+	def _get_returns(self):
+		"""Returns a dictionary of return fields.
+
+		This property provides a dictionary (keyed by name) of the fields
+		returned by the routine (assuming it is a row or table function).  If
+		the routine is a scalar function this will contain a single object. If
+		the routine is a procedure, this will be empty.
+		"""
 		raise NotImplementedError
 
-	def getReturnList(self):
+	def _get_return_list(self):
+		"""Returns an ordered list of return fields.
+
+		This property provides an ordered list of the fields returned by the
+		routine (assuming it is a row or table function).  If the routine is a
+		scalar function this will contain a single object. If the routine is a
+		procedure, this will be empty.
+		"""
 		raise NotImplementedError
 
-	def getPrototype(self):
+	def _get_prototype(self):
+		"""Returns the SQL prototype of the function.
+
+		This property returns the SQL prototype of the routine. This isn't
+		intended to be valid SQL, rather a representation of the routine as
+		might appear in a manual, e.g. FUNC(PARAM1 TYPE, PARAM2 TYPE, ...)
+		"""
 		raise NotImplementedError
 	
 	# Use the lambda trick to allow property getter methods to be overridden
-	params = property(lambda self: self.getParams(), doc="""The parameters of the routine""")
-	paramList = property(lambda self: self.getParamList(), doc="""The parameters of the routine in an ordered list""")
-	returns = property(lambda self: self.getReturns(), doc="""The return type (or types) of the routine""")
-	returnList = property(lambda self: self.getReturnList(), doc="""The return type (or types) of the routine in an ordered list""")
-	prototype = property(lambda self: self.getPrototype(), doc="""Returns the calling prototype of the routine, documenting its parameters and their types, and the return type(s) if any""")
-	specificName = property(__getSpecificName, doc="""The specific name of the routine""")
-
-def main():
-	pass
-
-if __name__ == "__main__":
-	main()
+	params = property(lambda self: self._get_params())
+	param_list = property(lambda self: self._get_param_list())
+	returns = property(lambda self: self._get_returns())
+	return_list = property(lambda self: self._get_return_list())
+	prototype = property(lambda self: self._get_prototype())

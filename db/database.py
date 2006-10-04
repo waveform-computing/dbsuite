@@ -1,11 +1,13 @@
-#!/bin/env python
 # $Header$
 # vim: set noet sw=4 ts=4:
 
+# Standard modules
 import logging
-from base import DocBase
-from schema import Schema
-from tablespace import Tablespace
+
+# Application-specific modules
+from db.base import DocBase
+from db.schema import Schema
+from db.tablespace import Tablespace
 
 class Database(DocBase):
 	"""Class representing a DB2 database"""
@@ -14,16 +16,17 @@ class Database(DocBase):
 		"""Initializes an instance of the class"""
 		super(Database, self).__init__(None, input.name)
 		logging.debug("Building database")
-		self.__tablespaces = {}
+		self.type_name = 'Database'
+		self.tablespaces = {}
 		for row in input.tablespaces.itervalues():
-			self.__tablespaces[row['name']] = Tablespace(self, input, **row)
-		self.__tablespaceList = sorted(self.__tablespaces.itervalues(), key=lambda tbspace:tbspace.name)
-		self.__schemas = {}
+			self.tablespaces[row['name']] = Tablespace(self, input, **row)
+		self.tablespace_list = sorted(self.tablespaces.itervalues(), key=lambda tbspace:tbspace.name)
+		self.schemas = {}
 		for row in input.schemas.itervalues():
-			self.__schemas[row['name']] = Schema(self, input, **row)
-		self.__schemaList = sorted(self.__schemas.itervalues(), key=lambda schema:schema.name)
+			self.schemas[row['name']] = Schema(self, input, **row)
+		self.schema_list = sorted(self.schemas.itervalues(), key=lambda schema:schema.name)
 
-	def find(self, qualifiedName):
+	def find(self, qualified_name):
 		"""Find an object in the hierarchy by its qualified name.
 		
 		Because there are several namespaces in DB2, the results of such a
@@ -33,18 +36,18 @@ class Database(DocBase):
 		
 		Schemas
 		Tablespaces
-			Tables/Views (one namespace)
+			Tables,Views (one namespace)
 				Fields
 				Constraints
 			Indexes
-			Functions/Methods/Procedures (one namespace)
+			Functions,Methods,Procedures (one namespace)
 		
 		Hence, if a schema shares a name with a tablespace, the schema will
 		be returned in preference to the tablespace. Likewise, if an index
 		shares a name with a table, the table will be returned in preference
 		to the index.
 		"""
-		parts = qualifiedName.split(".")
+		parts = qualified_name.split(".")
 		if len(parts) == 1:
 			return self.schemas.get(parts[0],
 				self.tablespaces.get(parts[0],
@@ -63,34 +66,8 @@ class Database(DocBase):
 		else:
 			return None
 
-	def getTypeName(self):
-		return "Database"
-	
-	def getIdentifier(self):
+	def _get_identifier(self):
 		return "db"
 	
-	def getDatabase(self):
+	def _get_database(self):
 		return self
-
-	def __getTablespaces(self):
-		return self.__tablespaces
-	
-	def __getTablespaceList(self):
-		return self.__tablespaceList
-	
-	def __getSchemas(self):
-		return self.__schemas
-	
-	def __getSchemaList(self):
-		return self.__schemaList
-
-	schemas = property(__getSchemas, doc="""The schemas contained in the database""")
-	schemaList = property(__getSchemaList, doc="""The schemas contained in the database, sorted by name""")
-	tablespaces = property(__getTablespaces, doc="""The tablespaces contained in the database""")
-	tablespaceList = property(__getTablespaceList, doc="""The tablespaces contained in the database, sorted by name""")
-
-def main():
-	pass
-
-if __name__ == "__main__":
-	main()
