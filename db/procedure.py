@@ -15,7 +15,7 @@ class Procedure(Routine):
 	
 	def __init__(self, schema, cache, **row):
 		"""Initializes an instance of the class from a cache row"""
-		super(Procedure, self).__init__(schema, row['name'], row['specific_name'])
+		super(Procedure, self).__init__(schema, row['name'], row['specificName'])
 		logging.debug("Building procedure %s" % (self.qualified_name))
 		self.type_name = 'Procedure'
 		self.description = row.get('description', None) or self.description

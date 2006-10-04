@@ -60,7 +60,7 @@ class Relation(SchemaObject):
 		raise NotImplementedError
 
 	def _get_parent_list(self):
-		return self.schema.relationList
+		return self.schema.relation_list
 
 	# Use the lambda trick to allow property getter methods to be overridden
 	dependents = property(lambda self: self._get_dependents())

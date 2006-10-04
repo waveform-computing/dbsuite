@@ -15,7 +15,7 @@ class Function(Routine):
 	
 	def __init__(self, schema, input, **row):
 		"""Initializes an instance of the class from a input row"""
-		super(Function, self).__init__(schema, row['name'], row['specific_name'])
+		super(Function, self).__init__(schema, row['name'], row['specificName'])
 		logging.debug("Building function %s" % (self.qualified_name))
 		self.type_name = 'Function'
 		self.description = row.get('description', None) or self.description

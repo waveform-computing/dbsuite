@@ -28,7 +28,7 @@ class Datatype(SchemaObject):
 		self._source_name = row['sourceName']
 		# XXX DB2 specific
 		self.variable_size = self._system and (self.size is None) and (self.name != "REFERENCE")
-		self.variable_scale self._system and (self.name == "DECIMAL")
+		self.variable_scale = self._system and (self.name == "DECIMAL")
 
 	def _get_identifier(self):
 		return "datatype_%s_%s" % (self.schema.name, self.name)

@@ -73,9 +73,9 @@ class Schema(DocBase):
 			if not func_rec['name'] in self.functions:
 				self.functions[func_rec['name']] = []
 			self.functions[func_rec['name']].append(func)
-			self.specificRoutines[func_rec['specific_name']] = func
-			self.specificFunctions[func_rec['specific_name']] = func
-		self.function_list = sorted(self.specificFunctions.itervalues(), key=lambda function:function.name)
+			self.specific_routines[func_rec['specificName']] = func
+			self.specific_functions[func_rec['specificName']] = func
+		self.function_list = sorted(self.specific_functions.itervalues(), key=lambda function:function.name)
 		for proc_rec in [input.procedures[(schema, name)] for (schema, name) in input.procedures if schema == self.name]:
 			proc = Procedure(self, input, **proc_rec)
 			if not proc_rec['name'] in self.routines:
@@ -84,11 +84,11 @@ class Schema(DocBase):
 			if not proc_rec['name'] in self.procedures:
 				self.procedures[proc_rec['name']] = []
 			self.procedures[proc_rec['name']].append(proc)
-			self.specificRoutines[proc_rec['specific_name']] = proc
-			self.specificProcedures[proc_rec['specific_name']] = proc
-		self.procedure_list = sorted(self.specificProcedures.itervalues(), key=lambda procedure:procedure.name)
+			self.specific_routines[proc_rec['specificName']] = proc
+			self.specific_procedures[proc_rec['specificName']] = proc
+		self.procedure_list = sorted(self.specific_procedures.itervalues(), key=lambda procedure:procedure.name)
 		# XXX Add support for methods
-		self.routine_list = sorted(self.specificRoutines.itervalues(), key=lambda routine:routine.name)
+		self.routine_list = sorted(self.specific_routines.itervalues(), key=lambda routine:routine.name)
 		# XXX Add support for sequences
 		for trig_rec in [input.triggers[(schema, name)] for (schema, name) in input.triggers if schema == self.name]:
 			self.triggers[trig_rec['name']] = Trigger(self, input, **trig_rec)

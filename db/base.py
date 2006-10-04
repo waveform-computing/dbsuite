@@ -162,7 +162,6 @@ class DocBase(object):
 	
 	# Use the lambda trick to make property getter methods "virtual"
 	database = property(lambda self: self._get_database())
-	parent = property(lambda self: self.getParent())
 	parent_list = property(lambda self: self._get_parent_list())
 	parent_index = property(lambda self: self._get_parent_index())
 	identifier = property(lambda self: self._get_identifier())

@@ -64,7 +64,7 @@ class PrimaryKey(UniqueKey):
 
 	def __init__(self, table, input, **row):
 		"""Initializes an instance of the class from a input row"""
-		super(PrimaryKey, self).__init__(table, input, row)
+		super(PrimaryKey, self).__init__(table, input, **row)
 		self.type_name = 'Primary Key'
 
 	def _get_prototype(self):

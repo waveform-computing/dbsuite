@@ -147,6 +147,6 @@ $elements
 		else:
 			return self.data_tablespace
 
-	data_tablespace = property(__get_data_tablespace)
-	index_tablespace = property(__get_index_tablespace)
-	long_tablespace = property(__get_long_tablespace)
+	data_tablespace = property(_get_data_tablespace)
+	index_tablespace = property(_get_index_tablespace)
+	long_tablespace = property(_get_long_tablespace)
