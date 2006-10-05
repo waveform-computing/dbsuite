@@ -55,13 +55,13 @@ def main():
 	)
 	parser.add_option("-c", "--config", dest="config", help=CONFIG_HELP)
 	parser.add_option("-q", "--quiet", dest="loglevel", action="store_const", const=logging.ERROR, help=QUIET_HELP)
-	parser.add_option("-v", "--verbose", dest="loglevel", action="store_const", const=logging.INFO, help=VERBOSE_HELP)
+	parser.add_option("-v", "--verbose", dest="loglevel", action="store_const", const=logging.DEBUG, help=VERBOSE_HELP)
 	parser.add_option("-l", "--log-file", dest="logfile", help=LOG_FILE_HELP)
 	parser.add_option("", "--help-plugins", dest="listplugins", action="store_true", help=HELP_PLUGINS_HELP)
 	parser.add_option("", "--help-plugin", dest="plugin", help=HELP_PLUGIN_HELP)
-	parser.add_option("-D", "--debug", dest="debug", help=DEBUG_HELP)
+	parser.add_option("-D", "--debug", dest="debug", action="store_true", help=DEBUG_HELP)
 	(options, args) = parser.parse_args()
-	# Deal with one-shot actions (help/whatever)
+	# Deal with one-shot actions (help, etc.)
 	if options.listplugins:
 		list_plugins()
 		return
@@ -81,9 +81,12 @@ def main():
 		logfile.setFormatter(logging.Formatter('%(asctime)s, %(levelname)s, %(message)s'))
 		logfile.setLevel(logging.INFO) # Log file always logs at INFO level
 		logging.getLogger().addHandler(logfile)
-	# Set up the exceptions hook for uncaught exceptions and the file-based
-	# logging level
+	# Set up the exceptions hook for uncaught exceptions and the logging
+	# levels if --debug was given
 	if options.debug:
+		console.setLevel(logging.DEBUG)
+		if options.logfile:
+			logfile.setLevel(logging.DEBUG)
 		logging.getLogger().setLevel(logging.DEBUG)
 	else:
 		logging.getLogger().setLevel(logging.INFO)
@@ -101,10 +104,10 @@ def main():
 			if not parser.has_option(section, PLUGIN_OPTION):
 				raise Exception(MISSING_VALUE_ERR % (config_file, section, PLUGIN_OPTION))
 			s = parser.get(section, PLUGIN_OPTION)
-			if s[:6] == 'input.':
-				input_sections.append(s)
-			elif s[:7] == 'output.':
-				output_sections.append(s)
+			if s.startswith('input.'):
+				input_sections.append(section)
+			elif s.startswith('output.'):
+				output_sections.append(section)
 			else:
 				raise Exception(INVALID_PLUGIN_ERR % (config_file, section, s))
 		# Run each output section for each input section
@@ -114,7 +117,7 @@ def main():
 				input_plugin = load_plugin(s)
 			except ImportError, e:
 				raise Exception(PLUGIN_IMPORT_ERR % (config_file, input_section, s, str(e)))
-			if not is_input_plugin(module):
+			if not is_input_plugin(input_plugin):
 				raise Exception(PLUGIN_NOT_INPUT_ERR % (config_file, input_section, s))
 			# Get input_plugin to read data from the source specified by the
 			# configuration values from input_section
@@ -133,10 +136,10 @@ def main():
 			for output_section in output_sections:
 				s = parser.get(output_section, PLUGIN_OPTION)
 				try:
-					output_plugin = load_plugin(plugin_name)
+					output_plugin = load_plugin(s)
 				except ImportError, e:
 					raise Exception(PLUGIN_IMPORT_ERR % (config_file, output_section, s, str(e)))
-				if not is_output_plugin(module):
+				if not is_output_plugin(output_plugin):
 					raise Exception(PLUGIN_NOT_OUTPUT_ERR % (config_file, output_section, s))
 				# Get the output_plugin to generate output from db
 				logging.info(WRITING_OUTPUT_MSG % (config_file, output_section, s))
