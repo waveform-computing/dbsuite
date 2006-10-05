@@ -14,6 +14,8 @@ will be used to source documentation data instead of SYSCAT.
 import sys
 mswindows = sys.platform == 'win32'
 import logging
+import datetime
+import re
 
 # Constants
 DATABASE_OPTION = 'database'
@@ -21,8 +23,11 @@ USERNAME_OPTION = 'username'
 PASSWORD_OPTION = 'password'
 
 # Localizable strings
-DATABASE_MISSING = 'The "%s" option must be specified' % DATABASE_OPTION
-PASSWORD_MISSING = 'If the "%s" option is given, the "%s" option must also be provided' % (USERNAME_OPTION, PASSWORD_OPTION)
+DATABASE_DESC = 'The locally cataloged name of the database to connect to'
+USERNAME_DESC = 'The username to connect with (optional: if ommitted an implicit connection will be made)'
+PASSWORD_DESC = 'The password associated with the user given by the username option'
+MISSING_OPTION = 'The "%s" option must be specified'
+MISSING_DEPENDENT = 'If the "%s" option is given, the "%s" option must also be provided'
 
 CONNECTING_MSG = 'Connecting to database %s'
 USING_DOCCAT = 'DOCCAT extension schema found, using DOCCAT instead of SYSCAT'
@@ -30,54 +35,24 @@ USING_SYSCAT = 'DOCCAT extension schema not found, using SYSCAT'
 
 # Plugin options dictionary
 options = {
-	DATABASE_OPTION: 'The locally cataloged name of the database to connect to',
-	USERNAME_OPTION: 'The username to connect with (optional: if ommitted an implicit connection will be made)',
-	PASSWORD_OPTION: 'The password associated with the user given by the username option',
+	DATABASE_OPTION: DATABASE_DESC,
+	USERNAME_OPTION: USERNAME_DESC,
+	PASSWORD_OPTION: PASSWORD_DESC,
 }
-
-def _make_datetime(value):
-	"""Converts a date-time value from a database query to a datetime object"""
-	if (value is None) or (value == ""):
-		return None
-	elif isinstance(value, basestring):
-		return datetime.datetime(*([int(x) for x in re.match(r"(\d{4})-(\d{2})-(\d{2})[T -](\d{2})[:.](\d{2})[:.](\d{2})\.(\d{6})\d*", value).groups()]))
-	elif hasattr(value, 'value') and isinstance(value.value, int):
-		return datetime.datetime.fromtimestamp(value.value)
-	else:
-		raise ValueError('Unable to convert date-time value "%s"' % str(value))
-
-def _make_bool(value, trueValue='Y', falseValue='N', noneValue=' ', unknownError=False, unknownResult=None):
-	"""Converts a character-based value into a boolean value"""
-	try:
-		return {trueValue: True, falseValue: False, noneValue: None}[value]
-	except KeyError:
-		if unknownError:
-			raise
-		else:
-			return unknownResult
-
-def _fetch_dict(cursor):
-	"""Returns rows from a cursor as a list of dictionaries.
-
-	Specifically, the result set is returned as a list of dictionaries, where
-	each dictionary represents one row of the result set, and is keyed by the
-	field names of the result set converted to lower case.
-	"""
-	return [dict(zip([d[0] for d in cursor.description], row)) for row in cursor.fetchall()]
 
 class Input(object):
 	def __init__(self, config):
 		super(Input, self).__init__()
 		# Check the config dictionary for missing stuff
 		if not DATABASE_OPTION in config:
-			raise Exception(DATABASE_MISSING)
+			raise Exception(MISSING_OPTION % DATABASE_OPTION)
 		if USERNAME_OPTION in config and not PASSWORD_OPTION in config:
-			raise Exception(USERNAME_MISSING)
+			raise Exception(MISSING_DEPENDENT % (USERNAME_OPTION, PASSWORD_OPTION))
 		logging.info(CONNECTING_MSG % config[DATABASE_OPTION])
 		self.connection = self._connect(
 			config[DATABASE_OPTION],
 			config.get(USERNAME_OPTION, None),
-			config.get(PASsWORD_OPTION, None)
+			config.get(PASSWORD_OPTION, None)
 		)
 		try:
 			self.name = config[DATABASE_OPTION]
@@ -127,7 +102,7 @@ class Input(object):
 			self.connection.close()
 			del self.connection
 	
-	def _connect(dsn, username=None, password=None):
+	def _connect(self, dsn, username=None, password=None):
 		"""Create a connection to the specified database.
 
 		This utility method attempts to connect to the database named by dsn
@@ -203,7 +178,7 @@ class Input(object):
 	def _get_datatypes(self):
 		logging.debug("Retrieving datatypes")
 		cursor = self.connection.cursor()
-		try)
+		try:
 			cursor.execute("""
 				SELECT
 					RTRIM(TYPESCHEMA)   AS "schemaName",
@@ -229,14 +204,13 @@ class Input(object):
 		for row in self.datatypes.itervalues():
 			row['created'] = _make_datetime(row['created'])
 			row['final'] = _make_bool(row['final'])
-			row['systemType'] = _make_bool(row['type'], 'S')
 			if not row['size']: row['size'] = None
 			if not row['scale']: row['scale'] = None # XXX Not necessarily unknown (0 is a valid scale)
 			if not row['codepage']: row['codepage'] = None
 			row['type'] = {
-				'S': 'System',
-				'T': 'Distinct',
-				'R': 'Structured'
+				'S': 'SYSTEM',
+				'T': 'DISTINCT',
+				'R': 'STRUCTURED',
 			}[row['type']]
 
 	def _get_tables(self):
@@ -284,14 +258,14 @@ class Input(object):
 			row['compression'] = _make_bool(row['compression'], 'V')
 			row['clustered'] = _make_bool(row['clustered'])
 			row['lockSize'] = {
-				'T': 'Table',
-				'R': 'Row'
+				'T': 'TABLE',
+				'R': 'ROW',
 			}[row['lockSize']]
 			row['accessMode'] = {
-				'N': 'No Access',
-				'R': 'Read Only',
-				'D': 'No Data Movement',
-				'F': 'Full Access'
+				'N': 'NO ACCESS',
+				'R': 'READ ONLY',
+				'D': 'NO DATA MOVEMENT',
+				'F': 'FULL ACCESS',
 			}[row['accessMode']]
 
 	def _get_views(self):
@@ -325,11 +299,11 @@ class Input(object):
 		for row in self.views.itervalues():
 			row['created'] = _make_datetime(row['created'])
 			row['readOnly'] = _make_bool(row['readOnly'])
-			row['valid'] = _make_bool(row['valid'], falseValue='X')
+			row['valid'] = _make_bool(row['valid'], false_value='X')
 			row['check'] = {
-				'N': 'No Check',
-				'L': 'Local Check',
-				'C': 'Cascaded Check'
+				'N': 'NO CHECK',
+				'L': 'LOCAL CHECK',
+				'C': 'CASCADED CHECK',
 			}[row['check']]
 			row['sql'] = str(row['sql'])
 
@@ -375,13 +349,13 @@ class Input(object):
 				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
 			self.relation_dependents = {}
 			self.relation_dependencies = {}
-			for (relationSchema, relationName, depSchema, depName) in cursor.fetchall():
-				if not (relationSchema, relationName) in self.relation_dependents:
-					self.relation_dependents[(relationSchema, relationName)] = []
-				self.relation_dependents[(relationSchema, relationName)].append((depSchema, depName))
-				if not (depSchema, depName) in self.relation_dependencies:
-					self.relation_dependencies[(depSchema, depName)] = []
-				self.relation_dependencies[(depSchema, depName)].append((relationSchema, relationName))
+			for (relation_schema, relation_name, dep_schema, dep_name) in cursor.fetchall():
+				if not (relation_schema, relation_name) in self.relation_dependents:
+					self.relation_dependents[(relation_schema, relation_name)] = []
+				self.relation_dependents[(relation_schema, relation_name)].append((dep_schema, dep_name))
+				if not (dep_schema, dep_name) in self.relation_dependencies:
+					self.relation_dependencies[(dep_schema, dep_name)] = []
+				self.relation_dependencies[(dep_schema, dep_name)].append((relation_schema, relation_name))
 		finally:
 			cursor.close()
 			del cursor
@@ -434,10 +408,10 @@ class Input(object):
 			row['userDefined'] = row['userDefined'] != 0
 			row['required'] = row['required'] != 0
 			row['type'] = {
-				'CLUS': 'Clustering',
-				'REG': 'Regular',
-				'DIM': 'Dimension Block',
-				'BLOK': 'Block'
+				'CLUS': 'CLUSTERING',
+				'REG': 'REGULAR',
+				'DIM': 'DIMENSION BLOCK',
+				'BLOK': 'BLOCK',
 			}[row['type']]
 
 	def _get_index_fields(self):
@@ -457,12 +431,16 @@ class Input(object):
 					INDNAME,
 					COLSEQ
 				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.indexFields = {}
-			for (indexSchema, indexName, fieldName, order) in cursor.fetchall():
-				if not (indexSchema, indexName) in self.indexFields:
-					self.indexFields[(indexSchema, indexName)] = []
-				order = {'A': 'Ascending', 'D': 'Descending', 'I': 'Include'}[order]
-				self.indexFields[(indexSchema, indexName)].append((fieldName, order))
+			self.index_fields = {}
+			for (index_schema, index_name, field_name, order) in cursor.fetchall():
+				if not (index_schema, index_name) in self.index_fields:
+					self.index_fields[(index_schema, index_name)] = []
+				order = {
+					'A': 'ASCENDING',
+					'D': 'DESCENDING',
+					'I': 'INCLUDE',
+				}[order]
+				self.index_fields[(index_schema, index_name)].append((field_name, order))
 		finally:
 			cursor.close()
 			del cursor
@@ -470,13 +448,13 @@ class Input(object):
 	def _get_table_indexes(self):
 		logging.debug("Retrieving table indexes")
 		# Note: Must be run AFTER _get_indexes and _get_tables
-		self.tableIndexes = dict([
-			((tableSchema, tableName), [(row['schemaName'], row['name'])
+		self.table_indexes = dict([
+			((table_schema, table_name), [(row['schemaName'], row['name'])
 				for row in self.indexes.itervalues()
-				if row['tableSchema'] == tableSchema
-				and row['tableName'] == tableName
+				if row['tableSchema'] == table_schema
+				and row['tableName'] == table_name
 			])
-			for (tableSchema, tableName) in self.tables
+			for (table_schema, table_name) in self.tables
 		])
 
 	def _get_fields(self):
@@ -527,13 +505,13 @@ class Input(object):
 			row['identity'] = _make_bool(row['identity'])
 			row['compressDefault'] = _make_bool(row['compressDefault'], 'S')
 			row['generated'] = {
-				'D': 'By Default',
-				'A': 'Always',
-				' ': 'Never'
+				'D': 'BY DEFAULT',
+				'A': 'ALWAYS',
+				' ': 'NEVER',
 			}[row['generated']]
 			row['generateExpression'] = str(row['generateExpression'])
 
-	def _get_unique_keys():
+	def _get_unique_keys(self):
 		logging.debug("Retrieving unique keys")
 		cursor = self.connection.cursor()
 		try:
@@ -551,15 +529,15 @@ class Input(object):
 				WHERE
 					TYPE IN ('U', 'P')
 				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.uniqueKeys = dict([((row['schemaName'], row['tableName'], row['name']), row) for row in _fetch_dict(cursor)])
+			self.unique_keys = dict([((row['schemaName'], row['tableName'], row['name']), row) for row in _fetch_dict(cursor)])
 		finally:
 			cursor.close()
 			del cursor
-		for row in self.uniqueKeys.itervalues():
+		for row in self.unique_keys.itervalues():
 			row['checkExisting'] = {
-				'D': 'Defer',
-				'I': 'Immediate',
-				'N': 'No check'
+				'D': 'DEFER',
+				'I': 'IMMEDIATE',
+				'N': 'NO CHECK',
 			}[row['checkExisting']]
 
 	def _get_unique_key_fields(self):
@@ -580,11 +558,11 @@ class Input(object):
 					CONSTNAME,
 					COLSEQ
 				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.uniqueKeyFields = {}
-			for (keySchema, keyTable, keyName, fieldName) in cursor.fetchall():
-				if not (keySchema, keyTable, keyName) in self.uniqueKeyFields:
-					self.uniqueKeyFields[(keySchema, keyTable, keyName)] = []
-				self.uniqueKeyFields[(keySchema, keyTable, keyName)].append(fieldName)
+			self.unique_key_fields = {}
+			for (key_schema, key_table, key_name, field_name) in cursor.fetchall():
+				if not (key_schema, key_table, key_name) in self.unique_key_fields:
+					self.unique_key_fields[(key_schema, key_table, key_name)] = []
+				self.unique_key_fields[(key_schema, key_table, key_name)].append(field_name)
 		finally:
 			cursor.close()
 			del cursor
@@ -617,28 +595,30 @@ class Input(object):
 						AND T.CONSTNAME = R.CONSTNAME
 						AND T.TYPE = 'F'
 				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.foreignKeys = dict([((row['schemaName'], row['tableName'], row['name']), row) for row in _fetch_dict(cursor)])
+			self.foreign_keys = dict([((row['schemaName'], row['tableName'], row['name']), row) for row in _fetch_dict(cursor)])
 		finally:
 			cursor.close()
 			del cursor
-		for row in self.foreignKeys.itervalues():
+		for row in self.foreign_keys.itervalues():
 			row['created'] = _make_datetime(row['created'])
 			row['enforced'] = _make_bool(row['enforced'])
 			row['queryOptimize'] = _make_bool(row['queryOptimize'])
 			row['checkExisting'] = {
-				'D': 'Defer',
-				'I': 'Immediate',
-				'N': 'No check'
+				'D': 'DEFER',
+				'I': 'IMMEDIATE',
+				'N': 'NO CHECK',
 			}[row['checkExisting']]
 			row['deleteRule'] = {
-				'A': 'No Action',
-				'R': 'Restrict',
-				'C': 'Cascade',
-				'N': 'Set NULL'
+				'A': 'NO ACTION',
+				'R': 'RESTRICT',
+				'C': 'CASCADE',
+				'N': 'SET NULL',
 			}[row['deleteRule']]
 			row['updateRule'] = {
-				'A': 'No Action',
-				'R': 'Restrict'
+				'A': 'NO ACTION',
+				'R': 'RESTRICT',
+				'C': 'CASCADE',
+				'N': 'SET NULL',
 			}[row['updateRule']]
 
 	def _get_foreign_key_fields(self):
@@ -670,11 +650,11 @@ class Input(object):
 					R.CONSTNAME,
 					KF.COLSEQ
 				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.foreignKeyFields = {}
-			for (keySchema, keyTable, keyName, foreignFieldName, parentFieldName) in cursor.fetchall():
-				if not (keySchema, keyTable, keyName) in self.foreignKeyFields:
-					self.foreignKeyFields[(keySchema, keyTable, keyName)] = []
-				self.foreignKeyFields[(keySchema, keyTable, keyName)].append((foreignFieldName, parentFieldName))
+			self.foreign_key_fields = {}
+			for (key_schema, key_table, key_name, foreign_field_name, parent_field_name) in cursor.fetchall():
+				if not (key_schema, key_table, key_name) in self.foreign_key_fields:
+					self.foreign_key_fields[(key_schema, key_table, key_name)] = []
+				self.foreign_key_fields[(key_schema, key_table, key_name)].append((foreign_field_name, parent_field_name))
 		finally:
 			cursor.close()
 			del cursor
@@ -715,16 +695,16 @@ class Input(object):
 			row['enforced'] = _make_bool(row['enforced'])
 			row['queryOptimize'] = _make_bool(row['queryOptimize'])
 			row['checkExisting'] = {
-				'D': 'Defer',
-				'I': 'Immediate',
-				'N': 'No check'
+				'D': 'DEFER',
+				'I': 'IMMEDIATE',
+				'N': 'NO CHECK',
 			}[row['checkExisting']]
 			row['type'] = {
-				'A': 'System Generated', # InfoCenter reckons it's 'A'
-				'S': 'System Generated', # However, it appears to be 'S'
-				'C': 'Check',
-				'F': 'Functional Dependency',
-				'O': 'Object Property'
+				'A': 'SYSTEM', # InfoCenter reckons it's 'A'
+				'S': 'SYSTEM', # However, it appears to be 'S'
+				'C': 'CHECK',
+				'F': 'FUNCTIONAL DEPENDENCY',
+				'O': 'OBJECT PROPERTY',
 			}[row['type']]
 			row['expression'] = str(row['expression'])
 
@@ -741,11 +721,11 @@ class Input(object):
 				FROM
 					%(schema)s.COLCHECKS
 				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.checkFields = {}
-			for (keySchema, keyTable, keyName, fieldName) in cursor.fetchall():
-				if not (keySchema, keyTable, keyName) in self.checkFields:
-					self.checkFields[(keySchema, keyTable, keyName)] = []
-				self.checkFields[(keySchema, keyTable, keyName)].append(fieldName)
+			self.check_fields = {}
+			for (key_schema, key_table, key_name, field_name) in cursor.fetchall():
+				if not (key_schema, key_table, key_name) in self.check_fields:
+					self.check_fields[(key_schema, key_table, key_name)] = []
+				self.check_fields[(key_schema, key_table, key_name)].append(field_name)
 		finally:
 			cursor.close()
 			del cursor
@@ -801,26 +781,26 @@ class Input(object):
 			row['threadSafe'] = _make_bool(row['threadSafe'])
 			row['valid'] = _make_bool(row['valid'])
 			row['origin'] = {
-				'B': 'Built-in',
-				'E': 'User-defined external',
-				'M': 'Template',
-				'Q': 'SQL body',
-				'U': 'User-defined source',
-				'S': 'System generated',
-				'T': 'System generated transform'
+				'B': 'BUILT-IN',
+				'E': 'USER-DEFINED EXTERNAL',
+				'M': 'TEMPLATE',
+				'Q': 'SQL BODY',
+				'U': 'USER-DEFINED SOURCE',
+				'S': 'SYSTEM GENERATED',
+				'T': 'SYSTEM GENERATED TRANSFORM',
 			}[row['origin']]
 			row['type'] = {
-				'C': 'Column',
-				'R': 'Row',
-				'S': 'Scalar',
-				'T': 'Table'
+				'C': 'COLUMN',
+				'R': 'ROW',
+				'S': 'SCALAR',
+				'T': 'TABLE',
 			}[row['type']]
 			row['sqlAccess'] = {
-				'C': 'Contains SQL',
-				'M': 'Modifies SQL',
-				'N': 'No SQL',
-				'R': 'Reads SQL',
-				' ': None
+				'C': 'CONTAINS SQL',
+				'M': 'MODIFIES SQL',
+				'N': 'NO SQL',
+				'R': 'READS SQL',
+				' ': None,
 			}[row['sqlAccess']]
 			row['sql'] = str(row['sql'])
 
@@ -861,11 +841,11 @@ class Input(object):
 			if row['scale'] == -1: row['scale'] = None
 			if not row['codepage']: row['codepage'] = None
 			row['type'] = {
-				'B': 'In/Out',
-				'O': 'Output',
-				'P': 'Input',
-				'C': 'Result',
-				'R': 'Result'
+				'B': 'INOUT',
+				'O': 'OUT',
+				'P': 'IN',
+				'C': 'RESULT',
+				'R': 'RESULT',
 			}[row['type']]
 	
 	def _get_procedures(self):
@@ -910,20 +890,20 @@ class Input(object):
 			row['threadSafe'] = _make_bool(row['threadSafe'])
 			row['valid'] = _make_bool(row['valid'])
 			row['origin'] = {
-				'B': 'Built-in',
-				'E': 'User-defined external',
-				'M': 'Template',
-				'Q': 'SQL body',
-				'U': 'User-defined source',
-				'S': 'System generated',
-				'T': 'System generated transform'
+				'B': 'BUILT-IN',
+				'E': 'USER-DEFINED EXTERNAL',
+				'M': 'TEMPLATE',
+				'Q': 'SQL BODY',
+				'U': 'USER-DEFINED SOURCE',
+				'S': 'SYSTEM GENERATED',
+				'T': 'SYSTEM GENERATED TRANSFORM',
 			}[row['origin']]
 			row['sqlAccess'] = {
-				'C': 'Contains SQL',
-				'M': 'Modifies SQL',
-				'N': 'No SQL',
-				'R': 'Reads SQL',
-				' ': None
+				'C': 'CONTAINS SQL',
+				'M': 'MODIFIES SQL',
+				'N': 'NO SQL',
+				'R': 'READS SQL',
+				' ': None,
 			}[row['sqlAccess']]
 			row['sql'] = str(row['sql'])
 	
@@ -962,11 +942,11 @@ class Input(object):
 			if row['scale'] == -1: row['scale'] = None
 			if not row['codepage']: row['codepage'] = None
 			row['type'] = {
-				'B': 'In/Out',
-				'O': 'Output',
-				'P': 'Input',
-				'C': 'Result',
-				'R': 'Result',
+				'B': 'INOUT',
+				'O': 'OUT',
+				'P': 'IN',
+				'C': 'RESULT',
+				'R': 'RESULT',
 			}[row['type']]
 	
 	def _get_triggers(self):
@@ -998,20 +978,20 @@ class Input(object):
 			del cursor
 		for row in self.triggers.itervalues():
 			row['created'] = _make_datetime(row['created'])
-			row['valid'] = _make_bool(row['valid'], falseValue='X')
+			row['valid'] = _make_bool(row['valid'], false_value='X')
 			row['triggerTime'] = {
-				'A': 'After',
-				'B': 'Before',
-				'I': 'Instead Of',
+				'A': 'AFTER',
+				'B': 'BEFORE',
+				'I': 'INSTEAD OF',
 			}[row['triggerTime']]
 			row['triggerEvent'] = {
-				'I': 'Insert',
-				'U': 'Update',
-				'D': 'Delete',
+				'I': 'INSERT',
+				'U': 'UPDATE',
+				'D': 'DELETE',
 			}[row['triggerEvent']]
 			row['granularity'] = {
-				'S': 'Statement',
-				'R': 'Row',
+				'S': 'STATEMENT',
+				'R': 'ROW',
 			}[row['granularity']]
 			row['sql'] = str(row['sql'])
 
@@ -1029,10 +1009,10 @@ class Input(object):
 					%(schema)s.TRIGGERS
 				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
 			self.relation_triggers = {}
-			for (tableSchema, tableName, triggerSchema, triggerName) in cursor.fetchall():
-				if not (tableSchema, tableName) in self.relation_triggers:
-					self.relation_triggers[(tableSchema, tableName)] = []
-				self.relation_triggers[(tableSchema, tableName)].append((triggerSchema, triggerName))
+			for (table_schema, table_name, trigger_schema, trigger_name) in cursor.fetchall():
+				if not (table_schema, table_name) in self.relation_triggers:
+					self.relation_triggers[(table_schema, table_name)] = []
+				self.relation_triggers[(table_schema, table_name)].append((trigger_schema, trigger_name))
 		finally:
 			cursor.close()
 			del cursor
@@ -1066,20 +1046,20 @@ class Input(object):
 			row['dropRecovery'] = _make_bool(row['dropRecovery'])
 			if row['prefetchSize'] < 0: row['prefetchSize'] = 'Auto'
 			row['managedBy'] = {
-				'S': 'System',
-				'D': 'Database'
+				'S': 'SYSTEM',
+				'D': 'DATABASE',
 			}[row['managedBy']]
 			row['dataType'] = {
-				'A': 'Any',
-				'L': 'Long/Index',
-				'T': 'System Temporary',
-				'U': 'User Temporary'
+				'A': 'ANY',
+				'L': 'LONG/INDEX',
+				'T': 'SYSTEM TEMPORARY',
+				'U': 'USER TEMPORARY',
 			}[row['dataType']]
 
 	def _get_tablespace_tables(self):
 		# Note: Must be run AFTER _get_tables and _get_tablespaces
 		logging.debug("Retrieving tablespace tables")
-		self.tablespaceTables = dict([
+		self.tablespace_tables = dict([
 			(tbspace, [(row['schemaName'], row['name'])
 				for row in self.tables.itervalues()
 				if row['dataTbspace'] == tbspace
@@ -1092,12 +1072,61 @@ class Input(object):
 	def _get_tablespace_indexes(self):
 		# Note: Must be run AFTER _get_indexes and _get_tablespaces
 		logging.debug("Retrieving tablespace indexes")
-		self.tablespaceIndexes = dict([
-			(tbspace, [(row['schemaName'], row['name'])
+		self.tablespace_indexes = dict([
+			(tbspace, [
+				(row['schemaName'], row['name'])
 				for row in self.indexes.itervalues() if row['tablespaceName'] == tbspace
 			])
 			for tbspace in self.tablespaces
 		])
+
+def _make_datetime(value):
+	"""Converts a date-time value from a database query to a datetime object.
+
+	If value is None or a blank string, returns None. If value is a string
+	containing an ISO8601 formatted date ("YYYY-MM-DD HH:MM:SS.NNNNNN") it is
+	converted to a standard Python datetime value. If value is has a integer
+	"value" attribute it is assumed to be a UNIX timestamp and is converted
+	into a Python datetime value.
+
+	Basically this routine exists to converts a database framework-specific
+	representation of a datetime value into a standard Python datetime value.
+	"""
+	if (value is None) or (value == ""):
+		return None
+	elif isinstance(value, basestring):
+		return datetime.datetime(*([int(x) for x in re.match(r"(\d{4})-(\d{2})-(\d{2})[T -](\d{2})[:.](\d{2})[:.](\d{2})\.(\d{6})\d*", value).groups()]))
+	elif hasattr(value, 'value') and isinstance(value.value, int):
+		return datetime.datetime.fromtimestamp(value.value)
+	else:
+		raise ValueError('Unable to convert date-time value "%s"' % str(value))
+
+def _make_bool(value, true_value='Y', false_value='N', none_value=' ', unknown_error=False, unknown_result=None):
+	"""Converts a character-based value into a boolean value.
+
+	If value equals true_value, false_value, or none_value return true, false,
+	or None respectively. If it matches none of them and unknown_error is false
+	(the default), returns unknown_result (defaults to None).  Otherwise if
+	unknown_error is true, the a KeyError is raised.
+	"""
+	try:
+		return {true_value: True, false_value: False, none_value: None}[value]
+	except KeyError:
+		if unknown_error:
+			raise
+		else:
+			return unknown_result
+
+def _fetch_dict(cursor):
+	"""Returns rows from a cursor as a list of dictionaries.
+
+	Specifically, the result set is returned as a list of dictionaries, where
+	each dictionary represents one row of the result set, and is keyed by the
+	field names of the result set converted to lower case.
+
+	Okay, horribly wasteful and un-Pythonic. But it's simple and it works.
+	"""
+	return [dict(zip([d[0] for d in cursor.description], row)) for row in cursor.fetchall()]
 
 def main():
 	pass
