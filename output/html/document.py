@@ -357,7 +357,7 @@ class WebSiteDocument(object):
 	def __init__(self, site, url):
 		"""Initializes an instance of the class."""
 		assert isinstance(site, WebSite)
-		super(Document, self).__init__()
+		super(WebSiteDocument, self).__init__()
 		self.site = site
 		self.url = url
 		self.filename = os.path.join(self.site.basepath, self.url)
@@ -422,6 +422,7 @@ class HTMLDocument(WebSiteDocument):
 		if name in [
 			'title',
 			'description',
+			'keywords',
 			'author_name',
 			'author_email',
 			'date',
@@ -545,8 +546,9 @@ class HTMLDocument(WebSiteDocument):
 	
 	def append_content(self, node, content):
 		"""Adds content (string, node, node-list, etc.) to a node"""
-		if content == '':
-			pass
+		if isinstance(content, basestring):
+			if content != '':
+				node.appendChild(self.doc.createTextNode(self.format_content(content)))
 		elif isinstance(content, xml.dom.Node) or hasattr(content, 'nodeType'):
 			node.appendChild(content)
 		elif isinstance(content, (list, tuple)) or hasattr(content, '__iter__'):
@@ -554,12 +556,16 @@ class HTMLDocument(WebSiteDocument):
 			# nodes
 			for n in content:
 				self.append_content(node, n)
+		elif content is None:
+			# None gets re-written to not-applicable / not-available
+			node.appendChild(self.doc.createTextNode('n/a'))
 		else:
-			node.appendChild(self.doc.createTextNode(self.format_content(content)))
+			# Attempt to convert anything else into a string
+			node.appendChild(self.doc.createTextNode(self.format_content(str(content))))
 	
 	def find_element(self, tagname, id=None):
 		"""Returns the first element with the specified tagname and id"""
-		if tagname is None:
+		if id is None:
 			try:
 				return self.doc.getElementsByTagName(tagname)[0]
 			except IndexError:
