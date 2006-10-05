@@ -1,4 +1,3 @@
-#!/bin/env python
 # $Header$
 # vim: set noet sw=4 ts=4:
 
@@ -18,11 +17,9 @@ class W3ProcedureDocument(W3MainDocument):
 		# XXX What about the IN/OUT/INOUT state of procedure parameters?
 		self.add(self.dl([
 			(param.name, self.format_description(param.description))
-			for param in self.dbobject.paramList
+			for param in self.dbobject.param_list
 		]))
 		self.section('attributes', 'Attributes')
-		self.add(self.p("""The following table notes the various attributes and
-			properties of the procedure."""))
 		self.add(self.table(
 			head=[(
 				"Attribute",
@@ -32,48 +29,43 @@ class W3ProcedureDocument(W3MainDocument):
 			)],
 			data=[
 				(
-					self.a("created.html", "Created", popup=True),
+					self.a(self.site.documents['created.html']),
 					self.dbobject.created,
-					self.a("funcorigin.html", "Origin", popup=True),
+					self.a(self.site.documents['funcorigin.html']),
 					self.dbobject.origin,
 				),
 				(
-					self.a("createdby.html", "Created By", popup=True),
+					self.a(self.site.documents['createdby.html']),
 					self.dbobject.definer,
-					self.a("funclanguage.html", "Language", popup=True),
+					self.a(self.site.documents['funclanguage.html']),
 					self.dbobject.language,
 				),
 				(
-					self.a("sqlaccess.html", "SQL Access", popup=True),
-					self.dbobject.sqlAccess,
-					self.a("nullcall.html", "Call on NULL", popup=True),
-					self.dbobject.nullCall,
+					self.a(self.site.documents['sqlaccess.html']),
+					self.dbobject.sql_access,
+					self.a(self.site.documents['nullcall.html']),
+					self.dbobject.null_call,
 				),
 				(
-					self.a("externalaction.html", "External Action", popup=True),
-					self.dbobject.externalAction,
-					self.a("deterministic.html", "Deterministic", popup=True),
+					self.a(self.site.documents['externalaction.html']),
+					self.dbobject.external_action,
+					self.a(self.site.documents['deterministic.html']),
 					self.dbobject.deterministic,
 				),
 				(
-					self.a("fenced.html", "Fenced", popup=True),
+					self.a(self.site.documents['fenced.html']),
 					self.dbobject.fenced,
-					self.a("threadsafe.html", "Thread Safe", popup=True),
-					self.dbobject.threadSafe,
+					self.a(self.site.documents['threadsafe.html']),
+					self.dbobject.thread_safe,
 				),
 				(
-					self.a("specificname.html", "Specific Name", popup=True),
-					{'colspan': '3', '': self.dbobject.specificName},
+					self.a(self.site.documents['specificname.html']),
+					{'colspan': '3', '': self.dbobject.specific_name},
 				),
 			]
 		))
 		if len(overloads) > 1:
 			self.section('overloads', 'Overloaded Versions')
-			self.add(self.p("""Listed below are the prototypes of overloaded
-				versions of this procedure (i.e. procedures with the same
-				qualified name, but different parameter lists). Click on a
-				specific name to view the entry for the overloaded
-				procedure."""))
 			self.add(self.table(
 				head=[(
 					'Prototype',
@@ -81,17 +73,10 @@ class W3ProcedureDocument(W3MainDocument):
 				)],
 				data=[(
 					self.format_prototype(overload.prototype),
-					self.a(self.site.document_map[overload].url, overload.specificName)
+					self.a(self.site.document_map[overload].url, overload.specific_name)
 				) for overload in overloads if overload != self.dbobject]
 			))
 		if self.dbobject.language == 'SQL':
 			self.section('sql', 'SQL Definition')
-			self.add(self.p("""The SQL which can be used to create the
-				procedure is given below. Note that, in the process of storing
-				the definition of a procedure, DB2 removes much of the
-				formatting, hence the formatting in the statement below (which
-				this system attempts to reconstruct) is not necessarily the
-				formatting of the original statement. The statement terminator
-				used in the SQL below is bang (!)"""))
-			self.add(self.pre(self.format_sql(self.dbobject.createSql, terminator='!'), attrs={'class': 'sql'}))
+			self.add(self.pre(self.format_sql(self.dbobject.create_sql, terminator='!'), attrs={'class': 'sql'}))
 

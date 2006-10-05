@@ -1,4 +1,3 @@
-#!/bin/env python
 # $Header$
 # vim: set noet sw=4 ts=4:
 
@@ -23,15 +22,10 @@ class W3TableDocument(W3MainDocument):
 		self.section('description', 'Description')
 		self.add(self.p(self.format_description(self.dbobject.description)))
 		self.section('attributes', 'Attributes')
-		self.add(self.p("""The following table notes various "vital statistics"
-			of the table (such as cardinality -- the number of rows in the
-			table). Note that many of these attributes are only valid as of the
-			last time that statistics were gathered for the table (this date is
-			recorded in the table)."""))
-		if self.dbobject.primaryKey is None:
+		if self.dbobject.primary_key is None:
 			key_count = 0
 		else:
-			key_count = len(self.dbobject.primaryKey.fields)
+			key_count = len(self.dbobject.primary_key.fields)
 		self.add(self.table(
 			head=[(
 				"Attribute",
@@ -42,60 +36,56 @@ class W3TableDocument(W3MainDocument):
 			data=[
 				(
 					'Data Tablespace',
-					self.a_to(self.dbobject.dataTablespace),
+					self.a_to(self.dbobject.data_tablespace),
 					'Index Tablespace',
-					self.a_to(self.dbobject.indexTablespace),
+					self.a_to(self.dbobject.index_tablespace),
 				),
 				(
 					'Long Tablespace',
-					self.a_to(self.dbobject.longTablespace),
-					self.a('clustered.html', 'MDC', popup=True),
+					self.a_to(self.dbobject.long_tablespace),
+					self.a(self.site.documents['clustered.html']),
 					self.dbobject.clustered,
 				),
 				(
-					self.a('created.html', 'Created', popup=True),
+					self.a(self.site.documents['created.html']),
 					self.dbobject.created,
-					self.a('laststats.html', 'Last Statistics', popup=True),
-					self.dbobject.statsUpdated,
+					self.a(self.site.documents['laststats.html']),
+					self.dbobject.stats_updated,
 				),
 				(
-					self.a('createdby.html', 'Created By', popup=True),
+					self.a(self.site.documents['createdby.html']),
 					self.dbobject.definer,
-					self.a('cardinality.html', 'Cardinality', popup=True),
+					self.a(self.site.documents['cardinality.html']),
 					self.dbobject.cardinality,
 				),
 				(
-					self.a('keycolcount.html', '# Key Columns', popup=True),
+					self.a(self.site.documents['keycolcount.html']),
 					key_count,
-					self.a('colcount.html', '# Columns', popup=True),
+					self.a(self.site.documents['colcount.html']),
 					len(self.dbobject.fields),
 				),
 				(
-					self.a('rowpages.html', 'Row Pages', popup=True),
-					self.dbobject.rowPages,
-					self.a('totalpages.html', 'Total Pages', popup=True),
-					self.dbobject.totalPages,
+					self.a(self.site.documents['rowpages.html']),
+					self.dbobject.row_pages,
+					self.a(self.site.documents['totalpages.html']),
+					self.dbobject.total_pages,
 				),
 				(
-					self.a('dependentrel.html', 'Dependent Relations', popup=True),
-					len(self.dbobject.dependentList),
-					self.a('locksize.html', 'Lock Size', popup=True),
-					self.dbobject.lockSize,
+					self.a(self.site.documents['dependentrel.html']),
+					len(self.dbobject.dependent_list),
+					self.a(self.site.documents['locksize.html']),
+					self.dbobject.lock_size,
 				),
 				(
-					self.a('append.html', 'Append', popup=True),
+					self.a(self.site.documents['append.html']),
 					self.dbobject.append,
-					self.a('volatile.html', 'Volatile', popup=True),
+					self.a(self.site.documents['volatile.html']),
 					self.dbobject.volatile,
 				),
 			]
 		))
 		if len(fields) > 0:
 			self.section('field_desc', 'Field Descriptions')
-			self.add(self.p("""The following table contains the fields of the
-				table (in alphabetical order) along with the description of
-				each field.  For information on the structure and attributes of
-				each field see the Field Schema section below."""))
 			self.add(self.table(
 				head=[(
 					"Name",
@@ -107,10 +97,6 @@ class W3TableDocument(W3MainDocument):
 				) for field in fields]
 			))
 			self.section('field_schema', 'Field Schema')
-			self.add(self.p("""The following table contains the attributes of
-				the fields of the table (again, fields are in alphabetical
-				order, though the # column indicates the 1-based position of
-				the field within the table)."""))
 			self.add(self.table(
 				head=[(
 					"#",
@@ -123,18 +109,14 @@ class W3TableDocument(W3MainDocument):
 				data=[(
 					field.position + 1,
 					field.name,
-					field.datatypeStr,
+					field.datatype_str,
 					field.nullable,
-					field.keyIndex,
+					field.key_index,
 					field.cardinality
 				) for field in fields]
 			))
 		if len(indexes) > 0:
 			self.section('indexes', 'Indexes')
-			self.add(self.p("""The following table details the indexes defined
-				against the table, including which fields each index targets.
-				For more information about an individual index (e.g.
-				statistics, directionality, etc.) click on the index name."""))
 			self.add(self.table(
 				head=[(
 					"Name",
@@ -146,23 +128,19 @@ class W3TableDocument(W3MainDocument):
 				data=[(
 					self.a_to(index, qualifiedname=True),
 					index.unique,
-					self.ol([ixfield.name for (ixfield, ixorder) in index.fieldList], attrs=olstyle),
-					self.ol([ixorder for (ixfield, ixorder) in index.fieldList], attrs=olstyle),
+					self.ol([ixfield.name for (ixfield, ixorder) in index.field_list], attrs=olstyle),
+					self.ol([ixorder for (ixfield, ixorder) in index.field_list], attrs=olstyle),
 					self.format_description(index.description, firstline=True)
 				) for index in indexes]
 			))
 		if len(constraints) > 0:
 			self.section('constraints', 'Constraints')
-			self.add(self.p("""The following table details the constraints
-				defined against the table, including which fields each
-				constraint limits or tests. For more information about an
-				individual constraint click on the constraint name."""))
 			rows = []
 			for constraint in constraints:
 				if isinstance(constraint, ForeignKey):
 					expression = [
 						'References ',
-						self.a_to(constraint.refTable),
+						self.a_to(constraint.ref_table),
 						self.ol(['%s -> %s' % (cfield.name, pfield.name)
 							for (cfield, pfield) in constraint.fields], attrs=olstyle)
 					]
@@ -172,7 +150,7 @@ class W3TableDocument(W3MainDocument):
 					expression = ''
 				rows.append((
 					self.a_to(constraint),
-					constraint.typeName,
+					constraint.type_name,
 					expression,
 					self.format_description(constraint.description, firstline=True)
 				))
@@ -187,10 +165,6 @@ class W3TableDocument(W3MainDocument):
 			))
 		if len(triggers) > 0:
 			self.section('triggers', 'Triggers')
-			self.add(self.p("""The following table details the triggers defined
-				against the table, including which actions fire the trigger and
-				when. For more information about an individual trigger click on
-				the trigger name."""))
 			self.add(self.table(
 				head=[(
 					"Name",
@@ -200,16 +174,13 @@ class W3TableDocument(W3MainDocument):
 				)],
 				data=[(
 					self.a_to(trigger, qualifiedname=True),
-					trigger.triggerTime,
-					trigger.triggerEvent,
+					trigger.trigger_time,
+					trigger.trigger_event,
 					self.format_description(trigger.description, firstline=True)
 				) for trigger in triggers]
 			))
 		if len(dependents) > 0:
 			self.section('dependents', 'Dependent Relations')
-			self.add(self.p("""The following table lists all relations (views
-				or materialized query tables) which reference this table in
-				their associated SQL statement."""))
 			self.add(self.table(
 				head=[(
 					"Name",
@@ -218,15 +189,10 @@ class W3TableDocument(W3MainDocument):
 				)],
 				data=[(
 					self.a_to(dep, qualifiedname=True),
-					dep.typeName,
+					dep.type_name,
 					self.format_description(dep.description, firstline=True)
 				) for dep in dependents]
 			))
 		self.section('sql', 'SQL Definition')
-		self.add(self.p("""The SQL which created the table is given below.
-			Note that this is not necessarily the same as the actual statement
-			used to create the table (it has been reconstructed from the
-			content of the system catalog tables and may differ in a number of
-			areas)."""))
-		self.add(self.pre(self.format_sql(self.dbobject.createSql), attrs={'class': 'sql'}))
+		self.add(self.pre(self.format_sql(self.dbobject.create_sql), attrs={'class': 'sql'}))
 

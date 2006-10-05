@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # $Header$
 # vim: set noet sw=4 ts=4:
 
@@ -12,18 +11,13 @@ class W3SchemaDocument(W3MainDocument):
 
 	def create_sections(self):
 		relations = [obj for (name, obj) in sorted(self.dbobject.relations.items(), key=lambda (name, obj): name)]
-		routines = [obj for (name, obj) in sorted(self.dbobject.specificRoutines.items(), key=lambda (name, obj): name)]
+		routines = [obj for (name, obj) in sorted(self.dbobject.specific_routines.items(), key=lambda (name, obj): name)]
 		indexes = [obj for (name, obj) in sorted(self.dbobject.indexes.items(), key=lambda (name, obj): name)]
 		triggers = [obj for (name, obj) in sorted(self.dbobject.triggers.items(), key=lambda (name, obj): name)]
 		self.section('description', 'Description')
 		self.add(self.p(self.format_description(self.dbobject.description)))
 		if len(relations) > 0:
 			self.section('relations', 'Relations')
-			self.add(self.p("""The following table contains all the relations
-				(tables and views) that the schema contains. Click on a
-				relation name to view the documentation for that relation,
-				including a list of all objects that exist within it, and that
-				the relation references."""))
 			self.add(self.table(
 				head=[(
 					"Name",
@@ -32,16 +26,12 @@ class W3SchemaDocument(W3MainDocument):
 				)],
 				data=[(
 					self.a_to(relation),
-					relation.typeName,
+					relation.type_name,
 					self.format_description(relation.description, firstline=True)
 				) for relation in relations]
 			))
 		if len(routines) > 0:
 			self.section('routines', 'Routines')
-			self.add(self.p("""The following table contains all the routines
-				(functions, stored procedures, and methods) that the schema
-				contains. Click on a routine name to view the documentation for
-				that routine."""))
 			self.add(self.table(
 				head=[(
 					"Name",
@@ -51,16 +41,13 @@ class W3SchemaDocument(W3MainDocument):
 				)],
 				data=[(
 					self.a_to(routine),
-					routine.specificName,
-					routine.typeName,
+					routine.specific_name,
+					routine.type_name,
 					self.format_description(routine.description, firstline=True)
 				) for routine in routines]
 			))
 		if len(indexes) > 0:
 			self.section('indexes', 'Indexes')
-			self.add(self.p("""The following table contains all the indexes
-				that the schema contains. Click on an index name to view the
-				documentation for that index."""))
 			self.add(self.table(
 				head=[(
 					"Name",
@@ -76,9 +63,6 @@ class W3SchemaDocument(W3MainDocument):
 			))
 		if len(triggers) > 0:
 			self.section('triggers', 'Triggers')
-			self.add(self.p("""The following table contains all the triggers
-				that the schema contains. Click on a trigger name to view the
-				documentation for that trigger."""))
 			self.add(self.table(
 				head=[(
 					"Name",
@@ -88,8 +72,8 @@ class W3SchemaDocument(W3MainDocument):
 					"Description")],
 				data=[(
 					self.a_to(trigger),
-					trigger.triggerTime,
-					trigger.triggerEvent,
+					trigger.trigger_time,
+					trigger.trigger_event,
 					self.a_to(trigger.relation, qualifiedname=True),
 					self.format_description(trigger.description, firstline=True)
 				) for trigger in triggers]

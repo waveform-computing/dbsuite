@@ -1,4 +1,3 @@
-#!/bin/env python
 # $Header$
 # vim: set noet sw=4 ts=4:
 
@@ -16,8 +15,6 @@ class W3TablespaceDocument(W3MainDocument):
 		self.section('description', 'Description')
 		self.add(self.p(self.format_description(self.dbobject.description)))
 		self.section('attributes', 'Attributes')
-		self.add(self.p("""The following table notes various "vital statistics"
-			of the tablespace."""))
 		self.add(self.table(
 			head=[(
 				'Attribute',
@@ -27,41 +24,38 @@ class W3TablespaceDocument(W3MainDocument):
 			)],
 			data=[
 				(
-					self.a('created.html', 'Created', popup=True),
+					self.a(self.site.documents['created.html']),
 					self.dbobject.created,
-					self.a('tables.html', '# Tables', popup=True),
+					self.a(self.site.documents['tables.html']),
 					len(tables),
 				),
 				(
-					self.a('createdby.html', 'Created By', popup=True),
+					self.a(self.site.documents['createdby.html']),
 					self.dbobject.definer,
-					self.a('cardinality.html', '# Indexes', popup=True),
+					self.a(self.site.documents['cardinality.html']),
 					len(indexes),
 				),
 				(
-					self.a('managedby.html', 'Managed By', popup=True),
-					self.dbobject.managedBy,
-					self.a('self.dbobjecttype.html', 'Data Type', popup=True),
-					self.dbobject.dataType,
+					self.a(self.site.documents['managedby.html']),
+					self.dbobject.managed_by,
+					self.a(self.site.documents['tbspacetype.html']),
+					self.dbobject.data_type,
 				),
 				(
-					self.a('extentsize.html', 'Extent Size', popup=True),
-					self.dbobject.extentSize,
-					self.a('prefetchsize.html', 'Prefetch Size', popup=True),
-					self.dbobject.prefetchSize,
+					self.a(self.site.documents['extentsize.html']),
+					self.dbobject.extent_size,
+					self.a(self.site.documents['prefetchsize.html']),
+					self.dbobject.prefetch_size,
 				),
 				(
-					self.a('pagesize.html', 'Page Size', popup=True),
-					self.dbobject.pageSize,
-					self.a('droprecovery.html', 'Drop Recovery', popup=True),
-					self.dbobject.dropRecovery,
+					self.a(self.site.documents['pagesize.html']),
+					self.dbobject.page_size,
+					self.a(self.site.documents['droprecovery.html']),
+					self.dbobject.drop_recovery,
 				),
 			]))
 		if len(tables) > 0:
 			self.section('tables', 'Tables')
-			self.add(self.p("""The following table contains all the tables that
-				the tablespace contains. Click on a table name to view the
-				documentation for that table."""))
 			self.add(self.table(
 				head=[(
 					'Name',
@@ -74,9 +68,6 @@ class W3TablespaceDocument(W3MainDocument):
 			))
 		if len(indexes) > 0:
 			self.section('indexes', 'Indexes')
-			self.add(self.p("""The following table contains all the indexes
-				that the tablespace contains. Click on an index name to view
-				the documentation for that index."""))
 			self.add(self.table(
 				head=[(
 					'Name',

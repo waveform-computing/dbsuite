@@ -1,4 +1,3 @@
-#!/bin/env python
 # $Header$
 # vim: set noet sw=4 ts=4:
 
@@ -18,8 +17,6 @@ class W3ViewDocument(W3MainDocument):
 		self.section('description', 'Description')
 		self.add(self.p(self.format_description(self.dbobject.description)))
 		self.section('attributes', 'Attributes')
-		self.add(self.p("""The following table notes various "vital statistics"
-			of the view."""))
 		self.add(self.table(
 			head=[(
 				'Attribute',
@@ -29,36 +26,32 @@ class W3ViewDocument(W3MainDocument):
 			)],
 			data=[
 				(
-					self.a('created.html', 'Created', popup=True),
+					self.a(self.site.documents['created.html']),
 					self.dbobject.created,
-					self.a('createdby.html', 'Created By', popup=True),
+					self.a(self.site.documents['createdby.html']),
 					self.dbobject.definer,
 				),
 				(
-					self.a('colcount.html', '# Columns', popup=True),
+					self.a(self.site.documents['colcount.html']),
 					len(self.dbobject.fields),
-					self.a('valid.html', 'Valid', popup=True),
+					self.a(self.site.documents['valid.html']),
 					self.dbobject.valid,
 				),
 				(
-					self.a('readonly.html', 'Read Only', popup=True),
-					self.dbobject.readOnly,
-					self.a('checkoption.html', 'Check Option', popup=True),
+					self.a(self.site.documents['readonly.html']),
+					self.dbobject.read_only,
+					self.a(self.site.documents['checkoption.html']),
 					self.dbobject.check,
 				),
 				(
-					self.a('dependentrel.html', 'Dependent Relations', popup=True),
-					len(self.dbobject.dependentList),
-					self.a('dependenciesrel.html', 'Dependencies', popup=True),
-					len(self.dbobject.dependencyList),
+					self.a(self.site.documents['dependentrel.html']),
+					len(self.dbobject.dependent_list),
+					self.a(self.site.documents['dependenciesrel.html']),
+					len(self.dbobject.dependency_list),
 				)
 			]))
 		if len(fields) > 0:
 			self.section('fields', 'Field Descriptions')
-			self.add(self.p("""The following table contains the fields of the
-				view (in alphabetical order) along with the description of each
-				field.  For information on the structure and attributes of each
-				field see the Field Schema section below."""))
 			self.add(self.table(
 				head=[(
 					'Name',
@@ -70,10 +63,6 @@ class W3ViewDocument(W3MainDocument):
 				) for field in fields]
 			))
 			self.section('field_schema', 'Field Schema')
-			self.add(self.p("""The following table contains the attributes of
-				the fields of the view (again, fields are in alphabetical
-				order, though the # column indicates the 1-based position of
-				the field within the view)."""))
 			self.add(self.table(
 				head=[(
 					'#',
@@ -84,16 +73,12 @@ class W3ViewDocument(W3MainDocument):
 				data=[(
 					field.position + 1,
 					field.name,
-					field.datatypeStr,
+					field.datatype_str,
 					field.nullable
 				) for field in fields]
 			))
 		if len(triggers) > 0:
 			self.section('triggers', 'Triggers')
-			self.add(self.p("""The following table details the triggers defined
-				against the view, including which actions fire the trigger and
-				when. For more information about an individual trigger click on
-				the trigger name."""))
 			self.add(self.table(
 				head=[(
 					'Name',
@@ -103,16 +88,13 @@ class W3ViewDocument(W3MainDocument):
 				)],
 				data=[(
 					self.a_to(trigger, qualifiedname=True),
-					trigger.triggerTime,
-					trigger.triggerEvent,
+					trigger.trigger_time,
+					trigger.trigger_event,
 					self.format_description(trigger.description, firstline=True)
 				) for trigger in triggers]
 			))
 		if len(dependents) > 0:
 			self.section('dependents', 'Dependent Relations')
-			self.add(self.p("""The following table lists all relations (views
-				or materialized query tables) which reference this view in
-				their associated SQL statement."""))
 			self.add(self.table(
 				head=[(
 					'Name',
@@ -121,15 +103,12 @@ class W3ViewDocument(W3MainDocument):
 				)],
 				data=[(
 					self.a_to(dep, qualifiedname=True),
-					dep.typeName,
+					dep.type_name,
 					self.format_description(dep.description, firstline=True)
 				) for dep in dependents]
 			))
 		if len(dependencies) > 0:
 			self.section('dependencies', 'Dependencies')
-			self.add(self.p("""The following table lists all relations (tables,
-				views, materialized query tables, etc.) which this view
-				references in it's SQL statement."""))
 			self.add(self.table(
 				head=[(
 					'Name',
@@ -138,15 +117,10 @@ class W3ViewDocument(W3MainDocument):
 				)],
 				data=[(
 					self.a_to(dep, qualifiedname=True),
-					dep.typeName,
+					dep.type_name,
 					self.format_description(dep.description, firstline=True)
 				) for dep in dependencies]
 			))
 		self.section('sql', 'SQL Definition')
-		self.add(self.p("""The SQL which created the view is given below.  Note
-			that, in the process of storing the definition of a view, DB2
-			removes much of the formatting, hence the formatting in the
-			statement below (which this system attempts to reconstruct) is not
-			necessarily the formatting of the original statement."""))
-		self.add(self.pre(self.format_sql(self.dbobject.createSql), attrs={'class': 'sql'}))
+		self.add(self.pre(self.format_sql(self.dbobject.create_sql), attrs={'class': 'sql'}))
 

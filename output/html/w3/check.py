@@ -1,4 +1,3 @@
-#!/bin/env python
 # $Header$
 # vim: set noet sw=4 ts=4:
 
@@ -15,7 +14,6 @@ class W3CheckDocument(W3MainDocument):
 		self.section('description', 'Description')
 		self.add(self.p(self.format_description(self.dbobject.description)))
 		self.section('attributes', 'Attributes')
-		self.add(self.p("""The following table notes various "vital statistics" of the check constraint."""))
 		self.add(self.table(
 			head=[(
 				"Attribute",
@@ -25,24 +23,21 @@ class W3CheckDocument(W3MainDocument):
 			)],
 			data=[
 				(
-					self.a("created.html", "Created", popup=True),
+					self.a(self.site.documents['created.html']),
 					self.dbobject.created,
-					self.a("createdby.html", "Created By", popup=True),
+					self.a(self.site.documents['createdby.html']),
 					self.dbobject.definer,
 				),
 				(
-					self.a("enforced.html", "Enforced", popup=True),
+					self.a(self.site.documents['enforced.html']),
 					self.dbobject.enforced,
-					self.a("queryoptimize.html", "Query Optimizing", popup=True),
-					self.dbobject.queryOptimize,
+					self.a(self.site.documents['queryoptimize.html']),
+					self.dbobject.query_optimize,
 				),
 			]
 		))
 		if len(fields) > 0:
 			self.section('fields', 'Fields')
-			self.add(self.p("""The following table contains the fields that the
-				check references in it's SQL expression, and the description of
-				the field in the check's table."""))
 			self.add(self.table(
 				head=[(
 					"Field",
@@ -54,10 +49,5 @@ class W3CheckDocument(W3MainDocument):
 				) for field in fields]
 			))
 		self.section('sql', 'SQL Definition')
-		self.add(self.p("""The SQL which can be used to create the check is given
-			below. Note that this is not necessarily the same as the actual
-			statement used to create the check (it has been reconstructed from
-			the content of the system catalog tables and may differ in a number
-			of areas)."""))
-		self.add(self.pre(self.format_sql(self.dbobject.createSql), attrs={'class': 'sql'}))
+		self.add(self.pre(self.format_sql(self.dbobject.create_sql), attrs={'class': 'sql'}))
 

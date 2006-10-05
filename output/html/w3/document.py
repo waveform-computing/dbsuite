@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # $Header$
 # vim: set noet sw=4 ts=4:
 
@@ -38,15 +37,6 @@ class W3Document(HTMLDocument):
 		headnode.appendChild(self.meta('IBM.Effective', self.date.strftime('%Y-%m-%d'), 'iso8601'))
 		headnode.appendChild(self.script(src='//w3.ibm.com/ui/v8/scripts/scripts.js'))
 		headnode.appendChild(self.style(src='//w3.ibm.com/ui/v8/css/v4-screen.css'))
-		headnode.appendChild(self.style(content="""
-			@import url("//w3.ibm.com/ui/v8/css/screen.css");
-			@import url("//w3.ibm.com/ui/v8/css/icons.css");
-			@import url("//w3.ibm.com/ui/v8/css/tables.css");
-			@import url("//w3.ibm.com/ui/v8/css/interior.css");
-			@import url("//w3.ibm.com/ui/v8/css/interior-1-col.css");
-		""", media='all'))
-		headnode.appendChild(self.style(src='sql.css', media='all'))
-		headnode.appendChild(self.style(src='//w3.ibm.com/ui/v8/css/print.css', media='print'))
 	
 	# HTML CONSTRUCTION METHODS
 	# Overridden versions specific to w3 formatting
@@ -56,11 +46,11 @@ class W3Document(HTMLDocument):
 		assert isinstance(dbobject, db.base.DocBase)
 		href = self.site.document_map[dbobject].url
 		if qualifiedname:
-			content = dbobject.qualifiedName
+			content = dbobject.qualified_name
 		else:
 			content = dbobject.name
 		if typename:
-			content = '%s %s' % (dbobject.typeName, content)
+			content = '%s %s' % (dbobject.type_name, content)
 		return self.a(href, content)
 
 	def hr(self, attrs={}):
@@ -205,16 +195,16 @@ class W3MainDocument(W3Document):
 		super(W3MainDocument, self).__init__(site, '%s.html' % dbobject.identifier)
 		self.dbobject = dbobject
 		self.site.document_map[dbobject] = self
-		self.title = '%s - %s %s' % (self.site.title, self.dbobject.typeName, self.dbobject.qualifiedName)
-		self.description = '%s %s' % (self.dbobject.typeName, self.dbobject.qualifiedName)
-		self.keywords = [self.site.database.name, self.dbobject.typeName, self.dbobject.name, self.dbobject.qualifiedName]
+		self.title = '%s - %s %s' % (self.site.title, self.dbobject.type_name, self.dbobject.qualified_name)
+		self.description = '%s %s' % (self.dbobject.type_name, self.dbobject.qualified_name)
+		self.keywords = [self.site.database.name, self.dbobject.type_name, self.dbobject.name, self.dbobject.qualified_name]
 		self.tokenizer = DB2UDBSQLTokenizer()
 		self.formatter = SQLFormatter()
 		self.highlighter = SQLDOMHighlighter()
 	
 	def write(self):
 		# Overridden to add logging
-		logging.debug('Writing documentation for %s %s to %s' % (self.dbobject.typeName, self.dbobject.name, self.filename))
+		logging.debug('Writing documentation for %s %s to %s' % (self.dbobject.type_name, self.dbobject.name, self.filename))
 		super(W3MainDocument, self).write()
 
 	def format_sql(self, sql, terminator=';'):
@@ -234,7 +224,7 @@ class W3MainDocument(W3Document):
 	def format_prototype(self, sql):
 		"""Syntax highlights an SQL routine prototype with <span> elements.
 
-        This method is similar to the formatSql() method, but operates on
+        This method is similar to the format_sql() method, but operates on
         standalone function prototypes which aren't otherwise valid standalone
         SQL scripts.
 		"""
@@ -322,6 +312,17 @@ class W3MainDocument(W3Document):
 			self.link_up = self.site.document_map.get(self.dbobject.parent)
 		# Call the inherited method to create the skeleton document
 		super(W3MainDocument, self).create_content()
+		# Add styles specific to w3v8 main documents
+		headnode = self.doc.getElementsByTagName('head')[0]
+		headnode.appendChild(self.style(content="""
+			@import url("//w3.ibm.com/ui/v8/css/screen.css");
+			@import url("//w3.ibm.com/ui/v8/css/icons.css");
+			@import url("//w3.ibm.com/ui/v8/css/tables.css");
+			@import url("//w3.ibm.com/ui/v8/css/interior.css");
+			@import url("//w3.ibm.com/ui/v8/css/interior-1-col.css");
+		""", media='all'))
+		headnode.appendChild(self.style(src='sql.css', media='all'))
+		headnode.appendChild(self.style(src='//w3.ibm.com/ui/v8/css/print.css', media='print'))
 		# Parse the HTML in template and graft the <body> element onto the
 		# <body> element in self.doc
 		oldbodynode = self.doc.getElementsByTagName('body')[0]
@@ -336,7 +337,7 @@ class W3MainDocument(W3Document):
 		self.sections = []
 		self.create_sections()
 		mainnode = self.find_element('div', 'content-main')
-		mainnode.appendChild(self.h('%s %s' % (self.dbobject.typeName, self.dbobject.qualifiedName), level=1))
+		mainnode.appendChild(self.h('%s %s' % (self.dbobject.type_name, self.dbobject.qualified_name), level=1))
 		mainnode.appendChild(self.ul([self.a('#%s' % section['id'], section['title'], 'Jump to section') for section in self.sections]))
 		for section in self.sections:
 			mainnode.appendChild(self.hr())
@@ -370,20 +371,20 @@ class W3MainDocument(W3Document):
 			"""
 			moretop = False
 			morebot = False
-			if selitem.parentList is None:
+			if selitem.parent_list is None:
 				slice = [selitem]
 			else:
-				index = selitem.parentIndex
-				if len(selitem.parentList) <= 10:
-					slice = selitem.parentList
+				index = selitem.parent_index
+				if len(selitem.parent_list) <= 10:
+					slice = selitem.parent_list
 				elif index <= 3:
-					slice = selitem.parentList[:7]
+					slice = selitem.parent_list[:7]
 					morebot = True
-				elif index >= len(selitem.parentList) - 4:
-					slice = selitem.parentList[-7:]
+				elif index >= len(selitem.parent_list) - 4:
+					slice = selitem.parent_list[-7:]
 					moretop = True
 				else:
-					slice = selitem.parentList[index - 3:index + 4]
+					slice = selitem.parent_list[index - 3:index + 4]
 					moretop = True
 					morebot = True
 			# items is a list of tuples of (URL, content, title, active, [children])
@@ -391,7 +392,7 @@ class W3MainDocument(W3Document):
 			for item in slice:
 				content = item.name
 				if len(content) > 10: content = '%s...' % content[:10]
-				title = '%s %s' % (item.typeName, item.qualifiedName)
+				title = '%s %s' % (item.type_name, item.qualified_name)
 				if item == selitem:
 					items.append((self.site.document_map[item].url, content, title, active, subitems))
 				else:
@@ -498,7 +499,18 @@ class W3PopupDocument(W3Document):
 	# Template of the <body> element of a popup document. This is parsed into a
 	# DOM tree, grafted onto the generated document and then filled in by
 	# searching for elements by id in the create_content() method below.
-	template = xml.dom.minidom.parseString(codecs.getencoder('UTF-8')(u"""<?xml version="1.0" encoding="UTF-8"?>
+
+	def __init__(self, site, url, title, body, width=400, height=300):
+		"""Initializes an instance of the class."""
+		assert isinstance(site, W3Site)
+		super(W3PopupDocument, self).__init__(site, url)
+		# Modify the url to use the JS popup() routine. Note that this won't
+		# affect the filename property (used by write()) as the super-class'
+		# constructor will already have set that
+		self.url = 'javascript:popup("%s","internal",%d,%d)' % (url, height, width)
+		self.title = title
+		self.content = xml.dom.minidom.parseString(codecs.getencoder('UTF-8')(u"""\
+<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html
 	PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
 	"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
@@ -517,16 +529,16 @@ class W3PopupDocument(W3Document):
 <div id="content">
 	<!-- start main content -->
 	<div id="content-main">
-		<div id="popup-content">
-		</div>
+		<h1>%s</h1>
+		%s
 		<!-- start popup footer //////////////////////////////////////////// -->
 		<div id="popup-footer">
-			<div class="hrule-dots">&nbsp;</div>
+			<div class="hrule-dots">\u00A0</div>
 			<div class="content">
 				<a class="float-right" href="javascript:close();">Close Window</a>
 				<a class="popup-print-link" href="javascript://">Print</a>
 			</div>
-			<div style="clear:both;">&nbsp;</div>
+			<div style="clear:both;">\u00A0</div>
 		</div>
 		<!-- stop popup footer //////////////////////////////////////////// -->
 
@@ -539,18 +551,7 @@ class W3PopupDocument(W3Document):
 
 </body>
 </html>
-""")[0])
-
-	def __init__(self, site, url, title, body, width=400, height=300):
-		"""Initializes an instance of the class."""
-		assert isinstance(site, W3Site)
-		super(W3PopupDocument, self).__init__(site, url)
-		# Modify the url to use the JS popup() routine. Note that this won't
-		# affect the filename property (used by write()) as the super-class'
-		# constructor will already have set that
-		self.url = 'javascript:popup("%s","internal",%d,%d)' % (url, height, width)
-		self.title = title
-		self.body = body
+""" % (title, body))[0])
 	
 	def write(self):
 		# Overridden to add logging
@@ -560,12 +561,60 @@ class W3PopupDocument(W3Document):
 	def create_content(self):
 		# Call the inherited method to create the skeleton document
 		super(W3PopupDocument, self).create_content()
-		# Parse the HTML in template and graft the <body> element onto the
-		# <body> element in self.doc
+		# Add styles specific to w3v8 popup documents
+		headnode = self.doc.getElementsByTagName('head')[0]
+		headnode.appendChild(self.style(src='//w3.ibm.com/ui/v8/css/v4-interior.css'))
+		headnode.appendChild(self.style(content="""
+			@import url("//w3.ibm.com/ui/v8/css/screen.css");
+			@import url("//w3.ibm.com/ui/v8/css/interior.css");
+			@import url("//w3.ibm.com/ui/v8/css/popup-window.css");
+		""", media='all'))
+		headnode.appendChild(self.style(src='sql.css', media='all'))
+		headnode.appendChild(self.style(src='//w3.ibm.com/ui/v8/css/print.css', media='print'))
+		# Graft the <body> element from self.content onto the <body> element in
+		# self.doc
 		oldbodynode = self.doc.getElementsByTagName('body')[0]
-		newbodynode = self.template.getElementsByTagName('body')[0]
+		newbodynode = self.content.getElementsByTagName('body')[0]
 		newbodynode = self.doc.importNode(newbodynode, deep=True)
 		self.doc.documentElement.replaceChild(newbodynode, oldbodynode)
-		# Descendent classes should override this method and fill in the
-		# content under the popup-content div here
 
+class W3CSSDocument(CSSDocument):
+	"""Stylesheet class for use with the w3v8 style."""
+
+	def __init__(self, site, url="sql.css"):
+		"""Initializes an instance of the class."""
+		# We only need one supplemental CSS stylesheet (the default w3v8 are
+		# pretty comprehensive). So this class is brutally simple...
+		super(W3CSSDocument, self).__init__(site, url)
+		self.text = """\
+.sql {
+	font-size: 8pt;
+	font-family: "Courier New", monospace;
+}
+
+pre.sql {
+	background-color: #ddd;
+	padding: 1em;
+	/* Ensure <pre> stuff wraps if it's too long */
+	white-space: -moz-pre-wrap; /* Mozilla */
+	white-space: -o-pre-wrap;   /* Opera 7 */
+	white-space: -pre-wrap;     /* Opera 4-6 */
+	white-space: pre-wrap;      /* CSS 2.1 (Opera8+) */
+	/* Nothing for IE? What a fucking surprise... */
+}
+
+.sql span.sql_error      { background-color: red; }
+.sql span.sql_comment    { color: green; }
+.sql span.sql_keyword    { font-weight: bold; color: blue; }
+.sql span.sql_datatype   { font-weight: bold; color: green; }
+.sql span.sql_register   { font-weight: bold; color: purple; }
+.sql span.sql_identifier { }
+.sql span.sql_number     { color: maroon; }
+.sql span.sql_string     { color: maroon; }
+.sql span.sql_operator   { }
+.sql span.sql_parameter  { font-style: italic; }
+.sql span.sql_terminator { }
+
+td.num_cell { background-color: silver; }
+td.sql_cell { background-color: gray; }
+"""

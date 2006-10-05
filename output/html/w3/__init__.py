@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # $Header$
 # vim: set noet sw=4 ts=4:
 
@@ -10,7 +9,11 @@ various objects in the database (views, tables, etc.) and SVG diagrams of the
 schema.
 """
 
-from output.html.w3.document import W3Site
+# Standard modules
+import os
+
+# Plugin specific modules
+from output.html.w3.document import W3Site, W3PopupDocument, W3CSSDocument
 from output.html.w3.database import W3DatabaseDocument
 from output.html.w3.schema import W3SchemaDocument
 from output.html.w3.table import W3TableDocument
@@ -24,18 +27,35 @@ from output.html.w3.trigger import W3TriggerDocument
 from output.html.w3.function import W3FunctionDocument
 from output.html.w3.procedure import W3ProcedureDocument
 from output.html.w3.tablespace import W3TablespaceDocument
+from output.html.w3.popups import W3_POPUPS
 
+# Constants
+PATH_OPTION = 'path'
+
+# Localizable strings
+PATH_DESC = 'The folder into which all files (HTML, CSS, SVG, etc.) will be written'
+MISSING_OPTION = 'The "%s" option must be specified'
+
+# Plugin options dictionary
 options = {
-	'path': 'The root folder into which all files (HTML, CSS, SVG, etc.) will be written',
+	PATH_OPTION: PATH_DESC,
 }
 
-def Output(database, outputpath):
+def Output(database, config):
+	# Check the config dictionary for missing stuff
+	if not PATH_OPTION in config:
+		raise Exception(MISSING_OPTION % PATH_OPTION)
 	# Construct the site object
 	site = W3Site(database)
 	site.baseurl = ''
-	site.basepath = outputpath
-	# XXX Construct the SQL stylesheet
-	# XXX Construct all popups
+	site.basepath = os.path.expanduser(os.path.expandvars(config[PATH_OPTION]))
+	# Construct the supplementary SQL stylesheet
+	W3CSSDocument(site)
+	# Construct all popups (this must be done before constructing database
+	# object documents as some of the templates refer to the popup document
+	# objects
+	for (url, title, body) in W3_POPUPS:
+		W3PopupDocument(site, url, title, body)
 	# Construct all document objects (the document objects will add themselves
 	# to the documents attribute of the site object)
 	W3DatabaseDocument(site, database)
@@ -43,9 +63,9 @@ def Output(database, outputpath):
 		W3SchemaDocument(site, schema)
 		for table in schema.tables.itervalues():
 			W3TableDocument(site, table)
-			for uniquekey in table.uniqueKeys.itervalues():
+			for uniquekey in table.unique_keys.itervalues():
 				W3UniqueKeyDocument(site, uniquekey)
-			for foreignkey in table.foreignKeys.itervalues():
+			for foreignkey in table.foreign_keys.itervalues():
 				W3ForeignKeyDocument(site, foreignkey)
 			for check in table.checks.itervalues():
 				W3CheckDocument(site, check)
@@ -55,15 +75,15 @@ def Output(database, outputpath):
 			W3AliasDocument(site, alias)
 		for index in schema.indexes.itervalues():
 			W3IndexDocument(site, index)
-		for function in schema.specificFunctions.itervalues():
+		for function in schema.specific_functions.itervalues():
 			W3FunctionDocument(site, function)
-		for procedure in schema.specificProcedures.itervalues():
+		for procedure in schema.specific_procedures.itervalues():
 			W3ProcedureDocument(site, procedure)
 		for trigger in schema.triggers.itervalues():
 			W3TriggerDocument(site, trigger)
 	for tablespace in database.tablespaces.itervalues():
 		W3TablespaceDocument(site, tablespace)
 	# Write all the documents in the site
-	for doc in site.documents:
+	for doc in site.documents.itervalues():
 		doc.write()
 
