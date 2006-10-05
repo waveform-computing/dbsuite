@@ -134,7 +134,7 @@ ON $tbschema.$tbname ($fields)"""
 			if len(incfields) > 0:
 				sql += '\nINCLUDE ($incfields)'
 				values['incfields'] = ', '.join([field.name for field in incfields])
-		if self.reverseScans:
+		if self.reverse_scans:
 			sql += '\nALLOW REVERSE SCANS'
 		sql += ';'
 		return Template(sql).substitute(values)

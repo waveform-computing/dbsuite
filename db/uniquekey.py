@@ -35,6 +35,14 @@ class UniqueKeyFieldsList(object):
 				return True
 		return False
 
+	def index(self, x, i=0, j=None):
+		result = i
+		for k in self._items[i:j]:
+			if self._table.fields[k] == x:
+				return result
+			result += 1
+		raise ValueError("%s not found in list" % repr(x))
+
 class UniqueKey(Constraint):
 	"""Class representing a unique key in a table in a DB2 database"""
 

@@ -55,7 +55,7 @@ class Constraint(RelationObject):
 		})
 	
 	def _get_parent_list(self):
-		return self.table.constraintList
+		return self.table.constraint_list
 
 	# Use the lambda trick to allow property getter methods to be overridden
 	fields = property(lambda self: self._get_fields(), doc="""The fields constrained by this constraint""")

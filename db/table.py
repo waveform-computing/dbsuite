@@ -92,10 +92,10 @@ class Table(Relation):
 		return self._field_list
 
 	def _get_dependents(self):
-		return self.__dependents
+		return self._dependents
 
 	def _get_dependent_list(self):
-		return self.__dependent_list
+		return self._dependent_list
 
 	def _get_create_sql(self):
 		sql = Template("""\

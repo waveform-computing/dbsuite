@@ -23,7 +23,7 @@ class Trigger(SchemaObject):
 		self.created = row.get('created', None)
 		self.valid = row.get('valid', None)
 		self.qualifier = row.get('qualifier', None)
-		self.funcPath = row.get('funcPath', None)
+		self.func_path = row.get('funcPath', None)
 		self.sql = row.get('sql', None)
 		self.trigger_time = row['triggerTime']
 		self.trigger_event = row['triggerEvent']
@@ -34,7 +34,7 @@ class Trigger(SchemaObject):
 		return "trigger_%s_%s" % (self.schema.name, self.name)
 
 	def _get_parent_list(self):
-		return self.schema.triggerList
+		return self.schema.trigger_list
 
 	def _get_create_sql(self):
 		if self.sql:

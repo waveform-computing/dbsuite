@@ -23,10 +23,10 @@ class View(Relation):
 		self.definer = row.get('definer', None)
 		self.created = row.get('created', None)
 		self.check = row.get('check', None)
-		self.readOnly = row.get('readOnly', None)
+		self.read_only = row.get('readOnly', None)
 		self.valid = row.get('valid', None)
 		self.qualifier = row.get('qualifier', None)
-		self.funcPath = row.get('funcPath', None)
+		self.func_path = row.get('funcPath', None)
 		self.sql = row.get('sql', None)
 		self._fields = {}
 		for field in [cache.fields[(schema_name, view_name, field_name)] for (schema_name, view_name, field_name) in cache.fields if schema_name == schema.name and view_name == self.name]:

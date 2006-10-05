@@ -85,7 +85,7 @@ class Field(RelationObject):
 		if not self.compact is None:
 			if self.compact:
 				items.append('COMPACT')
-		if self.generated:
+		if self.generated and self.generated != 'NEVER':
 			items.append('GENERATED %s AS (%s)' % (self.generated, self.generate_expression))
 		return ' '.join(items)
 		
@@ -108,9 +108,9 @@ class Field(RelationObject):
 				format_ident(self.datatype.name)
 			)
 		if self.datatype.variable_size:
-			result += '(%s' % (format_size(self.__size))
+			result += '(%s' % (format_size(self._size))
 			if self.datatype.variable_scale:
-				result += ',%d' % (self.__scale)
+				result += ',%d' % (self._scale)
 			result += ')'
 		return result
 
