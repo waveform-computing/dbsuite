@@ -1,4 +1,3 @@
-#!/bin/env python
 # $Header$
 # vim: set noet sw=4 ts=4:
 
@@ -28,7 +27,7 @@ from sql.tokenizer import *
 	INDENT,    # Whitespace indentation at the start of a line
 	VALIGN,    # Whitespace indentation within a line to vertically align blocks of text
 	VAPPLY,    # Mark the end of a run of VALIGN tokens
-) = newTokens(6)
+) = new_tokens(6)
 
 # Token labels used for formatting error messages
 TOKEN_LABELS = {
@@ -4778,6 +4777,3 @@ class SQLFormatter(BaseFormatter):
 				self._parse_datatype()
 		self._parse_finish()
 		return self._output
-
-if __name__ == '__main__':
-	pass

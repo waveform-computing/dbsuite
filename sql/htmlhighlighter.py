@@ -1,4 +1,3 @@
-#!/bin/env python
 # $Header$
 # vim: set noet sw=4 ts=4:
 
@@ -193,6 +192,3 @@ class SQLDOMHighlighter(object):
 			return [self._format_line(line, document) for line in tokens]
 		else:
 			return [self._format_token(token, document) for token in tokens]
-
-if __name__ == "__main__":
-	pass
