@@ -579,9 +579,9 @@ class W3PopupDocument(W3Document):
 		self.doc.documentElement.replaceChild(newbodynode, oldbodynode)
 
 class W3CSSDocument(CSSDocument):
-	"""Stylesheet class for use with the w3v8 style."""
+	"""Stylesheet class to supplement the w3v8 style with SQL syntax highlighting."""
 
-	def __init__(self, site, url="sql.css"):
+	def __init__(self, site, url):
 		"""Initializes an instance of the class."""
 		# We only need one supplemental CSS stylesheet (the default w3v8 are
 		# pretty comprehensive). So this class is brutally simple...
@@ -600,7 +600,7 @@ pre.sql {
 	white-space: -o-pre-wrap;   /* Opera 7 */
 	white-space: -pre-wrap;     /* Opera 4-6 */
 	white-space: pre-wrap;      /* CSS 2.1 (Opera8+) */
-	/* Nothing for IE? What a fucking surprise... */
+	/* No way to do this in IE? ... oh well */
 }
 
 .sql span.sql_error      { background-color: red; }

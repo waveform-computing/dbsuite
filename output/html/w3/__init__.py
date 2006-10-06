@@ -1,7 +1,7 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-"""Output plugin for w3v8 style web pages.
+"""Output plugin for IBM Intranet w3v8 style web pages.
 
 This output plugin supports generating XHTML documentation conforming to the
 internal IBM w3v8 style. It includes syntax highlighted SQL information on
