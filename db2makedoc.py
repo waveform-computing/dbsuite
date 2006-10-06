@@ -180,6 +180,7 @@ def list_plugins():
 	for (name, plugin) in plugins(output):
 		print ' '*4 + name
 		print tw.fill(plugin.__doc__.split('\n')[0])
+	print ""
 
 def help_plugin(plugin_name):
 	"""Pretty-print some help text for the specified plugin."""
@@ -197,6 +198,7 @@ def help_plugin(plugin_name):
 		for (option_name, option_desc) in plugin.options.iteritems():
 			print ' '*4 + option_name
 			print tw.fill(option_desc)
+	print ""
 
 def is_input_plugin(module):
 	"""Determines whether the specified module is an input plugin.
