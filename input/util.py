@@ -1,4 +1,3 @@
-#!/bin/env python
 # $Header$
 # vim: set noet sw=4 ts=4:
 
@@ -25,9 +24,3 @@ def makeBoolean(value, trueValue='Y', falseValue='N', noneValue=' ', unknownErro
 			raise
 		else:
 			return unknownResult
-
-def main():
-	pass
-
-if __name__ == "__main__":
-	main()

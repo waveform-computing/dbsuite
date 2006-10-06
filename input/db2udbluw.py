@@ -1,4 +1,3 @@
-#!/bin/env python
 # $Header$
 # vim: set noet sw=4 ts=4:
 
@@ -1127,9 +1126,3 @@ def _fetch_dict(cursor):
 	Okay, horribly wasteful and un-Pythonic. But it's simple and it works.
 	"""
 	return [dict(zip([d[0] for d in cursor.description], row)) for row in cursor.fetchall()]
-
-def main():
-	pass
-
-if __name__ == "__main__":
-	main()
