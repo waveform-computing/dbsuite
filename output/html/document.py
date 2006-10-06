@@ -376,9 +376,8 @@ class HTMLDocument(WebSiteDocument):
 	the final HTML document.
 	"""
 
-	def __init__(self, site, url="index.html"):
+	def __init__(self, site, url):
 		"""Initializes an instance of the class."""
-		assert isinstance(site, WebSite)
 		super(HTMLDocument, self).__init__(site, url)
 		if self.site.htmlver >= XHTML10:
 			namespace = 'http://www.w3.org/1999/xhtml'
@@ -822,9 +821,8 @@ class CSSDocument(WebSiteDocument):
 	stores the CSS to write to the file when write() is called.
 	"""
 
-	def __init__(self, site, url="default.css"):
+	def __init__(self, site, url):
 		"""Initializes an instance of the class."""
-		assert isinstance(site, WebSite)
 		super(CSSDocument, self).__init__(site, url)
 		self.text = ''
 		self.doc = ''
@@ -844,3 +842,26 @@ class CSSDocument(WebSiteDocument):
 		# In this base class the method is brutally simplistic...
 		self.doc = self.text
 	
+class GraphDocument(WebSiteDocument):
+	"""Represents a graph in graphviz dot language.
+
+	This is the base class for dot graphs. It provides no methods for
+	constructing or editing the dot language; it simply contains a "text"
+	property which stores the dot code to pass to graphviz for processing into
+	whatever formats are required.
+	"""
+
+	def __init__(self, site, url):
+		super(GraphDocument, self).__init__(site, url)
+		self.text = ''
+		self.doc = None
+	
+	def write(self):
+		"""Writes this document to a file in the site's path"""
+		f = open(self.filename, 'w')
+		try:
+			# XXX Generate the graph in SVG format
+			# XXX Generate the graph in PNG format + client-side map
+			f.write(self.doc)
+		finally:
+			f.close()
