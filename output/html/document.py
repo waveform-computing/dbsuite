@@ -1,7 +1,7 @@
-#!/usr/bin/env python
 # $Header$
 # vim: set noet sw=4 ts=4:
 
+# Standard modules
 import os
 import os.path
 import codecs
@@ -9,6 +9,9 @@ import re
 import datetime
 import shutil
 import xml.dom
+
+# Application-specific modules
+from dot.graph import Graph, Node, Edge, Cluster
 
 # Constants for HTML versions
 
@@ -669,6 +672,8 @@ class HTMLDocument(WebSiteDocument):
 		return self.element('i', attrs, content)
 
 	def img(self, src, alt=None, width=None, height=None, attrs={}):
+		if isinstance(src, GraphDocument):
+			src = src.url
 		return self.element('img', AttrDict(src=src, alt=alt, width=width, height=height) + attrs)
 
 	def ins(self, content, attrs={}):
@@ -817,14 +822,13 @@ class CSSDocument(WebSiteDocument):
 	"""Represents a simple CSS document.
 
 	This is the base class for CSS stylesheets. It provides no methods for
-	constructing or editing CSS; it simply contains a "text" property which
+	constructing or editing CSS; it simply contains a "doc" property which
 	stores the CSS to write to the file when write() is called.
 	"""
 
 	def __init__(self, site, url):
 		"""Initializes an instance of the class."""
 		super(CSSDocument, self).__init__(site, url)
-		self.text = ''
 		self.doc = ''
 	
 	def write(self):
@@ -832,36 +836,38 @@ class CSSDocument(WebSiteDocument):
 		f = open(self.filename, 'w')
 		try:
 			# Transcode the CSS into the target encoding and write to the file
-			self.create_content()
 			f.write(codecs.getencoder(self.site.encoding)(self.doc)[0])
 		finally:
 			f.close()
 
-	def create_content(self):
-		"""Constructs the content of the document."""
-		# In this base class the method is brutally simplistic...
-		self.doc = self.text
-	
 class GraphDocument(WebSiteDocument):
-	"""Represents a graph in graphviz dot language.
+	"""Represents a graph in GraphViz dot language.
 
-	This is the base class for dot graphs. It provides no methods for
-	constructing or editing the dot language; it simply contains a "text"
-	property which stores the dot code to pass to graphviz for processing into
-	whatever formats are required.
+	This is the base class for dot graphs. It provides a doc attribute which is
+	a Graph object from the dot.graph module included with the application.
+	This (and the associated Node, Edge, Cluster and Subgraph classes) provide
+	rudimentary editing facilities for constructor dot graphs.
 	"""
 
 	def __init__(self, site, url):
 		super(GraphDocument, self).__init__(site, url)
-		self.text = ''
-		self.doc = None
+		self.graph = Graph('G')
+		# XXX Rewrite URL to include 'orrible IE specific stuff for
+		# PNG+image-maps instead of SVG
 	
 	def write(self):
 		"""Writes this document to a file in the site's path"""
+		# XXX Add some hackish trickery to produce additional PNG and
+		# client-side image map files
 		f = open(self.filename, 'w')
 		try:
-			# XXX Generate the graph in SVG format
-			# XXX Generate the graph in PNG format + client-side map
-			f.write(self.doc)
+			self.create_graph()
+			self.graph.to_svg(f)
 		finally:
 			f.close()
+
+	def create_graph(self):
+		"""Constructs the content of the graph."""
+		# Child classes can override this to make last minute tweaks to the
+		# graph before writing
+		pass
