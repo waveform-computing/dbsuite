@@ -3743,7 +3743,7 @@ class SQLFormatter(BaseFormatter):
 			self._parse_subschema_name()
 		self._parse_table_correlation()
 		self._expect('USING')
-		if self._match('('):
+		if self._match('(') or self._match_sequence(['TABLE', '(']):
 			self._indent()
 			self._parse_full_select1()
 			self._outdent()
