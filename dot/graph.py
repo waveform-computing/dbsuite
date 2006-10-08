@@ -205,6 +205,40 @@ $strict$graph $id {
 		self._call_graphviz(output_img, converter, 'gif', graph_attr, node_attr, edge_attr)
 		if output_map is not None:
 			self._call_graphviz(output_map, converter, 'cmapx', graph_attr, node_attr, edge_attr)
+	
+	def touch(self, method, **params):
+		"""Calls the specified method for each object within the graph.
+
+		The touch() method can be used to perform an operation on all objects
+		or a sub-set of all objects in the graph. It iterates over all children
+		of the graph, recursing into Subgraphs and Clusters. The specified
+		method is called for each object with a single parameter (namely, the
+		object).
+
+		Additional parameters can be passed which will be captured by the
+		keyword argument params and passed verbatim to method on each
+		invocation.
+
+		The return value of the method can control when the recursion
+		terminates.  If the method returns a value which evaluates to True, the
+		loop immediately terminates.  If the method returns a value which
+		evaluates to False (e.g. if it returns None which all functions do by
+		default if no return is specified), the loop continues.
+		"""
+
+		def touch_sub(subgraph, params):
+			assert isinstance(subgraph, GraphBase)
+			if method(subgraph, **params):
+				return True
+			for i in subgraph.children:
+				if isinstance(i, GraphBase):
+					if touch_sub(i, params):
+						return True
+				else:
+					if method(i, **params):
+						return True
+
+		touch_sub(self, params)
 
 class Subgraph(GraphBase):
 	_attributes = frozenset(('rank'))
@@ -289,27 +323,26 @@ class Node(GraphObject):
 		this will NOT remove connections from the node specified in the
 		parameter to the node on which the method is called.
 		"""
-
-		def disconnect_sub(subgraph, directed):
-			# Recursively search for Edge objects connecting the nodes and
-			# destroy them
-			assert isinstance(subgraph, GraphBase)
-			unlink = []
-			for i in subgraph.children:
-				if isinstance(i, Edge):
-					if i.from_node == self and i.to_node == node:
-						unlink.append(i)
-					elif not directed and i.to_node == self and i.from_node == node:
-						unlink.append(i)
-				elif isinstance(i, GraphBase):
-					disconnect_sub(i)
-			for i in unlink:
-				subgraph.children.remove(i)
-
 		assert isinstance(node, Node)
 		assert self.graph == node.graph
-		disconnect_sub(self.graph, self.graph.directed)
-	
+
+		def disconnect_directed(i, node, edges):
+			if isinstance(i, Edge) and i.from_node == self and i.to_node == node:
+				edges.append(i)
+
+		def disconnect_undirected(i, node, edges):
+			if isinstance(i, Edge) and ((i.from_node == self and i.to_node == node) or
+					(i.from_node == node and i.to_node == self)):
+				edges.append(i)
+
+		edges = []
+		if self.graph.directed:
+			self.graph.touch(disconnect_directed, node=node, edges=edges)
+		else:
+			self.graph_touch(disconnect_undirected, node=node, edges=edges)
+		for edge in edges:
+			edge.parent.children.remove(edge)
+
 	def is_connected_to(self, node):
 		"""Determines if this node is connected to the specified node.
 
@@ -321,23 +354,26 @@ class Node(GraphObject):
 		If the graph is undirected, the method also searches for reverse
 		connections (from the specified node to this node).
 		"""
-
-		def is_connected_sub(subgraph, directed):
-			# Recursively search for Edge objects connecting the nodes
-			assert isinstance(subgraph, GraphBase)
-			for i in subgraph.children:
-				if isinstance(i, Edge):
-					if i.from_node == self and i.to_node == node:
-						return i
-					elif not directed and i.to_node == self and i.from_node == node:
-						return i
-				elif isinstance(i, GraphBase):
-					return is_connected_sub(i)
-			return None
-
 		assert isinstance(node, Node)
 		assert self.graph == node.graph
-		return is_connected_sub(self.graph, self.graph.directed)
+		edge = [None]
+
+		def find_directed(i, node, edge):
+			if isinstance(i, Edge) and i.from_node == self and i.to_node == node:
+				edge[0] = i
+				return True
+
+		def find_undirected(i, node, edge):
+			if isinstance(i, Edge) and ((i.from_node == self and i.to_node == node) or
+					(i.from_node == node and i.to_node == self)):
+				edge[0] = i
+				return True
+
+		if self.graph.directed:
+			self.graph.touch(find_directed, node=node, edge=edge)
+		else:
+			self.graph.touch(find_undirected, node=node, edge=edge)
+		return edge[0]
 
 class Edge(GraphObject):
 	_attributes = frozenset(('URL', 'arrowhead', 'arrowsize', 'arrowtail',
