@@ -92,6 +92,24 @@ W3_POPUPS = [
 		an object is dropped and later re-created, the created date will change
 		to reflect the later date.</p>
 		"""),
+	('deleterule.html', 'Delete Rule', """
+		<p>Determines the action that is taken when a row is deleted from the
+		table referenced by the foreign key, and the row is the parent of one
+		or more rows in the foreign key's table. The following are the possible
+		values:</p>
+		<dl>
+			<dt>NO ACTION or RESTRICT</dt>
+			<dd>The DELETE statement will fail with an integrity violation
+			error.</dd>
+			<dt>CASCADE</dt>
+			<dd>The DELETE statement will cascade to the foreign key's table,
+			deleting any rows which reference the deleted row.</dd>
+			<dt>SET NULL</dt>
+			<dd>The DELETE statement will succeed, and rows referencing the
+			deleted row in the foreign key's table will have their key values
+			set to NULL.</dd>
+		</dl>
+		"""),
 	('density.html', 'Density', """
 		<p>The ratio of <a href="sequentialpages.html">sequential pages</a> to
 		the number of pages that the index occupies, expressed as a
@@ -118,6 +136,11 @@ W3_POPUPS = [
 		<p>If True, tables that exist in this tablespace can be recovered after
 		being dropped with the RECOVER DROPPED TABLE option of the ROLLFORWARD
 		DATABASE command.</p>
+		"""),
+	('enforced.html', 'Enforced', """
+		<p>If True, the constraint is enforced by the database. This is the
+		usual state for integrity constraints like foreign keys and checks. If
+		False, integrity checking has been disabled for this constraint.</p>
 		"""),
 	('extentsize.html', 'Extent Size', """
 		<p>Indicates the size (in pages) of an <q>extent</q> of the tablespace.
@@ -251,6 +274,13 @@ W3_POPUPS = [
 		do so would be more efficient). If this value is -1, the prefetch size
 		is determined automatically.</p>
 		"""),
+	('queryoptimize.html', 'Query Optimization', """
+		<p>Indicates whether or not query optimization is enabled for the
+		constraint or relation. If True, the database optimizer will endeavour
+		to use knowledge of the constraint or relation to improve the
+		performance of queries. This is the usual state for constraints and
+		certain types of relation.</p>
+		"""),
 	('readonly.html', 'Read Only', """
 		<p>If True, the view is not updateable. If False, the view can be
 		updated using the INSERT, UPDATE, and DELETE DML statements as one
@@ -378,6 +408,27 @@ W3_POPUPS = [
 		that it contains. Unique indexes can also contain <q>include</q> fields
 		which are not tracked for uniqueness, but are included in the index for
 		performance reasons only.</p>
+		"""),
+	('updaterule.html', 'Update Rule', """
+		<p>Determines the action that is taken when a row is updated in the
+		table referenced by the foreign key, which changes the values of the
+		unique key that the foreign key references, and the row is the parent
+		of one or more rows in the foreign key's table. The following are the
+		possible values:</p>
+		<dl>
+			<dt>NO ACTION or RESTRICT</dt>
+			<dd>The DELETE statement will fail with an integrity violation
+			error.</dd>
+			<dt>CASCADE</dt>
+			<dd>The DELETE statement will cascade to the foreign key's table,
+			deleting any rows which reference the deleted row. Note: this
+			action is not currently supported by DB2.</dd>
+			<dt>SET NULL</dt>
+			<dd>The DELETE statement will succeed, and rows referencing the
+			deleted row in the foreign key's table will have their key values
+			set to NULL. Note: This action is not currently supported by
+			DB2.</dd>
+		</dl>
 		"""),
 	('valid.html', 'Valid', """
 		<p><strong>Views</strong></p>

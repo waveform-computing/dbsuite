@@ -2,7 +2,8 @@
 # vim: set noet sw=4 ts=4:
 
 from db.view import View
-from output.html.w3.document import W3MainDocument
+from dot.graph import Graph, Node, Edge, Cluster
+from output.html.w3.document import W3MainDocument, W3GraphDocument
 
 class W3ViewDocument(W3MainDocument):
 	def __init__(self, site, view):
@@ -121,6 +122,26 @@ class W3ViewDocument(W3MainDocument):
 					self.format_description(dep.description, firstline=True)
 				) for dep in dependencies]
 			))
+		self.section('diagram', 'Diagram')
+		self.add(self.img_of(self.dbobject))
 		self.section('sql', 'SQL Definition')
 		self.add(self.pre(self.format_sql(self.dbobject.create_sql), attrs={'class': 'sql'}))
 
+class W3ViewGraph(W3GraphDocument):
+	def __init__(self, site, view):
+		assert isinstance(view, View)
+		super(W3ViewGraph, self).__init__(site, view)
+
+	def create_graph(self):
+		view = self.dbobject
+		view_node = self.relation_node(view)
+		view_node.style = 'rounded, filled'
+		view_node.fillcolor = '#aaaaff'
+		for dependent in view.dependent_list:
+			dep_node = self.relation_node(dependent)
+			dep_edge = dep_node.connect_to(view_node)
+			dep_edge.label = '<uses>'
+		for dependency in view.dependency_list:
+			dep_node = self.relation_node(dependency)
+			dep_edge = view_node.connect_to(dep_node)
+			dep_edge.label = '<uses>'

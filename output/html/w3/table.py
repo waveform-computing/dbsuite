@@ -5,7 +5,8 @@ from db.table import Table
 from db.foreignkey import ForeignKey
 from db.uniquekey import PrimaryKey, UniqueKey
 from db.check import Check
-from output.html.w3.document import W3MainDocument
+from dot.graph import Graph, Node, Edge, Cluster
+from output.html.w3.document import W3MainDocument, W3GraphDocument
 
 class W3TableDocument(W3MainDocument):
 	def __init__(self, site, table):
@@ -193,6 +194,27 @@ class W3TableDocument(W3MainDocument):
 					self.format_description(dep.description, firstline=True)
 				) for dep in dependents]
 			))
+		self.section('diagram', 'Diagram')
+		self.add(self.img_of(self.dbobject))
 		self.section('sql', 'SQL Definition')
 		self.add(self.pre(self.format_sql(self.dbobject.create_sql), attrs={'class': 'sql'}))
+
+class W3TableGraph(W3GraphDocument):
+	def __init__(self, site, table):
+		assert isinstance(table, Table)
+		super(W3TableGraph, self).__init__(site, table)
+	
+	def create_graph(self):
+		table = self.dbobject
+		table_node = self.relation_node(table)
+		table_node.style = 'rounded, filled'
+		table_node.fillcolor = '#aaaaff'
+		for dependent in table.dependent_list:
+			dep_node = self.relation_node(dependent)
+			dep_edge = dep_node.connect_to(table_node)
+			dep_edge.label = '<uses>'
+		for key in table.foreign_key_list:
+			key_node = self.relation_node(key.ref_table)
+			key_edge = table_node.connect_to(key_node)
+			key_edge.label = key.name
 

@@ -16,8 +16,8 @@ import os
 from output.html.w3.document import W3Site, W3PopupDocument, W3CSSDocument
 from output.html.w3.database import W3DatabaseDocument
 from output.html.w3.schema import W3SchemaDocument
-from output.html.w3.table import W3TableDocument
-from output.html.w3.view import W3ViewDocument
+from output.html.w3.table import W3TableDocument, W3TableGraph
+from output.html.w3.view import W3ViewDocument, W3ViewGraph
 from output.html.w3.alias import W3AliasDocument
 from output.html.w3.uniquekey import W3UniqueKeyDocument
 from output.html.w3.foreignkey import W3ForeignKeyDocument
@@ -31,14 +31,23 @@ from output.html.w3.popups import W3_POPUPS
 
 # Constants
 PATH_OPTION = 'path'
+AUTHOR_NAME_OPTION = 'author_name'
+AUTHOR_MAIL_OPTION = 'author_email'
+COPYRIGHT_OPTION = 'copyright'
 
 # Localizable strings
 PATH_DESC = 'The folder into which all files (HTML, CSS, SVG, etc.) will be written'
+AUTHOR_NAME_DESC = 'The name of the author of the generated documentation (optional)'
+AUTHOR_MAIL_DESC = 'The e-mail address of the author of the generated documentation (optional)'
+COPYRIGHT_DESC = 'The copyright message to embed in the generated documentation (optional)'
 MISSING_OPTION = 'The "%s" option must be specified'
 
 # Plugin options dictionary
 options = {
 	PATH_OPTION: PATH_DESC,
+	AUTHOR_NAME_OPTION: AUTHOR_NAME_DESC,
+	AUTHOR_MAIL_OPTION: AUTHOR_MAIL_DESC,
+	COPYRIGHT_OPTION: COPYRIGHT_DESC,
 }
 
 def Output(database, config):
@@ -49,13 +58,26 @@ def Output(database, config):
 	site = W3Site(database)
 	site.baseurl = ''
 	site.basepath = os.path.expanduser(os.path.expandvars(config[PATH_OPTION]))
+	if AUTHOR_NAME_OPTION in config:
+		site.author_name = config[AUTHOR_NAME_OPTION]
+	if AUTHOR_MAIL_OPTION in config:
+		site.author_email = config[AUTHOR_MAIL_OPTION]
+	if COPYRIGHT_OPTION in config:
+		site.copyright = config[COPYRIGHT_OPTION]
 	# Construct the supplementary SQL stylesheet
-	W3CSSDocument(site)
+	W3CSSDocument(site, 'sql.css')
 	# Construct all popups (this must be done before constructing database
 	# object documents as some of the templates refer to the popup document
-	# objects
+	# objects)
 	for (url, title, body) in W3_POPUPS:
 		W3PopupDocument(site, url, title, body)
+	# Construct all graphs (the graphs will add themselves to the documents
+	# attribute of the site object)
+	for schema in database.schemas.itervalues():
+		for table in schema.tables.itervalues():
+			W3TableGraph(site, table)
+		for view in schema.views.itervalues():
+			W3ViewGraph(site, view)
 	# Construct all document objects (the document objects will add themselves
 	# to the documents attribute of the site object)
 	W3DatabaseDocument(site, database)
@@ -86,4 +108,3 @@ def Output(database, config):
 	# Write all the documents in the site
 	for doc in site.documents.itervalues():
 		doc.write()
-

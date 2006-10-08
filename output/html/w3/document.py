@@ -1,17 +1,23 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
+# Standard modules
 import os.path
 import logging
 import re
 import codecs
 import xml.dom
 import xml.dom.minidom
+
+# Application-specific modules
 import db.base
+import db.schema
+import db.schemabase
 from sql.tokenizer import DB2UDBSQLTokenizer
 from sql.formatter import SQLFormatter
 from sql.htmlhighlighter import SQLDOMHighlighter
-from output.html.document import AttrDict, WebSite, HTMLDocument, CSSDocument
+from output.html.document import AttrDict, WebSite, HTMLDocument, CSSDocument, GraphDocument
+from dot.graph import Graph, Node, Edge, Cluster
 
 class W3Site(WebSite):
 	"""Site class representing a collection of W3Document instances."""
@@ -24,9 +30,14 @@ class W3Site(WebSite):
 		self.keywords = [self.database.name]
 		self.copyright = 'Copyright (c) 2001,2006 by IBM corporation'
 		self.document_map = {}
+		self.graph_map = {}
 
 class W3Document(HTMLDocument):
 	"""Document class for use with the w3v8 style."""
+
+	def __init__(self, site, url):
+		assert isinstance(site, W3Site)
+		super(W3Document, self).__init__(site, url)
 
 	def create_content(self):
 		# Call the inherited method to create the skeleton document
@@ -52,6 +63,11 @@ class W3Document(HTMLDocument):
 		if typename:
 			content = '%s %s' % (dbobject.type_name, content)
 		return self.a(href, content)
+
+	def img_of(self, dbobject):
+		# Special version of "img" to create a graph of a database object
+		assert isinstance(dbobject, db.base.DocBase)
+		return self.element('iframe', {'src': self.site.graph_map[dbobject].url, 'frameborder': '0'}, ' ')
 
 	def hr(self, attrs={}):
 		# Overridden to use the w3 dotted line style (uses <div> instead of <hr>)
@@ -191,7 +207,6 @@ class W3MainDocument(W3Document):
 
 	def __init__(self, site, dbobject):
 		"""Initializes an instance of the class."""
-		assert isinstance(site, W3Site)
 		super(W3MainDocument, self).__init__(site, '%s.html' % dbobject.identifier)
 		self.dbobject = dbobject
 		self.site.document_map[dbobject] = self
@@ -502,7 +517,6 @@ class W3PopupDocument(W3Document):
 
 	def __init__(self, site, url, title, body, width=400, height=300):
 		"""Initializes an instance of the class."""
-		assert isinstance(site, W3Site)
 		super(W3PopupDocument, self).__init__(site, url)
 		# Modify the url to use the JS popup() routine. Note that this won't
 		# affect the filename property (used by write()) as the super-class'
@@ -583,10 +597,11 @@ class W3CSSDocument(CSSDocument):
 
 	def __init__(self, site, url):
 		"""Initializes an instance of the class."""
+		assert isinstance(site, W3Site)
+		super(W3CSSDocument, self).__init__(site, url)
 		# We only need one supplemental CSS stylesheet (the default w3v8 are
 		# pretty comprehensive). So this class is brutally simple...
-		super(W3CSSDocument, self).__init__(site, url)
-		self.text = """\
+		self.doc = """\
 .sql {
 	font-size: 8pt;
 	font-family: "Courier New", monospace;
@@ -618,3 +633,61 @@ pre.sql {
 td.num_cell { background-color: silver; }
 td.sql_cell { background-color: gray; }
 """
+
+class W3GraphDocument(GraphDocument):
+	"""Graph class representing a database object or collection of objects."""
+
+	def __init__(self, site, dbobject):
+		"""Initializes an instance of the class."""
+		assert isinstance(site, W3Site)
+		super(W3GraphDocument, self).__init__(site, '%s.svg' % dbobject.identifier)
+		self.schema_clusters = {}
+		self.dbobject = dbobject
+		self.site.graph_map[dbobject] = self
+	
+	def create_graph(self):
+		# Override in descendent classes
+		pass
+
+	def create_content(self):
+		# Call the inherited method in case it does anything
+		super(W3GraphDocument, self).create_content()
+		# Call create_graph to create the content of the graph
+		self.create_graph()
+		# Transform dbobject attributes on Node, Edge and Cluster objects into
+		# URL attributes 
+
+		def rewrite_url(node):
+			if isinstance(node, (Node, Edge, Cluster)) and hasattr(node, 'dbobject'):
+				print "Rewriting URL to: %s" % self.site.document_map[node.dbobject].url
+				node.URL = self.site.document_map[node.dbobject].url
+
+		self.graph.touch(rewrite_url)
+
+	def write(self):
+		# Overridden to add logging
+		logging.debug('Writing graph for %s %s to %s' % (self.dbobject.type_name, self.dbobject.name, self.filename))
+		super(W3GraphDocument, self).write()
+
+	def schema_cluster(self, schema):
+		"""Utility method to create a cluster representing a schema."""
+		assert isinstance(schema, db.schema.Schema)
+		cluster = Cluster(self.graph, schema.name)
+		cluster.label = schema.name
+		cluster.dbobject = schema
+		self.schema_clusters[schema] = cluster
+		return cluster
+	
+	def relation_node(self, relation):
+		"""Utility method to create a node representing a relation."""
+		assert isinstance(relation, db.schemabase.Relation)
+		if relation.schema not in self.schema_clusters:
+			cluster = self.schema_cluster(relation.schema)
+		else:
+			cluster = self.schema_clusters[relation.schema]
+		node = Node(cluster, relation.name)
+		node.shape = 'rectangle'
+		node.style = 'rounded'
+		node.label = relation.name
+		node.dbobject = relation
+		return node

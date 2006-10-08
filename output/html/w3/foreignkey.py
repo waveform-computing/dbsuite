@@ -31,7 +31,7 @@ class W3ForeignKeyDocument(W3MainDocument):
 					self.a(self.site.documents['created.html']),
 					self.dbobject.created,
 					self.a(self.site.documents['createdby.html']),
-					escape(self.dbobject.definer),
+					self.dbobject.definer,
 				),
 				(
 					self.a(self.site.documents['enforced.html']),
