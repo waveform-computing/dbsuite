@@ -60,12 +60,12 @@ class ForeignKey(Constraint):
 		self._ref_table_schema = row['refTableSchema']
 		self._ref_table_name = row['refTableName']
 		self._ref_key_name = row['refKeyName']
-		self._fields = ForeignKeyFieldsList(table, self._ref_table_schema, self._ref_table_name, input.foreignKeyFields[(table.schema.name, table.name, self.name)])
+		self._fields = ForeignKeyFieldsList(table, self._ref_table_schema, self._ref_table_name, input.foreign_key_fields[(table.schema.name, table.name, self.name)])
 		# XXX DB2 specific
 		self._anonymous = re.match('^SQL\d{15}$', self.name)
 
 	def _get_fields(self):
-		return self.__fields
+		return self._fields
 
 	def _get_prototype(self):
 		sql = 'FOREIGN KEY (%s) REFERENCES %s.%s(%s)' % (
