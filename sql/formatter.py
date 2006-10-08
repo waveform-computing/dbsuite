@@ -345,7 +345,7 @@ class BaseFormatter(object):
 			else:
 				return None
 		else:
-			assert False, "Invalid template token"
+			assert False, "Invalid template token (%s) %s" % (str(type(template)), str(template))
 	
 	def _peek(self, template):
 		"""Compares the current token against a template token.
@@ -1544,6 +1544,9 @@ class SQLFormatter(BaseFormatter):
 					'USING',
 					'SET',
 					'DO',
+					'LEFT',
+					'RIGHT',
+					'FULL',
 				]):
 				self._expect(IDENTIFIER)
 			# Parse optional column aliases
@@ -1826,7 +1829,11 @@ class SQLFormatter(BaseFormatter):
 		# Parse column options
 		while True:
 			if self._match('NOT'):
-				self._expect('NULL')
+				self._expect_one_of(['NULL', 'LOGGED', 'COMPACT'])
+			elif self._match('LOGGED'):
+				pass
+			elif self._match('COMPACT'):
+				pass
 			elif self._match('WITH'):
 				self._expect('DEFAULT')
 				self._save_state()
@@ -1885,7 +1892,7 @@ class SQLFormatter(BaseFormatter):
 			t = ['DELETE', 'UPDATE']
 			for i in xrange(2):
 				if self._match('ON'):
-					t.remove(self._expect(t)[1])
+					t.remove(self._expect_one_of(t)[1])
 					if self._match('NO'):
 						self._expect('ACTION')
 					elif self._match('SET'):
@@ -1940,7 +1947,7 @@ class SQLFormatter(BaseFormatter):
 			t = ['DELETE', 'UPDATE']
 			for i in xrange(2):
 				if self._match('ON'):
-					t.remove(self._expect(t)[1])
+					t.remove(self._expect_one_of(t)[1])
 					if self._match('NO'):
 						self._expect('ACTION')
 					elif self._match('SET'):
