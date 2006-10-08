@@ -171,13 +171,13 @@ def list_plugins():
 	tw.initial_indent = ' '*8
 	tw.subsequent_indent = tw.initial_indent
 	print "Available Input Plugins:"
-	for (name, plugin) in plugins(input):
+	for (name, plugin) in sorted(plugins(input), key=lambda(name, plugin): name):
 		print ' '*4 + name
 		print tw.fill(plugin.__doc__.split('\n')[0])
 	import output
 	print ""
 	print "Available Output Plugins:"
-	for (name, plugin) in plugins(output):
+	for (name, plugin) in sorted(plugins(output), key=lambda(name, plugin): name):
 		print ' '*4 + name
 		print tw.fill(plugin.__doc__.split('\n')[0])
 	print ""
@@ -195,9 +195,9 @@ def help_plugin(plugin_name):
 		print "Options:"
 		tw.initial_indent = ' '*8
 		tw.subsequent_indent = tw.initial_indent
-		for (option_name, option_desc) in plugin.options.iteritems():
-			print ' '*4 + option_name
-			print tw.fill(option_desc)
+		for (name, desc) in sorted(plugin.options.iteritems(), key=lambda(name, desc): name):
+			print ' '*4 + name
+			print tw.fill(desc)
 	print ""
 
 def is_input_plugin(module):
