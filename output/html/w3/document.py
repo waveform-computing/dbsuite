@@ -70,7 +70,12 @@ class W3Document(HTMLDocument):
 	def img_of(self, dbobject):
 		# Special version of "img" to create a graph of a database object
 		assert isinstance(dbobject, DocBase)
-		return self.element('iframe', {'src': self.site.graph_map[dbobject].url, 'frameborder': '0'}, ' ')
+		return self.element('object', {
+			'data': self.site.graph_map[dbobject].url,
+			'type': 'image/svg+xml',
+			'width': '100%',
+			'height': '100%',
+		}, 'Unable to render SVG diagram')
 
 	def hr(self, attrs={}):
 		# Overridden to use the w3 dotted line style (uses <div> instead of <hr>)
