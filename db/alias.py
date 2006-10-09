@@ -22,6 +22,8 @@ class Alias(Relation):
 		self.created = row.get('created', None)
 		self._relation_schema = row['relationSchema']
 		self._relation_name = row['relationName']
+		self._dependents = RelationsDict(self.database, cache.relation_dependents.get((schema.name, self.name)))
+		self._dependent_list = RelationsList(self.database, cache.relation_dependents.get((schema.name, self.name)))
 
 	def _get_fields(self):
 		return self.relation.fields
@@ -29,6 +31,12 @@ class Alias(Relation):
 	def _get_field_list(self):
 		return self.relation.field_list
 	
+	def _get_dependents(self):
+		return self._dependents
+
+	def _get_dependent_list(self):
+		return self._dependent_list
+
 	def _get_create_sql(self):
 		sql = Template('CREATE ALIAS $schema.$alias FOR $baseschema.$baserelation;')
 		return sql.substitute({
@@ -52,5 +60,17 @@ class Alias(Relation):
 		is this alias is defined for.
 		"""
 		return self.database.schemas[self._relation_schema].relations[self._relation_name]
+
+	def _get_final_relation(self):
+		"""Returns the final non-alias relation in a chain of aliases.
+
+		This property returns the view or table that the alias ultimately
+		points to by resolving any aliases in between.
+		"""
+		result = self
+		while isinstance(result, Alias):
+			result = result.relation
+		return result
 	
 	relation = property(_get_relation)
+	final_relation = property(_get_final_relation)
