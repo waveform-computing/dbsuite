@@ -93,6 +93,7 @@ class Input(object):
 			self._get_procedures()
 			self._get_procedure_params()
 			self._get_triggers()
+			self._get_trigger_dependencies()
 			self._get_relation_triggers()
 			self._get_tablespaces()
 			self._get_tablespace_tables()
@@ -355,6 +356,38 @@ class Input(object):
 				if not (dep_schema, dep_name) in self.relation_dependencies:
 					self.relation_dependencies[(dep_schema, dep_name)] = []
 				self.relation_dependencies[(dep_schema, dep_name)].append((relation_schema, relation_name))
+		finally:
+			cursor.close()
+			del cursor
+
+	def _get_trigger_dependencies(self):
+		logging.debug("Retrieving trigger dependencies")
+		cursor = self.connection.cursor()
+		try:
+			cursor.execute("""
+				SELECT
+					RTRIM(D.BSCHEMA)    AS "relationSchema",
+					RTRIM(D.BNAME)      AS "relationName",
+					RTRIM(D.TRIGSCHEMA) AS "depSchema",
+					RTRIM(D.TRIGNAME)   AS "depName"
+				FROM
+					%(schema)s.TRIGDEP D
+					INNER JOIN %(schema)s.TRIGGERS T
+						ON D.TRIGSCHEMA = T.TRIGSCHEMA
+						AND D.TRIGNAME = T.TRIGNAME
+				WHERE
+					BTYPE IN ('A', 'S', 'T', 'U', 'V', 'W')
+					AND NOT (D.BSCHEMA = T.TABSCHEMA AND D.BNAME = T.TABNAME)
+				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+			self.trigger_dependents = {}
+			self.trigger_dependencies = {}
+			for (relation_schema, relation_name, dep_schema, dep_name) in cursor.fetchall():
+				if not (relation_schema, relation_name) in self.trigger_dependents:
+					self.trigger_dependents[(relation_schema, relation_name)] = []
+				self.trigger_dependents[(relation_schema, relation_name)].append((dep_schema, dep_name))
+				if not (dep_schema, dep_name) in self.trigger_dependencies:
+					self.trigger_dependencies[(dep_schema, dep_name)] = []
+				self.trigger_dependencies[(dep_schema, dep_name)].append((relation_schema, relation_name))
 		finally:
 			cursor.close()
 			del cursor

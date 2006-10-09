@@ -27,6 +27,8 @@ class Trigger(SchemaObject):
 		self.sql = row.get('sql', None)
 		self.trigger_time = row['triggerTime']
 		self.trigger_event = row['triggerEvent']
+		self.dependencies = RelationsDict(self.database, cache.trigger_dependencies.get((schema.name, self.name)))
+		self.dependency_list = RelationsList(self.database, cache.trigger_dependencies.get((schema.name, self.name)))
 		self._relation_schema = row['tableSchema']
 		self._relation_name = row['tableName']
 
