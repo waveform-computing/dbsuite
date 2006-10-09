@@ -206,15 +206,21 @@ class W3TableGraph(W3GraphDocument):
 	
 	def create_graph(self):
 		table = self.dbobject
-		table_node = self.relation_node(table)
-		table_node.style = 'rounded, filled'
-		table_node.fillcolor = '#aaaaff'
+		table_node = self.add_dbobject(table, selected=True)
 		for dependent in table.dependent_list:
-			dep_node = self.relation_node(dependent)
+			dep_node = self.add_dbobject(dependent)
 			dep_edge = dep_node.connect_to(table_node)
 			dep_edge.label = '<uses>'
 		for key in table.foreign_key_list:
-			key_node = self.relation_node(key.ref_table)
+			key_node = self.add_dbobject(key.ref_table)
 			key_edge = table_node.connect_to(key_node)
 			key_edge.label = key.name
-
+		for trigger in table.trigger_list:
+			trig_node = self.add_dbobject(trigger)
+			trig_edge = table_node.connect_to(trig_node)
+			trig_edge.label = ('<%s %s>' % (trigger.trigger_time, trigger.trigger_event)).lower()
+			trig_edge.arrowhead = 'vee'
+			for dependency in trigger.dependency_list:
+				dep_node = self.add_dbobject(dependency)
+				dep_edge = trig_node.connect_to(dep_node)
+				dep_edge.label = '<uses>'

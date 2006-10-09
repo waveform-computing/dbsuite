@@ -134,14 +134,12 @@ class W3ViewGraph(W3GraphDocument):
 
 	def create_graph(self):
 		view = self.dbobject
-		view_node = self.relation_node(view)
-		view_node.style = 'rounded, filled'
-		view_node.fillcolor = '#aaaaff'
+		view_node = self.add_dbobject(view, selected=True)
 		for dependent in view.dependent_list:
-			dep_node = self.relation_node(dependent)
+			dep_node = self.add_dbobject(dependent)
 			dep_edge = dep_node.connect_to(view_node)
 			dep_edge.label = '<uses>'
 		for dependency in view.dependency_list:
-			dep_node = self.relation_node(dependency)
+			dep_node = self.add_dbobject(dependency)
 			dep_edge = view_node.connect_to(dep_node)
 			dep_edge.label = '<uses>'

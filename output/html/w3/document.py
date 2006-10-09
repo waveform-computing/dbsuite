@@ -10,9 +10,12 @@ import xml.dom
 import xml.dom.minidom
 
 # Application-specific modules
-import db.base
-import db.schema
-import db.schemabase
+from db.base import DocBase
+from db.schema import Schema
+from db.schemabase import Relation
+from db.table import Table
+from db.view import View
+from db.alias import Alias
 from sql.tokenizer import DB2UDBSQLTokenizer
 from sql.formatter import SQLFormatter
 from sql.htmlhighlighter import SQLDOMHighlighter
@@ -54,7 +57,7 @@ class W3Document(HTMLDocument):
 	
 	def a_to(self, dbobject, typename=False, qualifiedname=False):
 		# Special version of "a" to create a link to a database object
-		assert isinstance(dbobject, db.base.DocBase)
+		assert isinstance(dbobject, DocBase)
 		href = self.site.document_map[dbobject].url
 		if qualifiedname:
 			content = dbobject.qualified_name
@@ -66,7 +69,7 @@ class W3Document(HTMLDocument):
 
 	def img_of(self, dbobject):
 		# Special version of "img" to create a graph of a database object
-		assert isinstance(dbobject, db.base.DocBase)
+		assert isinstance(dbobject, DocBase)
 		return self.element('iframe', {'src': self.site.graph_map[dbobject].url, 'frameborder': '0'}, ' ')
 
 	def hr(self, attrs={}):
@@ -641,7 +644,7 @@ class W3GraphDocument(GraphDocument):
 		"""Initializes an instance of the class."""
 		assert isinstance(site, W3Site)
 		super(W3GraphDocument, self).__init__(site, '%s.svg' % dbobject.identifier)
-		self.schema_clusters = {}
+		self.dbobject_map = {}
 		self.dbobject = dbobject
 		self.site.graph_map[dbobject] = self
 	
@@ -668,26 +671,47 @@ class W3GraphDocument(GraphDocument):
 		# Overridden to add logging
 		logging.debug('Writing graph for %s %s to %s' % (self.dbobject.type_name, self.dbobject.name, self.filename))
 		super(W3GraphDocument, self).write()
-
-	def schema_cluster(self, schema):
-		"""Utility method to create a cluster representing a schema."""
-		assert isinstance(schema, db.schema.Schema)
-		cluster = Cluster(self.graph, schema.name)
-		cluster.label = schema.name
-		cluster.dbobject = schema
-		self.schema_clusters[schema] = cluster
-		return cluster
 	
-	def relation_node(self, relation):
-		"""Utility method to create a node representing a relation."""
-		assert isinstance(relation, db.schemabase.Relation)
-		if relation.schema not in self.schema_clusters:
-			cluster = self.schema_cluster(relation.schema)
-		else:
-			cluster = self.schema_clusters[relation.schema]
-		node = Node(cluster, relation.name)
-		node.shape = 'rectangle'
-		node.style = 'rounded'
-		node.label = relation.name
-		node.dbobject = relation
-		return node
+	def add_dbobject(self, dbobject, selected=False):
+		"""Utility method to add a database object to the graph.
+
+		This utility method adds the specified database object along with
+		standardized formatting depending on the type of the object.
+		"""
+		assert isinstance(dbobject, DocBase)
+		o = self.dbobject_map.get(dbobject, None)
+		if o is None:
+			if isinstance(dbobject, Schema):
+				o = Cluster(self.graph, dbobject.qualified_name)
+				o.label = dbobject.name
+				o.style = 'filled'
+				o.fillcolor = '#ece6d7'
+				o.color = '#ece6d7'
+			elif isinstance(dbobject, Relation):
+				cluster = self.add_dbobject(dbobject.schema)
+				o = Node(cluster, dbobject.qualified_name)
+				o.shape = 'rectangle'
+				o.style = 'filled'
+				o.label = dbobject.name
+				if isinstance(dbobject, Table):
+					o.fillcolor = '#bbbbff'
+				elif isinstance(dbobject, View):
+					o.style = 'filled,rounded'
+					o.fillcolor = '#bbffbb'
+				elif isinstance(dbobject, Alias):
+					if isinstance(dbobject.final_relation, View):
+						o.style = 'filled,rounded'
+					o.fillcolor = '#ffffbb'
+				o.color = '#000000'
+			elif isinstance(dbobject, Trigger):
+				cluster = self.add_dbobject(dbobject.schema)
+				o = Node(cluster, dbobject.qualified_name)
+				o.shape = 'hexagon'
+				o.style = 'filled'
+				o.fillcolor = '#ffbbbb'
+				o.label = dbobject.name
+			if selected:
+				o.style += ',setlinewidth(3)'
+			o.dbobject = dbobject
+			self.dbobject_map[dbobject] = o
+		return o
