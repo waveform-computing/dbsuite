@@ -2,7 +2,7 @@
 # vim: set noet sw=4 ts=4:
 
 from db.alias import Alias
-from output.html.w3.document import W3MainDocument
+from output.html.w3.document import W3MainDocument, W3GraphDocument
 
 class W3AliasDocument(W3MainDocument):
 	def __init__(self, site, alias):

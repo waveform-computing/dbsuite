@@ -16,6 +16,7 @@ from db.schemabase import Relation
 from db.table import Table
 from db.view import View
 from db.alias import Alias
+from db.trigger import Trigger
 from sql.tokenizer import DB2UDBSQLTokenizer
 from sql.formatter import SQLFormatter
 from sql.htmlhighlighter import SQLDOMHighlighter
