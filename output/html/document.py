@@ -861,13 +861,12 @@ class GraphDocument(WebSiteDocument):
 		# client-side image map files
 		f = open(self.filename, 'w')
 		try:
-			self.create_graph()
+			self.create_content()
 			self.graph.to_svg(f)
 		finally:
 			f.close()
 
-	def create_graph(self):
+	def create_content(self):
 		"""Constructs the content of the graph."""
-		# Child classes can override this to make last minute tweaks to the
-		# graph before writing
+		# Child classes can override this to build the graph before writing
 		pass

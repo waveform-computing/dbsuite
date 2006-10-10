@@ -215,6 +215,7 @@ class W3TableGraph(W3GraphDocument):
 		for key in table.foreign_key_list:
 			key_node = self.add_dbobject(key.ref_table)
 			key_edge = table_node.connect_to(key_node)
+			key_edge.dbobject = key
 			key_edge.label = key.name
 			key_edge.arrowhead = 'normal'
 		for trigger in table.trigger_list:

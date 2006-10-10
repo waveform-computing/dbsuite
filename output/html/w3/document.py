@@ -74,8 +74,8 @@ class W3Document(HTMLDocument):
 		return self.element('object', {
 			'data': self.site.graph_map[dbobject].url,
 			'type': 'image/svg+xml',
-			'width': '100%',
-			'height': '100%',
+			'width': '750',
+			'height': '500',
 		}, 'Unable to render SVG diagram')
 
 	def hr(self, attrs={}):
@@ -655,7 +655,8 @@ class W3GraphDocument(GraphDocument):
 		self.site.graph_map[dbobject] = self
 	
 	def create_graph(self):
-		# Override in descendent classes
+		# Override in descendent classes to generate nodes, edges, etc. in the
+		# graph
 		pass
 
 	def create_content(self):
@@ -664,17 +665,22 @@ class W3GraphDocument(GraphDocument):
 		# Call create_graph to create the content of the graph
 		self.create_graph()
 		# Tweak some of the graph attributes to make it scale a bit more nicely
-		self.graph.dpi = 75
-		self.graph.size = '10,6.6'
+		self.graph.rankdir = 'LR'
+		self.graph.dpi = '75'
+		self.graph.ratio = '1.5' # See width and height attributes in img_of()
 		# Transform dbobject attributes on Node, Edge and Cluster objects into
 		# URL attributes 
 
 		def rewrite_url(node):
 			if isinstance(node, (Node, Edge, Cluster)) and hasattr(node, 'dbobject'):
-				print "Rewriting URL to: %s" % self.site.document_map[node.dbobject].url
 				node.URL = self.site.document_map[node.dbobject].url
 
+		def rewrite_font(node):
+			if isinstance(node, (Node, Edge, Cluster)):
+				node.fontname = 'Verdana'
+
 		self.graph.touch(rewrite_url)
+		self.graph.touch(rewrite_font)
 
 	def write(self):
 		# Overridden to add logging
