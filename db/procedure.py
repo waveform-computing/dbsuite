@@ -13,8 +13,8 @@ from db.util import format_size, format_ident
 class Procedure(Routine):
 	"""Class representing a procedure in a DB2 database"""
 	
-	def __init__(self, schema, cache, **row):
-		"""Initializes an instance of the class from a cache row"""
+	def __init__(self, schema, input, **row):
+		"""Initializes an instance of the class from a input row"""
 		super(Procedure, self).__init__(schema, row['name'], row['specificName'])
 		logging.debug("Building procedure %s" % (self.qualified_name))
 		self.type_name = 'Procedure'
@@ -35,12 +35,12 @@ class Procedure(Routine):
 		self.language = row['language']
 		self._params = {}
 		myparams = [
-			cache.proc_params[(schema_name, specific_name, param_type, param_pos)]
-			for (schema_name, specific_name, param_type, param_pos) in cache.proc_params
+			input.proc_params[(schema_name, specific_name, param_type, param_pos)]
+			for (schema_name, specific_name, param_type, param_pos) in input.proc_params
 			if schema_name == schema.name and specific_name == self.specific_name
 		]
 		for row in myparams:
-			param = Param(self, cache, **row)
+			param = Param(self, input, **row)
 			self._params[param.name] = param
 		self._param_list = sorted(self._params.itervalues(), key=lambda param:param.position)
 

@@ -13,8 +13,8 @@ from db.util import format_ident
 class Trigger(SchemaObject):
 	"""Class representing an index in a DB2 database"""
 
-	def __init__(self, schema, cache, **row):
-		"""Initializes an instance of the class from a cache row"""
+	def __init__(self, schema, input, **row):
+		"""Initializes an instance of the class from a input row"""
 		super(Trigger, self).__init__(schema, row['name'])
 		logging.debug("Building trigger %s" % (self.qualified_name))
 		self.type_name = 'Trigger'
@@ -27,8 +27,8 @@ class Trigger(SchemaObject):
 		self.sql = row.get('sql', None)
 		self.trigger_time = row['triggerTime']
 		self.trigger_event = row['triggerEvent']
-		self.dependencies = RelationsDict(self.database, cache.trigger_dependencies.get((schema.name, self.name)))
-		self.dependency_list = RelationsList(self.database, cache.trigger_dependencies.get((schema.name, self.name)))
+		self.dependencies = RelationsDict(self.database, input.trigger_dependencies.get((schema.name, self.name)))
+		self.dependency_list = RelationsList(self.database, input.trigger_dependencies.get((schema.name, self.name)))
 		self._relation_schema = row['tableSchema']
 		self._relation_name = row['tableName']
 

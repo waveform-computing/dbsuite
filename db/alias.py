@@ -7,6 +7,7 @@ from string import Template
 
 # Application-specific modules
 from db.schemabase import Relation
+from db.proxies import RelationsDict, RelationsList
 from db.util import format_ident
 
 class Alias(Relation):
@@ -22,8 +23,8 @@ class Alias(Relation):
 		self.created = row.get('created', None)
 		self._relation_schema = row['relationSchema']
 		self._relation_name = row['relationName']
-		self._dependents = RelationsDict(self.database, cache.relation_dependents.get((schema.name, self.name)))
-		self._dependent_list = RelationsList(self.database, cache.relation_dependents.get((schema.name, self.name)))
+		self._dependents = RelationsDict(self.database, input.relation_dependents.get((schema.name, self.name)))
+		self._dependent_list = RelationsList(self.database, input.relation_dependents.get((schema.name, self.name)))
 
 	def _get_fields(self):
 		return self.relation.fields

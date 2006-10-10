@@ -14,8 +14,8 @@ from db.util import format_ident
 class View(Relation):
 	"""Class representing a view in a DB2 database"""
 	
-	def __init__(self, schema, cache, **row):
-		"""Initializes an instance of the class from a cache row"""
+	def __init__(self, schema, input, **row):
+		"""Initializes an instance of the class from a input row"""
 		super(View, self).__init__(schema, row['name'])
 		logging.debug("Building view %s" % (self.qualified_name))
 		self.type_name = 'View'
@@ -29,15 +29,15 @@ class View(Relation):
 		self.func_path = row.get('funcPath', None)
 		self.sql = row.get('sql', None)
 		self._fields = {}
-		for field in [cache.fields[(schema_name, view_name, field_name)] for (schema_name, view_name, field_name) in cache.fields if schema_name == schema.name and view_name == self.name]:
-			self._fields[field['name']] = Field(self, cache, **field)
+		for field in [input.fields[(schema_name, view_name, field_name)] for (schema_name, view_name, field_name) in input.fields if schema_name == schema.name and view_name == self.name]:
+			self._fields[field['name']] = Field(self, input, **field)
 		self._field_list = sorted(self._fields.itervalues(), key=lambda field:field.position)
-		self._dependents = RelationsDict(self.database, cache.relation_dependents.get((schema.name, self.name)))
-		self._dependent_list = RelationsList(self.database, cache.relation_dependents.get((schema.name, self.name)))
-		self.dependencies = RelationsDict(self.database, cache.relation_dependencies.get((schema.name, self.name)))
-		self.dependency_list = RelationsList(self.database, cache.relation_dependencies.get((schema.name, self.name)))
-		self.triggers = TriggersDict(self.database, cache.relation_triggers.get((schema.name, self.name)))
-		self.trigger_list = TriggersList(self.database, cache.relation_triggers.get((schema.name, self.name)))
+		self._dependents = RelationsDict(self.database, input.relation_dependents.get((schema.name, self.name)))
+		self._dependent_list = RelationsList(self.database, input.relation_dependents.get((schema.name, self.name)))
+		self.dependencies = RelationsDict(self.database, input.relation_dependencies.get((schema.name, self.name)))
+		self.dependency_list = RelationsList(self.database, input.relation_dependencies.get((schema.name, self.name)))
+		self.triggers = TriggersDict(self.database, input.relation_triggers.get((schema.name, self.name)))
+		self.trigger_list = TriggersList(self.database, input.relation_triggers.get((schema.name, self.name)))
 
 	def _get_dependents(self):
 		return self._dependents
