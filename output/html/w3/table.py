@@ -5,7 +5,6 @@ from db.table import Table
 from db.foreignkey import ForeignKey
 from db.uniquekey import PrimaryKey, UniqueKey
 from db.check import Check
-from dot.graph import Graph, Node, Edge, Cluster
 from output.html.w3.document import W3MainDocument, W3GraphDocument
 
 class W3TableDocument(W3MainDocument):
@@ -205,16 +204,19 @@ class W3TableGraph(W3GraphDocument):
 		super(W3TableGraph, self).__init__(site, table)
 	
 	def create_graph(self):
+		super(W3TableGraph, self).create_graph()
 		table = self.dbobject
 		table_node = self.add_dbobject(table, selected=True)
 		for dependent in table.dependent_list:
 			dep_node = self.add_dbobject(dependent)
 			dep_edge = dep_node.connect_to(table_node)
 			dep_edge.label = '<uses>'
+			dep_edge.arrowhead = 'onormal'
 		for key in table.foreign_key_list:
 			key_node = self.add_dbobject(key.ref_table)
 			key_edge = table_node.connect_to(key_node)
 			key_edge.label = key.name
+			key_edge.arrowhead = 'normal'
 		for trigger in table.trigger_list:
 			trig_node = self.add_dbobject(trigger)
 			trig_edge = table_node.connect_to(trig_node)
@@ -224,3 +226,4 @@ class W3TableGraph(W3GraphDocument):
 				dep_node = self.add_dbobject(dependency)
 				dep_edge = trig_node.connect_to(dep_node)
 				dep_edge.label = '<uses>'
+				dep_edge.arrowhead = 'onormal'

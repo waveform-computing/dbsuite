@@ -91,13 +91,16 @@ class W3AliasGraph(W3GraphDocument):
 		super(W3AliasGraph, self).__init__(site, alias)
 	
 	def create_graph(self):
+		super(W3AliasGraph, self).create_graph()
 		alias = self.dbobject
 		alias_node = self.add_dbobject(alias, selected=True)
 		target_node = self.add_dbobject(alias.relation)
+		target_edge = alias_node.connect_to(target_node)
+		target_edge.label = '<for>'
+		target_edge.arrowhead = 'onormal'
 		for dependent in alias.dependent_list:
 			dep_node = self.add_dbobject(dependent)
 			dep_edge = dep_node.connect_to(alias_node)
 			dep_edge.label = '<uses>'
-		target_edge = alias_node.connect_to(target_node)
-		target_edge.label = '<for>'
+			dep_edge.arrowhead = 'onormal'
 

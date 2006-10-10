@@ -2,7 +2,6 @@
 # vim: set noet sw=4 ts=4:
 
 from db.view import View
-from dot.graph import Graph, Node, Edge, Cluster
 from output.html.w3.document import W3MainDocument, W3GraphDocument
 
 class W3ViewDocument(W3MainDocument):
@@ -133,13 +132,16 @@ class W3ViewGraph(W3GraphDocument):
 		super(W3ViewGraph, self).__init__(site, view)
 
 	def create_graph(self):
+		super(W3ViewGraph, self).create_graph()
 		view = self.dbobject
 		view_node = self.add_dbobject(view, selected=True)
 		for dependent in view.dependent_list:
 			dep_node = self.add_dbobject(dependent)
 			dep_edge = dep_node.connect_to(view_node)
 			dep_edge.label = '<uses>'
+			dep_edge.arrowhead = 'onormal'
 		for dependency in view.dependency_list:
 			dep_node = self.add_dbobject(dependency)
 			dep_edge = view_node.connect_to(dep_node)
 			dep_edge.label = '<uses>'
+			dep_edge.arrowhead = 'onormal'

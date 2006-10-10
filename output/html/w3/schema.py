@@ -2,7 +2,8 @@
 # vim: set noet sw=4 ts=4:
 
 from db.schema import Schema
-from output.html.w3.document import W3MainDocument
+from db.table import Table
+from output.html.w3.document import W3MainDocument, W3GraphDocument
 
 class W3SchemaDocument(W3MainDocument):
 	def __init__(self, site, schema):
@@ -29,22 +30,6 @@ class W3SchemaDocument(W3MainDocument):
 					relation.type_name,
 					self.format_description(relation.description, firstline=True)
 				) for relation in relations]
-			))
-		if len(routines) > 0:
-			self.section('routines', 'Routines')
-			self.add(self.table(
-				head=[(
-					"Name",
-					"Specific Name",
-					"Type",
-					"Description"
-				)],
-				data=[(
-					self.a_to(routine),
-					routine.specific_name,
-					routine.type_name,
-					self.format_description(routine.description, firstline=True)
-				) for routine in routines]
 			))
 		if len(indexes) > 0:
 			self.section('indexes', 'Indexes')
@@ -78,4 +63,66 @@ class W3SchemaDocument(W3MainDocument):
 					self.format_description(trigger.description, firstline=True)
 				) for trigger in triggers]
 			))
+		if len(routines) > 0:
+			self.section('routines', 'Routines')
+			self.add(self.table(
+				head=[(
+					"Name",
+					"Specific Name",
+					"Type",
+					"Description"
+				)],
+				data=[(
+					self.a_to(routine),
+					routine.specific_name,
+					routine.type_name,
+					self.format_description(routine.description, firstline=True)
+				) for routine in routines]
+			))
+		if len(relations) > 0:
+			self.section('diagram', 'Diagram')
+			self.add(self.img_of(self.dbobject))
 
+class W3SchemaGraph(W3GraphDocument):
+	def __init__(self, site, schema):
+		assert isinstance(schema, Schema)
+		super(W3SchemaGraph, self).__init__(site, schema)
+
+	def create_graph(self):
+		super(W3SchemaGraph, self).create_graph()
+		schema = self.dbobject
+		schema_cluster = self.add_dbobject(schema)
+		for relation in schema.relation_list:
+			rel_node = self.add_dbobject(relation)
+			for dependent in relation.dependent_list:
+				dep_node = self.add_dbobject(dependent)
+				dep_edge = dep_node.connect_to(rel_node)
+				dep_edge.label = '<uses>'
+				dep_edge.arrowhead = 'onormal'
+			if isinstance(relation, Table):
+				for key in relation.foreign_key_list:
+					key_node = self.add_dbobject(key.ref_table)
+					key_edge = rel_node.connect_to(key_node)
+					key_edge.label = key.name
+					key_edge.arrowhead = 'normal'
+				for trigger in relation.trigger_list:
+					trig_node = self.add_dbobject(trigger)
+					trig_edge = rel_node.connect_to(trig_node)
+					trig_edge.label = ('<%s %s>' % (trigger.trigger_time, trigger.trigger_event)).lower()
+					trig_edge.arrowhead = 'vee'
+					for dependency in trigger.dependency_list:
+						dep_node = self.add_dbobject(dependency)
+						dep_edge = trig_node.connect_to(dep_node)
+						dep_edge.label = '<uses>'
+						dep_edge.arrowhead = 'onormal'
+		for trigger in schema.trigger_list:
+			rel_node = self.add_dbobject(trigger.relation)
+			trig_node = self.add_dbobject(trigger)
+			trig_edge = rel_node.connect_to(trig_node)
+			trig_edge.label = ('<%s %s>' % (trigger.trigger_time, trigger.trigger_event)).lower()
+			trig_edge.arrowhead = 'vee'
+			for dependency in trigger.dependency_list:
+				dep_node = self.add_dbobject(dependency)
+				dep_edge = trig_node.connect_to(dep_node)
+				dep_edge.label = '<uses>'
+				dep_edge.arrowhead = 'onormal'

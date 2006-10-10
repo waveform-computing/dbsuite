@@ -663,6 +663,9 @@ class W3GraphDocument(GraphDocument):
 		super(W3GraphDocument, self).create_content()
 		# Call create_graph to create the content of the graph
 		self.create_graph()
+		# Tweak some of the graph attributes to make it scale a bit more nicely
+		self.graph.dpi = 75
+		self.graph.size = '10,6.6'
 		# Transform dbobject attributes on Node, Edge and Cluster objects into
 		# URL attributes 
 
