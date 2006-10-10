@@ -91,7 +91,7 @@ class W3SchemaGraph(W3GraphDocument):
 	def create_graph(self):
 		super(W3SchemaGraph, self).create_graph()
 		schema = self.dbobject
-		schema_cluster = self.add_dbobject(schema)
+		self.add_dbobject(schema)
 		for relation in schema.relation_list:
 			rel_node = self.add_dbobject(relation)
 			for dependent in relation.dependent_list:

@@ -15,10 +15,10 @@ import os
 # Plugin specific modules
 from output.html.w3.document import W3Site, W3PopupDocument, W3CSSDocument
 from output.html.w3.database import W3DatabaseDocument
-from output.html.w3.schema import W3SchemaDocument
+from output.html.w3.schema import W3SchemaDocument, W3SchemaGraph
 from output.html.w3.table import W3TableDocument, W3TableGraph
 from output.html.w3.view import W3ViewDocument, W3ViewGraph
-from output.html.w3.alias import W3AliasDocument
+from output.html.w3.alias import W3AliasDocument, W3AliasGraph
 from output.html.w3.uniquekey import W3UniqueKeyDocument
 from output.html.w3.foreignkey import W3ForeignKeyDocument
 from output.html.w3.check import W3CheckDocument
@@ -74,10 +74,13 @@ def Output(database, config):
 	# Construct all graphs (the graphs will add themselves to the documents
 	# attribute of the site object)
 	for schema in database.schemas.itervalues():
+		W3SchemaGraph(site, schema)
 		for table in schema.tables.itervalues():
 			W3TableGraph(site, table)
 		for view in schema.views.itervalues():
 			W3ViewGraph(site, view)
+		for alias in schema.aliases.itervalues():
+			W3AliasGraph(site, alias)
 	# Construct all document objects (the document objects will add themselves
 	# to the documents attribute of the site object)
 	W3DatabaseDocument(site, database)
