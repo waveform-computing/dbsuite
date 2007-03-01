@@ -9,9 +9,15 @@ import re
 import datetime
 import shutil
 import xml.dom
+try:
+	from cStringIO import StringIO
+except ImportError:
+	from StringIO import StringIO
 
 # Application-specific modules
 from dot.graph import Graph, Node, Edge, Cluster
+from output.commenthighlighter import CommentHighlighter
+from output.sqlhighlighter import SQLHighlighter, ERROR, COMMENT, KEYWORD, IDENTIFIER, DATATYPE, REGISTER, NUMBER, STRING, OPERATOR, PARAMETER, TERMINATOR, STATEMENT
 
 # Constants for HTML versions
 
@@ -321,6 +327,77 @@ class AttrDict(dict):
 	def __iadd__(self, other):
 		self.update(other)
 
+class HTMLCommentHighlighter(CommentHighlighter):
+	def __init__(self, document):
+		"""Initializes an instance of the class."""
+		assert isinstance(document, HTMLDocument)
+		super(HTMLCommentHighlighter, self).__init__()
+		self.document = document
+
+	def handle_strong(self, text):
+		"""Highlights strong text with HTML <strong> elements."""
+		return self.document.strong(text)
+
+	def handle_emphasize(self, text):
+		"""Highlights emphasized text with HTML <em> elements."""
+		return self.document.em(text)
+
+	def handle_underline(self, text):
+		"""Highlights underlined text with HTML <u> elements."""
+		return self.document.u(text)
+
+	def start_para(self, summary):
+		"""Emits an empty string for the start of a paragraph."""
+		return ''
+
+	def end_para(self, summary):
+		"""Emits an HTML <br>eak element for the end of a paragraph."""
+		return self.document.br()
+
+class HTMLSQLHighlighter(SQLHighlighter):
+	def __init__(self, document):
+		"""Initializes an instance of the class."""
+		assert isinstance(document, HTMLDocument)
+		super(HTMLSQLHighlighter, self).__init__()
+		self.document = document
+		self.css_classes = {
+			ERROR:      'sql_error',
+			COMMENT:    'sql_comment',
+			KEYWORD:    'sql_keyword',
+			IDENTIFIER: 'sql_identifier',
+			DATATYPE:   'sql_datatype',
+			REGISTER:   'sql_register',
+			NUMBER:     'sql_number',
+			STRING:     'sql_string',
+			OPERATOR:   'sql_operator',
+			PARAMETER:  'sql_parameter',
+			TERMINATOR: 'sql_terminator',
+			STATEMENT:  'sql_terminator',
+		}
+		self.number_lines = False
+		self.number_class = 'num_cell'
+		self.sql_class = 'sql_cell'
+
+	def format_token(self, token):
+		(token_type, token_value, source, _, _) = token
+		try:
+			css_class = self.css_classes[(token_type, token_value)]
+		except KeyError:
+			css_class = self.css_classes.get(token_type, None)
+		if css_class is not None:
+			return self.document.span(source, {'class': css_class})
+		else:
+			return source
+
+	def format_line(self, index, line):
+		if self.number_lines:
+			return self.document.tr([
+				(index, {'class': self.number_class}),
+				([self.format_token(token) for token in line], {'class': self.sql_class})
+			])
+		else:
+			return [self.format_token(token) for token in line]
+		
 class WebSite(object):
 	"""Represents a collection of HTML documents (a website).
 
@@ -399,6 +476,10 @@ class HTMLDocument(WebSiteDocument):
 		except KeyError:
 			raise KeyError('Invalid HTML version and style (XHTML11 only supports the STRICT style)')
 		self.doc = DOM.createDocument(namespace, 'html', DOM.createDocumentType('html', public_id, system_id))
+		self.comment_highlighter = self.init_comment_highlighter()
+		assert isinstance(self.comment_highlighter, CommentHighlighter)
+		self.sql_highlighter = self.init_sql_highlighter()
+		assert isinstance(self.sql_highlighter, SQLHighlighter)
 		self.link_first = None
 		self.link_prior = None
 		self.link_next = None
@@ -419,6 +500,14 @@ class HTMLDocument(WebSiteDocument):
 		self.lang = None
 		self.sublang = None
 		self.copyright = None
+	
+	def init_comment_highlighter(self):
+		"""Instantiates an object for highlighting comment markup."""
+		return HTMLCommentHighlighter(self)
+
+	def init_sql_highlighter(self):
+		"""Instantiates an object for highlighting SQL."""
+		return HTMLSQLHighlighter(self)
 	
 	def __getattribute__(self, name):
 		if name in [
@@ -443,8 +532,8 @@ class HTMLDocument(WebSiteDocument):
 		unichr(max(HTML_ENTITIES.iterkeys()))
 	))
 
-	# Regex which finds the XML PI at the start of an XML document
-	xmlpire = re.compile(ur'^<\?xml version="1\.0" \?>')
+	# Regex which matches the XML PI at the start of an XML document
+	xmlpire = re.compile(ur"""^<\?xml +version=(['"])([0-9]+(\.[0-9]+))*\1( +encoding=(['"])(.*?)\5)?( +standalone=(['"])(yes|no)\8)? *\?>""")
 
 	def write(self):
 		"""Writes this document to a file in the site's path"""
@@ -465,7 +554,7 @@ class HTMLDocument(WebSiteDocument):
 				# Convert any characters into HTML entities that can be
 				s = self.entitiesre.sub(subfunc, s)
 				# Patch the XML PI at the start to reflect the target encoding
-				s = self.xmlpire.sub(u'<?xml version="1.0" encoding="%s" ?>' % self.site.encoding, s)
+				s = self.xmlpire.sub(ur'<?xml version="\2" encoding="%s" ?>' % self.site.encoding, s)
 				# Transcode the XML into the target encoding
 				s = codecs.getencoder(self.site.encoding)(s)[0]
 				f.write(s)
@@ -523,6 +612,15 @@ class HTMLDocument(WebSiteDocument):
 		self.doc.documentElement.appendChild(self.head(content))
 		self.doc.documentElement.appendChild(self.body(''))
 		# Override this in descendent classes to include additional content
+
+	def format_comment(self, comment, summary=False):
+		return self.comment_highlighter.parse(comment, summary)
+
+	def format_sql(self, sql, terminator=';', splitlines=False):
+		return self.sql_highlighter.parse(sql, terminator, splitlines)
+
+	def format_prototype(self, sql):
+		return self.sql_highlighter.parse_prototype(sql)
 	
 	def format_content(self, content):
 		if content is None:
@@ -558,12 +656,9 @@ class HTMLDocument(WebSiteDocument):
 			# nodes
 			for n in content:
 				self.append_content(node, n)
-		elif content is None:
-			# None gets re-written to not-applicable / not-available
-			node.appendChild(self.doc.createTextNode('n/a'))
 		else:
-			# Attempt to convert anything else into a string
-			node.appendChild(self.doc.createTextNode(self.format_content(str(content))))
+			# Attempt to convert anything else into a string with format_content()
+			node.appendChild(self.doc.createTextNode(self.format_content(content)))
 	
 	def find_element(self, tagname, id=None):
 		"""Returns the first element with the specified tagname and id"""
@@ -586,8 +681,7 @@ class HTMLDocument(WebSiteDocument):
 		node = self.doc.createElement(name)
 		for name, value in attrs.iteritems():
 			if value is not None:
-				assert isinstance(value, basestring)
-				node.setAttribute(name, value)
+				node.setAttribute(name, str(value))
 		self.append_content(node, content)
 		return node
 
@@ -746,38 +840,30 @@ class HTMLDocument(WebSiteDocument):
 		if len(head) > 0:
 			theadnode = self.doc.createElement('thead')
 			for row in head:
-				if isinstance(row, dict):
-					# If the row is a dictionary, the row content is in the
-					# value keyed by the empty string, and all other keys are
-					# to be attributes of the cell
-					attrs = dict(row)
-					row = attrs['']
-					del attrs['']
-					theadnode.appendChild(self.tr(row, head=True, attrs=attrs))
+				if isinstance(row, tuple) and len(row) == 2 and isinstance(row[1], dict):
+					# If the row is a two-element tuple, where the second
+					# element is a dictionary then the first element contains
+					# the content of the row and the second the attributes of
+					# the row.
+					theadnode.appendChild(self.tr(row[0], head=True, attrs=row[1]))
 				else:
 					theadnode.appendChild(self.tr(row, head=True))
 			tablenode.appendChild(theadnode)
 		if len(foot) > 0:
 			tfootnode = self.doc.createElement('tfoot')
 			for row in foot:
-				if isinstance(row, dict):
+				if isinstance(row, tuple) and len(row) == 2 and isinstance(row[1], dict):
 					# See comments above
-					attrs = dict(row)
-					row = attrs['']
-					del attrs['']
-					tfootnode.appendChild(self.tr(row, head=True, attrs=attrs))
+					tfootnode.appendChild(self.tr(row[0], head=True, attrs=row[1]))
 				else:
 					tfootnode.appendChild(self.tr(row, head=True))
 			tablenode.appendChild(tfootnode)
 		# The <tbody> element is mandatory, even if no rows are present
 		tbodynode = self.doc.createElement('tbody')
 		for row in data:
-			if isinstance(row, dict):
+			if isinstance(row, tuple) and len(row) == 2 and isinstance(row[1], dict):
 				# See comments above
-				attrs = dict(row)
-				row = attrs['']
-				del attrs['']
-				tbodynode.appendChild(self.tr(row, head=False, attrs=attrs))
+				tbodynode.appendChild(self.tr(row[0], head=False, attrs=row[1]))
 			else:
 				tbodynode.appendChild(self.tr(row, head=False))
 		tablenode.appendChild(tbodynode)
@@ -794,14 +880,11 @@ class HTMLDocument(WebSiteDocument):
 	def tr(self, cells, head=False, attrs={}):
 		rownode = self.element('tr', attrs)
 		for cell in cells:
-			if isinstance(cell, dict):
-				# If the cell is a dictionary, the cell content is in the value
-				# keyed by the empty string, and all other keys are to be
-				# attributes of the cell
-				attrs = dict(cell)
-				cell = attrs['']
-				del attrs['']
-				rownode.appendChild(self.td(cell, head, attrs))
+			if isinstance(cell, tuple) and len(cell) == 2 and isinstance(cell[1], dict):
+				# If the cell is a two-element tuple, where the second cell is
+				# a dictionary, then the first element contains the cell's
+				# content and the second the cell's attributes.
+				rownode.appendChild(self.td(cell[0], head, cell[1]))
 			else:
 				rownode.appendChild(self.td(cell, head))
 		return rownode
@@ -852,21 +935,54 @@ class GraphDocument(WebSiteDocument):
 	def __init__(self, site, url):
 		super(GraphDocument, self).__init__(site, url)
 		self.graph = Graph('G')
-		# XXX Rewrite URL to include 'orrible IE specific stuff for
-		# PNG+image-maps instead of SVG
-	
+		# PNGs and GIFs use a client-side image-map to define link locations
+		self.usemap = os.path.splitext(self.filename)[1].lower() in ('.png', '.gif')
+		# content_done is simply used to ensure that we don't generate the
+		# graph content more than once when dealing with image maps (which have
+		# to run through graphviz twice, once for the image, once for the map)
+		self.content_done = False
+
 	def write(self):
 		"""Writes this document to a file in the site's path"""
-		# XXX Add some hackish trickery to produce additional PNG and
-		# client-side image map files
+		# The following lookup tables are used to decide on the method used to
+		# write output based on the extension of the image filename
+		method_lookup = {
+			'.png': self.graph.to_png,
+			'.gif': self.graph.to_gif,
+			'.svg': self.graph.to_svg,
+			'.ps': self.graph.to_ps,
+			'.eps': self.graph.to_ps,
+		}
+		# If our filename is a compound (tuple) value, assume the first element
+		# refers to the image filename, and the second refers to the
+		# client-side image map
+		try:
+			method = method_lookup[os.path.splitext(self.filename)[1].lower()]
+		except KeyError:
+			raise Exception('Unknown image extension "%s"' % ext)
+		# Generate the graph and write it out to the specified file
+		if not self.content_done:
+			self.create_content()
 		f = open(self.filename, 'w')
 		try:
+			method(f)
+		finally:
+			f.close()
+
+	def map(self):
+		"""Returns a DOM tree containing the client-side image map."""
+		assert self.usemap
+		if not self.content_done:
 			self.create_content()
-			self.graph.to_svg(f)
+		f = StringIO()
+		try:
+			self.graph.to_map(f)
+			return xml.dom.minidom.parseString(f.getvalue())
 		finally:
 			f.close()
 
 	def create_content(self):
 		"""Constructs the content of the graph."""
 		# Child classes can override this to build the graph before writing
-		pass
+		self.content_done = True
+
