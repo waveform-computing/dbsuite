@@ -101,12 +101,13 @@ class ParseTokenError(ParseError):
 	def __str__(self):
 		"""Outputs a string version of the exception."""
 		# Generate a block of context with an indicator showing the error
+		context_lines = 5
 		sourcelines = ''.join([s for (_, _, s, _, _) in self.source]).splitlines()
 		marker = ''.join([{'\t': '\t'}.get(c, ' ') for c in sourcelines[self.line-1][:self.col-1]]) + '^'
 		sourcelines.insert(self.line, marker)
-		i = self.line - 5
+		i = self.line - context_lines
 		if i < 0: i = 0
-		context = '\n'.join(sourcelines[i:self.line + 5])
+		context = '\n'.join(sourcelines[i:self.line + context_lines])
 		# Format the message with the context
 		return ('%s:\n'
 				'line   : %d\n'
@@ -167,20 +168,19 @@ class BaseFormatter(object):
 	"""Base class for parsers.
 
 	Do not use this class directly. Instead use one of the descendent classes
-	SQLParser or CLPParser depending on your needs. Both the "concrete" parser
+	SQLParser or CLPParser depending on your needs. Both "concrete" parsers
 	operate in the same manner (as they are derived from this base class),
 	described below:
 
-	The class accepts input from one of the tokenizers in the sqltokenizer
-	unit, which in the form of a list of tokens, where tokens are tuples with
-	the following structure:
+	The class accepts input from one of the tokenizers in the tokenizer unit,
+	in the form of a list of tokens, where tokens are tuples with the following
+	structure:
 
 		(token_type, token_value, token_source, line, column)
 
-	In other words, this class accepts the output of the SQLTokenizer class in
-	the tokenizer unit. To use the class simply pass such a list to the parse
-	method. The method will return a list of tokens (just like the list of
-	tokens provided as input, but reformatted).
+	To use the class simply pass such a list to the parse method. The method
+	will return a list of tokens (just like the list of tokens provided as
+	input, but reformatted).
 
 	The token_type element gives the general "family" of the token (such as
 	OPERATOR, IDENTIFIER, etc), while the token_value element provides the
@@ -272,9 +272,9 @@ class BaseFormatter(object):
 		#
 		# Note that the _newline() method does *insert* rather than append
 		# tokens (when called with a negative index).  However, provided the
-		# tokens are inserted *after* the in the output list where the state
-		# was last saved, this also maintains the invariant (the _newline()
-		# method includes an assertion to ensure this is the case).
+		# tokens are inserted *after* the position in the output list where the
+		# state was last saved, this also maintains the invariant (the
+		# _newline() method includes an assertion to ensure this is the case).
 		self._statestack.append((self._index, self._level, len(self._output)))
 
 	def _restore_state(self):
@@ -294,13 +294,13 @@ class BaseFormatter(object):
 			return self._tokens[-1]
 
 	def _cmp_tokens(self, token, template):
-		"""Compares a token against a partial template token.
+		"""Compares a token against a partial template.
 
-		If the template token is just a string, it will match a KEYWORD,
-		OPERATOR, or IDENTIFIER token with the same value (the second element
-		of a token).  If a partial token is an integer (like the KEYWORD,
-		IDENTIFIER, etc.  constants) it will match a token with the same type,
-		with the following exceptions:
+		If the template is just a string, it will match a KEYWORD, OPERATOR, or
+		IDENTIFIER token with the same value (the second element of a token).
+		If the template is an integer (like the KEYWORD or IDENTIFIER
+		constants) it will match a token with the same type, with the following
+		exceptions:
 
 		* IDENTIFIER will also match KEYWORD tokens (to allow keywords to be
 		  used as identifiers)
@@ -312,8 +312,8 @@ class BaseFormatter(object):
 		* STATEMENT will match TERMINATOR (STATEMENT tokens are terminators
 		  but specific to a top-level SQL statement or CLP command)
 
-		If a partial token is a tuple it will match a token with the same
-		element values up to the number of elements in the partial token.
+		If the template is a tuple it will match a token with the same element
+		values up to the number of elements in the partial token.
 
 		The method returns the matched token (transformed if any
 		transformations were necessary to make the match, e.g. KEYWORD to

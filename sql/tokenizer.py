@@ -270,7 +270,7 @@ class SQLTokenizerBase(object):
 			raise ValueError("Statement terminator string must contain at least one character")
 		# Restore the saved handler, if necessary. We don't need to do this
 		# if there was no prior terminator (such as in a new instance of
-		# the, class). If the saved handler is the default handler (None),
+		# the class). If the saved handler is the default handler (None),
 		# simply remove the first character of the terminator from the jump
 		# table
 		if self._terminator is not None:
