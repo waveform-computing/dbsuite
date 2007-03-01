@@ -39,6 +39,25 @@ PLUGIN_EXEC_ERR = '%s: [%s]: plugin "%s" failed (error: %s)'
 
 READING_INPUT_MSG = '%s: [%s]: Reading input (%s)'
 WRITING_OUTPUT_MSG = '%s: [%s]: Generating output (%s)'
+INPUT_PLUGINS_MSG = 'Available input plugins:'
+OUTPUT_PLUGINS_MSG = 'Available output plugins:'
+PLUGIN_NAME_MSG = 'Name:'
+PLUGIN_DESC_MSG = 'Description:'
+PLUGIN_OPTIONS_MSG = 'Options:'
+
+# Formatting strings
+if hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
+	BOLD = '\x1b[1m'
+	NORMAL = '\x1b[0m'
+	RED = '\x1b[31m'
+	GREEN = '\x1b[32m'
+	BLUE = '\x1b[34m'
+else:
+	BOLD = ''
+	NORMAL = ''
+	RED = ''
+	GREEN = ''
+	BLUE = ''
 
 def main():
 	# Parse the command line arguments
@@ -170,33 +189,37 @@ def list_plugins():
 	tw = textwrap.TextWrapper()
 	tw.initial_indent = ' '*8
 	tw.subsequent_indent = tw.initial_indent
-	print "Available Input Plugins:"
+	print BOLD + BLUE + INPUT_PLUGINS_MSG + NORMAL
 	for (name, plugin) in sorted(plugins(input), key=lambda(name, plugin): name):
-		print ' '*4 + name
+		print ' '*4 + BOLD + name + NORMAL
 		print tw.fill(plugin.__doc__.split('\n')[0])
 	import output
-	print ""
-	print "Available Output Plugins:"
+	print ''
+	print BOLD + BLUE + OUTPUT_PLUGINS_MSG + NORMAL
 	for (name, plugin) in sorted(plugins(output), key=lambda(name, plugin): name):
-		print ' '*4 + name
+		print ' '*4 + BOLD + name + NORMAL
 		print tw.fill(plugin.__doc__.split('\n')[0])
-	print ""
+	print ''
 
 def help_plugin(plugin_name):
 	"""Pretty-print some help text for the specified plugin."""
 	plugin = load_plugin(plugin_name)
-	print "Name:\n    %s\n" % plugin_name
+	print BOLD + BLUE + PLUGIN_NAME_MSG + NORMAL
+	print ' '*4 + BOLD + plugin_name + NORMAL
+	print ''
 	tw = textwrap.TextWrapper()
 	tw.initial_indent = ' '*4
 	tw.subsequent_indent = tw.initial_indent
 	plugin_desc = '\n\n'.join(tw.fill(para) for para in plugin.__doc__.split('\n\n'))
-	print "Description:\n%s\n" % plugin_desc
+	print BOLD + BLUE + PLUGIN_DESC_MSG + NORMAL
+	print plugin_desc
+	print ''
 	if hasattr(plugin, 'options'):
-		print "Options:"
+		print BOLD + BLUE + PLUGIN_OPTIONS_MSG + NORMAL
 		tw.initial_indent = ' '*8
 		tw.subsequent_indent = tw.initial_indent
 		for (name, desc) in sorted(plugin.options.iteritems(), key=lambda(name, desc): name):
-			print ' '*4 + name
+			print ' '*4 + BOLD + name + NORMAL
 			print tw.fill(desc)
 	print ""
 
