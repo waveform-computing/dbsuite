@@ -23,6 +23,13 @@ try:
 except ImportError:
 	from StringIO import StringIO
 
+DEFAULT_CONVERTER = 'dot'
+SVG_FORMAT = 'svg'
+GIF_FORMAT = 'gif'
+PNG_FORMAT = 'png'
+PS_FORMAT = 'ps2'
+MAP_FORMAT = 'cmapx'
+
 # XXX Add some code to check for duplicate graph/node/edge IDs
 
 class GraphObject(object):
@@ -152,7 +159,7 @@ $strict$graph $id {
 			p.wait()
 
 	svg_fix = re.compile(r'(style=".*font-size:\s*[0-9]*(\.[0-9]+)?)(\s*;.*")')
-	def to_svg(self, output, converter='dot', graph_attr={}, node_attr={}, edge_attr={}):
+	def to_svg(self, output, converter=DEFAULT_CONVERTER, graph_attr={}, node_attr={}, edge_attr={}):
 		"""Converts the Graph into an SVG image.
 
 		Parameters:
@@ -163,48 +170,44 @@ $strict$graph $id {
 		edge_attr -- A dictionary of edge attributes to pass on the command line
 		"""
 		s = StringIO()
-		self._call_graphviz(s, converter, 'svg', graph_attr, node_attr, edge_attr)
+		self._call_graphviz(s, converter, SVG_FORMAT, graph_attr, node_attr, edge_attr)
 		# The regex substitution below is to fix a bug in GraphViz's SVG
 		# output; the font-size style element needs a unit, usually px, to
 		# work correctly in Firefox, Opera, etc.
 		output.write(self.svg_fix.sub(r'\1px\3', s.getvalue()))
 	
-	def to_ps(self, output, converter='dot', graph_attr={}, node_attr={}, edge_attr={}):
+	def to_ps(self, output, converter=DEFAULT_CONVERTER, graph_attr={}, node_attr={}, edge_attr={}):
 		"""Converts the Graph into a PostScript document.
 
 		Parameters are identical to the to_svg() method above.
 		"""
-		self._call_graphviz(output, converter, 'ps2', graph_attr, node_attr, edge_attr)
+		self._call_graphviz(output, converter, PS_FORMAT, graph_attr, node_attr, edge_attr)
 	
-	def to_png(self, output_img, output_map=None, converter='dot', graph_attr={}, node_attr={}, edge_attr={}):
+	def to_png(self, output, converter=DEFAULT_CONVERTER, graph_attr={}, node_attr={}, edge_attr={}):
 		"""Converts the Graph into a PNG image (and optionally a client-side image-map).
 
 		Parameters:
-		output_img -- A file-like object to write the PNG to
-		output_map -- An optional file-like object to write the image-map to
+		output -- A file-like object to write the PNG to
 		converter -- The path and name of the GraphViz application to use
 		graph_attr -- A dictionary of graph attributes to pass on the command line
 		node_attr -- A dictionary of node attributes to pass on the command line
 		edge_attr -- A dictionary of edge attributes to pass on the command line
 		"""
-		# It'd be nice to let GraphViz generate both formats at once with two
-		# -T arguments but when dealing with file-like objects (instead of
-		# filenames) that's just not possible to do reliably. If we insisted on
-		# filenames instead of file-like objects we're then into the tricky
-		# territory of creating temporary files and the caller doesn't have the
-		# option of passing a StringIO object. Oh well.
-		self._call_graphviz(output_img, converter, 'png', graph_attr, node_attr, edge_attr)
-		if output_map is not None:
-			self._call_graphviz(output_map, converter, 'cmapx', graph_attr, node_attr, edge_attr)
+		self._call_graphviz(output, converter, PNG_FORMAT, graph_attr, node_attr, edge_attr)
 	
-	def to_gif(self, output_img, output_map=None, converter='dot', graph_attr={}, node_attr={}, edge_attr={}):
+	def to_gif(self, output, converter=DEFAULT_CONVERTER, graph_attr={}, node_attr={}, edge_attr={}):
 		"""Converts the Graph into a GIF image (and optionally a client-side image-map).
 
 		Parameters are identical to the to_png() method above.
 		"""
-		self._call_graphviz(output_img, converter, 'gif', graph_attr, node_attr, edge_attr)
-		if output_map is not None:
-			self._call_graphviz(output_map, converter, 'cmapx', graph_attr, node_attr, edge_attr)
+		self._call_graphviz(output, converter, GIF_FORMAT, graph_attr, node_attr, edge_attr)
+	
+	def to_map(self, output, converter=DEFAULT_CONVERTER, graph_attr={}, node_attr={}, edge_attr={}):
+		"""Converts the Graph into a client-side image map.
+
+		Parameters are identical to the to_png() method above.
+		"""
+		self._call_graphviz(output, converter, MAP_FORMAT, graph_attr, node_attr, edge_attr)
 	
 	def touch(self, method, **params):
 		"""Calls the specified method for each object within the graph.
