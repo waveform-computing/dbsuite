@@ -4,7 +4,6 @@
 # Standard modules
 import os.path
 import logging
-import re
 import codecs
 import xml.dom
 import xml.dom.minidom
@@ -20,8 +19,20 @@ from db.trigger import Trigger
 from sql.tokenizer import DB2UDBSQLTokenizer
 from sql.formatter import SQLFormatter
 from sql.htmlhighlighter import SQLDOMHighlighter
-from output.html.document import AttrDict, WebSite, HTMLDocument, CSSDocument, GraphDocument
+from output.html.document import AttrDict, HTMLCommentHighlighter, WebSite, HTMLDocument, CSSDocument, GraphDocument
 from dot.graph import Graph, Node, Edge, Cluster
+
+class W3CommentHighlighter(HTMLCommentHighlighter):
+	def __init__(self, document):
+		"""Initializes an instance of the class."""
+		assert isinstance(document, W3Document)
+		super(W3CommentHighlighter, self).__init__(document)
+
+	def handle_link(self, target):
+		return self.document.a_to(target, qualifiedname=True)
+
+	def find_target(self, name):
+		return self.document.site.database.find(name)
 
 class W3Site(WebSite):
 	"""Site class representing a collection of W3Document instances."""
@@ -42,6 +53,9 @@ class W3Document(HTMLDocument):
 	def __init__(self, site, url):
 		assert isinstance(site, W3Site)
 		super(W3Document, self).__init__(site, url)
+	
+	def init_comment_highlighter(self):
+		return W3CommentHighlighter(self)
 
 	def create_content(self):
 		# Call the inherited method to create the skeleton document
@@ -69,14 +83,23 @@ class W3Document(HTMLDocument):
 		return self.a(href, content)
 
 	def img_of(self, dbobject):
-		# Special version of "img" to create a graph of a database object
+		# Special version of "img" to create diagrams of a database object
 		assert isinstance(dbobject, DocBase)
-		return self.element('object', {
-			'data': self.site.graph_map[dbobject].url,
-			'type': 'image/svg+xml',
-			'width': '750',
-			'height': '500',
-		}, 'Unable to render SVG diagram')
+		for graph in self.site.graph_map[dbobject]:
+			if graph.usemap:
+				# If the graph uses a client side image map for links a bit
+				# more work is required. We need to get the graph to generate
+				# the <map> document, then import all elements from that
+				# document into the document this instance contains...
+				image = self.img(graph.url, attrs={'usemap': graph.url})
+				mapdoc = graph.map()
+				map = self.doc.importNode(mapdoc.documentElement, deep=True)
+				mapdoc.unlink()
+				map.setAttribute('id', graph.url)
+				map.setAttribute('name', graph.url)
+				return [image, map]
+			else:
+				return self.img(graph.url)
 
 	def hr(self, attrs={}):
 		# Overridden to use the w3 dotted line style (uses <div> instead of <hr>)
@@ -230,95 +253,6 @@ class W3MainDocument(W3Document):
 		# Overridden to add logging
 		logging.debug('Writing documentation for %s %s to %s' % (self.dbobject.type_name, self.dbobject.name, self.filename))
 		super(W3MainDocument, self).write()
-
-	def format_sql(self, sql, terminator=';'):
-		"""Syntax highlights an SQL script with <span> elements.
-
-        Using the tokenizer, reformatter and HTML highlighter units in the
-        sql sub-package, this routine takes raw (typically white-space
-        mangled) SQL code and returns pretty-printed, syntax highlighted
-        SQL in HTML format.
-
-        This routine handles highlighting any arbitrary SQL script.
-		"""
-		tokens = self.tokenizer.parse(sql, terminator)
-		tokens = self.formatter.parse(tokens)
-		return self.highlighter.parse(tokens, self.doc)
-
-	def format_prototype(self, sql):
-		"""Syntax highlights an SQL routine prototype with <span> elements.
-
-        This method is similar to the format_sql() method, but operates on
-        standalone function prototypes which aren't otherwise valid standalone
-        SQL scripts.
-		"""
-		tokens = self.tokenizer.parse(sql)
-		tokens = self.formatter.parseRoutinePrototype(tokens)
-		return self.highlighter.parse(tokens, self.doc)
-
-	findref = re.compile(r'@([A-Za-z_$#@][A-Za-z0-9_$#@]*(\.[A-Za-z_$#@][A-Za-z0-9_$#@]*){0,2})\b')
-	findfmt = re.compile(r'\B([/_*])(\w+)\1\B')
-	def format_description(self, text, firstline=False):
-		"""Formats simple prefix-based markup into HTML.
-		
-		References in the provided text (specified as @-prefix qualified names)
-		are returned as links to the targetted objects (the objects are located
-		with the find() method of the Database object at the root of the
-		object hierarchy).
-
-		Highlights in the text are also converted. Currently *bold* text is
-		converted to <strong> tags, /italic/ text is converted to <em> tags,
-		and _underlined_ text is convert to <u> tags.
-
-		The resulting string is valid HTML; that is, all characters which
-		require converting to character entities are converted using the
-		escape() function of the xml.sax.saxutils unit.
-		"""
-		if firstline:
-			text = text.split('\n')[0]
-		# Convert simple markup to HTML
-		start = 0
-		result = []
-		while True:
-			matchref = self.findref.search(text, start)
-			matchfmt = self.findfmt.search(text, start)
-			if matchref is not None and (matchfmt is None or matchfmt.start(0) > matchref.start(0)):
-				result.append(text[start:matchref.start(0)])
-				start = matchref.end(0)
-				target = self.dbobject.database.find(matchref.group(1))
-				if target is None:
-					result.append(text[start:matchref.group(1)])
-				else:
-					result.append(self.a_to(target, qualifiedname=True))
-			elif matchfmt is not None and (matchref is None or matchfmt.start(0) < matchref.start(0)):
-				result.append(text[start:matchfmt.start(0)])
-				start = matchfmt.end(0)
-				if matchfmt.group(1) == '*':
-					result.append(self.strong(matchfmt.group(2)))
-				elif matchfmt.group(1) == '/':
-					result.append(self.em(matchfmt.group(2)))
-				elif matchfmt.group(1) == '_':
-					result.append(self.u(matchfmt.group(2)))
-				else:
-					assert False
-			else:
-				result.append(text[start:])
-				break
-		# Convert strings into text nodes and line breaks in <br> elements
-		items = []
-		for item in result:
-			if isinstance(item, basestring):
-				lines = item.split('\n')
-				first = True
-				for line in lines:
-					if not first:
-						items.append(self.doc.createElement('br'))
-					else:
-						first = False
-					items.append(self.doc.createTextNode(line))
-			else:
-				items.append(item)
-		return items
 
 	def create_content(self):
 		# Overridden to automatically set the link objects and generate the
@@ -649,10 +583,17 @@ class W3GraphDocument(GraphDocument):
 	def __init__(self, site, dbobject):
 		"""Initializes an instance of the class."""
 		assert isinstance(site, W3Site)
-		super(W3GraphDocument, self).__init__(site, '%s.svg' % dbobject.identifier)
 		self.dbobject_map = {}
 		self.dbobject = dbobject
-		self.site.graph_map[dbobject] = self
+		# Because a given database object may have multiple diagrams associated
+		# with it, we need to generate a unique URL by including a count
+		if dbobject in site.graph_map:
+			site.graph_map[dbobject].append(self)
+			count = len(site.graph_map[dbobject])
+		else:
+			site.graph_map[dbobject] = [self]
+			count = 1
+		super(W3GraphDocument, self).__init__(site, '%s%d.png' % (dbobject.identifier, count))
 	
 	def create_graph(self):
 		# Override in descendent classes to generate nodes, edges, etc. in the
@@ -684,7 +625,11 @@ class W3GraphDocument(GraphDocument):
 
 	def write(self):
 		# Overridden to add logging
-		logging.debug('Writing graph for %s %s to %s' % (self.dbobject.type_name, self.dbobject.name, self.filename))
+		if isinstance(self.filename, tuple):
+			f = self.filename[0]
+		else:
+			f = self.filename
+		logging.debug('Writing graph for %s %s to %s' % (self.dbobject.type_name, self.dbobject.name, f))
 		super(W3GraphDocument, self).write()
 	
 	def add_dbobject(self, dbobject, selected=False):
