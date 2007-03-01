@@ -13,7 +13,7 @@ class W3TablespaceDocument(W3MainDocument):
 		tables = [obj for (name, obj) in sorted(self.dbobject.tables.items(), key=lambda (name, obj): name)]
 		indexes = [obj for (name, obj) in sorted(self.dbobject.indexes.items(), key=lambda (name, obj): name)]
 		self.section('description', 'Description')
-		self.add(self.p(self.format_description(self.dbobject.description)))
+		self.add(self.p(self.format_comment(self.dbobject.description)))
 		self.section('attributes', 'Attributes')
 		self.add(self.table(
 			head=[(
@@ -63,7 +63,7 @@ class W3TablespaceDocument(W3MainDocument):
 				)],
 				data=[(
 					self.a_to(table, qualifiedname=True),
-					self.format_description(table.description, firstline=True)
+					self.format_comment(table.description, summary=True)
 				) for table in tables]
 			))
 		if len(indexes) > 0:
@@ -77,7 +77,7 @@ class W3TablespaceDocument(W3MainDocument):
 				data=[(
 					self.a_to(index, qualifiedname=True),
 					self.a_to(index.table, qualifiedname=True),
-					self.format_description(index.description, firstline=True)
+					self.format_comment(index.description, summary=True)
 				) for index in indexes]
 			))
 

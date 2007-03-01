@@ -11,7 +11,7 @@ class W3TriggerDocument(W3MainDocument):
 
 	def create_sections(self):
 		self.section('description', 'Description')
-		self.add(self.p(self.format_description(self.dbobject.description)))
+		self.add(self.p(self.format_comment(self.dbobject.description)))
 		self.section('attributes', 'Attributes')
 		self.add(self.table(
 			head=[(
@@ -41,5 +41,6 @@ class W3TriggerDocument(W3MainDocument):
 				),
 			]))
 		self.section('sql', 'SQL Definition')
-		self.add(self.pre(self.format_sql(self.dbobject.create_sql, terminator='!'), attrs={'class': 'sql'}))
+		self.add(self.pre(self.format_sql(self.dbobject.create_sql,
+			terminator='!'), attrs={'class': 'sql'}))
 

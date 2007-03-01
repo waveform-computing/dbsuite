@@ -13,10 +13,10 @@ class W3ProcedureDocument(W3MainDocument):
 		overloads = self.dbobject.schema.procedures[self.dbobject.name]
 		self.section('description', 'Description')
 		self.add(self.p(self.format_prototype(self.dbobject.prototype)))
-		self.add(self.p(self.format_description(self.dbobject.description)))
+		self.add(self.p(self.format_comment(self.dbobject.description)))
 		# XXX What about the IN/OUT/INOUT state of procedure parameters?
 		self.add(self.dl([
-			(param.name, self.format_description(param.description))
+			(param.name, self.format_comment(param.description))
 			for param in self.dbobject.param_list
 		]))
 		self.section('attributes', 'Attributes')
@@ -60,7 +60,7 @@ class W3ProcedureDocument(W3MainDocument):
 				),
 				(
 					self.a(self.site.documents['specificname.html']),
-					{'colspan': '3', '': self.dbobject.specific_name},
+					(self.dbobject.specific_name, {'colspan': 3}),
 				),
 			]
 		))
@@ -78,5 +78,6 @@ class W3ProcedureDocument(W3MainDocument):
 			))
 		if self.dbobject.language == 'SQL':
 			self.section('sql', 'SQL Definition')
-			self.add(self.pre(self.format_sql(self.dbobject.create_sql, terminator='!'), attrs={'class': 'sql'}))
+			self.add(self.pre(self.format_sql(self.dbobject.create_sql,
+				terminator='!'), attrs={'class': 'sql'}))
 

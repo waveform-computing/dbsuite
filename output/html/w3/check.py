@@ -12,7 +12,7 @@ class W3CheckDocument(W3MainDocument):
 	def create_sections(self):
 		fields = sorted(list(self.dbobject.fields), key=lambda field: field.name)
 		self.section('description', 'Description')
-		self.add(self.p(self.format_description(self.dbobject.description)))
+		self.add(self.p(self.format_comment(self.dbobject.description)))
 		self.section('attributes', 'Attributes')
 		self.add(self.table(
 			head=[(
@@ -45,7 +45,7 @@ class W3CheckDocument(W3MainDocument):
 				)],
 				data=[(
 					field.name,
-					self.format_description(field.description, firstline=True)
+					self.format_comment(field.description, summary=True)
 				) for field in fields]
 			))
 		self.section('sql', 'SQL Definition')

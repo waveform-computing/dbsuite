@@ -20,7 +20,7 @@ class W3TableDocument(W3MainDocument):
 		dependents = [obj for (name, obj) in sorted(self.dbobject.dependents.items(), key=lambda (name, obj): name)]
 		olstyle = {'style': 'list-style-type: none; padding: 0; margin: 0;'}
 		self.section('description', 'Description')
-		self.add(self.p(self.format_description(self.dbobject.description)))
+		self.add(self.p(self.format_comment(self.dbobject.description)))
 		self.section('attributes', 'Attributes')
 		if self.dbobject.primary_key is None:
 			key_count = 0
@@ -93,7 +93,7 @@ class W3TableDocument(W3MainDocument):
 				)],
 				data=[(
 					field.name,
-					self.format_description(field.description, firstline=True)
+					self.format_comment(field.description, summary=True)
 				) for field in fields]
 			))
 			self.section('field_schema', 'Field Schema')
@@ -130,7 +130,7 @@ class W3TableDocument(W3MainDocument):
 					index.unique,
 					self.ol([ixfield.name for (ixfield, ixorder) in index.field_list], attrs=olstyle),
 					self.ol([ixorder for (ixfield, ixorder) in index.field_list], attrs=olstyle),
-					self.format_description(index.description, firstline=True)
+					self.format_comment(index.description, summary=True)
 				) for index in indexes]
 			))
 		if len(constraints) > 0:
@@ -152,7 +152,7 @@ class W3TableDocument(W3MainDocument):
 					self.a_to(constraint),
 					constraint.type_name,
 					expression,
-					self.format_description(constraint.description, firstline=True)
+					self.format_comment(constraint.description, summary=True)
 				))
 			self.add(self.table(
 				head=[(
@@ -176,7 +176,7 @@ class W3TableDocument(W3MainDocument):
 					self.a_to(trigger, qualifiedname=True),
 					trigger.trigger_time,
 					trigger.trigger_event,
-					self.format_description(trigger.description, firstline=True)
+					self.format_comment(trigger.description, summary=True)
 				) for trigger in triggers]
 			))
 		if len(dependents) > 0:
@@ -190,13 +190,14 @@ class W3TableDocument(W3MainDocument):
 				data=[(
 					self.a_to(dep, qualifiedname=True),
 					dep.type_name,
-					self.format_description(dep.description, firstline=True)
+					self.format_comment(dep.description, summary=True)
 				) for dep in dependents]
 			))
 		self.section('diagram', 'Diagram')
 		self.add(self.img_of(self.dbobject))
 		self.section('sql', 'SQL Definition')
-		self.add(self.pre(self.format_sql(self.dbobject.create_sql), attrs={'class': 'sql'}))
+		self.add(self.pre(self.format_sql(self.dbobject.create_sql),
+			attrs={'class': 'sql'}))
 
 class W3TableGraph(W3GraphDocument):
 	def __init__(self, site, table):

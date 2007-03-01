@@ -13,7 +13,7 @@ class W3UniqueKeyDocument(W3MainDocument):
 		fields = [(field, position) for (position, field) in enumerate(self.dbobject.fields)]
 		fields = sorted(fields, key=lambda(field, position): field.name)
 		self.section('description', 'Description')
-		self.add(self.p(self.format_description(self.dbobject.description)))
+		self.add(self.p(self.format_comment(self.dbobject.description)))
 		self.section('attributes', 'Attributes')
 		self.add(self.table(
 			head=[(
@@ -41,7 +41,7 @@ class W3UniqueKeyDocument(W3MainDocument):
 				data=[(
 					position + 1,
 					field.name,
-					self.format_description(field.description, firstline=True)
+					self.format_comment(field.description, summary=True)
 				) for (field, position) in fields]
 			))
 		self.section('sql', 'SQL Definition')

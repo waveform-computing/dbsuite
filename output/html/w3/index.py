@@ -13,7 +13,7 @@ class W3IndexDocument(W3MainDocument):
 		fields = [(field, ordering, position) for (position, (field, ordering)) in enumerate(self.dbobject.field_list)]
 		fields = sorted(fields, key=lambda (field, ordering, position): field.name)
 		self.section('description', 'Description')
-		self.add(self.p(self.format_description(self.dbobject.description)))
+		self.add(self.p(self.format_comment(self.dbobject.description)))
 		self.section('attributes', 'Attributes')
 		self.add(self.p("""The following table notes various "vital statistics"
 			of the index."""))
@@ -67,8 +67,8 @@ class W3IndexDocument(W3MainDocument):
 			(
 				self.a(self.site.documents['cardinality.html']),
 				self.dbobject.cardinality[0],
-				{'rowspan': str(len(self.dbobject.cardinality[1]) + 1), '': self.a(self.site.documents['levels.html']),},
-				{'rowspan': str(len(self.dbobject.cardinality[1]) + 1), '': self.dbobject.levels},
+				(self.a(self.site.documents['levels.html']), {'rowspan': str(len(self.dbobject.cardinality[1]) + 1)}),
+				(self.dbobject.levels,                       {'rowspan': str(len(self.dbobject.cardinality[1]) + 1)}),
 			),
 		]
 		for (cardix, card) in enumerate(self.dbobject.cardinality[1]):
@@ -90,9 +90,10 @@ class W3IndexDocument(W3MainDocument):
 					position + 1,
 					field.name,
 					ordering,
-					self.format_description(field.description, firstline=True)
+					self.format_comment(field.description, summary=True)
 				) for (field, ordering, position) in fields]
 			))
 		self.section('sql', 'SQL Definition')
-		self.add(self.pre(self.format_sql(self.dbobject.create_sql), attrs={'class': 'sql'}))
+		self.add(self.pre(self.format_sql(self.dbobject.create_sql),
+			attrs={'class': 'sql'}))
 

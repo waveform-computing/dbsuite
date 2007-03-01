@@ -11,7 +11,7 @@ class W3ForeignKeyDocument(W3MainDocument):
 	
 	def create_sections(self):
 		self.section('description', 'Description')
-		self.add(self.p(self.format_description(self.dbobject.description)))
+		self.add(self.p(self.format_comment(self.dbobject.description)))
 		self.section('attributes', 'Attributes')
 		self.add(self.table(
 			head=[(
@@ -62,9 +62,10 @@ class W3ForeignKeyDocument(W3MainDocument):
 					index + 1,
 					field1.name,
 					field2.name,
-					self.format_description(field1.description, firstline=True)
+					self.format_comment(field1.description, summary=True)
 				) for (field1, field2, index) in fields]
 			))
 		self.section('sql', 'SQL Definition')
-		self.add(self.pre(self.format_sql(self.dbobject.create_sql), attrs={'class': 'sql'}))
+		self.add(self.pre(self.format_sql(self.dbobject.create_sql),
+			attrs={'class': 'sql'}))
 

@@ -16,7 +16,7 @@ class W3SchemaDocument(W3MainDocument):
 		indexes = [obj for (name, obj) in sorted(self.dbobject.indexes.items(), key=lambda (name, obj): name)]
 		triggers = [obj for (name, obj) in sorted(self.dbobject.triggers.items(), key=lambda (name, obj): name)]
 		self.section('description', 'Description')
-		self.add(self.p(self.format_description(self.dbobject.description)))
+		self.add(self.p(self.format_comment(self.dbobject.description)))
 		if len(relations) > 0:
 			self.section('relations', 'Relations')
 			self.add(self.table(
@@ -28,7 +28,7 @@ class W3SchemaDocument(W3MainDocument):
 				data=[(
 					self.a_to(relation),
 					relation.type_name,
-					self.format_description(relation.description, firstline=True)
+					self.format_comment(relation.description, summary=True)
 				) for relation in relations]
 			))
 		if len(indexes) > 0:
@@ -43,7 +43,7 @@ class W3SchemaDocument(W3MainDocument):
 					self.a_to(index),
 					index.unique,
 					self.a_to(index.table, qualifiedname=True),
-					self.format_description(index.description, firstline=True)
+					self.format_comment(index.description, summary=True)
 				) for index in indexes]
 			))
 		if len(triggers) > 0:
@@ -60,7 +60,7 @@ class W3SchemaDocument(W3MainDocument):
 					trigger.trigger_time,
 					trigger.trigger_event,
 					self.a_to(trigger.relation, qualifiedname=True),
-					self.format_description(trigger.description, firstline=True)
+					self.format_comment(trigger.description, summary=True)
 				) for trigger in triggers]
 			))
 		if len(routines) > 0:
@@ -76,11 +76,11 @@ class W3SchemaDocument(W3MainDocument):
 					self.a_to(routine),
 					routine.specific_name,
 					routine.type_name,
-					self.format_description(routine.description, firstline=True)
+					self.format_comment(routine.description, summary=True)
 				) for routine in routines]
 			))
 		if len(relations) > 0:
-			self.section('diagram', 'Diagram')
+			self.section('diagrams', 'Diagrams')
 			self.add(self.img_of(self.dbobject))
 
 class W3SchemaGraph(W3GraphDocument):

@@ -13,7 +13,7 @@ class W3DatabaseDocument(W3MainDocument):
 		schemas = [obj for (name, obj) in sorted(self.dbobject.schemas.items(), key=lambda (name, obj):name)]
 		tbspaces = [obj for (name, obj) in sorted(self.dbobject.tablespaces.items(), key=lambda (name, obj):name)]
 		self.section('description', 'Description')
-		self.add(self.p(self.format_description(self.dbobject.description)))
+		self.add(self.p(self.format_comment(self.dbobject.description)))
 		if len(schemas) > 0:
 			self.section('schemas', 'Schemas')
 			self.add(self.p("""The following table contains all schemas
@@ -27,7 +27,7 @@ class W3DatabaseDocument(W3MainDocument):
 				)],
 				data=[(
 					self.a_to(schema),
-					self.format_description(schema.description, firstline=True)
+					self.format_comment(schema.description, summary=True)
 				) for schema in schemas]
 			))
 		if len(tbspaces) > 0:
@@ -44,7 +44,7 @@ class W3DatabaseDocument(W3MainDocument):
 				)],
 				data=[(
 					self.a_to(tbspace),
-					self.format_description(tbspace.description, firstline=True)
+					self.format_comment(tbspace.description, summary=True)
 				) for tbspace in tbspaces]
 			))
 

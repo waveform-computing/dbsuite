@@ -15,7 +15,7 @@ class W3ViewDocument(W3MainDocument):
 		dependencies = [obj for (name, obj) in sorted(self.dbobject.dependencies.items(), key=lambda (name, obj): name)]
 		dependents = [obj for (name, obj) in sorted(self.dbobject.dependents.items(), key=lambda (name, obj): name)]
 		self.section('description', 'Description')
-		self.add(self.p(self.format_description(self.dbobject.description)))
+		self.add(self.p(self.format_comment(self.dbobject.description)))
 		self.section('attributes', 'Attributes')
 		self.add(self.table(
 			head=[(
@@ -59,7 +59,7 @@ class W3ViewDocument(W3MainDocument):
 				)],
 				data=[(
 					field.name,
-					self.format_description(field.description, firstline=True)
+					self.format_comment(field.description, summary=True)
 				) for field in fields]
 			))
 			self.section('field_schema', 'Field Schema')
@@ -90,7 +90,7 @@ class W3ViewDocument(W3MainDocument):
 					self.a_to(trigger, qualifiedname=True),
 					trigger.trigger_time,
 					trigger.trigger_event,
-					self.format_description(trigger.description, firstline=True)
+					self.format_comment(trigger.description, summary=True)
 				) for trigger in triggers]
 			))
 		if len(dependents) > 0:
@@ -104,7 +104,7 @@ class W3ViewDocument(W3MainDocument):
 				data=[(
 					self.a_to(dep, qualifiedname=True),
 					dep.type_name,
-					self.format_description(dep.description, firstline=True)
+					self.format_comment(dep.description, summary=True)
 				) for dep in dependents]
 			))
 		if len(dependencies) > 0:
@@ -118,13 +118,14 @@ class W3ViewDocument(W3MainDocument):
 				data=[(
 					self.a_to(dep, qualifiedname=True),
 					dep.type_name,
-					self.format_description(dep.description, firstline=True)
+					self.format_comment(dep.description, summary=True)
 				) for dep in dependencies]
 			))
 		self.section('diagram', 'Diagram')
 		self.add(self.img_of(self.dbobject))
 		self.section('sql', 'SQL Definition')
-		self.add(self.pre(self.format_sql(self.dbobject.create_sql), attrs={'class': 'sql'}))
+		self.add(self.pre(self.format_sql(self.dbobject.create_sql),
+			attrs={'class': 'sql'}))
 
 class W3ViewGraph(W3GraphDocument):
 	def __init__(self, site, view):
