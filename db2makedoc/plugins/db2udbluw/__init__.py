@@ -39,6 +39,54 @@ options = {
 	PASSWORD_OPTION: PASSWORD_DESC,
 }
 
+def _make_datetime(value):
+	"""Converts a date-time value from a database query to a datetime object.
+
+	If value is None or a blank string, returns None. If value is a string
+	containing an ISO8601 formatted date ("YYYY-MM-DD HH:MM:SS.NNNNNN") it is
+	converted to a standard Python datetime value. If value is has a integer
+	"value" attribute it is assumed to be a UNIX timestamp and is converted
+	into a Python datetime value.
+
+	Basically this routine exists to converts a database framework-specific
+	representation of a datetime value into a standard Python datetime value.
+	"""
+	if (value is None) or (value == ""):
+		return None
+	elif isinstance(value, basestring):
+		return datetime.datetime(*([int(x) for x in re.match(r"(\d{4})-(\d{2})-(\d{2})[T -](\d{2})[:.](\d{2})[:.](\d{2})\.(\d{6})\d*", value).groups()]))
+	elif hasattr(value, 'value') and isinstance(value.value, int):
+		return datetime.datetime.fromtimestamp(value.value)
+	else:
+		raise ValueError('Unable to convert date-time value "%s"' % str(value))
+
+def _make_bool(value, true_value='Y', false_value='N', none_value=' ', unknown_error=False, unknown_result=None):
+	"""Converts a character-based value into a boolean value.
+
+	If value equals true_value, false_value, or none_value return true, false,
+	or None respectively. If it matches none of them and unknown_error is false
+	(the default), returns unknown_result (defaults to None).  Otherwise if
+	unknown_error is true, the a KeyError is raised.
+	"""
+	try:
+		return {true_value: True, false_value: False, none_value: None}[value]
+	except KeyError:
+		if unknown_error:
+			raise
+		else:
+			return unknown_result
+
+def _fetch_dict(cursor):
+	"""Returns rows from a cursor as a list of dictionaries.
+
+	Specifically, the result set is returned as a list of dictionaries, where
+	each dictionary represents one row of the result set, and is keyed by the
+	field names of the result set converted to lower case.
+
+	Okay, horribly wasteful and un-Pythonic. But it's simple and it works.
+	"""
+	return [dict(zip([d[0] for d in cursor.description], row)) for row in cursor.fetchall()]
+
 class Input(object):
 	def __init__(self, config):
 		super(Input, self).__init__()
@@ -133,6 +181,7 @@ class Input(object):
 				except ImportError:
 					raise
 				else:
+					# XXX Fix connection string
 					# Connect using mxODBC (different driver depending on
 					# platform)
 					if mswindows:
@@ -1112,50 +1161,3 @@ class Input(object):
 			for tbspace in self.tablespaces
 		])
 
-def _make_datetime(value):
-	"""Converts a date-time value from a database query to a datetime object.
-
-	If value is None or a blank string, returns None. If value is a string
-	containing an ISO8601 formatted date ("YYYY-MM-DD HH:MM:SS.NNNNNN") it is
-	converted to a standard Python datetime value. If value is has a integer
-	"value" attribute it is assumed to be a UNIX timestamp and is converted
-	into a Python datetime value.
-
-	Basically this routine exists to converts a database framework-specific
-	representation of a datetime value into a standard Python datetime value.
-	"""
-	if (value is None) or (value == ""):
-		return None
-	elif isinstance(value, basestring):
-		return datetime.datetime(*([int(x) for x in re.match(r"(\d{4})-(\d{2})-(\d{2})[T -](\d{2})[:.](\d{2})[:.](\d{2})\.(\d{6})\d*", value).groups()]))
-	elif hasattr(value, 'value') and isinstance(value.value, int):
-		return datetime.datetime.fromtimestamp(value.value)
-	else:
-		raise ValueError('Unable to convert date-time value "%s"' % str(value))
-
-def _make_bool(value, true_value='Y', false_value='N', none_value=' ', unknown_error=False, unknown_result=None):
-	"""Converts a character-based value into a boolean value.
-
-	If value equals true_value, false_value, or none_value return true, false,
-	or None respectively. If it matches none of them and unknown_error is false
-	(the default), returns unknown_result (defaults to None).  Otherwise if
-	unknown_error is true, the a KeyError is raised.
-	"""
-	try:
-		return {true_value: True, false_value: False, none_value: None}[value]
-	except KeyError:
-		if unknown_error:
-			raise
-		else:
-			return unknown_result
-
-def _fetch_dict(cursor):
-	"""Returns rows from a cursor as a list of dictionaries.
-
-	Specifically, the result set is returned as a list of dictionaries, where
-	each dictionary represents one row of the result set, and is keyed by the
-	field names of the result set converted to lower case.
-
-	Okay, horribly wasteful and un-Pythonic. But it's simple and it works.
-	"""
-	return [dict(zip([d[0] for d in cursor.description], row)) for row in cursor.fetchall()]
