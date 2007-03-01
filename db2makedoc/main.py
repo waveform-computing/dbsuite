@@ -1,8 +1,6 @@
-#!/usr/bin/env python
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-# Standard modules
 import sys
 mswindows = sys.platform == "win32"
 import optparse
@@ -12,6 +10,7 @@ import fnmatch
 import os
 import imp
 import textwrap
+from db2makedoc.db.database import Database
 
 # Constants
 __version__ = "0.1"
@@ -111,7 +110,6 @@ def main():
 		logging.getLogger().setLevel(logging.INFO)
 		sys.excepthook = production_excepthook
 	# Loop over each provided configuration file
-	import db.database
 	for config_file in args:
 		# Read the configuration file
 		parser = ConfigParser.SafeConfigParser()
@@ -151,7 +149,7 @@ def main():
 					raise
 				continue
 			# Construct the internal representation of the metadata
-			db = db.database.Database(input)
+			db = Database(input)
 			for output_section in output_sections:
 				s = parser.get(output_section, PLUGIN_OPTION)
 				try:
@@ -185,18 +183,12 @@ def production_excepthook(type, value, traceback):
 
 def list_plugins():
 	"""Pretty-print a list of the available input and output plugins."""
-	import input
+	import db2makedoc.plugins
 	tw = textwrap.TextWrapper()
 	tw.initial_indent = ' '*8
 	tw.subsequent_indent = tw.initial_indent
 	print BOLD + BLUE + INPUT_PLUGINS_MSG + NORMAL
-	for (name, plugin) in sorted(plugins(input), key=lambda(name, plugin): name):
-		print ' '*4 + BOLD + name + NORMAL
-		print tw.fill(plugin.__doc__.split('\n')[0])
-	import output
-	print ''
-	print BOLD + BLUE + OUTPUT_PLUGINS_MSG + NORMAL
-	for (name, plugin) in sorted(plugins(output), key=lambda(name, plugin): name):
+	for (name, plugin) in sorted(plugins(db2makedoc.plugins), key=lambda(name, plugin): name):
 		print ' '*4 + BOLD + name + NORMAL
 		print tw.fill(plugin.__doc__.split('\n')[0])
 	print ''
