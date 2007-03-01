@@ -4,9 +4,11 @@
 """Output plugin for IBM Intranet w3v8 style web pages.
 
 This output plugin supports generating XHTML documentation conforming to the
-internal IBM w3v8 style. It includes syntax highlighted SQL information on
-various objects in the database (views, tables, etc.) and SVG diagrams of the
+internal IBM w3v8 style [1]. It includes syntax highlighted SQL information on
+various objects in the database (views, tables, etc.) and diagrams of the
 schema.
+
+[1] http://w3.ibm.com/standards/intranet/homepage/v8/index.html
 """
 
 # Standard modules
