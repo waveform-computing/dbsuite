@@ -1,3 +1,3 @@
 @echo off
 
-python -m db2makedoc.main %*
+python db2makedoc.py %*
