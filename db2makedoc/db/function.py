@@ -1,14 +1,11 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-# Standard modules
 import logging
 from string import Template
-
-# Application-specific modules
-from db.schemabase import Routine
-from db.param import Param
-from db.util import format_size, format_ident
+from db2makedoc.db.schemabase import Routine
+from db2makedoc.db.param import Param
+from db2makedoc.db.util import format_size, format_ident
 
 class Function(Routine):
 	"""Class representing a function in a DB2 database"""

@@ -1,12 +1,9 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-# Standard modules
 import logging
-
-# Application-specific modules
-from db.base import DocBase
-from db.util import format_size, format_ident
+from db2makedoc.db.base import DocBase
+from db2makedoc.db.util import format_size, format_ident
 
 class Param(DocBase):
 	"""Class representing a parameter in a routine in a DB2 database"""

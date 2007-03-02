@@ -1,13 +1,10 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-# Standard modules
 import logging
 from string import Template
-
-# Application-specific modules
-from db.relationbase import RelationObject
-from db.util import format_size, format_ident
+from db2makedoc.db.relationbase import RelationObject
+from db2makedoc.db.util import format_size, format_ident
 
 class Field(RelationObject):
 	"""Class representing a field in a relation in a DB2 database"""

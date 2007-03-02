@@ -1,8 +1,8 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-from db.database import Database
-from output.html.w3.document import W3MainDocument
+from db2makedoc.db.database import Database
+from db2makedoc.plugins.html.w3.document import W3MainDocument
 
 class W3DatabaseDocument(W3MainDocument):
 	def __init__(self, site, database):

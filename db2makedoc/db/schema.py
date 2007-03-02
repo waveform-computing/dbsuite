@@ -1,19 +1,16 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-# Standard modules
 import logging
-
-# Application-specific modules
-from db.base import DocBase
-from db.table import Table
-from db.view import View
-from db.alias import Alias
-from db.index import Index
-from db.trigger import Trigger
-from db.datatype import Datatype
-from db.function import Function
-from db.procedure import Procedure
+from db2makedoc.db.base import DocBase
+from db2makedoc.db.table import Table
+from db2makedoc.db.view import View
+from db2makedoc.db.alias import Alias
+from db2makedoc.db.index import Index
+from db2makedoc.db.trigger import Trigger
+from db2makedoc.db.datatype import Datatype
+from db2makedoc.db.function import Function
+from db2makedoc.db.procedure import Procedure
 
 class Schema(DocBase):
 	"""Class representing a schema in a DB2 database"""

@@ -14,11 +14,8 @@ documents, plain text files, or even SVG images.
 [1] http://www.kid-templating.org/
 """
 
-# Standard modules
 import os
 import kid
-
-# Plugin specific modules
 
 # Constants
 TEMPLATE_PATH_OPTION = 'template_path'

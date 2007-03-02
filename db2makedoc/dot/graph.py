@@ -11,7 +11,6 @@ GraphViz.
 
 """
 
-# Standard modules
 import sys
 mswindows = sys.platform == "win32"
 import os

@@ -1,13 +1,10 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-# Standard modules
 import logging
-
-# Application-specific modules
-from db.base import DocBase
-from db.schema import Schema
-from db.tablespace import Tablespace
+from db2makedoc.db.base import DocBase
+from db2makedoc.db.schema import Schema
+from db2makedoc.db.tablespace import Tablespace
 
 class Database(DocBase):
 	"""Class representing a DB2 database"""

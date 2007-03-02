@@ -1,15 +1,12 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-# Standard modules
 import logging
 from string import Template
-
-# Application-specific modules
-from db.schemabase import Relation
-from db.proxies import RelationsDict, RelationsList, TriggersDict, TriggersList
-from db.field import Field
-from db.util import format_ident
+from db2makedoc.db.schemabase import Relation
+from db2makedoc.db.proxies import RelationsDict, RelationsList, TriggersDict, TriggersList
+from db2makedoc.db.field import Field
+from db2makedoc.db.util import format_ident
 
 class View(Relation):
 	"""Class representing a view in a DB2 database"""

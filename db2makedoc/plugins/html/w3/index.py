@@ -1,8 +1,8 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-from db.index import Index
-from output.html.w3.document import W3MainDocument
+from db2makedoc.db.index import Index
+from db2makedoc.plugins.html.w3.document import W3MainDocument
 
 class W3IndexDocument(W3MainDocument):
 	def __init__(self, site, index):

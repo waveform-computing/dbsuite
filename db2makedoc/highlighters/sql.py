@@ -12,8 +12,8 @@ sql module to parse the SQL and defines various handler stubs for converting
 the result tokens into markup.
 """
 
-from sql.tokenizer import *
-from sql.formatter import *
+from db2makedoc.sql.tokenizer import *
+from db2makedoc.sql.formatter import *
 
 class SQLHighlighter(object):
 	def __init__(self):

@@ -1,18 +1,15 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-# Standard modules
 import logging
 from string import Template
-
-# Application-specific modules
-from db.schemabase import Relation
-from db.proxies import IndexesDict, IndexesList, RelationsDict, RelationsList, TriggersDict, TriggersList
-from db.field import Field
-from db.uniquekey import UniqueKey, PrimaryKey
-from db.foreignkey import ForeignKey
-from db.check import Check
-from db.util import format_ident
+from db2makedoc.db.schemabase import Relation
+from db2makedoc.db.proxies import IndexesDict, IndexesList, RelationsDict, RelationsList, TriggersDict, TriggersList
+from db2makedoc.db.field import Field
+from db2makedoc.db.uniquekey import UniqueKey, PrimaryKey
+from db2makedoc.db.foreignkey import ForeignKey
+from db2makedoc.db.check import Check
+from db2makedoc.db.util import format_ident
 
 class Table(Relation):
 	"""Class representing a table in a DB2 database"""

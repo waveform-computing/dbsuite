@@ -1,13 +1,10 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-# Standard modules
 import re
 import logging
-
-# Application-specific modules
-from db.relationbase import Constraint
-from db.util import format_ident
+from db2makedoc.db.relationbase import Constraint
+from db2makedoc.db.util import format_ident
 
 class UniqueKeyFieldsList(object):
 	"""Presents a list of fields in a unique key"""

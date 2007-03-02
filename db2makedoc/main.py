@@ -10,6 +10,7 @@ import fnmatch
 import os
 import imp
 import textwrap
+import db2makedoc.plugins
 from db2makedoc.db.database import Database
 
 # Constants
@@ -121,9 +122,10 @@ def main():
 			if not parser.has_option(section, PLUGIN_OPTION):
 				raise Exception(MISSING_VALUE_ERR % (config_file, section, PLUGIN_OPTION))
 			s = parser.get(section, PLUGIN_OPTION)
-			if s.startswith('input.'):
+			p = load_plugin(parser.get(section, PLUGIN_OPTION))
+			if is_input_plugin(p):
 				input_sections.append(section)
-			elif s.startswith('output.'):
+			elif is_output_plugin(p):
 				output_sections.append(section)
 			else:
 				raise Exception(INVALID_PLUGIN_ERR % (config_file, section, s))
@@ -178,17 +180,41 @@ def production_excepthook(type, value, traceback):
 	printing the stack trace (which'd just confuse most users). Users can
 	enable the normal exception hook by using the --debug or -D args.
 	"""
-	logging.critical(str(e))
+	logging.critical(str(value))
 	sys.exit(1)
 
 def list_plugins():
 	"""Pretty-print a list of the available input and output plugins."""
-	import db2makedoc.plugins
+	# Get all plugins and separate them into input and output lists, sorted by
+	# name. The prefix of the root plugin package ("db2makedoc.plugins") is
+	# stripped from the qualified name of each plugin module
+	plugins = [
+		(name[len(db2makedoc.plugins.__name__)+1:], plugin)
+		for (name, plugin) in get_plugins(db2makedoc.plugins)
+	]
+	input_plugins = [
+		(name, plugin)
+		for (name, plugin) in plugins
+		if is_input_plugin(plugin)
+	]
+	output_plugins = [
+		(name, plugin)
+		for (name, plugin) in plugins
+		if is_output_plugin(plugin)
+	]
+	input_plugins = sorted(input_plugins, key=lambda(name, plugin): name)
+	output_plugins = sorted(output_plugins, key=lambda(name, plugin): name)
+	# Format and output the lists
 	tw = textwrap.TextWrapper()
 	tw.initial_indent = ' '*8
 	tw.subsequent_indent = tw.initial_indent
 	print BOLD + BLUE + INPUT_PLUGINS_MSG + NORMAL
-	for (name, plugin) in sorted(plugins(db2makedoc.plugins), key=lambda(name, plugin): name):
+	for (name, plugin) in input_plugins:
+		print ' '*4 + BOLD + name + NORMAL
+		print tw.fill(plugin.__doc__.split('\n')[0])
+	print ''
+	print BOLD + BLUE + OUTPUT_PLUGINS_MSG + NORMAL
+	for (name, plugin) in output_plugins:
 		print ' '*4 + BOLD + name + NORMAL
 		print tw.fill(plugin.__doc__.split('\n')[0])
 	print ''
@@ -235,13 +261,14 @@ def is_plugin(module):
 	"""Determines whether the specified module is a plugin of either kind."""
 	return is_input_plugin(module) or is_output_plugin(module)
 
-def plugins(root, name=None):
+def get_plugins(root, name=None):
 	"""Generator returning all input and output plugins in a package.
 
 	Given a root package (root), this generator function recursively searches
 	all paths in the package for modules which contain a callable (function or
 	class definition) named Input or Output. It yields a 2-tuple containing the
-	plugin's fully qualified module name and the module itself.
+	plugin's qualified module name (minues the plugin root's name) and the
+	module itself.
 	"""
 	if name is None:
 		name = root.__name__
@@ -282,13 +309,13 @@ def plugins(root, name=None):
 		if is_plugin(m):
 			yield ('%s.%s' % (name, d), m)
 		# Recursively call ourselves with the directory module
-		for (n, m) in plugins(m, '%s.%s' % (name, m.__name__)):
+		for (n, m) in get_plugins(m, '%s.%s' % (name, m.__name__)):
 			yield (n, m)
 
 def load_plugin(name):
-	"""Given an absolute name, load an input or output plugin."""
+	"""Given a name relative to the plugin root, load an input or output plugin."""
 	root = None
-	parts = name.split('.')
+	parts = db2makedoc.plugins.__name__.split('.') + name.split('.')
 	for p in parts:
 		(modfile, modpath, moddesc) = imp.find_module(p, root)
 		try:

@@ -4,6 +4,5 @@
 __all__ = [
 	'dialects',
 	'formatter',
-	'htmlhighlighter',
 	'tokenizer',
 ]

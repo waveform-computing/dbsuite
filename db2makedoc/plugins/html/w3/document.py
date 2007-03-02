@@ -1,26 +1,20 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-# Standard modules
 import os.path
 import logging
 import codecs
 import xml.dom
 import xml.dom.minidom
-
-# Application-specific modules
-from db.base import DocBase
-from db.schema import Schema
-from db.schemabase import Relation
-from db.table import Table
-from db.view import View
-from db.alias import Alias
-from db.trigger import Trigger
-from sql.tokenizer import DB2UDBSQLTokenizer
-from sql.formatter import SQLFormatter
-from sql.htmlhighlighter import SQLDOMHighlighter
-from output.html.document import AttrDict, HTMLCommentHighlighter, WebSite, HTMLDocument, CSSDocument, GraphDocument
-from dot.graph import Graph, Node, Edge, Cluster
+from db2makedoc.db.base import DocBase
+from db2makedoc.db.schema import Schema
+from db2makedoc.db.schemabase import Relation
+from db2makedoc.db.table import Table
+from db2makedoc.db.view import View
+from db2makedoc.db.alias import Alias
+from db2makedoc.db.trigger import Trigger
+from db2makedoc.dot.graph import Graph, Node, Edge, Cluster
+from db2makedoc.plugins.html.document import AttrDict, HTMLCommentHighlighter, WebSite, HTMLDocument, CSSDocument, GraphDocument
 
 class W3CommentHighlighter(HTMLCommentHighlighter):
 	def __init__(self, document):
@@ -245,9 +239,6 @@ class W3MainDocument(W3Document):
 		self.title = '%s - %s %s' % (self.site.title, self.dbobject.type_name, self.dbobject.qualified_name)
 		self.description = '%s %s' % (self.dbobject.type_name, self.dbobject.qualified_name)
 		self.keywords = [self.site.database.name, self.dbobject.type_name, self.dbobject.name, self.dbobject.qualified_name]
-		self.tokenizer = DB2UDBSQLTokenizer()
-		self.formatter = SQLFormatter()
-		self.highlighter = SQLDOMHighlighter()
 	
 	def write(self):
 		# Overridden to add logging

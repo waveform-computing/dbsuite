@@ -1,11 +1,8 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-# Standard modules
 import logging
-
-# Application-specific modules
-from db.schemabase import SchemaObject
+from db2makedoc.db.schemabase import SchemaObject
 
 class Datatype(SchemaObject):
 	"""Class representing a datatype in a DB2 database"""

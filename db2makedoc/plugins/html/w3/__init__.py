@@ -11,25 +11,22 @@ schema.
 [1] http://w3.ibm.com/standards/intranet/homepage/v8/index.html
 """
 
-# Standard modules
 import os
-
-# Plugin specific modules
-from output.html.w3.document import W3Site, W3PopupDocument, W3CSSDocument
-from output.html.w3.database import W3DatabaseDocument
-from output.html.w3.schema import W3SchemaDocument, W3SchemaGraph
-from output.html.w3.table import W3TableDocument, W3TableGraph
-from output.html.w3.view import W3ViewDocument, W3ViewGraph
-from output.html.w3.alias import W3AliasDocument, W3AliasGraph
-from output.html.w3.uniquekey import W3UniqueKeyDocument
-from output.html.w3.foreignkey import W3ForeignKeyDocument
-from output.html.w3.check import W3CheckDocument
-from output.html.w3.index import W3IndexDocument
-from output.html.w3.trigger import W3TriggerDocument
-from output.html.w3.function import W3FunctionDocument
-from output.html.w3.procedure import W3ProcedureDocument
-from output.html.w3.tablespace import W3TablespaceDocument
-from output.html.w3.popups import W3_POPUPS
+from db2makedoc.plugins.html.w3.document import W3Site, W3PopupDocument, W3CSSDocument
+from db2makedoc.plugins.html.w3.database import W3DatabaseDocument
+from db2makedoc.plugins.html.w3.schema import W3SchemaDocument, W3SchemaGraph
+from db2makedoc.plugins.html.w3.table import W3TableDocument, W3TableGraph
+from db2makedoc.plugins.html.w3.view import W3ViewDocument, W3ViewGraph
+from db2makedoc.plugins.html.w3.alias import W3AliasDocument, W3AliasGraph
+from db2makedoc.plugins.html.w3.uniquekey import W3UniqueKeyDocument
+from db2makedoc.plugins.html.w3.foreignkey import W3ForeignKeyDocument
+from db2makedoc.plugins.html.w3.check import W3CheckDocument
+from db2makedoc.plugins.html.w3.index import W3IndexDocument
+from db2makedoc.plugins.html.w3.trigger import W3TriggerDocument
+from db2makedoc.plugins.html.w3.function import W3FunctionDocument
+from db2makedoc.plugins.html.w3.procedure import W3ProcedureDocument
+from db2makedoc.plugins.html.w3.tablespace import W3TablespaceDocument
+from db2makedoc.plugins.html.w3.popups import W3_POPUPS
 
 # Constants
 PATH_OPTION = 'path'

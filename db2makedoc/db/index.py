@@ -1,13 +1,10 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-# Standard modules
 import logging
 from string import Template
-
-# Application-specific modules
-from db.schemabase import SchemaObject
-from db.util import format_ident
+from db2makedoc.db.schemabase import SchemaObject
+from db2makedoc.db.util import format_ident
 
 class IndexFieldsDict(object):
 	"""Presents a dictionary of (field, index_order) tuples keyed by field_name"""

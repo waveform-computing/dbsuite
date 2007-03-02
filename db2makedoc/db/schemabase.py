@@ -1,8 +1,7 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-# Application-specific modules
-from db.base import DocBase
+from db2makedoc.db.base import DocBase
 
 class SchemaObject(DocBase):
 	"""Base class for database objects that belong directly to a schema"""

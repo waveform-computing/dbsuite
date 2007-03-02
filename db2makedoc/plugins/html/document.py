@@ -1,7 +1,6 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-# Standard modules
 import os
 import os.path
 import codecs
@@ -9,15 +8,14 @@ import re
 import datetime
 import shutil
 import xml.dom
+from db2makedoc.dot.graph import Graph, Node, Edge, Cluster
+from db2makedoc.highlighters.comments import CommentHighlighter
+from db2makedoc.highlighters.sql import SQLHighlighter, ERROR, COMMENT, KEYWORD, IDENTIFIER, DATATYPE, REGISTER, NUMBER, STRING, OPERATOR, PARAMETER, TERMINATOR, STATEMENT
+
 try:
 	from cStringIO import StringIO
 except ImportError:
 	from StringIO import StringIO
-
-# Application-specific modules
-from dot.graph import Graph, Node, Edge, Cluster
-from output.commenthighlighter import CommentHighlighter
-from output.sqlhighlighter import SQLHighlighter, ERROR, COMMENT, KEYWORD, IDENTIFIER, DATATYPE, REGISTER, NUMBER, STRING, OPERATOR, PARAMETER, TERMINATOR, STATEMENT
 
 # Constants for HTML versions
 

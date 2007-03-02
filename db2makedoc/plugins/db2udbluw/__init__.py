@@ -9,7 +9,6 @@ doccat_create.sql script in the contrib/db2udbluw directory) is present, it
 will be used to source documentation data instead of SYSCAT.
 """
 
-# Standard modules
 import sys
 mswindows = sys.platform == 'win32'
 import logging

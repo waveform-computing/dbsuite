@@ -16,8 +16,8 @@ The class is capable of reformatting the vast majority of the DB2 SQL dialect
 
 import re
 import sys
-from sql.dialects import *
-from sql.tokenizer import *
+from db2makedoc.sql.dialects import *
+from db2makedoc.sql.tokenizer import *
 
 # Custom token types used by the formatter
 (

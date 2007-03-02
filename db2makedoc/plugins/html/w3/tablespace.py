@@ -1,8 +1,8 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-from db.tablespace import Tablespace
-from output.html.w3.document import W3MainDocument
+from db2makedoc.db.tablespace import Tablespace
+from db2makedoc.plugins.html.w3.document import W3MainDocument
 
 class W3TablespaceDocument(W3MainDocument):
 	def __init__(self, site, tablespace):

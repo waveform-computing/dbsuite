@@ -1,12 +1,9 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-# Standard modules
 from string import Template
-
-# Application-specific modules
-from db.base import DocBase
-from db.util import format_ident
+from db2makedoc.db.base import DocBase
+from db2makedoc.db.util import format_ident
 
 class RelationObject(DocBase):
 	"""Base class for database objects that belong directly to a relation"""

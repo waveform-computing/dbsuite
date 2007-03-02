@@ -1,7 +1,6 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-# Standard modules
 from UserDict import DictMixin
 
 class RelationsDict(object, DictMixin):

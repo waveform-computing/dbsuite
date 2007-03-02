@@ -1,8 +1,6 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-import re
-
 """Implements a generic class for parsing simple prefix-based markup.
 
 This module defines a base class for converting a simple prefix-based into some
@@ -23,8 +21,9 @@ database (which has extremely limited field sizes), it is designed to be
 minimal and unobtrusive to the eye when read prior to conversion.
 """
 
+import re
 import logging
-from db.database import Database
+from db2makedoc.db.database import Database
 
 class CommentHighlighter(object):
 

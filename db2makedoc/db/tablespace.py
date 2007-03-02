@@ -1,12 +1,9 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-# Standard modules
 import logging
-
-# Application-specific modules
-from db.base import DocBase
-from db.proxies import IndexesDict, IndexesList, RelationsDict, RelationsList
+from db2makedoc.db.base import DocBase
+from db2makedoc.db.proxies import IndexesDict, IndexesList, RelationsDict, RelationsList
 
 class Tablespace(DocBase):
 	"""Class representing a tablespace in a DB2 database"""
