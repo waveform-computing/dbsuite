@@ -12,7 +12,7 @@ SRCZIP=dist/$(BASE).zip
 all: dist
 
 clean:
-	rm -f $(WININST) $(RPMS) $(SRCTAR) $(SRCZIP) MANIFEST
+	rm -f $(WININST) $(RPMS) $(SRCTAR) $(SRCZIP) MANIFEST README.txt
 	rm -fr build/
 
 dist: bdist sdist
