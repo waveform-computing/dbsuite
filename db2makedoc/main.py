@@ -14,7 +14,7 @@ import db2makedoc.plugins
 from db2makedoc.db.database import Database
 
 # Constants
-__version__ = "0.1"
+__version__ = "1.0.0pr2"
 PLUGIN_OPTION = 'plugin'
 
 # Localizable strings
@@ -72,7 +72,6 @@ def main():
 		logfile="",
 		loglevel=logging.WARNING
 	)
-	parser.add_option("-c", "--config", dest="config", help=CONFIG_HELP)
 	parser.add_option("-q", "--quiet", dest="loglevel", action="store_const", const=logging.ERROR, help=QUIET_HELP)
 	parser.add_option("-v", "--verbose", dest="loglevel", action="store_const", const=logging.DEBUG, help=VERBOSE_HELP)
 	parser.add_option("-l", "--log-file", dest="logfile", help=LOG_FILE_HELP)

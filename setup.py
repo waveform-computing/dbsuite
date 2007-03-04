@@ -4,8 +4,7 @@
 
 import sys
 from distutils.core import setup
-
-__version__ = '1.0.0pr1'
+from db2makedoc.main import __version__
 
 long_description = \
 """Flexible documentation generator for IBM DB2.
