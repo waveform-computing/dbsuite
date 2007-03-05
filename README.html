@@ -9,19 +9,34 @@
 body {
     font-family: "Bitstream Vera Sans", "Verdana", sans-serif;
     font-size: 10pt;
-    background-color: #028;
 }
 
-div#body {
-    margin: 1em 20% 1em 20%;
-    padding: 1em;
-    border: 2px solid #28a;
-    background-color: white;
+@media screen {
+    body {
+        background-color: #028;
+    }
+
+    div#body {
+        margin: 1em 15% 1em 15%;
+        padding: 1em;
+        border: 2px solid #28a;
+        background-color: white;
+    }
 }
 
-h1 { border-bottom: 1px solid black; margin-left: 0; }
+h1 {
+    border-bottom: 1px solid black;
+    margin-left: 0;
+    counter-reset: section;
+}
+
+h2.section:before {
+    content: counter(section) ". ";
+    counter-increment: section;
+}
+
 p { text-align: justify; }
-p, ul, pre { margin-left: 0.25in; margin-right: 0.25in; }
+p, ul, ol, pre { margin-left: 0.25in; margin-right: 0.25in; }
 ul ul { list-style-type: circle; }
 li { margin-top: 0.5em; }
 
@@ -36,6 +51,10 @@ pre {
     background-color: #eee;
     border: 1px solid #ccc;
     padding: 1em;
+    white-space: -moz-pre-wrap; /* Mozilla */
+    white-space: -o-pre-wrap;   /* Opera 7 */
+    white-space: -pre-wrap;     /* Opera 4-6 */
+    white-space: pre-wrap;      /* CSS 2.1 (Opera 8+) */
 }
 
 pre.ini span.head {
@@ -47,13 +66,28 @@ pre.ini span.comment {
     font-style: italic;
     color: #080;
 }
+
+pre.sql span.kw {
+    font-weight: bold;
+    color: #00f;
+}
+
+pre.sql span.comment {
+    font-style: italic;
+    color: #080;
+}
+
+pre.sql span.var {
+    font-weight: bold;
+    color: #f00;
+}
 /*]]>*/
 </style>
 </head>
 
 <body>
 <div id="body">
-    <h1>db2makedoc</h1>
+    <h1 id="top" name="top">db2makedoc</h1>
 
     <p><em>db2makedoc</em> is a command line application for generating
     documentation from IBM DB2&trade; databases (although theoretically it
@@ -63,7 +97,18 @@ pre.ini span.comment {
     <q>kid</q> XML templates, and a single input plugin is provided for IBM DB2
     UDB v8+ for Linux/UNIX/Windows.</p>
 
-    <h2>Requirements</h2>
+    <h2 id="contents" name="contents">Contents</h2>
+
+    <ol>
+        <li><a href="#requirements">Requirements</a></li>
+        <li><a href="#installation_win">Installation (Windows)</a></li>
+        <li><a href="#installation_unix">Installation (UNIX/Linux)</a></li>
+        <li><a href="#usage">Usage</a></li>
+        <li><a href="#issues">Known Issues / Bugs</a></li>
+        <li><a href="#contact">Contact Details</a></li>
+    </ol>
+
+    <h2 class="section" id="requirements" name="requirements">Requirements</h2>
 
     <ul>
         <li>Python 2.4 or above. May work on earlier versions, but this hasn't
@@ -76,13 +121,13 @@ pre.ini span.comment {
 
         <li>For the db2udbluw input plugin (for reading meta-data from an IBM
         DB2 UDB v8+ for Linux/UNIX/Windows database), one of the following
-        database connection packages must be installed:
+        database connection packages must be installed, along with the client
+        for IBM DB2 UDB v8 or above for Linux/UNIX/Windows:
 
             <ul>
+                <li>IBM DB2 UDB &lt;<a href="http://www.ibm.com/db2">http://www.ibm.com/db2</a>&gt;</li>
                 <li>PyDB2 &lt;<a href="http://sourceforge.net/projects/pydb2">http://sourceforge.net/projects/pydb2</a>&gt;</li>
-
                 <li>PyWin32 &lt;<a href="http://sourceforge.net/projects/pywin32">http://sourceforge.net/projects/pywin32</a>&gt;</li>
-
                 <li>mxODBC &lt;<a href="http://www.egenix.com/files/python/mxODBC.html">http://www.egenix.com/files/python/mxODBC.html</a>&gt;</li>
             </ul>
         </li>
@@ -94,9 +139,16 @@ pre.ini span.comment {
                 <li>kid &lt;<a href="http://www.kid-templating.org/">http://www.kid-templating.org/</a>&gt;</li>
             </ul>
         </li>
+
+        <li>For diagram creation, GraphViz is required:
+
+            <ul>
+                <li>GraphViz &lt;<a href="http://www.graphviz.org/">http://www.graphviz.org/</a>&gt;</li>
+            </ul>
+        </li>
     </ul>
 
-    <h2>Installation (Windows)</h2>
+    <h2 class="section" id="installation_win" name="installation_win">Installation (Windows)</h2>
 
     <p>Under Windows, simply run the executable installer and follow the
     prompts. This will install the <em>db2makedoc</em> packages under your
@@ -104,13 +156,13 @@ pre.ini span.comment {
     application script (<code>db2makedoc.py</code>) under your main Python
     directory (e.g. <code>C:\Python24</code>) which should be in your
     <code>PATH</code> variable. You should then be able to run
-    <code>db2makedoc</code> from a CMD window simply by typing
+    <em>db2makedoc</em> from a CMD window simply by typing
     <code>db2makedoc.py</code>. For example, to receive information on the
     command line syntax:</p>
 
     <pre>C:\&gt; <strong>db2makedoc.py --help</strong></pre>
 
-    <h2>Installation (UNIX/Linux)</h2>
+    <h2 class="section" id="installation_unix" name="installation_unix">Installation (UNIX/Linux)</h2>
 
     <p>Under UNIX/Linux, extract the tarball into a convenient directory and,
     as root, run the following command:</p>
@@ -128,7 +180,7 @@ pre.ini span.comment {
 
     <pre>$ <strong>db2makedoc.py --help</strong></pre>
 
-    <h2>Usage</h2>
+    <h2 class="section" id="usage" name="usage">Usage</h2>
 
     <p><em>db2makedoc</em> requires a configuration file in order to run.
     Configuration files are simple INI-style files, consisting of sections
@@ -204,11 +256,14 @@ copyright=Copyright (c) 1960 B.C. Fred Flintstone. All Rights
     debugging, verbose output, etc. Use the <code>--help</code> option for a
     summary of the available options.</p>
 
-    <h2>Known Issues / Bugs</h2>
+    <h2 class="section" id="issues" name="issues">Known Issues / Bugs</h2>
 
     <p>None currently known.</p>
 
-    <h2>Contact Details</h2>
+    <h2 class="section" id="contact" name="contact">Contact Details</h2>
+
+    <p>Please feel free to contact me at the following address if you have
+    questions, bug reports, suggestions, etc.:</p>
 
     <p>Dave Hughes &lt;<a href="mailto:dave@waveform.plus.com">dave@waveform.plus.com</a>&gt;</p>
 
