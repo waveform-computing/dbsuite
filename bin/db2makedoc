@@ -2,7 +2,15 @@
 # vim: set noet sw=4 ts=4:
 # $Header$
 
-from db2makedoc.main import main
+try:
+	from db2makedoc.main import main
+except ImportError:
+	# If we're running an uninstalled copy we need to tweak the path a bit to
+	# find the main module
+	import sys
+	import os
+	sys.path.insert(0, os.path.realpath(os.path.join(os.path.dirname(sys.argv[0]), '..')))
+	from db2makedoc.main import main
 
 if __name__ == '__main__':
 	main()
