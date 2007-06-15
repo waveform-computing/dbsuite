@@ -153,14 +153,37 @@ pre.sql span.var {
     <p>Under Windows, simply run the executable installer and follow the
     prompts. This will install the <em>db2makedoc</em> packages under your
     Python installation's <code>site-packages</code> path and the main
-    application script (<code>db2makedoc.py</code>) under your main Python
-    directory (e.g. <code>C:\Python24</code>) which should be in your
-    <code>PATH</code> variable. You should then be able to run
-    <em>db2makedoc</em> from a CMD window simply by typing
-    <code>db2makedoc.py</code>. For example, to receive information on the
+    application script (<code>db2makedoc</code>) under your Python Scripts
+    directory (e.g. <code>C:\Python24\Scripts</code>).  You should then be able
+    to run <em>db2makedoc</em> from a CMD window by typing the full path of the
+    <em>db2makedoc</em> script. For example, to receive information on the
     command line syntax:</p>
 
-    <pre>C:\&gt; <strong>db2makedoc.py --help</strong></pre>
+    <pre>C:\&gt; <strong>C:\Python24\Scripts\db2makedoc --help</strong></pre>
+
+    <p>If you wish, you can add the Scripts directory to your <code>PATH</code>
+    environment variable which will allow you to launch <em>db2exec</em> (and
+    other Python scripts) without specifying the full path. To do this
+    temporarily for the current command line session:</p>
+
+    <pre>C:\&gt; <strong>SET PATH=%PATH%;C:\Python24\Scripts</strong>
+C:\&gt; <strong>db2makedoc --help</strong></pre>
+
+    <p>To make the <code>PATH</code> change permanent, use the System applet in
+    the Windows Control Panel (the location of environment variables in the
+    System applet varies with the version of Windows, but is typically found in
+    an <q>Advanced</q> section).</p>
+
+    <p>On Windows XP Service Pack 2, and Windows 2003 Server R2 you may find
+    you have a <code>setx</code> command that can make permanent changes to the
+    environment, although the changes will not affect the command line session
+    in which they are made. For example, on Windows 2003 Server R2, to add
+    <code>C:\Python24\Scripts</code> to the system-wide <code>PATH</code>:
+
+    <pre>C:\&gt; <strong>SETX PATH "%PATH%;C:\Python24\Scripts" /M</strong></pre>
+
+    <p>Don't forget to restart the command line session before testing the new
+    environment.</p>
 
     <h2 class="section" id="installation_unix" name="installation_unix">Installation (UNIX/Linux)</h2>
 
@@ -171,14 +194,14 @@ pre.sql span.var {
 
     <p>This will install the <em>db2makedoc</em> packages under your main
     Python installation's <code>site-packages</code> path and the main
-    application script (<code>db2makedoc.py</code>) under the <code>bin</code>
+    application script (<code>db2makedoc</code>) under the <code>bin</code>
     directory of Python's <q>prefix</q> path, typically <code>/usr/bin</code>
     or <code>/usr/local/bin</code>. You should then be able to run
     <em>db2makedoc</em> from the shell simply by typing
-    <code>db2makedoc.py</code>. For example, to receive information on the
+    <code>db2makedoc</code>. For example, to receive information on the
     command line syntax:</p>
 
-    <pre>$ <strong>db2makedoc.py --help</strong></pre>
+    <pre>$ <strong>db2makedoc --help</strong></pre>
 
     <h2 class="section" id="usage" name="usage">Usage</h2>
 
@@ -196,17 +219,17 @@ pre.sql span.var {
     an output plugin. To obtain a list of the available input and output
     plugins, run the following command:</p>
 
-    <pre>$ <strong>db2makedoc.py --help-plugins</strong></pre>
+    <pre>$ <strong>db2makedoc --help-plugins</strong></pre>
 
     <p>To obtain a list of the values that can be specified with a particular
     plugin, run the following command:</p>
 
-    <pre>$ <strong>db2makedoc.py --help-plugin=&lt;<em>plugin-name</em>&gt;</strong></pre>
+    <pre>$ <strong>db2makedoc --help-plugin=&lt;<em>plugin-name</em>&gt;</strong></pre>
 
     <p>Where <code>&lt;<em>plugin-name</em>&gt;</code> is the name of the
     plugin you wish to query. For example:</p>
 
-    <pre>$ <strong>db2makedoc.py --help-plugin=db2udbluw</strong></pre>
+    <pre>$ <strong>db2makedoc --help-plugin=db2udbluw</strong></pre>
 
     <p>A section specifying an input plugin is used to tell
     <em>db2makedoc</em> about a database from which you wish to extract
@@ -249,7 +272,7 @@ copyright=Copyright (c) 1960 B.C. Fred Flintstone. All Rights
     stored in a file called mydb.ini it could be executed with the following
     command line:</p>
 
-    <pre>$ <strong>db2makedoc.py mydb.ini</strong></pre>
+    <pre>$ <strong>db2makedoc mydb.ini</strong></pre>
 
     <p>Multiple configuration files can be specified on the command line.
     Additionally, several command line options are available for logging,
