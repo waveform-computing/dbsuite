@@ -103,7 +103,9 @@ class ParseTokenError(ParseError):
 		# Generate a block of context with an indicator showing the error
 		context_lines = 5
 		sourcelines = ''.join([s for (_, _, s, _, _) in self.source]).splitlines()
-		marker = ''.join([{'\t': '\t'}.get(c, ' ') for c in sourcelines[self.line-1][:self.col-1]]) + '^'
+		lineindex = self.line - 1
+		if self.line > len(sourcelines): lineindex = -1
+		marker = ''.join([{'\t': '\t'}.get(c, ' ') for c in sourcelines[lineindex][:self.col-1]]) + '^'
 		sourcelines.insert(self.line, marker)
 		i = self.line - context_lines
 		if i < 0: i = 0
@@ -992,7 +994,7 @@ class SQLFormatter(BaseFormatter):
 		"""
 		while True:
 			if not (allowdefault and self._match('DEFAULT')):
-				self._parse_expression1()
+				self._parse_expression()
 			if not self._match(','):
 				break
 			elif newlines:
@@ -1044,7 +1046,7 @@ class SQLFormatter(BaseFormatter):
 		try:
 			# Try and parse a full-select
 			self._indent()
-			self._parse_full_select1()
+			self._parse_full_select()
 			self._outdent()
 		except ParseError:
 			# If that fails, rewind and parse a tuple of expressions
@@ -1059,16 +1061,24 @@ class SQLFormatter(BaseFormatter):
 		"""Parse a search condition (as part of WHERE/HAVING/etc.)"""
 		while True:
 			self._match('NOT')
-			if self._match('('):
+			# Ambiguity: open parentheses could indicate a parentheiszed search
+			# condition, or a parenthesized expression within a predicate
+			self._save_state()
+			try:
+				# Attempt to parse a parenthesized search condition
+				self._expect('(')
 				self._parse_search_condition()
 				self._expect(')')
-			else:
+			except ParseError:
+				# If that fails, rewind and parse a predicate instead (which
+				# will parse a parenthesized expression)
+				self._restore_state()
 				self._parse_predicate()
 				if self._match('SELECTIVITY'):
 					self._expect(NUMBER)
-			if self._match_one_of(['AND', 'OR']):
-				if linebreaks: self._newline(-1)
 			else:
+				self._forget_state()
+			if not self._match_one_of(['AND', 'OR']):
 				break
 	
 	def _parse_predicate(self):
@@ -3238,7 +3248,7 @@ class SQLFormatter(BaseFormatter):
 				reraise = True
 				self._expect('(')
 				self._indent()
-				self._parse_full_select1()
+				self._parse_full_select()
 				self._outdent()
 				self._expect(')')
 				if self._match('WITH'):
@@ -3637,7 +3647,7 @@ class SQLFormatter(BaseFormatter):
 		self._expect('INTO')
 		if self._match('('):
 			self._indent()
-			self._parse_full_select1()
+			self._parse_full_select()
 			self._outdent()
 			self._expect(')')
 		else:
@@ -3703,7 +3713,7 @@ class SQLFormatter(BaseFormatter):
 		self._expect('INTO')
 		if self._match('('):
 			self._indent()
-			self._parse_full_select1()
+			self._parse_full_select()
 			self._outdent()
 			self._expect(')')
 		else:
@@ -4190,7 +4200,7 @@ class SQLFormatter(BaseFormatter):
 		# UPDATE already matched
 		if self._match('('):
 			self._indent()
-			self._parse_full_select1()
+			self._parse_full_select()
 			self._outdent()
 			self._expect(')')
 		else:
