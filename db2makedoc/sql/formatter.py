@@ -508,71 +508,14 @@ class BaseFormatter(object):
 		raise ParseExpectedOneOfError(self._tokens, self._token(self._index), templates)
 
 	def _format_token(self, t):
-		"""Reformats tokens for output"""
+		"""Reformats a token for output"""
+		# Override this method in descendent classes to transform the token
+		# in whatever manner you wish. Return the transformed token without
+		# the line and column elements (the last two) as these will be
+		# recalculated in _parse_finish. The default implementation here
+		# performs no transformation
+		return t[:3]
 		
-		def quote_str(s, qchar):
-			"""Quote a string, doubling all quotation characters within it"""
-			ctrlchars = set(chr(c) for c in xrange(32))
-			if ctrlchars & set(s):
-				# If the string contains non-printable control characters,
-				# format it as a hexstring
-				return 'X%s%s%s' % (qchar, ''.join('%.2X' % (ord(c),) for c in s), qchar)
-			else:
-				return '%s%s%s' % (qchar, s.replace(qchar, qchar*2), qchar)
-		
-		def format_ident(ident):
-			"""Format an SQL identifier with quotes if required"""
-			identchars = set(ibmdb2udb_identchars)
-			quotedident = not ident[0] in (identchars - set('0123456789'))
-			if not quotedident:
-				for c in ident[1:]:
-					if not c in identchars:
-						quotedident = True
-						break
-			if quotedident:
-				return quote_str(ident, '"')
-			else:
-				return ident
-		
-		def format_param(param):
-			"""Format a parameter with quotes if required"""
-			if param is None:
-				return '?'
-			else:
-				return ':%s' % (format_ident(param))
-			
-		# Override this method in descendent classes to transform the token in
-		# whatever manner you wish. Return the transformed token without the
-		# line and column elements (the last two) as these will be recalculated
-		# in _recalc_positions(). To remove a token from the output, return
-		# None.
-		if t[0] == IDENTIFIER:
-			return (t[0], t[1], format_ident(t[1]))
-		elif t[0] == REGISTER:
-			return (t[0], t[1], format_ident(t[1]))
-		elif t[0] == DATATYPE:
-			return (t[0], t[1], format_ident(t[1]))
-		elif t[0] == PARAMETER:
-			return (t[0], t[1], format_param(t[1]))
-		elif t[0] == KEYWORD:
-			return (t[0], t[1], t[1])
-		elif t[0] == WHITESPACE:
-			return (t[0], None, ' ')
-		elif t[0] == COMMENT:
-			return (t[0], t[1], '/*%s*/' % (t[1]))
-		elif t[0] == NUMBER:
-			return (t[0], t[1], str(t[1]))
-		elif t[0] == STRING:
-			return (t[0], t[1], quote_str(t[1], "'"))
-		elif t[0] == TERMINATOR:
-			return (t[0], None, ';')
-		elif t[0] == STATEMENT:
-			return (t[0], None, '!')
-		elif t[0] == INDENT:
-			return (WHITESPACE, None, '\n' + self.indent*t[1])
-		else:
-			return t[:3]
-	
 	def _reformat_output(self):
 		"""Reformats all output tokens with _format_token()"""
 		newoutput = []
@@ -702,6 +645,71 @@ class SQLFormatter(BaseFormatter):
 	def _parse_top(self):
 		# Override _parse_top to make a 'statement' the top of the parse tree
 		self._parse_statement()
+	def _format_token(self, t):
+		"""Reformats a token for output"""
+		
+		def quote_str(s, qchar):
+			"""Quote a string, doubling all quotation characters within it"""
+			ctrlchars = set(chr(c) for c in xrange(32))
+			if ctrlchars & set(s):
+				# If the string contains non-printable control characters,
+				# format it as a hexstring
+				return 'X%s%s%s' % (qchar, ''.join('%.2X' % (ord(c),) for c in s), qchar)
+			else:
+				return '%s%s%s' % (qchar, s.replace(qchar, qchar*2), qchar)
+		
+		def format_ident(ident):
+			"""Format an SQL identifier with quotes if required"""
+			identchars = set(ibmdb2udb_identchars)
+			quotedident = not ident[0] in (identchars - set('0123456789'))
+			if not quotedident:
+				for c in ident[1:]:
+					if not c in identchars:
+						quotedident = True
+						break
+			if quotedident:
+				return quote_str(ident, '"')
+			else:
+				return ident
+		
+		def format_param(param):
+			"""Format a parameter with quotes if required"""
+			if param is None:
+				return '?'
+			else:
+				return ':%s' % (format_ident(param))
+			
+		# Override this method in descendent classes to transform the token in
+		# whatever manner you wish. Return the transformed token without the
+		# line and column elements (the last two) as these will be recalculated
+		# in _recalc_positions(). To remove a token from the output, return
+		# None.
+		if t[0] == IDENTIFIER:
+			return (t[0], t[1], format_ident(t[1]))
+		elif t[0] == REGISTER:
+			return (t[0], t[1], format_ident(t[1]))
+		elif t[0] == DATATYPE:
+			return (t[0], t[1], format_ident(t[1]))
+		elif t[0] == PARAMETER:
+			return (t[0], t[1], format_param(t[1]))
+		elif t[0] == KEYWORD:
+			return (t[0], t[1], t[1])
+		elif t[0] == WHITESPACE:
+			return (t[0], None, ' ')
+		elif t[0] == COMMENT:
+			return (t[0], t[1], '/*%s*/' % (t[1]))
+		elif t[0] == NUMBER:
+			return (t[0], t[1], str(t[1]))
+		elif t[0] == STRING:
+			return (t[0], t[1], quote_str(t[1], "'"))
+		elif t[0] == TERMINATOR:
+			return (t[0], None, ';')
+		elif t[0] == STATEMENT:
+			return (t[0], None, '!')
+		elif t[0] == INDENT:
+			return (WHITESPACE, None, '\n' + self.indent*t[1])
+		else:
+			return t[:3]
 
 	# PATTERNS ###############################################################
 	
@@ -1046,84 +1054,68 @@ class SQLFormatter(BaseFormatter):
 			self._forget_state()
 
 	# EXPRESSIONS and PREDICATES #############################################
-	
-	def _parse_predicate1(self, linebreaks=True):
-		"""Parse low precedence predicate operators (OR)"""
-		self._parse_predicate2(linebreaks)
-		while True:
-			if self._match('OR'):
-				if linebreaks: self._newline(-1)
-				self._parse_predicate2(linebreaks)
-			else:
-				break
 
-	def _parse_predicate2(self, linebreaks=True):
-		"""Parse medium precedence predicate operators (AND)"""
-		self._parse_predicate3(linebreaks)
+	def _parse_search_condition(self, linebreaks=True):
+		"""Parse a search condition (as part of WHERE/HAVING/etc.)"""
 		while True:
-			if self._match('AND'):
-				if linebreaks: self._newline(-1)
-				self._parse_predicate3(linebreaks)
-			else:
-				break
-
-	def _parse_predicate3(self, linebreaks=True):
-		"""Parse high precedence predicate operators (BETWEEN, IN, etc.)"""
-		# Ambiguity: Open parenthesis could indicate a grouping of predicates
-		# or expressions
-		self._save_state()
-		try:
+			self._match('NOT')
 			if self._match('('):
-				self._parse_predicate1(linebreaks)
-				self._expect(')')
-			elif self._match('EXISTS'):
-				self._expect('(')
-				self._parse_full_select1()
+				self._parse_search_condition()
 				self._expect(')')
 			else:
-				raise ParseBacktrack()
-		except ParseError:
-			# If that fails, or we don't match an open parenthesis, parse an
-			# ordinary high-precedence predicate operator
-			self._restore_state()
-			self._parse_expression1()
+				self._parse_predicate()
+				if self._match('SELECTIVITY'):
+					self._expect(NUMBER)
+			if self._match_one_of(['AND', 'OR']):
+				if linebreaks: self._newline(-1)
+			else:
+				break
+	
+	def _parse_predicate(self):
+		"""Parse high precedence predicate operators (BETWEEN, IN, etc.)"""
+		if self._match('EXISTS'):
+			self._expect('(')
+			self._parse_full_select()
+			self._expect(')')
+		else:
+			self._parse_expression()
 			if self._match('NOT'):
 				if self._match('LIKE'):
-					self._parse_expression1()
+					self._parse_expression()
 				elif self._match('BETWEEN'):
-					self._parse_expression1()
+					self._parse_expression()
 					self._expect('AND')
-					self._parse_expression1()
+					self._parse_expression()
 				elif self._match('IN'):
 					if self._match('('):
 						self._parse_tuple()
 						self._expect(')')
 					else:
-						self._parse_expression1()
+						self._parse_expression()
 				else:
-					self._parse_predicate3(linebreaks)
+					self._expected_one_of(['LIKE', 'BETWEEN', 'IN'])
 			elif self._match('LIKE'):
-				self._parse_expression1()
+				self._parse_expression()
 			elif self._match('BETWEEN'):
-				self._parse_expression1()
+				self._parse_expression()
 				self._expect('AND')
-				self._parse_expression1()
+				self._parse_expression()
 			elif self._match('IN'):
 				if self._match('('):
 					self._parse_tuple()
 					self._expect(')')
 				else:
-					self._parse_expression1()
+					self._parse_expression()
 			elif self._match('IS'):
 				self._match('NOT')
 				self._expect('NULL')
 			elif self._match_one_of(['=', '<', '>', '<>', '<=', '>=']):
 				if self._match_one_of(['SOME', 'ANY', 'ALL']):
 					self._expect('(')
-					self._parse_full_select1()
+					self._parse_full_select()
 					self._expect(')')
 				else:
-					self._parse_expression1()
+					self._parse_expression()
 			else:
 				self._expected_one_of([
 					'EXISTS',
@@ -1139,98 +1131,68 @@ class SQLFormatter(BaseFormatter):
 					'<=',
 					'>='
 				])
-		else:
-			self._forget_state()
 
-	def _parse_expression1(self):
-		"""Parse low precedence expression operators (+, -, ||, CONCAT)"""
-		self._parse_expression2()
+	def _parse_expression(self):
 		while True:
-			if self._match('+'):
-				self._parse_expression2()
-			elif self._match('-'):
-				self._parse_expression2()
-			elif self._match('||'):
-				self._parse_expression2()
-			elif self._match('CONCAT'):
-				self._parse_expression2()
+			self._match_one_of(['+', '-']) # Unary +/-
+			if self._match('('):
+				self._parse_tuple()
+				self._expect(')')
+			elif self._match('CAST'):
+				self._parse_cast_expression()
+			elif self._match('CASE'):
+				if self._match('WHEN'):
+					self._parse_searched_case()
+				else:
+					self._parse_simple_case()
+			elif self._match_one_of([NUMBER, STRING, PARAMETER, 'NULL']): # Literals
+				pass
 			else:
-				break
-
-	def _parse_expression2(self):
-		"""Parse medium precedence expression operators (*, /)"""
-		self._parse_expression3()
-		while True:
-			if self._match('*'):
-				self._parse_expression1()
-			elif self._match('/'):
-				self._parse_expression1()
-			else:
-				break
-
-	def _parse_expression3(self):
-		"""Parse high precedence expression operators (literals, etc.)"""
-		if self._match('('):
-			self._parse_tuple()
-			self._expect(')')
-		elif self._match('+'): # Unary +
-			self._parse_expression3()
-		elif self._match('-'): # Unary -
-			self._parse_expression3()
-		elif self._match('CAST'):
-			self._parse_cast_expression()
-		elif self._match('CASE'):
-			if self._match('WHEN'):
-				self._indent(-1)
-				self._parse_searched_case()
-			else:
-				self._parse_simple_case()
-		elif self._match_one_of([NUMBER, STRING, PARAMETER, 'NULL']):
-			pass
-		else:
-			self._save_state()
-			try:
-				# Try and parse an aggregation function
-				self._parse_aggregate_function_call()
-			except ParseError:
-				self._restore_state()
 				self._save_state()
 				try:
-					# Try and parse a scalar function
-					self._parse_scalar_function_call()
+					# Try and parse an aggregation function
+					self._parse_aggregate_function_call()
 				except ParseError:
 					self._restore_state()
 					self._save_state()
 					try:
-						# Try and parse a special register
-						self._parse_special_register()
+						# Try and parse a scalar function
+						self._parse_scalar_function_call()
 					except ParseError:
 						self._restore_state()
-						# Parse a normal column reference
-						self._parse_column_name()
+						self._save_state()
+						try:
+							# Try and parse a special register
+							self._parse_special_register()
+						except ParseError:
+							self._restore_state()
+							# Parse a normal column reference
+							self._parse_column_name()
+						else:
+							self._forget_state()
 					else:
 						self._forget_state()
 				else:
 					self._forget_state()
-			else:
-				self._forget_state()
-		# Parse an optional interval suffix
-		self._match_one_of([
-			'YEARS',
-			'YEAR',
-			'DAYS',
-			'DAY',
-			'MONTHS',
-			'MONTH',
-			'HOURS',
-			'HOUR',
-			'MINUTES',
-			'MINUTE',
-			'SECONDS',
-			'SECOND',
-			'MICROSECONDS',
-			'MICROSECOND',
-		])
+			# Parse an optional interval suffix
+			self._match_one_of([
+				'YEARS',
+				'YEAR',
+				'DAYS',
+				'DAY',
+				'MONTHS',
+				'MONTH',
+				'HOURS',
+				'HOUR',
+				'MINUTES',
+				'MINUTE',
+				'SECONDS',
+				'SECOND',
+				'MICROSECONDS',
+				'MICROSECOND',
+			])
+			if not self._match_one_of(['+', '-', '*', '/', '||', 'CONCAT']): # Binary operators
+				break
 
 	def _parse_aggregate_function_call(self):
 		"""Parses an aggregate function with it's optional arg-prefix"""
@@ -1255,7 +1217,7 @@ class SQLFormatter(BaseFormatter):
 			# Aggregation functions have an optional ALL/DISTINCT argument prefix
 			self._match_one_of(['ALL', 'DISTINCT'])
 			# And only take a single expression as an argument
-			self._parse_expression1()
+			self._parse_expression()
 		self._expect(')')
 		# Parse an OLAP suffix if one exists
 		if self._match('OVER'):
@@ -1299,7 +1261,7 @@ class SQLFormatter(BaseFormatter):
 					self._expect('OF')
 					self._parse_table_name()
 				else:
-					self._parse_expression1()
+					self._parse_expression()
 					if self._match_one_of(['ASC', 'DESC']):
 						if self._match('NULLS'):
 							self._expect_one_of(['FIRST', 'LAST'])
@@ -1317,9 +1279,11 @@ class SQLFormatter(BaseFormatter):
 		"""Parses a CAST() expression"""
 		# CAST already matched
 		self._expect('(')
-		self._parse_expression1()
+		self._parse_expression()
 		self._expect('AS')
 		self._parse_datatype()
+		if self._match('SCOPE'):
+			self._parse_relation_name()
 		self._expect(')')
 
 	def _parse_searched_case(self):
@@ -1327,9 +1291,9 @@ class SQLFormatter(BaseFormatter):
 		# CASE WHEN already matched
 		# Parse all WHEN cases
 		while True:
-			self._parse_predicate1(linebreaks=False) # WHEN Search condition
+			self._parse_search_condition(linebreaks=False) # WHEN Search condition
 			self._expect('THEN')
-			self._parse_expression1() # THEN Expression
+			self._parse_expression() # THEN Expression
 			if self._match('WHEN'):
 				self._newline(-1)
 			elif self._match('ELSE'):
@@ -1341,7 +1305,7 @@ class SQLFormatter(BaseFormatter):
 			else:
 				self._expected_one_of(['WHEN', 'ELSE', 'END'])
 		# Parse the optional ELSE case
-		self._parse_expression1() # ELSE Expression
+		self._parse_expression() # ELSE Expression
 		self._outdent()
 		self._expect('END')
 
@@ -1349,14 +1313,14 @@ class SQLFormatter(BaseFormatter):
 		"""Parses a simple CASE expression (CASE expression WHEN value...)"""
 		# CASE already matched
 		# Parse the CASE Expression
-		self._parse_expression1() # CASE Expression
+		self._parse_expression() # CASE Expression
 		# Parse all WHEN cases
 		self._indent()
 		self._expect('WHEN')
 		while True:
-			self._parse_expression1() # WHEN Expression
+			self._parse_expression() # WHEN Expression
 			self._expect('THEN')
-			self._parse_expression1() # THEN Expression
+			self._parse_expression() # THEN Expression
 			if self._match('WHEN'):
 				self._newline(-1)
 			elif self._match('ELSE'):
@@ -1368,14 +1332,14 @@ class SQLFormatter(BaseFormatter):
 			else:
 				self._expected_one_of(['WHEN', 'ELSE', 'END'])
 		# Parse the optional ELSE case
-		self._parse_expression1() # ELSE Expression
+		self._parse_expression() # ELSE Expression
 		self._outdent()
 		self._expect('END')
 
 	def _parse_column_expression(self):
 		"""Parses an expression representing a column in a SELECT expression"""
 		if not self._match_sequence([IDENTIFIER, '.', '*']):
-			self._parse_expression1()
+			self._parse_expression()
 			# Parse optional column alias
 			if self._match('AS'):
 				self._expect(IDENTIFIER)
@@ -1387,7 +1351,7 @@ class SQLFormatter(BaseFormatter):
 	def _parse_grouping_expression(self):
 		"""Parses a grouping-expression in a GROUP BY clause"""
 		if not self._match_sequence(['(', ')']):
-			self._parse_expression1()
+			self._parse_expression()
 	
 	def _parse_super_group(self):
 		"""Parses a super-group in a GROUP BY clause"""
@@ -1399,7 +1363,7 @@ class SQLFormatter(BaseFormatter):
 				self._parse_expression_list()
 				self._expect(')')
 			else:
-				self._parse_expression1()
+				self._parse_expression()
 			if not self._match(','):
 				break
 			else:
@@ -1441,10 +1405,10 @@ class SQLFormatter(BaseFormatter):
 			if self._match('GROUPING'):
 				self._expect('SETS')
 				self._parse_grouping_sets()
-				altSyntax = False
+				alt_syntax = False
 			elif self._match_one_of(['ROLLUP', 'CUBE']):
 				self._parse_super_group()
-				altSyntax = False
+				alt_syntax = False
 			else:
 				self._parse_grouping_expression()
 			if not self._match(','):
@@ -1474,7 +1438,7 @@ class SQLFormatter(BaseFormatter):
 		self._expect('FROM')
 		self._indent()
 		while True:
-			self._parse_table_ref1()
+			self._parse_join_expression()
 			if not self._match(','):
 				break
 			else:
@@ -1482,7 +1446,7 @@ class SQLFormatter(BaseFormatter):
 		self._outdent()
 		if self._match('WHERE'):
 			self._indent()
-			self._parse_predicate1()
+			self._parse_search_condition()
 			self._outdent()
 		if self._match('GROUP'):
 			self._expect('BY')
@@ -1491,13 +1455,13 @@ class SQLFormatter(BaseFormatter):
 			self._outdent()
 		if self._match('HAVING'):
 			self._indent()
-			self._parse_predicate1()
+			self._parse_search_condition()
 			self._outdent()
 		if self._match('ORDER'):
 			self._expect('BY')
 			self._indent()
 			while True:
-				self._parse_expression1()
+				self._parse_expression()
 				self._match_one_of(['ASC', 'DESC'])
 				if not self._match(','):
 					break
@@ -1531,22 +1495,22 @@ class SQLFormatter(BaseFormatter):
 			# Ambiguity: Several KEYWORDs can legitimately appear in this
 			# position
 			elif not self._peek_one_of([
-					'WHERE',
+					'DO',
+					'EXCEPT',
+					'FETCH',
 					'GROUP',
 					'HAVING',
-					'ORDER',
-					'FETCH',
-					'UNION',
-					'INTERSECT',
-					'EXCEPT',
-					'WITH',
-					'ON',
-					'USING',
-					'SET',
-					'DO',
 					'LEFT',
 					'RIGHT',
 					'FULL',
+					'INTERSECT',
+					'ON',
+					'ORDER',
+					'SET',
+					'UNION',
+					'USING',
+					'WHERE',
+					'WITH',
 				]):
 				self._expect(IDENTIFIER)
 			# Parse optional column aliases
@@ -1559,7 +1523,7 @@ class SQLFormatter(BaseFormatter):
 		# Syntactically, this is identical to a scalar function call
 		self._parse_scalar_function_call()
 
-	def _parse_values_clause(self, allowdefault=False):
+	def _parse_values_expression(self, allowdefault=False):
 		"""Parses a VALUES expression"""
 		# VALUES already matched
 		self._indent()
@@ -1569,34 +1533,36 @@ class SQLFormatter(BaseFormatter):
 				self._expect(')')
 			else:
 				if not (allowdefault and self._match('DEFAULT')):
-					self._parse_expression1()
+					self._parse_expression()
 			if not self._match(','):
 				break
 		self._outdent()
 
-	def _parse_table_ref1(self):
+	def _parse_join_expression(self):
 		"""Parses join operators in a table-reference"""
-		self._parse_table_ref2()
+		# This method can be extended to support CROSS JOIN if this is ever
+		# added to DB2 (see PostgreSQL and Oracle)
+		self._parse_table_ref()
 		while True:
 			if self._match('INNER'):
 				self._newline(-1)
 				self._expect('JOIN')
-				self._parse_table_ref2()
+				self._parse_table_ref()
 				self._parse_join_condition()
 			elif self._match_one_of(['LEFT', 'RIGHT', 'FULL']):
 				self._newline(-1)
 				self._match('OUTER')
 				self._expect('JOIN')
-				self._parse_table_ref2()
+				self._parse_table_ref()
 				self._parse_join_condition()
 			elif self._match('JOIN'):
 				self._newline(-1)
-				self._parse_table_ref2()
+				self._parse_table_ref()
 				self._parse_join_condition()
 			else:
 				break
 
-	def _parse_table_ref2(self):
+	def _parse_table_ref(self):
 		"""Parses literal table references or functions in a table-reference"""
 		# Ambiguity: A table or schema can be named TABLE, FINAL, OLD, etc.
 		reraise = False
@@ -1604,19 +1570,19 @@ class SQLFormatter(BaseFormatter):
 		try:
 			if self._match('('):
 				# Ambiguity: Open-parenthesis could indicate a full-select or a
-				# join group
+				# join expression
 				self._save_state()
 				try:
 					# Try and parse a full-select
-					self._parse_full_select1()
+					self._parse_full_select()
 					reraise = True
 					self._expect(')')
 					self._parse_table_correlation(optional=False)
 				except ParseError:
-					# If it fails, rewind and try a join group instead
+					# If it fails, rewind and try a join expression instead
 					self._restore_state()
 					if reraise: raise
-					self._parse_table_ref1()
+					self._parse_join_expression()
 					self._expect(')')
 				else:
 					self._forget_state()
@@ -1627,7 +1593,7 @@ class SQLFormatter(BaseFormatter):
 				self._save_state()
 				try:
 					# Try and parse a full-select
-					self._parse_full_select1()
+					self._parse_full_select()
 				except ParseError:
 					# If it fails, rewind and try a table function call instead
 					self._restore_state()
@@ -1665,6 +1631,7 @@ class SQLFormatter(BaseFormatter):
 			if reraise: raise
 			self._parse_table_name()
 			self._parse_table_correlation(optional=True)
+			# XXX Add support for tablesample-clause
 		else:
 			self._forget_state()
 
@@ -1674,25 +1641,25 @@ class SQLFormatter(BaseFormatter):
 		# if ever added to DB2 (see PostgreSQL)
 		self._indent()
 		self._expect('ON')
-		self._parse_predicate1()
+		self._parse_search_condition()
 		self._outdent()
 
-	def _parse_full_select1(self, allowdefault=False):
+	def _parse_full_select(self, allowdefault=False):
 		"""Parses set operators (low precedence) in a full-select expression"""
-		self._parse_full_select2(allowdefault)
+		self._parse_relation(allowdefault)
 		while True:
 			if self._match_one_of(['UNION', 'INTERSECT', 'EXCEPT']):
 				self._newline(-1)
 				self._match('ALL')
 				self._newline()
 				self._newline()
-				self._parse_full_select2(allowdefault)
+				self._parse_relation(allowdefault)
 			else:
 				break
 		if self._match('ORDER'):
 			self._expect('BY')
 			while True:
-				self._parse_expression1()
+				self._parse_expression()
 				self._match_one_of(['ASC', 'DESC'])
 				if not self._match(','):
 					break
@@ -1702,15 +1669,15 @@ class SQLFormatter(BaseFormatter):
 			self._expect_one_of(['ROW', 'ROWS'])
 			self._expect('ONLY')
 
-	def _parse_full_select2(self, allowdefault=False):
+	def _parse_relation(self, allowdefault=False):
 		"""Parses relation generators (high precedence) in a full-select expression"""
 		if self._match('('):
-			self._parse_full_select1(allowdefault)
+			self._parse_full_select(allowdefault)
 			self._expect(')')
 		elif self._match('SELECT'):
 			self._parse_sub_select()
 		elif self._match('VALUES'):
-			self._parse_values_clause(allowdefault)
+			self._parse_values_expression(allowdefault)
 		else:
 			self._expected_one_of(['SELECT', 'VALUES', '('])
 
@@ -1730,7 +1697,7 @@ class SQLFormatter(BaseFormatter):
 				self._expect('(')
 				self._indent()
 				# Note that DEFAULT is *never* permitted in a CTE
-				self._parse_full_select1(allowdefault=False)
+				self._parse_full_select(allowdefault=False)
 				self._outdent()
 				self._expect(')')
 				if not self._match(','):
@@ -1740,7 +1707,7 @@ class SQLFormatter(BaseFormatter):
 			self._newline()
 		# Parse the actual full-select. DEFAULT may be permitted here if the
 		# full-select turns out to be a VALUES statement
-		self._parse_full_select1(allowdefault)
+		self._parse_full_select(allowdefault)
 
 	# CLAUSES ################################################################
 
@@ -1758,7 +1725,7 @@ class SQLFormatter(BaseFormatter):
 				# Parse simple assignment
 				self._expect_sequence([IDENTIFIER, '='])
 				if not (allowdefault and self._match('DEFAULT')):
-					self._parse_expression1()
+					self._parse_expression()
 			if not self._match(','):
 				break
 
@@ -1838,7 +1805,7 @@ class SQLFormatter(BaseFormatter):
 				self._expect('DEFAULT')
 				self._save_state()
 				try:
-					self._parse_expression1()
+					self._parse_expression()
 				except ParseError:
 					self._restore_state()
 				else:
@@ -1846,7 +1813,7 @@ class SQLFormatter(BaseFormatter):
 			elif self._match('DEFAULT'):
 				self._save_state()
 				try:
-					self._parse_expression1()
+					self._parse_expression()
 				except ParseError:
 					self._restore_state()
 				else:
@@ -1860,7 +1827,7 @@ class SQLFormatter(BaseFormatter):
 						self._parse_identity_options()
 						self._expect(')')
 				elif self._match('('):
-					self._parse_expression1()
+					self._parse_expression()
 					self._expect(')')
 				else:
 					self._expected_one_of(['IDENTITY', '('])
@@ -1910,7 +1877,7 @@ class SQLFormatter(BaseFormatter):
 					break
 		elif self._match('CHECK'):
 			self._expect('(')
-			self._parse_predicate1()
+			self._parse_search_condition()
 			self._expect(')')
 		else:
 			self._expected_one_of([
@@ -1965,7 +1932,7 @@ class SQLFormatter(BaseFormatter):
 					break
 		elif self._match('CHECK'):
 			self._expect('(')
-			self._parse_predicate1()
+			self._parse_search_condition()
 			self._expect(')')
 		else:
 			self._expected_one_of([
@@ -2012,7 +1979,7 @@ class SQLFormatter(BaseFormatter):
 				elif self._match('EXPRESSION'):
 					self._expect('AS')
 					self._expect('(')
-					self._parse_expression1()
+					self._parse_expression()
 					self._expect(')')
 				elif self._match('INLINE'):
 					self._expect_sequence(['LENGTH', NUMBER])
@@ -2025,7 +1992,7 @@ class SQLFormatter(BaseFormatter):
 							self._parse_identity_options()
 							self._expect(')')
 					elif self._match('('):
-						self._parse_expression1()
+						self._parse_expression()
 						self._expect(')')
 					else:
 						self._expected_one_of(['IDENTITY', '('])
@@ -2270,7 +2237,7 @@ class SQLFormatter(BaseFormatter):
 		if self._match('EXPRESSION'):
 			self._expect_sequence(['AS', IDENTIFIER])
 		else:
-			self._parse_expression1()
+			self._parse_expression()
 		valid = ['SEARCH', 'FILTER']
 		while True:
 			if not valid:
@@ -2649,7 +2616,7 @@ class SQLFormatter(BaseFormatter):
 			self._indent(-1)
 		else:
 			# Parse simple-case-statement
-			self._parse_expression1()
+			self._parse_expression()
 			self._indent()
 			self._expect('WHEN')
 			simple = True
@@ -2658,9 +2625,9 @@ class SQLFormatter(BaseFormatter):
 		t = None
 		while True:
 			if simple:
-				self._parse_expression1()
+				self._parse_expression()
 			else:
-				self._parse_predicate1()
+				self._parse_search_condition()
 			self._expect('THEN')
 			self._indent()
 			while True:
@@ -3402,7 +3369,7 @@ class SQLFormatter(BaseFormatter):
 		if self._match('WHEN'):
 			self._expect('(')
 			self._indent()
-			self._parse_predicate1()
+			self._parse_search_condition()
 			self._outdent()
 			self._expect(')')
 		if self._match('BEGIN'):
@@ -3443,7 +3410,7 @@ class SQLFormatter(BaseFormatter):
 		self._expect('FROM')
 		if self._match('('):
 			self._indent()
-			self._parse_full_select1()
+			self._parse_full_select()
 			self._outdent()
 			self._expect(')')
 		else:
@@ -3488,7 +3455,7 @@ class SQLFormatter(BaseFormatter):
 		if self._match('WHERE'):
 			self._newline(-1)
 			self._indent()
-			self._parse_predicate1()
+			self._parse_search_condition()
 			self._outdent()
 		if self._match('WITH'):
 			self._newline(-1)
@@ -3557,7 +3524,7 @@ class SQLFormatter(BaseFormatter):
 	def _parse_execute_immediate_statement(self):
 		"""Parses an EXECUTE IMMEDIATE statement in a procedure"""
 		# EXECUTE IMMEDIATE already matched
-		self._parse_expression1()
+		self._parse_expression()
 			
 	def _parse_for_statement(self, inproc):
 		"""Parses a FOR-loop in a dynamic compound statement"""
@@ -3630,7 +3597,7 @@ class SQLFormatter(BaseFormatter):
 		t = 'IF'
 		while True:
 			if t in ('IF', 'ELSEIF'):
-				self._parse_predicate1(linebreaks=False)
+				self._parse_search_condition(linebreaks=False)
 				self._expect('THEN')
 				self._indent()
 				while True:
@@ -3743,22 +3710,15 @@ class SQLFormatter(BaseFormatter):
 			self._parse_subschema_name()
 		self._parse_table_correlation()
 		self._expect('USING')
-		if self._match('(') or self._match_sequence(['TABLE', '(']):
-			self._indent()
-			self._parse_full_select1()
-			self._outdent()
-			self._expect(')')
-		else:
-			self._parse_subschema_name()
-		self._parse_table_correlation()
+		self._parse_table_ref()
 		self._expect('ON')
-		self._parse_predicate1()
+		self._parse_search_condition()
 		self._expect('WHEN')
 		while True:
 			self._match('NOT')
 			self._expect('MATCHED')
 			if self._match('AND'):
-				self._parse_predicate1()
+				self._parse_search_condition()
 			self._expect('THEN')
 			self._indent()
 			if self._match('UPDATE'):
@@ -3774,7 +3734,7 @@ class SQLFormatter(BaseFormatter):
 					self._expect(')')
 				else:
 					if not self._match('DEFAULT'):
-						self._parse_expression1()
+						self._parse_expression()
 				if not self._match(','):
 					break
 			elif self._match('DELETE'):
@@ -3823,7 +3783,7 @@ class SQLFormatter(BaseFormatter):
 			else:
 				self._newline()
 		self._outdent(-1)
-		self._parse_predicate1()
+		self._parse_search_condition()
 		self._expect_sequence(['END', 'REPEAT'])
 	
 	def _parse_resignal_statement(self):
@@ -3837,7 +3797,7 @@ class SQLFormatter(BaseFormatter):
 				return
 		if self._match('SET'):
 			self._expect_sequence(['MESSAGE_TEXT', '='])
-			self._parse_expression1()
+			self._parse_expression()
 	
 	def _parse_return_statement(self):
 		"""Parses a RETURN statement in a compound statement"""
@@ -3849,7 +3809,7 @@ class SQLFormatter(BaseFormatter):
 		except ParseError:
 			# If it fails, rewind and try an expression or tuple instead
 			self._restore_state()
-			self._parse_expression1()
+			self._parse_expression()
 		else:
 			self._forget_state()
 
@@ -4219,10 +4179,10 @@ class SQLFormatter(BaseFormatter):
 			self._expect(IDENTIFIER)
 		if self._match('SET'):
 			self._expect_sequence(['MESSAGE_TEXT', '='])
-			self._parse_expression1()
+			self._parse_expression()
 		elif self._match('('):
 			# XXX Ensure syntax only valid within a trigger
-			self._parse_expression1()
+			self._parse_expression()
 			self._expect(')')
 	
 	def _parse_update_statement(self):
@@ -4274,7 +4234,7 @@ class SQLFormatter(BaseFormatter):
 		self._outdent()
 		if self._match('WHERE'):
 			self._indent()
-			self._parse_predicate1()
+			self._parse_search_condition()
 			self._outdent()
 		if self._match('WITH'):
 			self._expect_one_of(['RR', 'RS', 'CS', 'UR'])
@@ -4283,7 +4243,7 @@ class SQLFormatter(BaseFormatter):
 		"""Parses a WHILE-loop in a dynamic compound statement"""
 		# XXX Implement support for labels
 		# WHILE already matched
-		self._parse_predicate1(linebreaks=False)
+		self._parse_search_condition(linebreaks=False)
 		self._newline()
 		self._expect('DO')
 		self._indent()
@@ -4356,7 +4316,7 @@ class SQLFormatter(BaseFormatter):
 				else:
 					self._parse_datatype()
 					if self._match('DEFAULT'):
-						self._parse_expression1()
+						self._parse_expression()
 				self._expect((TERMINATOR, ';'))
 				self._newline()
 				if not self._match('DECLARE'):
@@ -4500,7 +4460,7 @@ class SQLFormatter(BaseFormatter):
 						self._parse_datatype()
 						if self._match('DEFAULT'):
 							reraise = True
-							self._parse_expression1()
+							self._parse_expression()
 				self._expect((TERMINATOR, ';'))
 				self._newline()
 			except ParseError:
