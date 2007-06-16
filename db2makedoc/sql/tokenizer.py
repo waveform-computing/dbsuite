@@ -55,12 +55,12 @@ other situations:
                    unquoted identifier. Note that the parser
                    automatically excludes numerals from this set
                    for the initial character of an identifier.
-    newline_split  When False (the default), a list of tokens will
-                   be returned by the parse function. When True,
-                   any tokens which contain line breaks will be
-                   split at those breaks, and the tokens will be
-                   returned as a list of a list of tokens (the
-                   outer list is organized by lines).
+	line_split     When False (the default), multi-line tokens
+	               (e.g. comments, whitespace) will be returned
+	               as a single token. When True, tokens will be
+	               forcibly split at line breaks to ensure every
+	               line has a token with column 1 (useful when
+	               performing per-line processing on the result).
     sql_comments   If True (the default), SQL style comments
                    (--..EOL) will be recognized.
     c_comments     If True, C style comments (/*..*/) will be
@@ -116,23 +116,6 @@ def new_tokens(count):
 	TERMINATOR,    # A statement terminator
 ) = new_tokens(11)
 
-def debug_tokens(tokens):
-	for (token_type, token_value, source, line, column) in tokens:
-		token_type = {
-			EOF:        'EOF',
-			ERROR:      'ERROR',
-			WHITESPACE: 'WHITESPACE',
-			COMMENT:    'COMMENT',
-			KEYWORD:    'KEYWORD',
-			IDENTIFIER: 'IDENTIFIER',
-			NUMBER:     'NUMBER',
-			STRING:     'STRING',
-			OPERATOR:   'OPERATOR',
-			PARAMETER:  'PARAMETER',
-			TERMINATOR: 'TERMINATOR',
-		}[token_type]
-		print "(%3d,%3d)  %-10s  %-10s  (%s)" % (line, column, token_type, source, token_value)
-
 class SQLTokenizerBase(object):
 	"""Base SQL tokenizer class."""
 	
@@ -141,7 +124,7 @@ class SQLTokenizerBase(object):
 		self.keywords = set(sql92_keywords)
 		self.identchars = set(sql92_identchars)
 		self.spacechars = ' \t\r\n'
-		self.newline_split = False
+		self.line_split= False
 		self.sql_comments = True
 		self.c_comments = False
 		self.cpp_comments = False
@@ -178,11 +161,15 @@ class SQLTokenizerBase(object):
 		"""
 		while count > 0:
 			count -= 1
-			if (self._source[self._index] == '\r') or (self._source[self._index] == '\n'):
-				if (self._source[self._index] == '\r') and (self._source[self._index + 1] == '\n'):
+			if self._source[self._index] == '\r':
+				if self._source[self._index + 1] == '\n':
 					self._index += 2
 				else:
 					self._index += 1
+				self._line += 1
+				self._linestart = self._index
+			elif self._source[self._index] == '\n':
+				self._index += 1
 				self._line += 1
 				self._linestart = self._index
 			else:
@@ -227,7 +214,10 @@ class SQLTokenizerBase(object):
 		try:
 			if self._source[self._index] == '\r':
 				if self._source[self._index + 1] == '\n':
-					return self._source[self._index + 2]
+					if self._source[self._index + 2] == '\r':
+						return '\n'
+					else:
+						return self._source[self._index + 2]
 				else:
 					return self._source[self._index + 1]
 			elif self._source[self._index + 1] == '\r':
@@ -494,9 +484,9 @@ class SQLTokenizerBase(object):
 		if self.cpp_comments and (self.char == '/'):
 			self._next()
 			self._mark()
-			while not self.char in '\0\n': self._next()
+			while not self.char in '\0\n':
+				self._next()
 			content = self.markedchars
-			self._next()
 			self._add_token(COMMENT, content)
 		elif self.c_comments and (self.char == '*'):
 			self._next()
@@ -505,7 +495,7 @@ class SQLTokenizerBase(object):
 				while True:
 					if self.char == '\0':
 						raise ValueError("Incomplete comment")
-					elif (self.char == '\n') and self.newline_split:
+					elif (self.char == '\n') and self.line_split:
 						self._next()
 						self._add_token(COMMENT, self.markedchars)
 						self._mark()
@@ -531,7 +521,12 @@ class SQLTokenizerBase(object):
 
 	def _handle_space(self):
 		"""Parses whitespace characters in the source."""
-		while self.char in self.spacechars: self._next()
+		while self.char in self.spacechars:
+			if self.char == '\n':
+				self._next()
+				break
+			else:
+				self._next()
 		self._add_token(WHITESPACE, None)
 
 	def _init_handlers(self):
@@ -590,23 +585,7 @@ class SQLTokenizerBase(object):
 			except KeyError:
 				self._handle_default()
 		self._add_token(EOF, None)
-		if self.newline_split:
-			# Split the list of tokens into a list of lines of lists of tokens
-			newtokens = []
-			linetokens = []
-			currentline = 1
-			for token in self._tokens:
-				(_, _, _, line, _) = token
-				if line == currentline:
-					linetokens.append(token)
-				else:
-					newtokens.append(linetokens)
-					linetokens = [token]
-					currentline = line
-			newtokens.append(linetokens)
-			return newtokens
-		else:
-			return self._tokens
+		return self._tokens
 
 class SQL92Tokenizer(SQLTokenizerBase):
 	"""ANSI SQL-92 tokenizer class."""
