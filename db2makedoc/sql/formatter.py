@@ -202,7 +202,9 @@ class BaseFormatter(object):
 	def __init__(self):
 		"""Initializes an instance of the class"""
 		super(BaseFormatter, self).__init__()
-		self.indent = " "*4 # Default indent is 4 spaces
+		self.indent = ' '*4 # Default indent is 4 spaces
+		self.reformat = True # Default to reformating the input
+		self.line_split = False # See Tokenizer class
 		self.debugging = 0
 	
 	def _insert_output(self, token, index):
@@ -289,7 +291,7 @@ class BaseFormatter(object):
 		self._statestack.pop()
 	
 	def _token(self, index):
-		"""Returns the token at the specified index, or an token EOF."""
+		"""Returns the token at the specified index, or an EOF token."""
 		try:
 			return self._tokens[index]
 		except IndexError:
@@ -312,7 +314,8 @@ class BaseFormatter(object):
 		  datatypes, and things like CURRENT DATE to be treated as special
 		  registers)
 		* STATEMENT will match TERMINATOR (STATEMENT tokens are terminators
-		  but specific to a top-level SQL statement or CLP command)
+		  but specific to a top-level SQL statement or CLP command), or EOF
+		  (the script is assumed to end with an implicit terminator)
 
 		If the template is a tuple it will match a token with the same element
 		values up to the number of elements in the partial token.
@@ -335,7 +338,7 @@ class BaseFormatter(object):
 				return (IDENTIFIER,) + token[1:]
 			elif token[0] in (KEYWORD, IDENTIFIER) and template in (DATATYPE, REGISTER):
 				return (template,) + token[1:]
-			elif token[0] == TERMINATOR and template == STATEMENT:
+			elif token[0] in (TERMINATOR, EOF) and template == STATEMENT:
 				return (STATEMENT,) + token[1:]
 			else:
 				return None
@@ -524,7 +527,10 @@ class BaseFormatter(object):
 		for token in self._output:
 			token = self._format_token(token)
 			if token:
-				newoutput.append(token)
+				if isinstance(token, list):
+					newoutput.extend(token)
+				else:
+					newoutput.append(token)
 		self._output = newoutput
 	
 	def _convert_valign(self):
@@ -580,9 +586,6 @@ class BaseFormatter(object):
 	def _parse_init(self, tokens):
 		"""Sets up the parser with the specified tokens as input"""
 		self._statestack = list()
-		# Check that newline_split wasn't used in the tokenizer
-		if isinstance(tokens[0], list):
-			raise Error('Tokens must not be organized by line')
 		self._tokens = tokens
 		self._index = 0
 		self._output = []
@@ -647,6 +650,7 @@ class SQLFormatter(BaseFormatter):
 	def _parse_top(self):
 		# Override _parse_top to make a 'statement' the top of the parse tree
 		self._parse_statement()
+
 	def _format_token(self, t):
 		"""Reformats a token for output"""
 		
@@ -686,32 +690,47 @@ class SQLFormatter(BaseFormatter):
 		# line and column elements (the last two) as these will be recalculated
 		# in _recalc_positions(). To remove a token from the output, return
 		# None.
-		if t[0] == IDENTIFIER:
-			return (t[0], t[1], format_ident(t[1]))
-		elif t[0] == REGISTER:
-			return (t[0], t[1], format_ident(t[1]))
-		elif t[0] == DATATYPE:
-			return (t[0], t[1], format_ident(t[1]))
-		elif t[0] == PARAMETER:
-			return (t[0], t[1], format_param(t[1]))
-		elif t[0] == KEYWORD:
-			return (t[0], t[1], t[1])
-		elif t[0] == WHITESPACE:
-			return (t[0], None, ' ')
-		elif t[0] == COMMENT:
-			return (t[0], t[1], '/*%s*/' % (t[1]))
-		elif t[0] == NUMBER:
-			return (t[0], t[1], str(t[1]))
-		elif t[0] == STRING:
-			return (t[0], t[1], quote_str(t[1], "'"))
-		elif t[0] == TERMINATOR:
-			return (t[0], None, ';')
-		elif t[0] == STATEMENT:
-			return (t[0], None, '!')
-		elif t[0] == INDENT:
-			return (WHITESPACE, None, '\n' + self.indent*t[1])
+		if self.reformat:
+			if t[0] == IDENTIFIER:
+				return (t[0], t[1], format_ident(t[1]))
+			elif t[0] == REGISTER:
+				return (t[0], t[1], format_ident(t[1]))
+			elif t[0] == DATATYPE:
+				return (t[0], t[1], format_ident(t[1]))
+			elif t[0] == PARAMETER:
+				return (t[0], t[1], format_param(t[1]))
+			elif t[0] == KEYWORD:
+				return (t[0], t[1], t[1])
+			elif t[0] == WHITESPACE:
+				return (t[0], None, ' ')
+			elif t[0] == COMMENT:
+				# XXX Need much more intelligent comment handling
+				##return (t[0], t[1], '/*%s*/' % (t[1]))
+				return t[:3]
+			elif t[0] == NUMBER:
+				return (t[0], t[1], str(t[1]))
+			elif t[0] == STRING:
+				return (t[0], t[1], quote_str(t[1], "'"))
+			elif t[0] == TERMINATOR:
+				return (t[0], None, ';')
+			elif t[0] == STATEMENT:
+				return (t[0], None, '!')
+			elif t[0] == INDENT:
+				if self.line_split:
+					return [
+						(WHITESPACE, None, '\n'),
+						(WHITESPACE, None, self.indent*t[1])
+					]
+				else:
+					return (WHITESPACE, None, '\n' + self.indent*t[1])
+			else:
+				return t[:3]
 		else:
-			return t[:3]
+			# If we're not reformatting, just remove INDENT, VALIGN and VAPPLY tokens
+			if t[0] in (INDENT, VALIGN, VAPPLY):
+				return None
+			else:
+				return t[:3]
 
 	# PATTERNS ###############################################################
 	
@@ -1078,7 +1097,9 @@ class SQLFormatter(BaseFormatter):
 					self._expect(NUMBER)
 			else:
 				self._forget_state()
-			if not self._match_one_of(['AND', 'OR']):
+			if self._match_one_of(['AND', 'OR']):
+				if linebreaks: self._newline(-1)
+			else:
 				break
 	
 	def _parse_predicate(self):
