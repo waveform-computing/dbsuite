@@ -1,6 +1,9 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
+import sys
+import logging
+
 class InputPlugin(object):
 	def __init__(self, config):
 		"""Initializes an instance of the class.
@@ -65,6 +68,7 @@ class InputPlugin(object):
 
 		* Optional (can be None)
 		"""
+		logging.debug('Retrieving schemas')
 		return []
 
 	def _get_datatypes(self):
@@ -90,6 +94,7 @@ class InputPlugin(object):
 
 		* Optional (can be None)
 		"""
+		logging.debug('Retrieving datatypes')
 		return []
 
 	def _get_tables(self):
@@ -113,6 +118,7 @@ class InputPlugin(object):
 
 		* Optional (can be None)
 		"""
+		logging.debug('Retrieving tables')
 		return []
 
 	def _get_views(self):
@@ -133,6 +139,7 @@ class InputPlugin(object):
 
 		* Optional (can be None)
 		"""
+		logging.debug('Retrieving views')
 		return []
 
 	def _get_aliases(self):
@@ -154,6 +161,7 @@ class InputPlugin(object):
 
 		* Optional (can be None)
 		"""
+		logging.debug('Retrieving aliases')
 		return []
 
 	def _get_view_dependencies(self):
@@ -169,6 +177,7 @@ class InputPlugin(object):
 		dep_schema   -- The schema of the relation upon which the view depends
 		dep_name     -- The name of the relation upon which the view depends
 		"""
+		logging.debug('Retrieving view dependencies')
 		return []
 
 	def _get_indexes(self):
@@ -194,6 +203,7 @@ class InputPlugin(object):
 
 		* Optional (can be None)
 		"""
+		logging.debug('Retrieving indexes')
 		return []
 
 	def _get_index_cols(self):
@@ -215,6 +225,7 @@ class InputPlugin(object):
 		is important that the list of tuples is in the order that each column
 		is declared in an index.
 		"""
+		logging.debug('Retrieving index columns')
 		return []
 
 	def _get_relation_cols(self):
@@ -256,6 +267,7 @@ class InputPlugin(object):
 
 		* Optional (can be None)
 		"""
+		logging.debug('Retrieving relation columns')
 		return []
 
 	def _get_unique_keys(self):
@@ -276,6 +288,7 @@ class InputPlugin(object):
 
 		* Optional (can be None)
 		"""
+		logging.debug('Retrieving unique keys')
 		return []
 
 	def _get_unique_key_cols(self):
@@ -290,6 +303,7 @@ class InputPlugin(object):
 		keyname      -- The name of the key
 		colname      -- The name of the column
 		"""
+		logging.debug('Retrieving unique key columns')
 		return []
 
 	def _get_foreign_keys(self):
@@ -322,6 +336,7 @@ class InputPlugin(object):
 
 		* Optional (can be None)
 		"""
+		logging.debug('Retrieving foreign keys')
 		return []
 
 	def _get_foreign_key_cols(self):
@@ -338,6 +353,7 @@ class InputPlugin(object):
 		refcolname   -- The name of the column that this column references in
 		                the referenced table
 		"""
+		logging.debug('Retrieving foreign key columns')
 		return []
 
 	def _get_checks(self):
@@ -358,6 +374,7 @@ class InputPlugin(object):
 
 		* Optional (can be None)
 		"""
+		logging.debug('Retrieving check constraints')
 		return []
 
 	def _get_check_cols(self):
@@ -372,6 +389,7 @@ class InputPlugin(object):
 		checkname    -- The name of the check
 		colname      -- The name of the column
 		"""
+		logging.debug('Retrieving check constraint columns')
 		return []
 
 	def _get_functions(self):
@@ -404,6 +422,7 @@ class InputPlugin(object):
 
 		* Optional (can be None)
 		"""
+		logging.debug('Retrieving functions')
 		return []
 
 	def _get_function_params(self):
@@ -443,6 +462,7 @@ class InputPlugin(object):
 
 		* Optional (can be None)
 		"""
+		logging.debug('Retrieving function parameters')
 		return []
 
 	def _get_procedures(self):
@@ -471,6 +491,7 @@ class InputPlugin(object):
 
 		* Optional (can be None)
 		"""
+		logging.debug('Retrieving procedures')
 		return []
 
 	def _get_procedure_params(self):
@@ -510,6 +531,7 @@ class InputPlugin(object):
 
 		* Optional (can be None)
 		"""
+		logging.debug('Retrieving procedure parameters')
 		return []
 
 	def _get_triggers(self):
@@ -542,6 +564,7 @@ class InputPlugin(object):
 
 		* Optional (can be None)
 		"""
+		logging.debug('Retrieving triggers')
 		return []
 
 	def _get_trigger_dependencies(self):
@@ -557,6 +580,7 @@ class InputPlugin(object):
 		dep_schema   -- The schema of the relation upon which the trigger depends
 		dep_name     -- The name of the relation upon which the trigger depends
 		"""
+		logging.debug('Retrieving trigger dependencies')
 		return []
 
 	def _get_tablespaces(self):
@@ -576,6 +600,7 @@ class InputPlugin(object):
 
 		* Optional (can be None)
 		"""
+		logging.debug('Retrieving tablespaces')
 		return []
 
 	# PRIVATE PROPERTY GETTERS ################################################
@@ -712,7 +737,6 @@ class InputPlugin(object):
 				])
 				for ukey in self.unique_keys_list
 			])
-			self.__unique_key_cols = self._get_unique_key_cols()
 		return self.__unique_key_cols
 
 	def __get_foreign_keys(self):
