@@ -45,11 +45,11 @@ class View(Relation):
 		)
 		self.dependencies = RelationsDict(
 			self.database,
-			input.relation_dependencies.[schema.name, self.name)]
+			input.relation_dependencies[(schema.name, self.name)]
 		)
 		self.dependency_list = RelationsList(
 			self.database,
-			input.relation_dependencies.[(schema.name, self.name)]
+			input.relation_dependencies[(schema.name, self.name)]
 		)
 		self.triggers = TriggersDict(
 			self.database,

@@ -146,7 +146,7 @@ class Table(Relation):
 					'\n' + index.create_sql
 					for index in self.index_list
 				]),
-		}
+		})
 	
 	def _get_drop_sql(self):
 		sql = Template('DROP TABLE $schema.$table;')
