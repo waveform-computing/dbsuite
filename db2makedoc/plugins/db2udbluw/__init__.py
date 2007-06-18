@@ -53,10 +53,10 @@ def _make_datetime(value):
 	Basically this routine exists to convert a database framework-specific
 	representation of a datetime value into a standard Python datetime value.
 	"""
-	if (value is None) or (value == ""):
+	if (value is None) or (value == ''):
 		return None
 	elif isinstance(value, basestring):
-		return datetime.datetime(*([int(x) for x in re.match(r"(\d{4})-(\d{2})-(\d{2})[T -](\d{2})[:.](\d{2})[:.](\d{2})\.(\d{6})\d*", value).groups()]))
+		return datetime.datetime(*([int(x) for x in re.match(r'(\d{4})-(\d{2})-(\d{2})[T -](\d{2})[:.](\d{2})[:.](\d{2})\.(\d{6})\d*', value).groups()]))
 	elif hasattr(value, 'value') and isinstance(value.value, int):
 		return datetime.datetime.fromtimestamp(value.value)
 	else:
@@ -80,14 +80,13 @@ def _make_bool(value, true_value='Y', false_value='N', none_value=' ', unknown_e
 
 class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 	def __init__(self, config):
-		super(InputPlugin, self).__init__()
+		super(InputPlugin, self).__init__(config)
 		# Check the config dictionary for missing stuff
 		if not DATABASE_OPTION in config:
 			raise Exception(MISSING_OPTION % DATABASE_OPTION)
 		if USERNAME_OPTION in config and not PASSWORD_OPTION in config:
 			raise Exception(MISSING_DEPENDENT % (USERNAME_OPTION, PASSWORD_OPTION))
 		# Open the databsae connection
-		logging.info(CONNECTING_MSG % config[DATABASE_OPTION])
 		self.connection = self._connect(
 			config[DATABASE_OPTION],
 			config.get(USERNAME_OPTION, None),
@@ -106,19 +105,27 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 			logging.info(USING_DOCCAT)
 		else:
 			logging.info(USING_SYSCAT)
+		# Test which version of the system catalog is installed
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT COUNT(*)
-			FROM SYSCAT.COLUMNS
-			WHERE TABSCHEMA = 'SYSCAT'
+			FROM %(schema)s.COLUMNS
+			WHERE TABSCHEMA = '%(schema)s'
 			AND TABNAME = 'TABLES'
 			AND COLNAME = 'OWNER'
-			WITH UR""")
+			WITH UR""" % {
+			'schema': ['SYSCAT', 'DOCCAT'][self.doccat]
+		})
 		self.v9 = bool(cursor.fetchall()[0][0])
 		if self.v9:
 			logging.info(USING_V9)
 		else:
 			logging.info(USING_V8)
+		# Set up a generic query substitution dictionary
+		self.query_subst = {
+			'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
+			'owner': ['DEFINER', 'OWNER'][self.v9],
+		}
 	
 	def _connect(self, dsn, username=None, password=None):
 		"""Create a connection to the specified database.
@@ -133,6 +140,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 		ODBC module doesn't correctly handle certain dates hence why all DATE
 		and TIMESTAMP fields are CAST to CHAR in the queries below).
 		"""
+		logging.info(CONNECTING_MSG % dsn)
 		try:
 			# Try the PyDB2 framework
 			import DB2
@@ -178,13 +186,14 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
+		result = super(InputPlugin, self)._get_schemas()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
 				RTRIM(SCHEMANAME) AS NAME,
 				RTRIM(OWNER)      AS OWNER,
 				CASE
-					WHEN SCHEMANAME LIKE 'SYS%' THEN 'Y'
+					WHEN SCHEMANAME LIKE 'SYS%%' THEN 'Y'
 					WHEN SCHEMANAME = 'SQLJ' THEN 'Y'
 					WHEN SCHEMANAME = 'NULLID' THEN 'Y'
 					ELSE 'N'
@@ -193,12 +202,23 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				REMARKS           AS DESCRIPTION
 			FROM
 				%(schema)s.SCHEMATA
-			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-		result = []
-		for (name, owner, system, created, desc) in cursor.fetchall():
+			WITH UR""" % self.query_subst)
+		for (
+				name,
+				owner,
+				system,
+				created,
+				desc
+			) in cursor.fetchall():
 			system = _make_bool(system)
 			created = _make_datetime(created)
-			result.append((name, owner, system, created, desc))
+			result.append((
+				name,
+				owner,
+				system,
+				created, 
+				desc
+			))
 		return result
 
 	def _get_datatypes(self):
@@ -224,6 +244,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
+		result = super(InputPlugin, self)._get_datatypes()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -245,18 +266,40 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 			FROM
 				%(schema)s.DATATYPES
 			WHERE INSTANTIABLE = 'Y'
-			WITH UR""" % {
-				'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
-				'owner': ['DEFINER', 'OWNER'][self.v9],
-			})
-		result = []
-		for (schema, name, owner, system, created, source_schema, source_name, size, scale, codepage, final, desc) in cursor.fetchall():
+			WITH UR""" % self.query_subst)
+		for (
+				schema,
+				name,
+				owner,
+				system,
+				created,
+				source_schema,
+				source_name,
+				size,
+				scale,
+				codepage,
+				final,
+				desc
+			) in cursor.fetchall():
 			system = _make_bool(system)
 			created = _make_datetime(created)
 			if not size: size = None
 			if not scale: scale = None # XXX Not necessarily unknown (0 is a valid scale)
 			if not codepage: codepage = None
-			result.append((schema, name, owner, system, created, source_schema, source_name, size, scale, codepage, final, desc))
+			result.append((
+				schema,
+				name,
+				owner,
+				system,
+				created,
+				source_schema,
+				source_name,
+				size,
+				scale,
+				codepage,
+				final,
+				desc
+			))
 		return result
 
 	def _get_tables(self):
@@ -280,6 +323,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
+		result = super(InputPlugin, self)._get_tables()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -287,7 +331,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				RTRIM(T.TABNAME)       AS TABNAME,
 				RTRIM(T.%(owner)s)     AS OWNER,
 				CASE
-					WHEN T.TABSCHEMA LIKE 'SYS%' THEN 'Y'
+					WHEN T.TABSCHEMA LIKE 'SYS%%' THEN 'Y'
 					WHEN T.TABSCHEMA = 'SQLJ' THEN 'Y'
 					WHEN T.TABSCHEMA = 'NULLID' THEN 'Y'
 					ELSE 'N'
@@ -304,16 +348,34 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 					ON T.TBSPACEID = TS.TBSPACEID
 			WHERE
 				TYPE = 'T'
-			WITH UR""" % {
-				'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
-				'owner': ['DEFINER', 'OWNER'][self.v9],
-			})
-		result = []
-		for (schema, name, owner, system, created, laststats, cardinality, size, tbspace, desc) in cursor.fetchall():
+			WITH UR""" % self.query_subst)
+		for (
+				schema,
+				name,
+				owner,
+				system,
+				created,
+				laststats,
+				cardinality,
+				size,
+				tbspace,
+				desc
+			) in cursor.fetchall():
 			system = _make_bool(system)
 			created = _make_datetime(created)
-			laststats = _make_datetime(created)
-			result.append((schema, name, owner, system, created, laststats, cardinality, size, tbspace, desc))
+			laststats = _make_datetime(laststats)
+			result.append((
+				schema,
+				name,
+				owner,
+				system,
+				created,
+				laststats,
+				cardinality,
+				size,
+				tbspace,
+				desc
+			))
 		return result
 
 	def _get_views(self):
@@ -334,6 +396,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
+		result = super(InputPlugin, self)._get_views()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -341,12 +404,14 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				RTRIM(V.VIEWNAME)     AS VIEWNAME,
 				RTRIM(V.%(owner)s)    AS OWNER,
 				CASE
-					WHEN T.TABSCHEMA LIKE 'SYS%' THEN 'Y'
+					WHEN V.VIEWSCHEMA LIKE 'SYS%%' THEN 'Y'
+					WHEN V.VIEWSCHEMA = 'SQLJ' THEN 'Y'
+					WHEN V.VIEWSCHEMA = 'NULLID' THEN 'Y'
 					ELSE 'N'
 				END                   AS SYSTEM,
 				CHAR(T.CREATE_TIME)   AS CREATED,
 				V.READONLY            AS READONLY,
-				V.TEXT                AS SQL,
+				COALESCE(V.TEXT, '')  AS SQL,
 				T.REMARKS             AS DESCRIPTION
 			FROM
 				%(schema)s.TABLES T
@@ -354,16 +419,30 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 					ON T.TABSCHEMA = V.VIEWSCHEMA
 					AND T.TABNAME = V.VIEWNAME
 					AND T.TYPE = 'V'
-			WITH UR""" % {
-				'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
-				'owner': ['DEFINER', 'OWNER'][self.v9],
-			})
-		result = []
-		for (schema, name, owner, system, created, readonly, sql, desc) in cursor.fetchall():
+			WITH UR""" % self.query_subst)
+		for (
+				schema,
+				name,
+				owner,
+				system,
+				created,
+				readonly,
+				sql,
+				desc
+			) in cursor.fetchall():
 			system = _make_bool(system)
 			created = _make_datetime(created)
 			sql = str(sql)
-			result.append((schema, name, owner, system, created, readonly, sql, desc))
+			result.append((
+				schema,
+				name,
+				owner,
+				system,
+				created,
+				readonly,
+				sql,
+				desc
+			))
 		return result
 
 	def _get_aliases(self):
@@ -385,14 +464,17 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
+		result = super(InputPlugin, self)._get_aliases()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
 				RTRIM(TABSCHEMA)      AS ALIASSCHEMA,
 				RTRIM(TABNAME)        AS ALIASNAME,
-				RTRIM(%(owner)s)      AS OWNER
+				RTRIM(%(owner)s)      AS OWNER,
 				CASE
-					WHEN TABSCHEMA LIKE 'SYS%' THEN 'Y'
+					WHEN TABSCHEMA LIKE 'SYS%%' THEN 'Y'
+					WHEN TABSCHEMA = 'SQLJ' THEN 'Y'
+					WHEN TABSCHEMA = 'NULLID' THEN 'Y'
 					ELSE 'N'
 				END                   AS SYSTEM,
 				CHAR(CREATE_TIME)     AS CREATED,
@@ -403,15 +485,29 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				%(schema)s.TABLES
 			WHERE
 				TYPE = 'A'
-			WITH UR""" % {
-				'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
-				'owner': ['DEFINER', 'OWNER'][self.v9],
-			})
-		result = []
-		for (schema, name, owner, system, created, base_schema, base_table, desc) in cursor.fetchall():
+			WITH UR""" % self.query_subst)
+		for (
+				schema,
+				name,
+				owner,
+				system,
+				created,
+				base_schema,
+				base_table,
+				desc
+			) in cursor.fetchall():
 			system = _make_bool(system)
 			created = _make_datetime(created)
-			result.append((schema, name, owner, system, created, base_schema, base_table, desc))
+			result.append((
+				schema,
+				name,
+				owner,
+				system,
+				created,
+				base_schema,
+				base_table,
+				desc
+			))
 		return result
 
 	def _get_view_dependencies(self):
@@ -427,6 +523,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 		dep_schema   -- The schema of the relation upon which the view depends
 		dep_name     -- The name of the relation upon which the view depends
 		"""
+		result = super(InputPlugin, self)._get_view_dependencies()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -438,8 +535,20 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				%(schema)s.TABDEP
 			WHERE
 				BTYPE IN ('A', 'S', 'T', 'U', 'V', 'W')
-			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-		return cursor.fetchall()
+			WITH UR""" % self.query_subst)
+		for (
+				schema,
+				name,
+				depschema,
+				depname
+			) in cursor.fetchall():
+			result.append((
+				schema,
+				name,
+				depschema,
+				depname
+			))
+		return result
 
 	def _get_indexes(self):
 		"""Retrieves the details of indexes stored in the database.
@@ -464,6 +573,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
+		result = super(InputPlugin, self)._get_indexes()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -473,7 +583,9 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				RTRIM(I.TABNAME)                 AS TABNAME,
 				RTRIM(I.%(owner)s)               AS OWNER,
 				CASE
-					WHEN I.INDSCHEMA LIKE 'SYS%' THEN 'Y'
+					WHEN I.INDSCHEMA LIKE 'SYS%%' THEN 'Y'
+					WHEN I.INDSCHEMA = 'SQLJ' THEN 'Y'
+					WHEN I.INDSCHEMA = 'NULLID' THEN 'Y'
 					ELSE 'N'
 				END                              AS SYSTEM,
 				CHAR(I.CREATE_TIME)              AS CREATED,
@@ -494,12 +606,26 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				%(schema)s.INDEXES I
 				INNER JOIN %(schema)s.TABLESPACES T
 					ON I.TBSPACEID = T.TBSPACEID
-			WITH UR""" % {
-				'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
-				'owner': ['DEFINER', 'OWNER'][self.v9],
-			})
-		result = []
-		for (schema, name, tabschema, tabname, owner, system, created, laststats, card1, card2, card3, card4, card, size, unique, tbspace, desc) in cursor.fetchall():
+			WITH UR""" % self.query_subst)
+		for (
+				schema,
+				name,
+				tabschema,
+				tabname,
+				owner,
+				system,
+				created,
+				laststats,
+				card1,
+				card2,
+				card3,
+				card4,
+				card,
+				size,
+				unique,
+				tbspace,
+				desc
+			) in cursor.fetchall():
 			system = _make_bool(system)
 			created = _make_datetime(created)
 			laststats = _make_datetime(laststats)
@@ -510,7 +636,21 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				card = '%d (%s)' % (card, ','.join([
 					str(i) for i in (card1, card2, card3, card4) if i != -1
 				]))
-			result.append((schema, name, tabschema, tabname, owner, system, created, laststats, card, size, unique, tbspace, desc))
+			result.append((
+				schema,
+				name,
+				tabschema,
+				tabname,
+				owner,
+				system,
+				created,
+				laststats,
+				card,
+				size,
+				unique,
+				tbspace,
+				desc
+			))
 		return result
 
 	def _get_index_cols(self):
@@ -532,6 +672,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 		important that the list of tuples is in the order that each column is
 		declared in an index.
 		"""
+		result = super(InputPlugin, self)._get_index_cols()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -545,8 +686,20 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				INDSCHEMA,
 				INDNAME,
 				COLSEQ
-			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-		return cursor.fetchall()
+			WITH UR""" % self.query_subst)
+		for (
+				schema,
+				name,
+				colname,
+				colorder
+			) in cursor.fetchall():
+			result.append((
+				schema,
+				name,
+				colname,
+				colorder
+			))
+		return result
 
 	def _get_relation_cols(self):
 		"""Retrieves the list of columns belonging to relations.
@@ -587,6 +740,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
+		result = super(InputPlugin, self)._get_relation_cols()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -609,7 +763,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				END                              AS GENERATED,
 				CASE GENERATED
 					WHEN ' ' THEN RTRIM(DEFAULT)
-					ELSE RTRIM(TEXT)
+					ELSE RTRIM(COALESCE(TEXT, ''))
 				END                              AS DEFAULT,
 				REMARKS                          AS DESCRIPTION
 			FROM
@@ -620,14 +774,45 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				TABSCHEMA,
 				TABNAME,
 				COLNO
-			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-		result = []
-		for (schema, name, colname, typeschema, typename, identity, keypos, size, scale, codepage, nullable, cardinality, nullcard, generated, default, desc) in cursor.fetchall():
-			identity = _mae_bool(identity)
+			WITH UR""" % self.query_subst)
+		for (
+				schema,
+				name,
+				colname,
+				typeschema,
+				typename,
+				identity,
+				size,
+				scale,
+				codepage,
+				nullable,
+				cardinality,
+				nullcard,
+				generated,
+				default,
+				desc
+			) in cursor.fetchall():
+			identity = _make_bool(identity)
 			nullable = _make_bool(nullable)
 			if not codepage: codepage = None
 			default = str(default)
-			result.append((schema, name, colname, typeschema, typename, identity, keypos, size, scale, codepage, nullable, cardinality, nullcard, generated, default, desc))
+			result.append((
+				schema,
+				name,
+				colname,
+				typeschema,
+				typename,
+				identity,
+				size,
+				scale,
+				codepage,
+				nullable,
+				cardinality,
+				nullcard,
+				generated,
+				default,
+				desc
+			))
 		return result
 
 	def _get_unique_keys(self):
@@ -648,6 +833,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
+		result = super(InputPlugin, self)._get_unique_keys()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -656,7 +842,9 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				RTRIM(CONSTNAME)        AS KEYNAME,
 				RTRIM(%(owner)s)        AS OWNER,
 				CASE
-					WHEN TABSCHEMA LIKE 'SYS%' THEN 'Y'
+					WHEN TABSCHEMA LIKE 'SYS%%' THEN 'Y'
+					WHEN TABSCHEMA = 'SQLJ' THEN 'Y'
+					WHEN TABSCHEMA = 'NULLID' THEN 'Y'
 					ELSE 'N'
 				END                     AS SYSTEM,
 				CAST(NULL AS TIMESTAMP) AS CREATED,
@@ -669,16 +857,30 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				%(schema)s.TABCONST
 			WHERE
 				TYPE IN ('U', 'P')
-			WITH UR""" % {
-				'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
-				'owner': ['DEFINER', 'OWNER'][self.v9],
-			})
-		result = []
-		for (schema, name, keyname, owner, system, created, primary, desc) in cursor.fetchall():
+			WITH UR""" % self.query_subst)
+		for (
+				schema,
+				name,
+				keyname,
+				owner,
+				system,
+				created,
+				primary,
+				desc
+			) in cursor.fetchall():
 			system = _make_bool(system)
 			created = _make_datetime(created)
 			primary = _make_bool(primary)
-			result.append((schema, name, keyname, owner, system, created, primary, desc))
+			result.append((
+				schema,
+				name,
+				keyname,
+				owner,
+				system,
+				created,
+				primary,
+				desc
+			))
 		return result
 
 	def _get_unique_key_cols(self):
@@ -693,6 +895,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 		keyname      -- The name of the key
 		colname      -- The name of the column
 		"""
+		result = super(InputPlugin, self)._get_unique_key_cols()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -707,8 +910,20 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				TABNAME,
 				CONSTNAME,
 				COLSEQ
-			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-		return cursor.fetchall()
+			WITH UR""" % self.query_subst)
+		for (
+				schema,
+				name,
+				keyname,
+				colname
+			) in cursor.fetchall():
+			result.append((
+				schema,
+				name,
+				keyname,
+				colname
+			))
+		return result
 
 	def _get_foreign_keys(self):
 		"""Retrieves the details of foreign keys stored in the database.
@@ -740,6 +955,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
+		result = super(InputPlugin, self)._get_foreign_keys()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -748,7 +964,9 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				RTRIM(T.CONSTNAME)    AS KEYNAME,
 				RTRIM(T.%(owner)s)    AS OWNER,
 				CASE
-					WHEN TABSCHEMA LIKE 'SYS%' THEN 'Y'
+					WHEN T.TABSCHEMA LIKE 'SYS%%' THEN 'Y'
+					WHEN T.TABSCHEMA = 'SQLJ' THEN 'Y'
+					WHEN T.TABSCHEMA = 'NULLID' THEN 'Y'
 					ELSE 'N'
 				END                   AS SYSTEM,
 				CHAR(R.CREATE_TIME)   AS CREATED,
@@ -765,15 +983,37 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 					AND T.TABNAME = R.TABNAME
 					AND T.CONSTNAME = R.CONSTNAME
 					AND T.TYPE = 'F'
-			WITH UR""" % {
-				'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
-				'owner': ['DEFINER', 'OWNER'][self.v9],
-			})
-		result = []
-		for (schema, name, keyname, owner, system, created, refschema, refname, refkeyname, deleterule, updaterule, desc) in cursor.fetchall():
+			WITH UR""" % self.query_subst)
+		for (
+				schema,
+				name,
+				keyname,
+				owner,
+				system,
+				created,
+				refschema,
+				refname,
+				refkeyname,
+				deleterule,
+				updaterule,
+				desc
+			) in cursor.fetchall():
 			system = _make_bool(system)
 			created = _make_datetime(created)
-			result.append((schema, name, keyname, owner, system, created, refschema, refname, refkeyname, deleterule, updaterule, desc))
+			result.append((
+				schema,
+				name,
+				keyname,
+				owner,
+				system,
+				created,
+				refschema,
+				refname,
+				refkeyname,
+				deleterule,
+				updaterule,
+				desc
+			))
 		return result
 
 	def _get_foreign_key_cols(self):
@@ -790,6 +1030,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 		refcolname   -- The name of the column that this column references in
 		                the referenced table
 		"""
+		result = super(InputPlugin, self)._get_foreign_key_cols()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -815,8 +1056,22 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				R.TABNAME,
 				R.CONSTNAME,
 				KF.COLSEQ
-			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-		return cursor.fetchall()
+			WITH UR""" % self.query_subst)
+		for (
+				schema,
+				name,
+				keyname,
+				colname,
+				refcolname
+			) in cursor.fetchall():
+			result.append((
+				schema,
+				name,
+				keyname,
+				colname,
+				refcolname
+			))
+		return result
 
 	def _get_checks(self):
 		"""Retrieves the details of checks stored in the database.
@@ -836,6 +1091,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
+		result = super(InputPlugin, self)._get_checks()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -844,12 +1100,14 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				RTRIM(T.CONSTNAME)    AS CHECKNAME,
 				RTRIM(T.%(owner)s)    AS OWNER,
 				CASE
-					WHEN TABSCHEMA LIKE 'SYS%' THEN 'Y'
+					WHEN T.TABSCHEMA LIKE 'SYS%%' THEN 'Y'
+					WHEN T.TABSCHEMA = 'SQLJ' THEN 'Y'
+					WHEN T.TABSCHEMA = 'NULLID' THEN 'Y'
 					WHEN C.TYPE IN ('A', 'S') THEN 'Y'
 					ELSE 'N'
 				END                   AS SYSTEM,
 				CHAR(C.CREATE_TIME)   AS CREATED,
-				C.TEXT                AS SQL,
+				COALESCE(C.TEXT, '')  AS SQL,
 				T.REMARKS             AS DESCRIPTION
 			FROM
 				%(schema)s.TABCONST T
@@ -858,16 +1116,30 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 					AND T.TABNAME = C.TABNAME
 					AND T.CONSTNAME = C.CONSTNAME
 					AND T.TYPE = 'K'
-			WITH UR""" % {
-				'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
-				'owner': ['DEFINER', 'OWNER'][self.v9],
-			})
-		result = []
-		for (schema, name, checkname, owner, system, created, sql, desc) in cursor.fetchall():
+			WITH UR""" % self.query_subst)
+		for (
+				schema,
+				name,
+				checkname,
+				owner,
+				system,
+				created,
+				sql,
+				desc
+			) in cursor.fetchall():
 			system = _make_bool(system)
 			created = _make_datetime(created)
 			sql = str(sql)
-			result.append((schema, name, checkname, owner, system, created, sql, desc))
+			result.append((
+				schema,
+				name,
+				checkname,
+				owner,
+				system,
+				created,
+				sql,
+				desc
+			))
 		return result
 
 	def _get_check_cols(self):
@@ -882,6 +1154,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 		checkname    -- The name of the check
 		colname      -- The name of the column
 		"""
+		result = super(InputPlugin, self)._get_check_cols()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -891,8 +1164,20 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				RTRIM(COLNAME)   AS COLNAME
 			FROM
 				%(schema)s.COLCHECKS
-			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-		return cursor.fetchall()
+			WITH UR""" % self.query_subst)
+		for (
+				schema,
+				name,
+				chkname,
+				colname
+			) in cursor.fetchall():
+			result.append((
+				schema,
+				name,
+				chkname,
+				colname
+			))
+		return result
 
 	def _get_functions(self):
 		"""Retrieves the details of functions stored in the database.
@@ -924,6 +1209,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
+		result = super(InputPlugin, self)._get_functions()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -932,7 +1218,9 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				RTRIM(ROUTINENAME)       AS FUNCNAME,
 				RTRIM(%(owner)s)         AS OWNER,
 				CASE
-					WHEN ROUTINESCHEMA LIKE 'SYS%' THEN 'Y'
+					WHEN ROUTINESCHEMA LIKE 'SYS%%' THEN 'Y'
+					WHEN ROUTINESCHEMA = 'SQLJ' THEN 'Y'
+					WHEN ROUTINESCHEMA = 'NULLID' THEN 'Y'
 					WHEN ORIGIN IN ('B', 'S', 'T') THEN 'Y'
 					ELSE 'N'
 				END                      AS SYSTEM,
@@ -942,25 +1230,49 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				EXTERNAL_ACTION          AS EXTACTION,
 				NULLCALL                 AS NULLCALL,
 				SQL_DATA_ACCESS          AS ACCESS,
-				TEXT                     AS SQL,
+				COALESCE(TEXT, '')       AS SQL,
 				REMARKS                  AS DESCRIPTION
 			FROM
 				%(schema)s.ROUTINES
 			WHERE
 				ROUTINETYPE = 'F'
-			WITH UR""" % {
-				'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
-				'owner': ['DEFINER', 'OWNER'][self.v9],
-			})
-		result = []
-		for (schema, specname, name, owner, system, created, functype, deterministic, extaction, nullcall, access, sql, desc) in cursor.fetchall():
+			WITH UR""" % self.query_subst)
+		for (
+				schema,
+				specname,
+				name,
+				owner,
+				system,
+				created,
+				functype,
+				deterministic,
+				extaction,
+				nullcall,
+				access,
+				sql,
+				desc
+			) in cursor.fetchall():
 			system = _make_bool(system)
 			created = _make_datetime(created)
 			deterministic = _make_bool(deterministic)
 			extaction = _make_bool(extaction, true_value='E')
 			nullcall = _make_bool(nullcall)
 			sql = str(sql)
-			result.append((schema, specname, name, owner, system, created, functype, deterministic, extaction, nullcall, access, sql, desc))
+			result.append((
+				schema,
+				specname,
+				name,
+				owner,
+				system,
+				created,
+				functype,
+				deterministic,
+				extaction,
+				nullcall,
+				access,
+				sql,
+				desc
+			))
 		return result
 
 	def _get_function_params(self):
@@ -1000,6 +1312,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
+		result = super(InputPlugin, self)._get_function_params()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -1028,13 +1341,34 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				P.ROUTINESCHEMA,
 				P.SPECIFICNAME,
 				P.ORDINAL
-			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-		result = []
-		for (schema, specname, parmname, parmtype, typeschema, typename, size, scale, codepage, desc) in cursor.fetchall():
+			WITH UR""" % self.query_subst)
+		for (
+				schema,
+				specname,
+				parmname,
+				parmtype,
+				typeschema,
+				typename,
+				size,
+				scale,
+				codepage,
+				desc
+			) in cursor.fetchall():
 			if not size: size = None
 			if not scale: scale = None # XXX Not necessarily unknown (0 is a valid scale)
 			if not codepage: codepage = None
-			result.append((schema, specname, parmname, parmtype, typeschema, typename, size, scale, codepage, desc))
+			result.append((
+				schema,
+				specname,
+				parmname,
+				parmtype,
+				typeschema,
+				typename,
+				size,
+				scale,
+				codepage,
+				desc
+			))
 		return result
 	
 	def _get_procedures(self):
@@ -1063,6 +1397,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
+		result = super(InputPlugin, self)._get_procedures()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -1071,7 +1406,9 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				RTRIM(ROUTINENAME)       AS PROCNAME,
 				RTRIM(%(owner)s)         AS OWNER,
 				CASE
-					WHEN ROUTINESCHEMA LIKE 'SYS%' THEN 'Y'
+					WHEN ROUTINESCHEMA LIKE 'SYS%%' THEN 'Y'
+					WHEN ROUTINESCHEMA = 'SQLJ' THEN 'Y'
+					WHEN ROUTINESCHEMA = 'NULLID' THEN 'Y'
 					WHEN ORIGIN IN ('B', 'S', 'T') THEN 'Y'
 					ELSE 'N'
 				END                      AS SYSTEM,
@@ -1080,25 +1417,47 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				EXTERNAL_ACTION          AS EXTACTION,
 				NULLCALL                 AS NULLCALL,
 				SQL_DATA_ACCESS          AS ACCESS,
-				TEXT                     AS SQL,
+				COALESCE(TEXT, '')       AS SQL,
 				REMARKS                  AS DESCRIPTION
 			FROM
 				%(schema)s.ROUTINES
 			WHERE
 				ROUTINETYPE = 'P'
-			WITH UR""" % {
-				'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
-				'owner': ['DEFINER', 'OWNER'][self.v9],
-			})
-		result = []
-		for (schema, specname, name, owner, system, created, functype, deterministic, extaction, nullcall, access, sql, desc) in cursor.fetchall():
+			WITH UR""" % self.query_subst)
+		for (
+				schema,
+				specname,
+				name,
+				owner,
+				system,
+				created,
+				deterministic,
+				extaction,
+				nullcall,
+				access,
+				sql,
+				desc
+			) in cursor.fetchall():
 			system = _make_bool(system)
 			created = _make_datetime(created)
 			deterministic = _make_bool(deterministic)
 			extaction = _make_bool(extaction, true_value='E')
 			nullcall = _make_bool(nullcall)
 			sql = str(sql)
-			result.append((schema, specname, name, owner, system, created, functype, deterministic, extaction, nullcall, access, sql, desc))
+			result.append((
+				schema,
+				specname,
+				name,
+				owner,
+				system,
+				created,
+				deterministic,
+				extaction,
+				nullcall,
+				access,
+				sql,
+				desc
+			))
 		return result
 	
 	def _get_procedure_params(self):
@@ -1138,6 +1497,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
+		result = super(InputPlugin, self)._get_procedure_params()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -1166,13 +1526,34 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				P.ROUTINESCHEMA,
 				P.SPECIFICNAME,
 				P.ORDINAL
-			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-		result = []
-		for (schema, specname, parmname, parmtype, typeschema, typename, size, scale, codepage, desc) in cursor.fetchall():
+			WITH UR""" % self.query_subst)
+		for (
+				schema,
+				specname,
+				parmname,
+				parmtype,
+				typeschema,
+				typename,
+				size,
+				scale,
+				codepage,
+				desc
+			) in cursor.fetchall():
 			if not size: size = None
 			if not scale: scale = None # XXX Not necessarily unknown (0 is a valid scale)
 			if not codepage: codepage = None
-			result.append((schema, specname, parmname, parmtype, typeschema, typename, size, scale, codepage, desc))
+			result.append((
+				schema,
+				specname,
+				parmname,
+				parmtype,
+				typeschema,
+				typename,
+				size,
+				scale,
+				codepage,
+				desc
+			))
 		return result
 	
 	def _get_triggers(self):
@@ -1205,36 +1586,61 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
+		result = super(InputPlugin, self)._get_triggers()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(TRIGSCHEMA) AS TRIGSCHEMA,
-				RTRIM(TRIGNAME)   AS TRIGNAME,
-				RTRIM(%(owner)s)  AS OWNER,
+				RTRIM(TRIGSCHEMA)  AS TRIGSCHEMA,
+				RTRIM(TRIGNAME)    AS TRIGNAME,
+				RTRIM(%(owner)s)   AS OWNER,
 				CASE
-					WHEN TRIGSCHEMA LIKE 'SYS%' THEN 'Y'
+					WHEN TRIGSCHEMA LIKE 'SYS%%' THEN 'Y'
+					WHEN TRIGSCHEMA = 'SQLJ' THEN 'Y'
+					WHEN TRIGSCHEMA = 'NULLID' THEN 'Y'
 					ELSE 'N'
-				END               AS SYSTEM,
-				CHAR(CREATE_TIME) AS CREATED,
-				RTRIM(TABSCHEMA)  AS TABSCHEMA,
-				RTRIM(TABNAME)    AS TABNAME,
-				TRIGTIME          AS TRIGTIME,
-				TRIGEVENT         AS TRIGEVENT,
-				GRANULARITY       AS GRANULARITY
-				TEXT              AS SQL,
-				REMARKS           AS DESCRIPTION
+				END                AS SYSTEM,
+				CHAR(CREATE_TIME)  AS CREATED,
+				RTRIM(TABSCHEMA)   AS TABSCHEMA,
+				RTRIM(TABNAME)     AS TABNAME,
+				TRIGTIME           AS TRIGTIME,
+				TRIGEVENT          AS TRIGEVENT,
+				GRANULARITY        AS GRANULARITY,
+				COALESCE(TEXT, '') AS SQL,
+				REMARKS            AS DESCRIPTION
 			FROM
 				%(schema)s.TRIGGERS
-			WITH UR""" % {
-				'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
-				'owner': ['DEFINER', 'OWNER'][self.v9],
-			})
-		result = []
-		for (schema, name, owner, system, created, tabschema, tabname, trigtime, trigevent, granularity, sql, desc) in cursor.fetchall():
+			WITH UR""" % self.query_subst)
+		for (
+				schema,
+				name,
+				owner,
+				system,
+				created,
+				tabschema,
+				tabname,
+				trigtime,
+				trigevent,
+				granularity,
+				sql,
+				desc
+			) in cursor.fetchall():
 			system = _make_bool(system)
 			created = _make_datetime(created)
 			sql = str(sql)
-			result.append((schema, name, owner, system, created, tabschema, tabname, trigtime, trigevent, granularity, sql, desc))
+			result.append((
+				schema,
+				name,
+				owner,
+				system,
+				created,
+				tabschema,
+				tabname,
+				trigtime,
+				trigevent,
+				granularity,
+				sql,
+				desc
+			))
 		return result
 
 	def _get_trigger_dependencies(self):
@@ -1250,6 +1656,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 		dep_schema   -- The schema of the relation upon which the trigger depends
 		dep_name     -- The name of the relation upon which the trigger depends
 		"""
+		result = super(InputPlugin, self)._get_trigger_dependencies()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -1265,8 +1672,20 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 			WHERE
 				BTYPE IN ('A', 'S', 'T', 'U', 'V', 'W')
 				AND NOT (D.BSCHEMA = T.TABSCHEMA AND D.BNAME = T.TABNAME)
-			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-		return cursor.fetchall()
+			WITH UR""" % self.query_subst)
+		for (
+				schema,
+				name,
+				depschema,
+				depname
+			) in cursor.fetchall():
+			result.append((
+				schema,
+				name,
+				depschema,
+				depname
+			))
+		return result
 
 	def _get_tablespaces(self):
 		"""Retrieves the details of the tablespaces in the database.
@@ -1285,6 +1704,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
+		result = super(InputPlugin, self)._get_tablespaces()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -1317,14 +1737,24 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				REMARKS           AS DESCRIPTION
 			FROM
 				%(schema)s.TABLESPACES
-			WITH UR""" % {
-				'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
-				'owner': ['DEFINER', 'OWNER'][self.v9],
-			})
-		result = []
-		for (tbspace, owner, system, created, tstype, desc) in cursor.fetchall():
+			WITH UR""" % self.query_subst)
+		for (
+				tbspace,
+				owner,
+				system,
+				created,
+				tstype,
+				desc
+			) in cursor.fetchall():
 			system = _make_bool(system)
 			created = _make_datetime(created)
-			result.append((tbspace, owner, system, created, tstype, desc))
+			result.append((
+				tbspace,
+				owner,
+				system,
+				created,
+				tstype,
+				desc
+			))
 		return result
 
