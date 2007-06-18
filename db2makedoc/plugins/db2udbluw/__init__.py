@@ -31,6 +31,8 @@ MISSING_DEPENDENT = 'If the "%s" option is given, the "%s" option must also be p
 CONNECTING_MSG = 'Connecting to database %s'
 USING_DOCCAT = 'DOCCAT extension schema found, using DOCCAT instead of SYSCAT'
 USING_SYSCAT = 'DOCCAT extension schema not found, using SYSCAT'
+USING_V9 = 'Detected IBM DB2 UDB 9+ catalog layout'
+USING_V8 = 'Did not detect IBM DB2 UDB 9+ catalog layout, defaulting to IBM DB2 UDB 8 layout'
 
 # Plugin options dictionary
 options = {
@@ -104,6 +106,19 @@ class InputPlugin(db2makedoc.plugins.input.InputPlugin):
 			logging.info(USING_DOCCAT)
 		else:
 			logging.info(USING_SYSCAT)
+		cursor = self.connection.cursor()
+		cursor.execute("""
+			SELECT COUNT(*)
+			FROM SYSCAT.COLUMNS
+			WHERE TABSCHEMA = 'SYSCAT'
+			AND TABNAME = 'TABLES'
+			AND COLNAME = 'OWNER'
+			WITH UR""")
+		self.v9 = bool(cursor.fetchall()[0][0])
+		if self.v9:
+			logging.info(USING_V9)
+		else:
+			logging.info(USING_V8)
 	
 	def _connect(self, dsn, username=None, password=None):
 		"""Create a connection to the specified database.
@@ -214,7 +229,7 @@ class InputPlugin(db2makedoc.plugins.input.InputPlugin):
 			SELECT
 				RTRIM(TYPESCHEMA)   AS TYPESCHEMA,
 				RTRIM(TYPENAME)     AS TYPENAME,
-				RTRIM(OWNER)        AS OWNER,
+				RTRIM(%(owner)s)    AS OWNER,
 				CASE METATYPE
 					WHEN 'S' THEN 'Y'
 					ELSE 'N'
@@ -230,7 +245,10 @@ class InputPlugin(db2makedoc.plugins.input.InputPlugin):
 			FROM
 				%(schema)s.DATATYPES
 			WHERE INSTANTIABLE = 'Y'
-			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+			WITH UR""" % {
+				'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
+				'owner': ['DEFINER', 'OWNER'][self.v9],
+			})
 		result = []
 		for (schema, name, owner, system, created, source_schema, source_name, size, scale, codepage, final, desc) in cursor.fetchall():
 			system = _make_bool(system)
@@ -267,7 +285,7 @@ class InputPlugin(db2makedoc.plugins.input.InputPlugin):
 			SELECT
 				RTRIM(T.TABSCHEMA)     AS TABSCHEMA,
 				RTRIM(T.TABNAME)       AS TABNAME,
-				RTRIM(T.OWNER)         AS OWNER,
+				RTRIM(T.%(owner)s)     AS OWNER,
 				CASE
 					WHEN T.TABSCHEMA LIKE 'SYS%' THEN 'Y'
 					WHEN T.TABSCHEMA = 'SQLJ' THEN 'Y'
@@ -286,7 +304,10 @@ class InputPlugin(db2makedoc.plugins.input.InputPlugin):
 					ON T.TBSPACEID = TS.TBSPACEID
 			WHERE
 				TYPE = 'T'
-			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+			WITH UR""" % {
+				'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
+				'owner': ['DEFINER', 'OWNER'][self.v9],
+			})
 		result = []
 		for (schema, name, owner, system, created, laststats, cardinality, size, tbspace, desc) in cursor.fetchall():
 			system = _make_bool(system)
@@ -318,7 +339,7 @@ class InputPlugin(db2makedoc.plugins.input.InputPlugin):
 			SELECT
 				RTRIM(V.VIEWSCHEMA)   AS VIEWSCHEMA,
 				RTRIM(V.VIEWNAME)     AS VIEWNAME,
-				RTRIM(V.OWNER)        AS OWNER,
+				RTRIM(V.%(owner)s)    AS OWNER,
 				CASE
 					WHEN T.TABSCHEMA LIKE 'SYS%' THEN 'Y'
 					ELSE 'N'
@@ -333,7 +354,10 @@ class InputPlugin(db2makedoc.plugins.input.InputPlugin):
 					ON T.TABSCHEMA = V.VIEWSCHEMA
 					AND T.TABNAME = V.VIEWNAME
 					AND T.TYPE = 'V'
-			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+			WITH UR""" % {
+				'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
+				'owner': ['DEFINER', 'OWNER'][self.v9],
+			})
 		result = []
 		for (schema, name, owner, system, created, readonly, sql, desc) in cursor.fetchall():
 			system = _make_bool(system)
@@ -366,7 +390,7 @@ class InputPlugin(db2makedoc.plugins.input.InputPlugin):
 			SELECT
 				RTRIM(TABSCHEMA)      AS ALIASSCHEMA,
 				RTRIM(TABNAME)        AS ALIASNAME,
-				RTRIM(OWNER)          AS OWNER
+				RTRIM(%(owner)s)      AS OWNER
 				CASE
 					WHEN TABSCHEMA LIKE 'SYS%' THEN 'Y'
 					ELSE 'N'
@@ -379,7 +403,10 @@ class InputPlugin(db2makedoc.plugins.input.InputPlugin):
 				%(schema)s.TABLES
 			WHERE
 				TYPE = 'A'
-			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+			WITH UR""" % {
+				'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
+				'owner': ['DEFINER', 'OWNER'][self.v9],
+			})
 		result = []
 		for (schema, name, owner, system, created, base_schema, base_table, desc) in cursor.fetchall():
 			system = _make_bool(system)
@@ -444,7 +471,7 @@ class InputPlugin(db2makedoc.plugins.input.InputPlugin):
 				RTRIM(I.INDNAME)                 AS INDNAME,
 				RTRIM(I.TABSCHEMA)               AS TABSCHEMA,
 				RTRIM(I.TABNAME)                 AS TABNAME,
-				RTRIM(I.OWNER)                   AS OWNER,
+				RTRIM(I.%(owner)s)               AS OWNER,
 				CASE
 					WHEN I.INDSCHEMA LIKE 'SYS%' THEN 'Y'
 					ELSE 'N'
@@ -467,7 +494,10 @@ class InputPlugin(db2makedoc.plugins.input.InputPlugin):
 				%(schema)s.INDEXES I
 				INNER JOIN %(schema)s.TABLESPACES T
 					ON I.TBSPACEID = T.TBSPACEID
-			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+			WITH UR""" % {
+				'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
+				'owner': ['DEFINER', 'OWNER'][self.v9],
+			})
 		result = []
 		for (schema, name, tabschema, tabname, owner, system, created, laststats, card1, card2, card3, card4, card, size, unique, tbspace, desc) in cursor.fetchall():
 			system = _make_bool(system)
@@ -624,7 +654,7 @@ class InputPlugin(db2makedoc.plugins.input.InputPlugin):
 				RTRIM(TABSCHEMA)        AS TABSCHEMA,
 				RTRIM(TABNAME)          AS TABNAME,
 				RTRIM(CONSTNAME)        AS KEYNAME,
-				RTRIM(OWNER)            AS OWNER,
+				RTRIM(%(owner)s)        AS OWNER,
 				CASE
 					WHEN TABSCHEMA LIKE 'SYS%' THEN 'Y'
 					ELSE 'N'
@@ -639,7 +669,10 @@ class InputPlugin(db2makedoc.plugins.input.InputPlugin):
 				%(schema)s.TABCONST
 			WHERE
 				TYPE IN ('U', 'P')
-			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+			WITH UR""" % {
+				'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
+				'owner': ['DEFINER', 'OWNER'][self.v9],
+			})
 		result = []
 		for (schema, name, keyname, owner, system, created, primary, desc) in cursor.fetchall():
 			system = _make_bool(system)
@@ -713,7 +746,7 @@ class InputPlugin(db2makedoc.plugins.input.InputPlugin):
 				RTRIM(T.TABSCHEMA)    AS TABSCHEMA,
 				RTRIM(T.TABNAME)      AS TABNAME,
 				RTRIM(T.CONSTNAME)    AS KEYNAME,
-				RTRIM(T.OWNER)        AS OWNER,
+				RTRIM(T.%(owner)s)    AS OWNER,
 				CASE
 					WHEN TABSCHEMA LIKE 'SYS%' THEN 'Y'
 					ELSE 'N'
@@ -732,7 +765,10 @@ class InputPlugin(db2makedoc.plugins.input.InputPlugin):
 					AND T.TABNAME = R.TABNAME
 					AND T.CONSTNAME = R.CONSTNAME
 					AND T.TYPE = 'F'
-			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+			WITH UR""" % {
+				'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
+				'owner': ['DEFINER', 'OWNER'][self.v9],
+			})
 		result = []
 		for (schema, name, keyname, owner, system, created, refschema, refname, refkeyname, deleterule, updaterule, desc) in cursor.fetchall():
 			system = _make_bool(system)
@@ -806,7 +842,7 @@ class InputPlugin(db2makedoc.plugins.input.InputPlugin):
 				RTRIM(T.TABSCHEMA)    AS TABSCHEMA,
 				RTRIM(T.TABNAME)      AS TABNAME,
 				RTRIM(T.CONSTNAME)    AS CHECKNAME,
-				RTRIM(T.OWNER)        AS OWNER,
+				RTRIM(T.%(owner)s)    AS OWNER,
 				CASE
 					WHEN TABSCHEMA LIKE 'SYS%' THEN 'Y'
 					WHEN C.TYPE IN ('A', 'S') THEN 'Y'
@@ -822,7 +858,10 @@ class InputPlugin(db2makedoc.plugins.input.InputPlugin):
 					AND T.TABNAME = C.TABNAME
 					AND T.CONSTNAME = C.CONSTNAME
 					AND T.TYPE = 'K'
-			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+			WITH UR""" % {
+				'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
+				'owner': ['DEFINER', 'OWNER'][self.v9],
+			})
 		result = []
 		for (schema, name, checkname, owner, system, created, sql, desc) in cursor.fetchall():
 			system = _make_bool(system)
@@ -891,7 +930,7 @@ class InputPlugin(db2makedoc.plugins.input.InputPlugin):
 				RTRIM(ROUTINESCHEMA)     AS FUNCSCHEMA,
 				RTRIM(SPECIFICNAME)      AS FUNCSPECNAME,
 				RTRIM(ROUTINENAME)       AS FUNCNAME,
-				RTRIM(OWNER)             AS OWNER,
+				RTRIM(%(owner)s)         AS OWNER,
 				CASE
 					WHEN ROUTINESCHEMA LIKE 'SYS%' THEN 'Y'
 					WHEN ORIGIN IN ('B', 'S', 'T') THEN 'Y'
@@ -909,7 +948,10 @@ class InputPlugin(db2makedoc.plugins.input.InputPlugin):
 				%(schema)s.ROUTINES
 			WHERE
 				ROUTINETYPE = 'F'
-			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+			WITH UR""" % {
+				'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
+				'owner': ['DEFINER', 'OWNER'][self.v9],
+			})
 		result = []
 		for (schema, specname, name, owner, system, created, functype, deterministic, extaction, nullcall, access, sql, desc) in cursor.fetchall():
 			system = _make_bool(system)
@@ -1027,7 +1069,7 @@ class InputPlugin(db2makedoc.plugins.input.InputPlugin):
 				RTRIM(ROUTINESCHEMA)     AS PROCSCHEMA,
 				RTRIM(SPECIFICNAME)      AS PROCSPECNAME,
 				RTRIM(ROUTINENAME)       AS PROCNAME,
-				RTRIM(OWNER)             AS OWNER,
+				RTRIM(%(owner)s)         AS OWNER,
 				CASE
 					WHEN ROUTINESCHEMA LIKE 'SYS%' THEN 'Y'
 					WHEN ORIGIN IN ('B', 'S', 'T') THEN 'Y'
@@ -1044,7 +1086,10 @@ class InputPlugin(db2makedoc.plugins.input.InputPlugin):
 				%(schema)s.ROUTINES
 			WHERE
 				ROUTINETYPE = 'P'
-			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+			WITH UR""" % {
+				'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
+				'owner': ['DEFINER', 'OWNER'][self.v9],
+			})
 		result = []
 		for (schema, specname, name, owner, system, created, functype, deterministic, extaction, nullcall, access, sql, desc) in cursor.fetchall():
 			system = _make_bool(system)
@@ -1165,7 +1210,7 @@ class InputPlugin(db2makedoc.plugins.input.InputPlugin):
 			SELECT
 				RTRIM(TRIGSCHEMA) AS TRIGSCHEMA,
 				RTRIM(TRIGNAME)   AS TRIGNAME,
-				RTRIM(OWNER)      AS OWNER,
+				RTRIM(%(owner)s)  AS OWNER,
 				CASE
 					WHEN TRIGSCHEMA LIKE 'SYS%' THEN 'Y'
 					ELSE 'N'
@@ -1180,7 +1225,10 @@ class InputPlugin(db2makedoc.plugins.input.InputPlugin):
 				REMARKS           AS DESCRIPTION
 			FROM
 				%(schema)s.TRIGGERS
-			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+			WITH UR""" % {
+				'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
+				'owner': ['DEFINER', 'OWNER'][self.v9],
+			})
 		result = []
 		for (schema, name, owner, system, created, tabschema, tabname, trigtime, trigevent, granularity, sql, desc) in cursor.fetchall():
 			system = _make_bool(system)
@@ -1241,7 +1289,7 @@ class InputPlugin(db2makedoc.plugins.input.InputPlugin):
 		cursor.execute("""
 			SELECT
 				RTRIM(TBSPACE)    AS TBSPACE,
-				RTRIM(OWNER)      AS OWNER,
+				RTRIM(%(owner)s)  AS OWNER,
 				CASE TBSPACE
 					WHEN 'SYSCATSPACE' THEN 'Y'
 					WHEN 'SYSTOOLSPACE' THEN 'Y'
@@ -1269,7 +1317,10 @@ class InputPlugin(db2makedoc.plugins.input.InputPlugin):
 				REMARKS           AS DESCRIPTION
 			FROM
 				%(schema)s.TABLESPACES
-			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+			WITH UR""" % {
+				'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
+				'owner': ['DEFINER', 'OWNER'][self.v9],
+			})
 		result = []
 		for (tbspace, owner, system, created, tstype, desc) in cursor.fetchall():
 			system = _make_bool(system)
