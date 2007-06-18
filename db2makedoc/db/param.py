@@ -8,30 +8,32 @@ from db2makedoc.db.util import format_size, format_ident
 class Param(DocBase):
 	"""Class representing a parameter in a routine in a DB2 database"""
 
-	def __init__(self, routine, input, **row):
+	def __init__(self, routine, input, position, *row):
 		"""Initializes an instance of the class from a input row"""
 		# If the parameter is unnamed, make up a name based on the parameter's
 		# position
-		if row.get('name', None):
-			super(Param, self).__init__(routine, row['name'])
+		if row[0]:
+			super(Param, self).__init__(routine, row[0])
 		else:
-			super(Param, self).__init__(routine, 'P%d' % row['position'])
+			super(Param, self).__init__(routine, 'P%d' % position)
 		logging.debug("Building parameter %s" % (self.qualified_name))
+		(
+			_,
+			self.type,
+			self._datatype_schema,
+			self._datatype_name,
+			self.size,
+			self.scale,
+			self.codepage,
+			desc
+		) = row
 		self.type_name = 'Parameter'
 		self.routine = self.parent
 		self.schema = self.parent.parent
-		self.description = row.get('description', None) or self.description
-		self.locator = row.get('locator', False)
-		self.codepage = row.get('codepage', None)
-		self.size = row['size']
-		self.scale = row['scale']
-		self.position = row['position']
-		self.type = row['type']
-		self._datatype_schema = row['datatypeSchema']
-		self._datatype_name = row['datatypeName']
+		self.description = desc or self.description
 
 	def _get_identifier(self):
-		return "param_%s_%s_%d" % (self.schema.name, self.routine.specific_name, self.position)
+		return "param_%s_%s_%d" % (self.parent.parent.name, self.parent.specific_name, self.position)
 
 	def _get_database(self):
 		return self.parent.parent.parent

@@ -12,14 +12,14 @@ class CheckFieldsList(object):
 	def __init__(self, table, fields):
 		"""Initializes the list from a list of field names"""
 		super(CheckFieldsList, self).__init__()
-		assert type(fields) == type([])
+		assert isinstance(fields, list)
 		self._table = table
 		self._items = fields
 
 	def __len__(self):
 		return len(self._items)
 
-	def __getItem__(self, key):
+	def __getitem__(self, key):
 		assert type(key) == int
 		return self._table.fields[self._items[key]]
 
@@ -36,25 +36,26 @@ class CheckFieldsList(object):
 class Check(Constraint):
 	"""Class representing a check constraint in a table in a DB2 database"""
 
-	def __init__(self, table, input, **row):
+	def __init__(self, table, input, *row):
 		"""Initializes an instance of the class from a input row"""
-		super(Check, self).__init__(table, row['name'])
+		super(Check, self).__init__(table, row[0])
 		logging.debug("Building check %s" % (self.qualified_name))
 		self.type_name = 'Check Constraint'
-		self.description = row.get('description', None) or self.description
-		self.created = row.get('created', None)
-		self.definer = row.get('definer', None)
-		self.enforced = row.get('enforced', None)
-		self.query_optimize = row.get('queryOptimize', None)
-		self.check_existing = row.get('checkExisting', None)
-		self.type = row.get('type', None)
-		self.qualifier = row.get('qualifier', None)
-		self.func_path = row.get('funcPath', None)
-		self.expression = row.get('expression', None)
-		self._fields = CheckFieldsList(table, input.check_fields[(table.schema.name, table.name, self.name)])
-		self._system = self.type == 'SYSTEM'
+		(
+			_,
+			self.owner,
+			self._system,
+			self.created,
+			self.expression,
+			desc
+		) = row
+		self.description = desc or self.description
 		# XXX DB2 specific
 		self._anonymous = re.match('^SQL\d{15}$', self.name)
+		self._fields = CheckFieldsList(
+			table,
+			input.check_cols[(table.schema.name, table.name, self.name)]
+		)
 
 	def _get_fields(self):
 		return self._fields

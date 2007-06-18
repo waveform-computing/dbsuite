@@ -10,45 +10,47 @@ from db2makedoc.db.util import format_size, format_ident
 class Function(Routine):
 	"""Class representing a function in a DB2 database"""
 	
-	def __init__(self, schema, input, **row):
+	def __init__(self, schema, input, *row):
 		"""Initializes an instance of the class from a input row"""
-		super(Function, self).__init__(schema, row['name'], row['specificName'])
+		super(Function, self).__init__(schema, row[2], row[1])
 		logging.debug("Building function %s" % (self.qualified_name))
+		(
+			_,
+			_,
+			_,
+			self.owner,
+			self._system,
+			self.created,
+			self.type,
+			self.deterministic,
+			self.external_action,
+			self.null_call,
+			self.sql_access,
+			self.sql,
+			desc
+		) = row
 		self.type_name = 'Function'
-		self.description = row.get('description', None) or self.description
-		self.definer = row.get('definer', None)
-		self.origin = row.get('origin', None)
-		self.type = row.get('type', None)
-		self.deterministic = row.get('deterministic', None)
-		self.external_action = row.get('externalAction', None)
-		self.null_call = row.get('nullCall', None)
-		self.cast_function = row.get('castFunction', None)
-		self.assign_function = row.get('assignFunction', None)
-		self.parallel = row.get('parallel', None)
-		self.fenced = row.get('fenced', None)
-		self.sql_access = row.get('sqlAccess', None)
-		self.thread_safe = row.get('threadSafe', None)
-		self.valid = row.get('valid', None)
-		self.created = row.get('created', None)
-		self.qualifier = row.get('qualifier', None)
-		self.func_path = row.get('funcPath', None)
-		self.sql = row.get('sql', None)
-		self.language = row['language']
+		self.description = desc or self.description
+		self._param_list = [
+			Param(self, input, position + 1, *item)
+			for (position, item) in enumerate(input.function_params[(schema.name, self.specific_name)])
+			if item[1] != 'R'
+		]
+		self._params = dict([
+			(param.name, param)
+			for param in self._param_list
+		])
+		self._return_list = [
+			Param(self, input, position + 1, *item)
+			for (position, item) in enumerate(input.function_params[(schema.name, self.specific_name)])
+			if item[1] == 'R'
+		]
+		self._returns = dict([
+			(param.name, param)
+			for param in self._return_list
+		])
 		self._params = {}
 		self._returns = {}
-		myparams = [
-			input.func_params[(schema_name, specific_name, param_type, param_pos)]
-			for (schema_name, specific_name, param_type, param_pos) in input.func_params
-			if schema_name == schema.name and specific_name == self.specific_name
-		]
-		for row in myparams:
-			param = Param(self, input, **row)
-			if param.type == 'RESULT':
-				self._returns[param.name] = param
-			else:
-				self._params[param.name] = param
-		self._param_list = sorted(self._params.itervalues(), key=lambda param:param.position)
-		self._return_list = sorted(self._returns.itervalues(), key=lambda param:param.position)
 
 	def _get_parent_list(self):
 		return self.schema.function_list
@@ -73,9 +75,9 @@ class Function(Routine):
 		def format_returns():
 			if len(self.return_list) == 0:
 				return ''
-			elif self.type == 'ROW':
+			elif self.type == 'R':
 				return ' RETURNS ROW(%s)' % (format_params(self.return_list))
-			elif self.type == 'TABLE':
+			elif self.type == 'T':
 				return ' RETURNS TABLE(%s)' % (format_params(self.return_list))
 			else:
 				return ' RETURNS %s' % (self.return_list[0].datatype_str)

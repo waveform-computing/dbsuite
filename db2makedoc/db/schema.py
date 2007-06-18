@@ -15,81 +15,120 @@ from db2makedoc.db.procedure import Procedure
 class Schema(DocBase):
 	"""Class representing a schema in a DB2 database"""
 
-	def __init__(self, database, input, **row):
+	def __init__(self, database, input, *row):
 		"""Initializes an instance of the class from a input row"""
-		super(Schema, self).__init__(database, row['name'])
+		super(Schema, self).__init__(database, row[0])
 		logging.debug("Building schema %s" % (self.qualified_name))
+		(
+			_,
+			self.owner,
+			self._system,
+			self.created,
+			desc
+		) = row
 		self.type_name = 'Schema'
-		self.description = row.get('description', None) or self.description
-		self.owner = row.get('owner', None)
-		self.definer = row.get('definer', None)
-		self.created = row.get('created', None)
-		self.datatypes = {}
-		self.relations = {}
-		self.tables = {}
-		self.views = {}
-		self.aliases = {}
-		self.indexes = {}
-		self.routines = {}
+		self.description = desc or self.description
+		self.datatype_list = sorted([
+			Datatype(self, input, *item)
+			for item in input.datatypes
+			if item[0] == self.name
+		], key=lambda item:item.name)
+		self.datatypes = dict([
+			(datatype.name, datatype)
+			for datatype in self.datatype_list
+		])
+		self.table_list = sorted([
+			Table(self, input, *item)
+			for item in input.tables
+			if item[0] == self.name
+		], key=lambda item:item.name)
+		self.tables = dict([
+			(table.name, table)
+			for table in self.table_list
+		])
+		self.view_list = sorted([
+			View(self, input, *item)
+			for item in input.views
+			if item[0] == self.name
+		], key=lambda item:item.name)
+		self.views = dict([
+			(view.name, view)
+			for view in self.view_list
+		])
+		self.alias_list = sorted([
+			Alias(self, input, *item)
+			for item in input.aliases
+			if item[0] == self.name
+		], key=lambda item:item.name)
+		self.aliases = dict([
+			(alias.name, alias)
+			for alias in self.alias_list
+		])
+		self.relation_list = sorted(
+			self.table_list + self.view_list + self.alias_list,
+			key=lambda item:item.name
+		)
+		self.relations = dict([
+			(relation.name, relation)
+			for relation in self.relation_list
+		])
+		self.index_list = sorted([
+			Index(self, input, *item)
+			for item in input.indexes
+			if item[0] == self.name
+		])
+		self.indexes = dict([
+			(index.name, index)
+			for index in self.index_list
+		])
+		self.function_list = sorted([
+			Function(self, input, *item)
+			for item in input.functions
+			if item[0] == self.name
+		], key=lambda item:item.name)
 		self.functions = {}
-		self.methods = {}
+		for function in self.function_list:
+			if function.name in self.functions:
+				self.functions[function.name].append(function)
+			else:
+				self.functions[function.name] = [function]
+		self.specific_functions = dict([
+			(function.specific_name, function)
+			for function in self.function_list
+		])
+		self.procedure_list = sorted([
+			Procedure(self, input, *item)
+			for item in input.procedures
+			if item[0] == self.name
+		], key=lambda item:item.name)
 		self.procedures = {}
-		self.triggers = {}
-		self.specific_routines = {}
-		self.specific_functions = {}
-		self.specific_methods = {}
-		self.specific_procedures = {}
-		# XXX Could all this be done entirely with list comprehensions instead?
-		for datatype in [input.datatypes[(schema, name)] for (schema, name) in input.datatypes if schema == self.name]:
-			self.datatypes[datatype['name']] = Datatype(self, input, **datatype)
-		self.datatype_list = sorted(self.datatypes.itervalues(), key=lambda datatype: datatype.name)
-		for table_rec in [input.tables[(schema, name)] for (schema, name) in input.tables if schema == self.name]:
-			table = Table(self, input, **table_rec)
-			self.tables[table_rec['name']] = table
-			self.relations[table_rec['name']] = table
-		self.table_list = sorted(self.tables.itervalues(), key=lambda table:table.name)
-		for view_rec in [input.views[(schema, name)] for (schema, name) in input.views if schema == self.name]:
-			view = View(self, input, **view_rec)
-			self.views[view_rec['name']] = view
-			self.relations[view_rec['name']] = view
-		self.view_list = sorted(self.views.itervalues(), key=lambda view:view.name)
-		for alias_rec in [input.aliases[(schema, name)] for (schema, name) in input.aliases if schema == self.name]:
-			alias = Alias(self, input, **alias_rec)
-			self.aliases[alias_rec['name']] = alias
-			self.relations[alias_rec['name']] = alias
-		self.alias_list = sorted(self.aliases.itervalues(), key=lambda alias:alias.name)
-		self.relation_list = sorted(self.relations.itervalues(), key=lambda relation:relation.name)
-		for index_rec in [input.indexes[(schema, name)] for (schema, name) in input.indexes if schema == self.name]:
-			self.indexes[index_rec['name']] = Index(self, input, **index_rec)
-		self.index_list = sorted(self.indexes.itervalues(), key=lambda index:index.name)
-		for func_rec in [input.functions[(schema, name)] for (schema, name) in input.functions if schema == self.name]:
-			func = Function(self, input, **func_rec)
-			if not func_rec['name'] in self.routines:
-				self.routines[func_rec['name']] = []
-			self.routines[func_rec['name']].append(func)
-			if not func_rec['name'] in self.functions:
-				self.functions[func_rec['name']] = []
-			self.functions[func_rec['name']].append(func)
-			self.specific_routines[func_rec['specificName']] = func
-			self.specific_functions[func_rec['specificName']] = func
-		self.function_list = sorted(self.specific_functions.itervalues(), key=lambda function:function.name)
-		for proc_rec in [input.procedures[(schema, name)] for (schema, name) in input.procedures if schema == self.name]:
-			proc = Procedure(self, input, **proc_rec)
-			if not proc_rec['name'] in self.routines:
-				self.routines[proc_rec['name']] = []
-			self.routines[proc_rec['name']].append(proc)
-			if not proc_rec['name'] in self.procedures:
-				self.procedures[proc_rec['name']] = []
-			self.procedures[proc_rec['name']].append(proc)
-			self.specific_routines[proc_rec['specificName']] = proc
-			self.specific_procedures[proc_rec['specificName']] = proc
-		self.procedure_list = sorted(self.specific_procedures.itervalues(), key=lambda procedure:procedure.name)
+		for procedure in self.procedure_list:
+			if procedure.name in self.procedures:
+				self.procedures[procedure.name].append(procedure)
+			else:
+				self.procedures[procedure.name] = [procedure]
+		self.specific_procedures = dict([
+			(procedure.specific_name, procedure)
+			for procedure in self.procedure_list
+		])
+		self.routine_list = sorted(
+			self.function_list + self.procedure_list,
+			key=lambda item:item.name
+		)
+		self.routines = dict([
+			(routine.name, routine)
+			for routine in self.routine_list
+		])
 		# XXX Add support for methods
-		self.routine_list = sorted(self.specific_routines.itervalues(), key=lambda routine:routine.name)
 		# XXX Add support for sequences
-		for trig_rec in [input.triggers[(schema, name)] for (schema, name) in input.triggers if schema == self.name]:
-			self.triggers[trig_rec['name']] = Trigger(self, input, **trig_rec)
-		self.trigger_list = sorted(self.triggers.itervalues(), key=lambda trigger:trigger.name)
+		self.trigger_list = sorted([
+			Trigger(self, input, *item)
+			for item in input.triggers
+		], key=lambda item:item.name)
+		self.triggers = dict([
+			(trigger.name, trigger)
+			for trigger in self.trigger_list
+		])
 
 	def _get_identifier(self):
 		return "schema_%s" % (self.name)
@@ -98,19 +137,6 @@ class Schema(DocBase):
 		# Schemas form the top of the naming hierarchy
 		return self.name
 	
-	def _get_system(self):
-		# XXX DB2 specific
-		return self.name in [
-			"NULLID",
-			"SQLJ",
-			"SYSCAT",
-			"SYSFUN",
-			"SYSIBM",
-			"SYSPROC",
-			"SYSSTAT",
-			"SYSTOOLS"
-		]
-
 	def _get_database(self):
 		return self.parent
 

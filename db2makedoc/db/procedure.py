@@ -10,36 +10,35 @@ from db2makedoc.db.util import format_size, format_ident
 class Procedure(Routine):
 	"""Class representing a procedure in a DB2 database"""
 	
-	def __init__(self, schema, input, **row):
+	def __init__(self, schema, input, *row):
 		"""Initializes an instance of the class from a input row"""
-		super(Procedure, self).__init__(schema, row['name'], row['specificName'])
+		super(Procedure, self).__init__(schema, row[2], row[1])
 		logging.debug("Building procedure %s" % (self.qualified_name))
+		(
+			_,
+			_,
+			_,
+			self.owner,
+			self._system,
+			self.created,
+			self.deterministic,
+			self.external_action,
+			self.null_call,
+			self.sql_access,
+			self.sql,
+			desc
+		) = row
 		self.type_name = 'Procedure'
-		self.description = row.get('description', None) or self.description
-		self.definer = row.get('definer', None)
-		self.origin = row.get('origin', None)
-		self.deterministic = row.get('deterministic', None)
-		self.external_action = row.get('externalAction', None)
-		self.null_call = row.get('nullCall', None)
-		self.fenced = row.get('fenced', None)
-		self.sql_access = row.get('sqlAccess', None)
-		self.thread_safe = row.get('threadSafe', None)
-		self.valid = row.get('valid', None)
-		self.created = row.get('created', None)
-		self.qualifier = row.get('qualifier', None)
-		self.func_path = row.get('funcPath', None)
-		self.sql = row.get('sql', None)
-		self.language = row['language']
-		self._params = {}
-		myparams = [
-			input.proc_params[(schema_name, specific_name, param_type, param_pos)]
-			for (schema_name, specific_name, param_type, param_pos) in input.proc_params
-			if schema_name == schema.name and specific_name == self.specific_name
+		self.description = desc or self.description
+		self._param_list = [
+			Param(self, input, position + 1, *item)
+			for (position, item) in enumerate(input.procedure_params[(schema.name, self.specific_name)])
+			if item[1] != 'R'
 		]
-		for row in myparams:
-			param = Param(self, input, **row)
-			self._params[param.name] = param
-		self._param_list = sorted(self._params.itervalues(), key=lambda param:param.position)
+		self._params = dict([
+			(param.name, param)
+			for param in self._param_list
+		])
 
 	def _get_parent_list(self):
 		return self.schema.procedure_list

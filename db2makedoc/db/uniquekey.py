@@ -11,14 +11,14 @@ class UniqueKeyFieldsList(object):
 
 	def __init__(self, table, fields):
 		"""Initializes the list from a list of field names"""
-		assert type(fields) == type([])
+		assert isinstance(fields, list)
 		self._table = table
 		self._items = fields
 
 	def __len__(self):
 		return len(self._items)
 
-	def __getItem__(self, key):
+	def __getitem__(self, key):
 		assert type(key) == int
 		return self._table.fields[self._items[key]]
 
@@ -43,17 +43,26 @@ class UniqueKeyFieldsList(object):
 class UniqueKey(Constraint):
 	"""Class representing a unique key in a table in a DB2 database"""
 
-	def __init__(self, table, input, **row):
+	def __init__(self, table, input, *row):
 		"""Initializes an instance of the class from a input row"""
-		super(UniqueKey, self).__init__(table, row['name'])
+		super(UniqueKey, self).__init__(table, row[0])
 		logging.debug("Building unique key %s" % (self.qualified_name))
 		self.type_name = 'Unique Key'
-		self.description = row.get('description', None) or self.description
-		self.definer = row.get('definer', None)
-		self.check_existing = row.get('checkExisting', None)
-		self._fields = UniqueKeyFieldsList(table, input.unique_key_fields[(table.schema.name, table.name, self.name)])
+		(
+			_,
+			self.owner,
+			self._system,
+			self.created,
+			_,
+			desc
+		) = row
+		self.description = desc or self.description
 		# XXX DB2 specific
 		self._anonymous = re.match('^SQL\d{15}$', self.name)
+		self._fields = UniqueKeyFieldsList(
+			table,
+			input.unique_key_cols[(table.schema.name, table.name, self.name)]
+		)
 
 	def _get_fields(self):
 		return self._fields
@@ -67,9 +76,9 @@ class UniqueKey(Constraint):
 class PrimaryKey(UniqueKey):
 	"""Class representing a primary key in a table in a DB2 database"""
 
-	def __init__(self, table, input, **row):
+	def __init__(self, table, input, *row):
 		"""Initializes an instance of the class from a input row"""
-		super(PrimaryKey, self).__init__(table, input, **row)
+		super(PrimaryKey, self).__init__(table, input, *row)
 		self.type_name = 'Primary Key'
 
 	def _get_prototype(self):

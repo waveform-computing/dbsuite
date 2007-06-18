@@ -29,7 +29,7 @@ class IndexFieldsDict(object):
 	def __len__(self):
 		return len(self._keys)
 
-	def __getItem__(self, key):
+	def __getitem__(self, key):
 		return (self._database.schemas[self._schema_name].tables[self._table_name].fields[key], self._items[key])
 
 	def __iter__(self):
@@ -53,7 +53,7 @@ class IndexFieldsList(object):
 	def __len__(self):
 		return len(self._items)
 
-	def __getItem__(self, key):
+	def __getitem__(self, key):
 		assert type(key) == int
 		(field_name, index_order) = self._items[key]
 		return (self._database.schemas[self._schema_name].tables[self._table_name].fields[field_name], index_order)
@@ -71,39 +71,38 @@ class IndexFieldsList(object):
 class Index(SchemaObject):
 	"""Class representing an index in a DB2 database"""
 
-	def __init__(self, schema, input, **row):
+	def __init__(self, schema, input, *row):
 		"""Initializes an instance of the class from a input row"""
-		super(Index, self).__init__(schema, row['name'])
+		super(Index, self).__init__(schema, row[1])
 		logging.debug("Building index %s" % (self.qualified_name))
+		(
+			_,
+			_,
+			self._table_schema,
+			self._table_name,
+			self.owner,
+			self._system,
+			self.created,
+			self.last_stats,
+			self.cardinality,
+			self.size,
+			self.unique,
+			self._tablespace,
+			desc
+		) = row
 		self.type_name = 'Index'
-		self.description = row.get('description', None) or self.description
-		self.definer = row.get('definer', None)
-		self.type = row.get('type', None)
-		self.leaf_pages = row.get('leafPages', None)
-		self.levels = row.get('levels', None)
-		self.cluster_ratio = row.get('clusterRatio', None)
-		self.cluster_factor = row.get('clusterFactor', None)
-		self.sequential_pages = row.get('sequentialPages', None)
-		self.density = row.get('density', None)
-		self.user_defined = row.get('userDefined', None)
-		self.required = row.get('required', None)
-		self.created = row.get('created', None)
-		self.stats_updated = row.get('statsUpdated', None)
-		self.reverse_scans = row.get('reverseScans', None)
-		self.unique = row['unique']
-		self._table_schema = row['tableSchema']
-		self._table_name = row['tableName']
-		self._tablespace_name = row['tablespaceName']
-		self.fields = IndexFieldsDict(self.database, self._table_schema, self._table_name, input.index_fields[(schema.name, self.name)])
-		self.field_list = IndexFieldsList(self.database, self._table_schema, self._table_name, input.index_fields[(schema.name, self.name)])
-		self.cardinality = (
-			row.get('cardinality', None),
-			[
-				row.get('cardinality1', None),
-				row.get('cardinality2', None),
-				row.get('cardinality3', None),
-				row.get('cardinality4', None),
-			][:len(self.field_list)]
+		self.description = desc or self.description
+		self.fields = IndexFieldsDict(
+			self.database,
+			self._table_schema,
+			self._table_name,
+			input.index_cols[(schema.name, self.name)]
+		)
+		self.field_list = IndexFieldsList(
+			self.database,
+			self._table_schema,
+			self._table_name,
+			input.index_cols[(schema.name, self.name)]
 		)
 
 	def _get_identifier(self):
@@ -113,8 +112,7 @@ class Index(SchemaObject):
 		return self.schema.index_list
 
 	def _get_create_sql(self):
-		sql = """CREATE $type $schema.$index
-ON $tbschema.$tbname ($fields)"""
+		sql = 'CREATE $type $schema.$index ON $tbschema.$tbname ($fields)'
 		values = {
 			'type': {False: 'INDEX', True: 'UNIQUE INDEX'}[self.unique],
 			'schema': format_ident(self.schema.name),
@@ -122,17 +120,19 @@ ON $tbschema.$tbname ($fields)"""
 			'tbschema': format_ident(self.table.schema.name),
 			'tbname': format_ident(self.table.name),
 			'fields': ', '.join(['%s%s' % (field.name, {
-				'ASCENDING': '',
-				'DESCENDING': ' DESC'
-			}[order]) for (field, order) in self.field_list if order != 'INCLUDE'])
+				'A': '',
+				'D': ' DESC'
+			}[order]) for (field, order) in self.field_list if order != 'I'])
 		}
 		if self.unique:
-			incfields = [field for (field, order) in self.field_list if order == 'INCLUDE']
+			incfields = [
+				field
+				for (field, order) in self.field_list
+				if order == 'I'
+			]
 			if len(incfields) > 0:
 				sql += '\nINCLUDE ($incfields)'
 				values['incfields'] = ', '.join([field.name for field in incfields])
-		if self.reverse_scans:
-			sql += '\nALLOW REVERSE SCANS'
 		sql += ';'
 		return Template(sql).substitute(values)
 
@@ -149,7 +149,7 @@ ON $tbschema.$tbname ($fields)"""
 
 	def _get_tablespace(self):
 		"""Returns the tablespace that contains the index's data"""
-		return self.database.tablespaces[self._tablespace_name]
+		return self.database.tablespaces[self._tablespace]
 
 	table = property(_get_table)
 	tablespace = property(_get_tablespace)

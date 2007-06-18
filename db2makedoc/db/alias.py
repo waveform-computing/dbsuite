@@ -10,18 +10,30 @@ from db2makedoc.db.util import format_ident
 class Alias(Relation):
 	"""Class representing a alias in a DB2 database"""
 	
-	def __init__(self, schema, input, **row):
+	def __init__(self, schema, input, *row):
 		"""Initializes an instance of the class from a input row"""
-		super(Alias, self).__init__(schema, row['name'])
+		super(Alias, self).__init__(schema, row[1])
 		logging.debug("Building alias %s" % (self.qualified_name))
+		(
+			_,
+			_,
+			self.owner,
+			self._system,
+			self.created,
+			self._relation_schema,
+			self._relation_name,
+			desc
+		) = row
 		self.type_name = 'Alias'
-		self.description = row.get('description', None) or self.description
-		self.definer = row.get('definer', None)
-		self.created = row.get('created', None)
-		self._relation_schema = row['relationSchema']
-		self._relation_name = row['relationName']
-		self._dependents = RelationsDict(self.database, input.relation_dependents.get((schema.name, self.name)))
-		self._dependent_list = RelationsList(self.database, input.relation_dependents.get((schema.name, self.name)))
+		self.description = desc or self.description
+		self._dependents = RelationsDict(
+			self.database,
+			input.relation_dependents[(schema.name, self.name)]
+		)
+		self._dependent_list = RelationsList(
+			self.database,
+			input.relation_dependents[(schema.name, self.name)]
+		)
 
 	def _get_fields(self):
 		return self.relation.fields

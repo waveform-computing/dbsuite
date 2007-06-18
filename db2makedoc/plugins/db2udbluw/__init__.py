@@ -14,6 +14,7 @@ mswindows = sys.platform == 'win32'
 import logging
 import datetime
 import re
+import db2makedoc.plugins.input
 
 # Constants
 DATABASE_OPTION = 'database'
@@ -47,7 +48,7 @@ def _make_datetime(value):
 	"value" attribute it is assumed to be a UNIX timestamp and is converted
 	into a Python datetime value.
 
-	Basically this routine exists to converts a database framework-specific
+	Basically this routine exists to convert a database framework-specific
 	representation of a datetime value into a standard Python datetime value.
 	"""
 	if (value is None) or (value == ""):
@@ -75,79 +76,34 @@ def _make_bool(value, true_value='Y', false_value='N', none_value=' ', unknown_e
 		else:
 			return unknown_result
 
-def _fetch_dict(cursor):
-	"""Returns rows from a cursor as a list of dictionaries.
-
-	Specifically, the result set is returned as a list of dictionaries, where
-	each dictionary represents one row of the result set, and is keyed by the
-	field names of the result set converted to lower case.
-
-	Okay, horribly wasteful and un-Pythonic. But it's simple and it works.
-	"""
-	return [dict(zip([d[0] for d in cursor.description], row)) for row in cursor.fetchall()]
-
-class Input(object):
+class InputPlugin(db2makedoc.plugins.input.InputPlugin):
 	def __init__(self, config):
-		super(Input, self).__init__()
+		super(InputPlugin, self).__init__()
 		# Check the config dictionary for missing stuff
 		if not DATABASE_OPTION in config:
 			raise Exception(MISSING_OPTION % DATABASE_OPTION)
 		if USERNAME_OPTION in config and not PASSWORD_OPTION in config:
 			raise Exception(MISSING_DEPENDENT % (USERNAME_OPTION, PASSWORD_OPTION))
+		# Open the databsae connection
 		logging.info(CONNECTING_MSG % config[DATABASE_OPTION])
 		self.connection = self._connect(
 			config[DATABASE_OPTION],
 			config.get(USERNAME_OPTION, None),
 			config.get(PASSWORD_OPTION, None)
 		)
-		try:
-			self.name = config[DATABASE_OPTION]
-			# Test whether the DOCCAT extension is installed
-			cursor = self.connection.cursor()
-			try:
-				cursor.execute("""
-					SELECT COUNT(*)
-					FROM SYSCAT.SCHEMATA
-					WHERE SCHEMANAME = 'DOCCAT'
-					WITH UR""")
-				self.doccat = bool(cursor.fetchall()[0][0])
-				if self.doccat:
-					logging.info(USING_DOCCAT)
-				else:
-					logging.info(USING_SYSCAT)
-			finally:
-				cursor.close()
-				del cursor
-			# Run all the queries, using DOCCAT extensions if available
-			self._get_schemas()
-			self._get_datatypes()
-			self._get_tables()
-			self._get_views()
-			self._get_aliases()
-			self._get_relation_dependencies()
-			self._get_indexes()
-			self._get_index_fields()
-			self._get_table_indexes()
-			self._get_fields()
-			self._get_unique_keys()
-			self._get_unique_key_fields()
-			self._get_foreign_keys()
-			self._get_foreign_key_fields()
-			self._get_checks()
-			self._get_check_fields()
-			self._get_functions()
-			self._get_function_params()
-			self._get_procedures()
-			self._get_procedure_params()
-			self._get_triggers()
-			self._get_trigger_dependencies()
-			self._get_relation_triggers()
-			self._get_tablespaces()
-			self._get_tablespace_tables()
-			self._get_tablespace_indexes()
-		finally:
-			self.connection.close()
-			del self.connection
+		self.name = config[DATABASE_OPTION]
+		# Test whether the DOCCAT extension is installed
+		cursor = self.connection.cursor()
+		cursor.execute("""
+			SELECT COUNT(*)
+			FROM SYSCAT.SCHEMATA
+			WHERE SCHEMANAME = 'DOCCAT'
+			WITH UR""")
+		self.doccat = bool(cursor.fetchall()[0][0])
+		if self.doccat:
+			logging.info(USING_DOCCAT)
+		else:
+			logging.info(USING_SYSCAT)
 	
 	def _connect(self, dsn, username=None, password=None):
 		"""Create a connection to the specified database.
@@ -165,998 +121,1159 @@ class Input(object):
 		try:
 			# Try the PyDB2 framework
 			import DB2
+			if username:
+				return DB2.Connection(dsn, username, password)
+			else:
+				return DB2.Connection(dsn)
 		except ImportError:
 			try:
 				# Try the PythonWin ODBC framework
-				if mswindows:
-					import dbi
-					import odbc
+				import dbi
+				import odbc
+				if username:
+					return odbc.odbc("%s/%s/%s" % (dsn, username, password))
 				else:
-					raise ImportError('')
+					return odbc.odbc(dsn)
 			except ImportError:
 				try:
 					# Try the mxODBC framework
 					import mx.ODBC
-				except ImportError:
-					raise
-				else:
 					# XXX Fix connection string
-					# Connect using mxODBC (different driver depending on
-					# platform)
 					if mswindows:
 						import mx.ODBC.Windows
 						return mx.ODBC.Windows.DriverConnect('DSN=%s;UID=%s;PWD=%s')
 					else:
 						import mx.ODBC.iODBC
 						return mx.ODBC.iODBC.DriverConnect('DSN=%s;UID=%s;PWD=%s')
-			else:
-				# Connect using PythonWin ODBC
-				if username:
-					return odbc.odbc("%s/%s/%s" % (dsn, username, password))
-				else:
-					return odbc.odbc(dsn)
-		else:
-			# Connect using PyDB2
-			if username:
-				return DB2.Connection(dsn, username, password)
-			else:
-				return DB2.Connection(dsn)
+				except ImportError:
+					raise Exception('Unable to find a suitable connection framework')
 
 	def _get_schemas(self):
-		logging.debug("Retrieving schemas")
+		"""Retrieves the details of schemas stored in the database.
+
+		Override this function to return a list of tuples containing details of
+		the schemas defined in the database. The tuples contain the following
+		details in the order specified:
+
+		name         -- The name of the schema
+		owner*       -- The name of the user who owns the schema
+		system       -- True if the schema is system maintained (boolean)
+		created*     -- When the schema was created (datetime)
+		description* -- Descriptive text
+
+		* Optional (can be None)
+		"""
 		cursor = self.connection.cursor()
-		try:
-			cursor.execute("""
-				SELECT
-					RTRIM(SCHEMANAME) AS "name",
-					RTRIM(OWNER)      AS "owner",
-					RTRIM(DEFINER)    AS "definer",
-					CHAR(CREATE_TIME) AS "created",
-					REMARKS           AS "description"
-				FROM
-					%(schema)s.SCHEMATA
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.schemas = dict([(row['name'], row) for row in _fetch_dict(cursor)])
-		finally:
-			cursor.close()
-			del cursor
-		for row in self.schemas.itervalues():
-			row['created'] = _make_datetime(row['created'])
+		cursor.execute("""
+			SELECT
+				RTRIM(SCHEMANAME) AS NAME,
+				RTRIM(OWNER)      AS OWNER,
+				CASE
+					WHEN SCHEMANAME LIKE 'SYS%' THEN 'Y'
+					WHEN SCHEMANAME = 'SQLJ' THEN 'Y'
+					WHEN SCHEMANAME = 'NULLID' THEN 'Y'
+					ELSE 'N'
+				END               AS SYSTEM,
+				CHAR(CREATE_TIME) AS CREATED,
+				REMARKS           AS DESCRIPTION
+			FROM
+				%(schema)s.SCHEMATA
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+		result = []
+		for (name, owner, system, created, desc) in cursor.fetchall():
+			system = _make_bool(system)
+			created = _make_datetime(created)
+			result.append((name, owner, system, created, desc))
+		return result
 
 	def _get_datatypes(self):
-		logging.debug("Retrieving datatypes")
+		"""Retrieves the details of datatypes stored in the database.
+
+		Override this function to return a list of tuples containing details of
+		the datatypes defined in the database (including system types). The
+		tuples contain the following details in the order specified:
+
+		schema         -- The schema of the datatype
+		name           -- The name of the datatype
+		owner*         -- The name of the user who owns the datatype
+		system         -- True if the type is system maintained (boolean)
+		created*       -- When the type was created (datetime)
+		source_schema* -- The schema of the base system type of the datatype
+		source_name*   -- The name of the base system type of the datatype
+		size*          -- The length of the type for character based types or
+		                  the maximum precision for decimal types
+		scale*         -- The maximum scale for decimal types
+		codepage*      -- The codepage for character based types
+		final*         -- True if the type cannot be derived from (boolean)
+		description*   -- Descriptive text
+
+		* Optional (can be None)
+		"""
 		cursor = self.connection.cursor()
-		try:
-			cursor.execute("""
-				SELECT
-					RTRIM(TYPESCHEMA)   AS "schemaName",
-					RTRIM(TYPENAME)     AS "name",
-					RTRIM(DEFINER)      AS "definer",
-					RTRIM(SOURCESCHEMA) AS "sourceSchema",
-					RTRIM(SOURCENAME)   AS "sourceName",
-					METATYPE            AS "type",
-					LENGTH              AS "size",
-					SCALE               AS "scale",
-					CODEPAGE            AS "codepage",
-					CHAR(CREATE_TIME)   AS "created",
-					FINAL               AS "final",
-					REMARKS             AS "description"
-				FROM
-					%(schema)s.DATATYPES
-				WHERE INSTANTIABLE = 'Y'
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.datatypes = dict([((row['schemaName'], row['name']), row) for row in _fetch_dict(cursor)])
-		finally:
-			cursor.close()
-			del cursor
-		for row in self.datatypes.itervalues():
-			row['created'] = _make_datetime(row['created'])
-			row['final'] = _make_bool(row['final'])
-			if not row['size']: row['size'] = None
-			if not row['scale']: row['scale'] = None # XXX Not necessarily unknown (0 is a valid scale)
-			if not row['codepage']: row['codepage'] = None
-			row['type'] = {
-				'S': 'SYSTEM',
-				'T': 'DISTINCT',
-				'R': 'STRUCTURED',
-			}[row['type']]
+		cursor.execute("""
+			SELECT
+				RTRIM(TYPESCHEMA)   AS TYPESCHEMA,
+				RTRIM(TYPENAME)     AS TYPENAME,
+				RTRIM(OWNER)        AS OWNER,
+				CASE METATYPE
+					WHEN 'S' THEN 'Y'
+					ELSE 'N'
+				END                 AS SYSTEM,
+				CHAR(CREATE_TIME)   AS CREATED,
+				RTRIM(SOURCESCHEMA) AS SOURCESCHEMA,
+				RTRIM(SOURCENAME)   AS SOURCENAME,
+				LENGTH              AS SIZE,
+				SCALE               AS SCALE,
+				CODEPAGE            AS CODEPAGE,
+				FINAL               AS FINAL,
+				REMARKS             AS DESCRIPTION
+			FROM
+				%(schema)s.DATATYPES
+			WHERE INSTANTIABLE = 'Y'
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+		result = []
+		for (schema, name, owner, system, created, source_schema, source_name, size, scale, codepage, final, desc) in cursor.fetchall():
+			system = _make_bool(system)
+			created = _make_datetime(created)
+			if not size: size = None
+			if not scale: scale = None # XXX Not necessarily unknown (0 is a valid scale)
+			if not codepage: codepage = None
+			result.append((schema, name, owner, system, created, source_schema, source_name, size, scale, codepage, final, desc))
+		return result
 
 	def _get_tables(self):
-		logging.debug("Retrieving tables")
+		"""Retrieves the details of tables stored in the database.
+
+		Override this function to return a list of tuples containing details of
+		the tables (NOT views) defined in the database (including system
+		tables). The tuples contain the following details in the order
+		specified:
+
+		schema        -- The schema of the table
+		name          -- The name of the table
+		owner*        -- The name of the user who owns the table
+		system        -- True of the table is system maintained (boolean)
+		created*      -- When the table was created (datetime)
+		laststats*    -- When the table's statistics were last calculated (datetime)
+		cardinality*  -- The approximate number of rows in the table
+		size*         -- The approximate size in bytes of the table
+		tbspace       -- The name of the primary tablespace containing the table
+		description*  -- Descriptive text
+
+		* Optional (can be None)
+		"""
 		cursor = self.connection.cursor()
-		try:
-			cursor.execute("""
-				SELECT
-					RTRIM(TABSCHEMA)     AS "schemaName",
-					RTRIM(TABNAME)       AS "name",
-					RTRIM(DEFINER)       AS "definer",
-					STATUS               AS "checkPending",
-					CHAR(CREATE_TIME)    AS "created",
-					CHAR(STATS_TIME)     AS "statsUpdated",
-					NULLIF(CARD, -1)     AS "cardinality",
-					NULLIF(NPAGES, -1)   AS "rowPages",
-					NULLIF(FPAGES, -1)   AS "totalPages",
-					NULLIF(OVERFLOW, -1) AS "overflow",
-					RTRIM(TBSPACE)       AS "dataTbspace",
-					RTRIM(INDEX_TBSPACE) AS "indexTbspace",
-					RTRIM(LONG_TBSPACE)  AS "longTbspace",
-					APPEND_MODE          AS "append",
-					LOCKSIZE             AS "lockSize",
-					VOLATILE             AS "volatile",
-					COMPRESSION          AS "compression",
-					ACCESS_MODE          AS "accessMode",
-					CLUSTERED            AS "clustered",
-					ACTIVE_BLOCKS        AS "activeBlocks",
-					REMARKS              AS "description"
-				FROM
-					%(schema)s.TABLES
-				WHERE
-					TYPE = 'T'
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.tables = dict([((row['schemaName'], row['name']), row) for row in _fetch_dict(cursor)])
-		finally:
-			cursor.close()
-			del cursor
-		for row in self.tables.itervalues():
-			row['created'] = _make_datetime(row['created'])
-			row['statsUpdated'] = _make_datetime(row['statsUpdated'])
-			row['checkPending'] = _make_bool(row['checkPending'], 'C')
-			row['append'] = _make_bool(row['append'])
-			row['volatile'] = _make_bool(row['volatile'], 'C', ' ', None)
-			row['compression'] = _make_bool(row['compression'], 'V')
-			row['clustered'] = _make_bool(row['clustered'])
-			row['lockSize'] = {
-				'T': 'TABLE',
-				'R': 'ROW',
-			}[row['lockSize']]
-			row['accessMode'] = {
-				'N': 'NO ACCESS',
-				'R': 'READ ONLY',
-				'D': 'NO DATA MOVEMENT',
-				'F': 'FULL ACCESS',
-			}[row['accessMode']]
+		cursor.execute("""
+			SELECT
+				RTRIM(T.TABSCHEMA)     AS TABSCHEMA,
+				RTRIM(T.TABNAME)       AS TABNAME,
+				RTRIM(T.OWNER)         AS OWNER,
+				CASE
+					WHEN T.TABSCHEMA LIKE 'SYS%' THEN 'Y'
+					WHEN T.TABSCHEMA = 'SQLJ' THEN 'Y'
+					WHEN T.TABSCHEMA = 'NULLID' THEN 'Y'
+					ELSE 'N'
+				END                    AS SYSTEM,
+				CHAR(T.CREATE_TIME)    AS CREATED,
+				CHAR(T.STATS_TIME)     AS LASTSTATS,
+				NULLIF(T.CARD, -1)     AS CARDINALITY,
+				NULLIF(T.FPAGES, -1) * TS.PAGESIZE AS SIZE,
+				RTRIM(T.TBSPACE)       AS TBSPACE,
+				T.REMARKS              AS DESCRIPTION
+			FROM
+				%(schema)s.TABLES T
+				INNER JOIN %(schema)s.TABLESPACES TS
+					ON T.TBSPACEID = TS.TBSPACEID
+			WHERE
+				TYPE = 'T'
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+		result = []
+		for (schema, name, owner, system, created, laststats, cardinality, size, tbspace, desc) in cursor.fetchall():
+			system = _make_bool(system)
+			created = _make_datetime(created)
+			laststats = _make_datetime(created)
+			result.append((schema, name, owner, system, created, laststats, cardinality, size, tbspace, desc))
+		return result
 
 	def _get_views(self):
-		logging.debug("Retrieving views")
+		"""Retrieves the details of views stored in the database.
+
+		Override this function to return a list of tuples containing details of
+		the views defined in the database (including system views). The tuples
+		contain the following details in the order specified:
+
+		schema        -- The schema of the view
+		name          -- The name of the view
+		owner*        -- The name of the user who owns the view
+		system        -- True of the view is system maintained (boolean)
+		created*      -- When the view was created (datetime)
+		readonly*     -- True if the view is not updateable (boolean)
+		sql*          -- The SQL statement/query that defined the view
+		description*  -- Descriptive text
+
+		* Optional (can be None)
+		"""
 		cursor = self.connection.cursor()
-		try:
-			cursor.execute("""
-				SELECT
-					RTRIM(T.TABSCHEMA)    AS "schemaName",
-					RTRIM(T.TABNAME)      AS "name",
-					RTRIM(V.DEFINER)      AS "definer",
-					CHAR(T.CREATE_TIME)   AS "created",
-					V.VIEWCHECK           AS "check",
-					V.READONLY            AS "readOnly",
-					V.VALID               AS "valid",
-					RTRIM(V.QUALIFIER)    AS "qualifier",
-					RTRIM(V.FUNC_PATH)    AS "funcPath",
-					V.TEXT                AS "sql",
-					T.REMARKS             AS "description"
-				FROM
-					%(schema)s.TABLES T
-					INNER JOIN %(schema)s.VIEWS V
-						ON T.TABSCHEMA = V.VIEWSCHEMA
-						AND T.TABNAME = V.VIEWNAME
-						AND T.TYPE = 'V'
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.views = dict([((row['schemaName'], row['name']), row) for row in _fetch_dict(cursor)])
-		finally:
-			cursor.close()
-			del cursor
-		for row in self.views.itervalues():
-			row['created'] = _make_datetime(row['created'])
-			row['readOnly'] = _make_bool(row['readOnly'])
-			row['valid'] = _make_bool(row['valid'], false_value='X')
-			row['check'] = {
-				'N': 'NO CHECK',
-				'L': 'LOCAL CHECK',
-				'C': 'CASCADED CHECK',
-			}[row['check']]
-			row['sql'] = str(row['sql'])
+		cursor.execute("""
+			SELECT
+				RTRIM(V.VIEWSCHEMA)   AS VIEWSCHEMA,
+				RTRIM(V.VIEWNAME)     AS VIEWNAME,
+				RTRIM(V.OWNER)        AS OWNER,
+				CASE
+					WHEN T.TABSCHEMA LIKE 'SYS%' THEN 'Y'
+					ELSE 'N'
+				END                   AS SYSTEM,
+				CHAR(T.CREATE_TIME)   AS CREATED,
+				V.READONLY            AS READONLY,
+				V.TEXT                AS SQL,
+				T.REMARKS             AS DESCRIPTION
+			FROM
+				%(schema)s.TABLES T
+				INNER JOIN %(schema)s.VIEWS V
+					ON T.TABSCHEMA = V.VIEWSCHEMA
+					AND T.TABNAME = V.VIEWNAME
+					AND T.TYPE = 'V'
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+		result = []
+		for (schema, name, owner, system, created, readonly, sql, desc) in cursor.fetchall():
+			system = _make_bool(system)
+			created = _make_datetime(created)
+			sql = str(sql)
+			result.append((schema, name, owner, system, created, readonly, sql, desc))
+		return result
 
 	def _get_aliases(self):
-		logging.debug("Retrieving aliases")
-		cursor = self.connection.cursor()
-		try:
-			cursor.execute("""
-				SELECT
-					RTRIM(TABSCHEMA)      AS "schemaName",
-					RTRIM(TABNAME)        AS "name",
-					RTRIM(DEFINER)        AS "definer",
-					CHAR(CREATE_TIME)     AS "created",
-					RTRIM(BASE_TABSCHEMA) AS "relationSchema",
-					RTRIM(BASE_TABNAME)   AS "relationName",
-					REMARKS               AS "description"
-				FROM
-					%(schema)s.TABLES
-				WHERE
-					TYPE = 'A'
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.aliases = dict([((row['schemaName'], row['name']), row) for row in _fetch_dict(cursor)])
-		finally:
-			cursor.close()
-			del cursor
-		for row in self.aliases.itervalues():
-			row['created'] = _make_datetime(row['created'])
+		"""Retrieves the details of aliases stored in the database.
 
-	def _get_relation_dependencies(self):
-		logging.debug("Retrieving relation dependencies")
-		cursor = self.connection.cursor()
-		try:
-			cursor.execute("""
-				SELECT
-					RTRIM(BSCHEMA)    AS "relationSchema",
-					RTRIM(BNAME)      AS "relationName",
-					RTRIM(TABSCHEMA)  AS "depSchema",
-					RTRIM(TABNAME)    AS "depName"
-				FROM
-					%(schema)s.TABDEP
-				WHERE
-					BTYPE IN ('A', 'S', 'T', 'U', 'V', 'W')
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.relation_dependents = {}
-			self.relation_dependencies = {}
-			for (relation_schema, relation_name, dep_schema, dep_name) in cursor.fetchall():
-				if not (relation_schema, relation_name) in self.relation_dependents:
-					self.relation_dependents[(relation_schema, relation_name)] = []
-				self.relation_dependents[(relation_schema, relation_name)].append((dep_schema, dep_name))
-				if not (dep_schema, dep_name) in self.relation_dependencies:
-					self.relation_dependencies[(dep_schema, dep_name)] = []
-				self.relation_dependencies[(dep_schema, dep_name)].append((relation_schema, relation_name))
-		finally:
-			cursor.close()
-			del cursor
+		Override this function to return a list of tuples containing details of
+		the aliases (also known as synonyms in some systems) defined in the
+		database (including system aliases). The tuples contain the following
+		details in the order specified:
 
-	def _get_trigger_dependencies(self):
-		logging.debug("Retrieving trigger dependencies")
+		schema        -- The schema of the alias
+		name          -- The name of the alias
+		owner*        -- The name of the user who owns the alias
+		system        -- True of the alias is system maintained (boolean)
+		created*      -- When the alias was created (datetime)
+		base_schema   -- The schema of the target relation
+		base_table    -- The name of the target relation
+		description*  -- Descriptive text
+
+		* Optional (can be None)
+		"""
 		cursor = self.connection.cursor()
-		try:
-			cursor.execute("""
-				SELECT
-					RTRIM(D.BSCHEMA)    AS "relationSchema",
-					RTRIM(D.BNAME)      AS "relationName",
-					RTRIM(D.TRIGSCHEMA) AS "depSchema",
-					RTRIM(D.TRIGNAME)   AS "depName"
-				FROM
-					%(schema)s.TRIGDEP D
-					INNER JOIN %(schema)s.TRIGGERS T
-						ON D.TRIGSCHEMA = T.TRIGSCHEMA
-						AND D.TRIGNAME = T.TRIGNAME
-				WHERE
-					BTYPE IN ('A', 'S', 'T', 'U', 'V', 'W')
-					AND NOT (D.BSCHEMA = T.TABSCHEMA AND D.BNAME = T.TABNAME)
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.trigger_dependents = {}
-			self.trigger_dependencies = {}
-			for (relation_schema, relation_name, dep_schema, dep_name) in cursor.fetchall():
-				if not (relation_schema, relation_name) in self.trigger_dependents:
-					self.trigger_dependents[(relation_schema, relation_name)] = []
-				self.trigger_dependents[(relation_schema, relation_name)].append((dep_schema, dep_name))
-				if not (dep_schema, dep_name) in self.trigger_dependencies:
-					self.trigger_dependencies[(dep_schema, dep_name)] = []
-				self.trigger_dependencies[(dep_schema, dep_name)].append((relation_schema, relation_name))
-		finally:
-			cursor.close()
-			del cursor
+		cursor.execute("""
+			SELECT
+				RTRIM(TABSCHEMA)      AS ALIASSCHEMA,
+				RTRIM(TABNAME)        AS ALIASNAME,
+				RTRIM(OWNER)          AS OWNER
+				CASE
+					WHEN TABSCHEMA LIKE 'SYS%' THEN 'Y'
+					ELSE 'N'
+				END                   AS SYSTEM,
+				CHAR(CREATE_TIME)     AS CREATED,
+				RTRIM(BASE_TABSCHEMA) AS BASESCHEMA,
+				RTRIM(BASE_TABNAME)   AS BASETABLE,
+				REMARKS               AS DESCRIPTION
+			FROM
+				%(schema)s.TABLES
+			WHERE
+				TYPE = 'A'
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+		result = []
+		for (schema, name, owner, system, created, base_schema, base_table, desc) in cursor.fetchall():
+			system = _make_bool(system)
+			created = _make_datetime(created)
+			result.append((schema, name, owner, system, created, base_schema, base_table, desc))
+		return result
+
+	def _get_view_dependencies(self):
+		"""Retrieves the details of view dependencies.
+
+		Override this function to return a list of tuples containing details of
+		the relations upon which views depend (the tables and views that a view
+		references in its query).  The tuples contain the following details in
+		the order specified:
+
+		schema       -- The schema of the view
+		name         -- The name of the view
+		dep_schema   -- The schema of the relation upon which the view depends
+		dep_name     -- The name of the relation upon which the view depends
+		"""
+		cursor = self.connection.cursor()
+		cursor.execute("""
+			SELECT
+				RTRIM(TABSCHEMA) AS VIEWSCHEMA,
+				RTRIM(TABNAME)   AS VIEWNAME,
+				RTRIM(BSCHEMA)   AS DEPSCHEMA,
+				RTRIM(BNAME)     AS DEPNAME
+			FROM
+				%(schema)s.TABDEP
+			WHERE
+				BTYPE IN ('A', 'S', 'T', 'U', 'V', 'W')
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+		return cursor.fetchall()
 
 	def _get_indexes(self):
-		logging.debug("Retrieving indexes")
-		cursor = self.connection.cursor()
-		try:
-			cursor.execute("""
-				SELECT
-					RTRIM(I.INDSCHEMA)             AS "schemaName",
-					RTRIM(I.INDNAME)               AS "name",
-					RTRIM(I.DEFINER)               AS "definer",
-					RTRIM(I.TABSCHEMA)             AS "tableSchema",
-					RTRIM(I.TABNAME)               AS "tableName",
-					I.UNIQUERULE                   AS "unique",
-					RTRIM(I.INDEXTYPE)             AS "type",
-					NULLIF(I.NLEAF, -1)            AS "leafPages",
-					NULLIF(I.NLEVELS, -1)          AS "levels",
-					NULLIF(I.FIRSTKEYCARD, -1)     AS "cardinality1",
-					NULLIF(I.FIRST2KEYCARD, -1)    AS "cardinality2",
-					NULLIF(I.FIRST3KEYCARD, -1)    AS "cardinality3",
-					NULLIF(I.FIRST4KEYCARD, -1)    AS "cardinality4",
-					NULLIF(I.FULLKEYCARD, -1)      AS "cardinality",
-					NULLIF(I.CLUSTERRATIO, -1)     AS "clusterRatio",
-					NULLIF(I.CLUSTERFACTOR, -1.0)  AS "clusterFactor",
-					NULLIF(I.SEQUENTIAL_PAGES, -1) AS "sequentialPages",
-					NULLIF(I.DENSITY, -1)          AS "density",
-					I.USER_DEFINED                 AS "userDefined",
-					I.SYSTEM_REQUIRED              AS "required",
-					CHAR(I.CREATE_TIME)            AS "created",
-					CHAR(I.STATS_TIME)             AS "statsUpdated",
-					I.REVERSE_SCANS                AS "reverseScans",
-					I.REMARKS                      AS "description",
-					RTRIM(T.TBSPACE)               AS "tablespaceName"
-				FROM
-					%(schema)s.INDEXES I
-					INNER JOIN %(schema)s.TABLESPACES T
-						ON I.TBSPACEID = T.TBSPACEID
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.indexes = dict([((row['schemaName'], row['name']), row) for row in _fetch_dict(cursor)])
-		finally:
-			cursor.close()
-			del cursor
-		for row in self.indexes.itervalues():
-			row['created'] = _make_datetime(row['created'])
-			row['statsUpdated'] = _make_datetime(row['statsUpdated'])
-			row['reverseScans'] = _make_bool(row['reverseScans'])
-			row['unique'] = row['unique'] != 'D'
-			row['userDefined'] = row['userDefined'] != 0
-			row['required'] = row['required'] != 0
-			row['type'] = {
-				'CLUS': 'CLUSTERING',
-				'REG': 'REGULAR',
-				'DIM': 'DIMENSION BLOCK',
-				'BLOK': 'BLOCK',
-			}[row['type']]
+		"""Retrieves the details of indexes stored in the database.
 
-	def _get_index_fields(self):
-		logging.debug("Retrieving index fields")
-		cursor = self.connection.cursor()
-		try:
-			cursor.execute("""
-				SELECT
-					RTRIM(INDSCHEMA) AS "indexSchema",
-					RTRIM(INDNAME)   AS "indexName",
-					RTRIM(COLNAME)   AS "fieldName",
-					COLORDER         AS "order"
-				FROM
-					%(schema)s.INDEXCOLUSE
-				ORDER BY
-					INDSCHEMA,
-					INDNAME,
-					COLSEQ
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.index_fields = {}
-			for (index_schema, index_name, field_name, order) in cursor.fetchall():
-				if not (index_schema, index_name) in self.index_fields:
-					self.index_fields[(index_schema, index_name)] = []
-				order = {
-					'A': 'ASCENDING',
-					'D': 'DESCENDING',
-					'I': 'INCLUDE',
-				}[order]
-				self.index_fields[(index_schema, index_name)].append((field_name, order))
-		finally:
-			cursor.close()
-			del cursor
+		Override this function to return a list of tuples containing details of
+		the indexes defined in the database (including system indexes). The
+		tuples contain the following details in the order specified:
 
-	def _get_table_indexes(self):
-		logging.debug("Retrieving table indexes")
-		# Note: Must be run AFTER _get_indexes and _get_tables
-		self.table_indexes = dict([
-			((table_schema, table_name), [(row['schemaName'], row['name'])
-				for row in self.indexes.itervalues()
-				if row['tableSchema'] == table_schema
-				and row['tableName'] == table_name
-			])
-			for (table_schema, table_name) in self.tables
-		])
+		schema        -- The schema of the index
+		name          -- The name of the index
+		tabschema     -- The schema of the table the index belongs to
+		tabname       -- The name of the table the index belongs to
+		owner*        -- The name of the user who owns the index
+		system        -- True of the index is system maintained (boolean)
+		created*      -- When the index was created (datetime)
+		laststats*    -- When the index statistics were last updated (datetime)
+		cardinality*  -- The approximate number of values in the index
+		size*         -- The approximate size in bytes of the index
+		unique        -- True if the index contains only unique values (boolean)
+		tbspace       -- The name of the tablespace which contains the index
+		description*  -- Descriptive text
 
-	def _get_fields(self):
-		logging.debug("Retrieving fields")
+		* Optional (can be None)
+		"""
 		cursor = self.connection.cursor()
-		try:
-			cursor.execute("""
-				SELECT
-					RTRIM(TABSCHEMA)  AS "schemaName",
-					RTRIM(TABNAME)    AS "tableName",
-					RTRIM(COLNAME)    AS "name",
-					RTRIM(TYPESCHEMA) AS "datatypeSchema",
-					RTRIM(TYPENAME)   AS "datatypeName",
-					LENGTH            AS "size",
-					SCALE             AS "scale",
-					RTRIM(DEFAULT)    AS "default",
-					NULLS             AS "nullable",
-					CODEPAGE          AS "codepage",
-					LOGGED            AS "logged",
-					COMPACT           AS "compact",
-					COLCARD           AS "cardinality",
-					AVGCOLLEN         AS "averageSize",
-					COLNO             AS "position",
-					KEYSEQ            AS "keyIndex",
-					NUMNULLS          AS "nullCardinality",
-					IDENTITY          AS "identity",
-					GENERATED         AS "generated",
-					COMPRESS          AS "compressDefault",
-					RTRIM(TEXT)       AS "generateExpression",
-					REMARKS           AS "description"
-				FROM
-					%(schema)s.COLUMNS
-				WHERE
-					HIDDEN <> 'S'
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.fields = dict([((row['schemaName'], row['tableName'], row['name']), row) for row in _fetch_dict(cursor)])
-		finally:
-			cursor.close()
-			del cursor
-		for row in self.fields.itervalues():
-			if row['cardinality'] < 0: row['cardinality'] = None
-			if row['averageSize'] < 0: row['averageSize'] = None
-			if row['nullCardinality'] < 0: row['nullCardinality'] = None
-			if not row['codepage']: row['codepage'] = None
-			row['logged'] = _make_bool(row['logged'])
-			row['compact'] = _make_bool(row['compact'])
-			row['nullable'] = _make_bool(row['nullable'])
-			row['identity'] = _make_bool(row['identity'])
-			row['compressDefault'] = _make_bool(row['compressDefault'], 'S')
-			row['generated'] = {
-				'D': 'BY DEFAULT',
-				'A': 'ALWAYS',
-				' ': 'NEVER',
-			}[row['generated']]
-			row['generateExpression'] = str(row['generateExpression'])
+		cursor.execute("""
+			SELECT
+				RTRIM(I.INDSCHEMA)               AS INDSCHEMA,
+				RTRIM(I.INDNAME)                 AS INDNAME,
+				RTRIM(I.TABSCHEMA)               AS TABSCHEMA,
+				RTRIM(I.TABNAME)                 AS TABNAME,
+				RTRIM(I.OWNER)                   AS OWNER,
+				CASE
+					WHEN I.INDSCHEMA LIKE 'SYS%' THEN 'Y'
+					ELSE 'N'
+				END                              AS SYSTEM,
+				CHAR(I.CREATE_TIME)              AS CREATED,
+				CHAR(I.STATS_TIME)               AS LASTSTATS,
+				NULLIF(I.FIRSTKEYCARD, -1)       AS CARD1,
+				NULLIF(I.FIRST2KEYCARD, -1)      AS CARD2,
+				NULLIF(I.FIRST3KEYCARD, -1)      AS CARD3,
+				NULLIF(I.FIRST4KEYCARD, -1)      AS CARD4,
+				NULLIF(I.FULLKEYCARD, -1)        AS CARD,
+				NULLIF(I.NLEAF, -1) * T.PAGESIZE AS SIZE,
+				CASE I.UNIQUERULE
+					WHEN 'D' THEN 'N'
+					ELSE 'Y'
+				END                              AS UNIQUE,
+				RTRIM(T.TBSPACE)                 AS TBSPACE,
+				I.REMARKS                        AS DESCRIPTION
+			FROM
+				%(schema)s.INDEXES I
+				INNER JOIN %(schema)s.TABLESPACES T
+					ON I.TBSPACEID = T.TBSPACEID
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+		result = []
+		for (schema, name, tabschema, tabname, owner, system, created, laststats, card1, card2, card3, card4, card, size, unique, tbspace, desc) in cursor.fetchall():
+			system = _make_bool(system)
+			created = _make_datetime(created)
+			laststats = _make_datetime(laststats)
+			unique = _make_bool(unique)
+			# A little jiggery-pokery to get some more detailed cardinality
+			# stats
+			if card is not None:
+				card = '%d (%s)' % (card, ','.join([
+					str(i) for i in (card1, card2, card3, card4) if i != -1
+				]))
+			result.append((schema, name, tabschema, tabname, owner, system, created, laststats, card, size, unique, tbspace, desc))
+		return result
+
+	def _get_index_cols(self):
+		"""Retrieves the list of columns belonging to indexes.
+
+		Override this function to return a list of tuples detailing the columns
+		that belong to each index in the database (including system indexes).
+		The tuples contain the following details in the order specified:
+
+		schema       -- The schema of the index
+		name         -- The name of the index
+		colname      -- The name of the column
+		colorder     -- The ordering of the column in the index:
+		                'A'=Ascending
+		                'D'=Descending
+		                'I'=Include (not an index key)
+
+		Note that the each tuple details one column belonging an index. It is
+		important that the list of tuples is in the order that each column is
+		declared in an index.
+		"""
+		cursor = self.connection.cursor()
+		cursor.execute("""
+			SELECT
+				RTRIM(INDSCHEMA) AS INDSCHEMA,
+				RTRIM(INDNAME)   AS INDNAME,
+				RTRIM(COLNAME)   AS COLNAME,
+				COLORDER         AS COLORDER
+			FROM
+				%(schema)s.INDEXCOLUSE
+			ORDER BY
+				INDSCHEMA,
+				INDNAME,
+				COLSEQ
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+		return cursor.fetchall()
+
+	def _get_relation_cols(self):
+		"""Retrieves the list of columns belonging to relations.
+
+		Override this function to return a list of tuples detailing the columns
+		that belong to each relation (table, view, etc.) in the database
+		(including system relations).  The tuples contain the following details
+		in the order specified:
+
+		schema        -- The schema of the table
+		name          -- The name of the table
+		colname       -- The name of the column
+		typeschema    -- The schema of the column's datatype
+		typename      -- The name of the column's datatype
+		identity*     -- True if the column is an identity column (boolean)
+		size*         -- The length of the column for character types, or the
+		                 numeric precision for decimal types (None if not a
+		                 character or decimal type)
+		scale*        -- The maximum scale for decimal types (None if not a
+		                 decimal type)
+		codepage*     -- The codepage of the column for character types (None
+		                 if not a character type)
+		nullable*     -- True if the column can store NULL (boolean)
+		cardinality*  -- The approximate number of unique values in the column
+		nullcard*     -- The approximate number of NULLs in the column
+		generated     -- 'A' if the column is always generated
+		                 'D' if the column is generated by default
+		                 'N' if the column is not generated
+		default*      -- If generated is 'N', the default value of the column
+		                 (expressed as SQL). Otherwise, the SQL expression that
+		                 generates the column's value (or default value). None
+		                 if the column has no default
+		description*  -- Descriptive text
+
+		Note that the each tuple details one column belonging to a relation. It
+		is important that the list of tuples is in the order that each column
+		is declared in a relation.
+
+		* Optional (can be None)
+		"""
+		cursor = self.connection.cursor()
+		cursor.execute("""
+			SELECT
+				RTRIM(TABSCHEMA)                 AS TABSCHEMA,
+				RTRIM(TABNAME)                   AS TABNAME,
+				RTRIM(COLNAME)                   AS COLNAME,
+				RTRIM(TYPESCHEMA)                AS TYPESCHEMA,
+				RTRIM(TYPENAME)                  AS TYPENAME,
+				IDENTITY                         AS IDENTITY,
+				LENGTH                           AS SIZE,
+				SCALE                            AS SCALE,
+				CODEPAGE                         AS CODEPAGE,
+				NULLS                            AS NULLABLE,
+				NULLIF(NULLIF(COLCARD, -1), -2)  AS CARDINALITY,
+				NULLIF(NUMNULLS, -1)             AS NULLCARD,
+				CASE GENERATED
+					WHEN 'A' THEN 'A'
+					WHEN 'D' THEN 'D'
+					ELSE 'N'
+				END                              AS GENERATED,
+				CASE GENERATED
+					WHEN ' ' THEN RTRIM(DEFAULT)
+					ELSE RTRIM(TEXT)
+				END                              AS DEFAULT,
+				REMARKS                          AS DESCRIPTION
+			FROM
+				%(schema)s.COLUMNS
+			WHERE
+				HIDDEN <> 'S'
+			ORDER BY
+				TABSCHEMA,
+				TABNAME,
+				COLNO
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+		result = []
+		for (schema, name, colname, typeschema, typename, identity, keypos, size, scale, codepage, nullable, cardinality, nullcard, generated, default, desc) in cursor.fetchall():
+			identity = _mae_bool(identity)
+			nullable = _make_bool(nullable)
+			if not codepage: codepage = None
+			default = str(default)
+			result.append((schema, name, colname, typeschema, typename, identity, keypos, size, scale, codepage, nullable, cardinality, nullcard, generated, default, desc))
+		return result
 
 	def _get_unique_keys(self):
-		logging.debug("Retrieving unique keys")
-		cursor = self.connection.cursor()
-		try:
-			cursor.execute("""
-				SELECT
-					RTRIM(TABSCHEMA)  AS "schemaName",
-					RTRIM(TABNAME)    AS "tableName",
-					RTRIM(CONSTNAME)  AS "name",
-					TYPE              AS "type",
-					RTRIM(DEFINER)    AS "definer",
-					CHECKEXISTINGDATA AS "checkExisting",
-					REMARKS           AS "description"
-				FROM
-					%(schema)s.TABCONST
-				WHERE
-					TYPE IN ('U', 'P')
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.unique_keys = dict([((row['schemaName'], row['tableName'], row['name']), row) for row in _fetch_dict(cursor)])
-		finally:
-			cursor.close()
-			del cursor
-		for row in self.unique_keys.itervalues():
-			row['checkExisting'] = {
-				'D': 'DEFER',
-				'I': 'IMMEDIATE',
-				'N': 'NO CHECK',
-			}[row['checkExisting']]
+		"""Retrieves the details of unique keys stored in the database.
 
-	def _get_unique_key_fields(self):
-		logging.debug("Retrieving unique key fields")
+		Override this function to return a list of tuples containing details of
+		the unique keys defined in the database. The tuples contain the
+		following details in the order specified:
+
+		schema        -- The schema of the table containing the key
+		name          -- The name of the table containing the key
+		keyname       -- The name of the key
+		owner         -- The name of the user who owns the key
+		system        -- True of the key is system maintained (boolean)
+		created*      -- When the key was created (datetime)
+		primary       -- True if the unique key is also a primary key
+		description*  -- Descriptive text
+
+		* Optional (can be None)
+		"""
 		cursor = self.connection.cursor()
-		try:
-			cursor.execute("""
-				SELECT
-					RTRIM(TABSCHEMA) AS "keySchema",
-					RTRIM(TABNAME)   AS "keyTable",
-					RTRIM(CONSTNAME) AS "keyName",
-					RTRIM(COLNAME)   AS "fieldName"
-				FROM
-					%(schema)s.KEYCOLUSE
-				ORDER BY
-					TABSCHEMA,
-					TABNAME,
-					CONSTNAME,
-					COLSEQ
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.unique_key_fields = {}
-			for (key_schema, key_table, key_name, field_name) in cursor.fetchall():
-				if not (key_schema, key_table, key_name) in self.unique_key_fields:
-					self.unique_key_fields[(key_schema, key_table, key_name)] = []
-				self.unique_key_fields[(key_schema, key_table, key_name)].append(field_name)
-		finally:
-			cursor.close()
-			del cursor
+		cursor.execute("""
+			SELECT
+				RTRIM(TABSCHEMA)        AS TABSCHEMA,
+				RTRIM(TABNAME)          AS TABNAME,
+				RTRIM(CONSTNAME)        AS KEYNAME,
+				RTRIM(OWNER)            AS OWNER,
+				CASE
+					WHEN TABSCHEMA LIKE 'SYS%' THEN 'Y'
+					ELSE 'N'
+				END                     AS SYSTEM,
+				CAST(NULL AS TIMESTAMP) AS CREATED,
+				CASE TYPE
+					WHEN 'P' THEN 'Y'
+					ELSE 'N'
+				END                     AS PRIMARY,
+				REMARKS                 AS DESCRIPTION
+			FROM
+				%(schema)s.TABCONST
+			WHERE
+				TYPE IN ('U', 'P')
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+		result = []
+		for (schema, name, keyname, owner, system, created, primary, desc) in cursor.fetchall():
+			system = _make_bool(system)
+			created = _make_datetime(created)
+			primary = _make_bool(primary)
+			result.append((schema, name, keyname, owner, system, created, primary, desc))
+		return result
+
+	def _get_unique_key_cols(self):
+		"""Retrieves the list of columns belonging to unique keys.
+
+		Override this function to return a list of tuples detailing the columns
+		that belong to each unique key in the database.  The tuples contain the
+		following details in the order specified:
+
+		schema       -- The schema of the table containing the key
+		name         -- The name of the table containing the key
+		keyname      -- The name of the key
+		colname      -- The name of the column
+		"""
+		cursor = self.connection.cursor()
+		cursor.execute("""
+			SELECT
+				RTRIM(TABSCHEMA) AS TABSCHEMA,
+				RTRIM(TABNAME)   AS TABNAME,
+				RTRIM(CONSTNAME) AS KEYNAME,
+				RTRIM(COLNAME)   AS COLNAME
+			FROM
+				%(schema)s.KEYCOLUSE
+			ORDER BY
+				TABSCHEMA,
+				TABNAME,
+				CONSTNAME,
+				COLSEQ
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+		return cursor.fetchall()
 
 	def _get_foreign_keys(self):
-		logging.debug("Retrieving foreign keys")
-		cursor = self.connection.cursor()
-		try:
-			cursor.execute("""
-				SELECT
-					RTRIM(T.TABSCHEMA)    AS "schemaName",
-					RTRIM(T.TABNAME)      AS "tableName",
-					RTRIM(T.CONSTNAME)    AS "name",
-					RTRIM(R.REFTABSCHEMA) AS "refTableSchema",
-					RTRIM(R.REFTABNAME)   AS "refTableName",
-					RTRIM(R.REFKEYNAME)   AS "refKeyName",
-					CHAR(R.CREATE_TIME)   AS "created",
-					RTRIM(T.DEFINER)      AS "definer",
-					T.ENFORCED            AS "enforced",
-					T.CHECKEXISTINGDATA   AS "checkExisting",
-					T.ENABLEQUERYOPT      AS "queryOptimize",
-					R.DELETERULE          AS "deleteRule",
-					R.UPDATERULE          AS "updateRule",
-					T.REMARKS             AS "description"
-				FROM
-					%(schema)s.TABCONST T
-					INNER JOIN %(schema)s.REFERENCES R
-						ON T.TABSCHEMA = R.TABSCHEMA
-						AND T.TABNAME = R.TABNAME
-						AND T.CONSTNAME = R.CONSTNAME
-						AND T.TYPE = 'F'
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.foreign_keys = dict([((row['schemaName'], row['tableName'], row['name']), row) for row in _fetch_dict(cursor)])
-		finally:
-			cursor.close()
-			del cursor
-		for row in self.foreign_keys.itervalues():
-			row['created'] = _make_datetime(row['created'])
-			row['enforced'] = _make_bool(row['enforced'])
-			row['queryOptimize'] = _make_bool(row['queryOptimize'])
-			row['checkExisting'] = {
-				'D': 'DEFER',
-				'I': 'IMMEDIATE',
-				'N': 'NO CHECK',
-			}[row['checkExisting']]
-			row['deleteRule'] = {
-				'A': 'NO ACTION',
-				'R': 'RESTRICT',
-				'C': 'CASCADE',
-				'N': 'SET NULL',
-			}[row['deleteRule']]
-			row['updateRule'] = {
-				'A': 'NO ACTION',
-				'R': 'RESTRICT',
-				'C': 'CASCADE',
-				'N': 'SET NULL',
-			}[row['updateRule']]
+		"""Retrieves the details of foreign keys stored in the database.
 
-	def _get_foreign_key_fields(self):
-		logging.debug("Retrieving foreign key fields")
+		Override this function to return a list of tuples containing details of
+		the foreign keys defined in the database. The tuples contain the
+		following details in the order specified:
+
+		schema        -- The schema of the table containing the key
+		name          -- The name of the table containing the key
+		keyname       -- The name of the key
+		owner*        -- The name of the user who owns the key
+		system        -- True of the key is system maintained (boolean)
+		created*      -- When the key was created (datetime)
+		refschema     -- The schema of the table the key references
+		refname       -- The name of the table the key references
+		refkeyname    -- The name of the unique key that the key references
+		deleterule    -- The action to take on deletion of a parent key
+		                 'A' = No action
+		                 'C' = Cascade
+		                 'N' = Set NULL
+		                 'R' = Restrict
+		updaterule    -- The action to take on update of a parent key
+		                 'A' = No action
+		                 'C' = Cascade
+		                 'N' = Set NULL
+		                 'R' = Restrict
+		description*  -- Descriptive text
+
+		* Optional (can be None)
+		"""
 		cursor = self.connection.cursor()
-		try:
-			cursor.execute("""
-				SELECT
-					RTRIM(R.TABSCHEMA) AS "keySchema",
-					RTRIM(R.TABNAME)   AS "keyTable",
-					RTRIM(R.CONSTNAME) AS "keyName",
-					RTRIM(KF.COLNAME)  AS "foreignFieldName",
-					RTRIM(KP.COLNAME)  AS "parentFieldName"
-				FROM
-					%(schema)s.REFERENCES R
-					INNER JOIN %(schema)s.KEYCOLUSE KF
-						ON R.TABSCHEMA = KF.TABSCHEMA
-						AND R.TABNAME = KF.TABNAME
-						AND R.CONSTNAME = KF.CONSTNAME
-					INNER JOIN %(schema)s.KEYCOLUSE KP
-						ON R.REFTABSCHEMA = KP.TABSCHEMA
-						AND R.REFTABNAME = KP.TABNAME
-						AND R.REFKEYNAME = KP.CONSTNAME
-				WHERE
-					KF.COLSEQ = KP.COLSEQ
-				ORDER BY
-					R.TABSCHEMA,
-					R.TABNAME,
-					R.CONSTNAME,
-					KF.COLSEQ
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.foreign_key_fields = {}
-			for (key_schema, key_table, key_name, foreign_field_name, parent_field_name) in cursor.fetchall():
-				if not (key_schema, key_table, key_name) in self.foreign_key_fields:
-					self.foreign_key_fields[(key_schema, key_table, key_name)] = []
-				self.foreign_key_fields[(key_schema, key_table, key_name)].append((foreign_field_name, parent_field_name))
-		finally:
-			cursor.close()
-			del cursor
+		cursor.execute("""
+			SELECT
+				RTRIM(T.TABSCHEMA)    AS TABSCHEMA,
+				RTRIM(T.TABNAME)      AS TABNAME,
+				RTRIM(T.CONSTNAME)    AS KEYNAME,
+				RTRIM(T.OWNER)        AS OWNER,
+				CASE
+					WHEN TABSCHEMA LIKE 'SYS%' THEN 'Y'
+					ELSE 'N'
+				END                   AS SYSTEM,
+				CHAR(R.CREATE_TIME)   AS CREATED,
+				RTRIM(R.REFTABSCHEMA) AS REFTABSCHEMA,
+				RTRIM(R.REFTABNAME)   AS REFTABNAME,
+				RTRIM(R.REFKEYNAME)   AS REFKEYNAME,
+				R.DELETERULE          AS DELETERULE,
+				R.UPDATERULE          AS UPDATERULE,
+				T.REMARKS             AS DESCRIPTION
+			FROM
+				%(schema)s.TABCONST T
+				INNER JOIN %(schema)s.REFERENCES R
+					ON T.TABSCHEMA = R.TABSCHEMA
+					AND T.TABNAME = R.TABNAME
+					AND T.CONSTNAME = R.CONSTNAME
+					AND T.TYPE = 'F'
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+		result = []
+		for (schema, name, keyname, owner, system, created, refschema, refname, refkeyname, deleterule, updaterule, desc) in cursor.fetchall():
+			system = _make_bool(system)
+			created = _make_datetime(created)
+			result.append((schema, name, keyname, owner, system, created, refschema, refname, refkeyname, deleterule, updaterule, desc))
+		return result
+
+	def _get_foreign_key_cols(self):
+		"""Retrieves the list of columns belonging to foreign keys.
+
+		Override this function to return a list of tuples detailing the columns
+		that belong to each foreign key in the database.  The tuples contain
+		the following details in the order specified:
+
+		schema       -- The schema of the table containing the key
+		name         -- The name of the table containing the key
+		keyname      -- The name of the key
+		colname      -- The name of the column
+		refcolname   -- The name of the column that this column references in
+		                the referenced table
+		"""
+		cursor = self.connection.cursor()
+		cursor.execute("""
+			SELECT
+				RTRIM(R.TABSCHEMA) AS TABSCHEMA,
+				RTRIM(R.TABNAME)   AS TABNAME,
+				RTRIM(R.CONSTNAME) AS KEYNAME,
+				RTRIM(KF.COLNAME)  AS COLNAME,
+				RTRIM(KP.COLNAME)  AS REFCOLNAME
+			FROM
+				%(schema)s.REFERENCES R
+				INNER JOIN %(schema)s.KEYCOLUSE KF
+					ON R.TABSCHEMA = KF.TABSCHEMA
+					AND R.TABNAME = KF.TABNAME
+					AND R.CONSTNAME = KF.CONSTNAME
+				INNER JOIN %(schema)s.KEYCOLUSE KP
+					ON R.REFTABSCHEMA = KP.TABSCHEMA
+					AND R.REFTABNAME = KP.TABNAME
+					AND R.REFKEYNAME = KP.CONSTNAME
+			WHERE
+				KF.COLSEQ = KP.COLSEQ
+			ORDER BY
+				R.TABSCHEMA,
+				R.TABNAME,
+				R.CONSTNAME,
+				KF.COLSEQ
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+		return cursor.fetchall()
 
 	def _get_checks(self):
-		logging.debug("Retrieving check constraints")
-		cursor = self.connection.cursor()
-		try:
-			cursor.execute("""
-				SELECT
-					RTRIM(T.TABSCHEMA)    AS "schemaName",
-					RTRIM(T.TABNAME)      AS "tableName",
-					RTRIM(T.CONSTNAME)    AS "name",
-					CHAR(C.CREATE_TIME)   AS "created",
-					RTRIM(T.DEFINER)      AS "definer",
-					T.ENFORCED            AS "enforced",
-					T.CHECKEXISTINGDATA   AS "checkExisting",
-					T.ENABLEQUERYOPT      AS "queryOptimize",
-					C.TYPE                AS "type",
-					RTRIM(C.QUALIFIER)    AS "qualifier",
-					RTRIM(C.FUNC_PATH)    AS "funcPath",
-					C.TEXT                AS "expression",
-					T.REMARKS             AS "description"
-				FROM
-					%(schema)s.TABCONST T
-					INNER JOIN %(schema)s.CHECKS C
-						ON T.TABSCHEMA = C.TABSCHEMA
-						AND T.TABNAME = C.TABNAME
-						AND T.CONSTNAME = C.CONSTNAME
-						AND T.TYPE = 'K'
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.checks = dict([((row['schemaName'], row['tableName'], row['name']), row) for row in _fetch_dict(cursor)])
-		finally:
-			cursor.close()
-			del cursor
-		for row in self.checks.itervalues():
-			row['created'] = _make_datetime(row['created'])
-			row['enforced'] = _make_bool(row['enforced'])
-			row['queryOptimize'] = _make_bool(row['queryOptimize'])
-			row['checkExisting'] = {
-				'D': 'DEFER',
-				'I': 'IMMEDIATE',
-				'N': 'NO CHECK',
-			}[row['checkExisting']]
-			row['type'] = {
-				'A': 'SYSTEM', # InfoCenter reckons it's 'A'
-				'S': 'SYSTEM', # However, it appears to be 'S'
-				'C': 'CHECK',
-				'F': 'FUNCTIONAL DEPENDENCY',
-				'O': 'OBJECT PROPERTY',
-			}[row['type']]
-			row['expression'] = str(row['expression'])
+		"""Retrieves the details of checks stored in the database.
 
-	def _get_check_fields(self):
-		logging.debug("Retrieving check fields")
+		Override this function to return a list of tuples containing details of
+		the checks defined in the database. The tuples contain the following
+		details in the order specified:
+
+		schema        -- The schema of the table containing the check
+		name          -- The name of the table containing the check
+		checkname     -- The name of the check
+		owner*        -- The name of the user who owns the check
+		system        -- True if the check is system maintained (boolean)
+		created*      -- When the check was created (datetime)
+		sql*          -- The SQL statement/query that defined the check
+		description*  -- Descriptive text
+
+		* Optional (can be None)
+		"""
 		cursor = self.connection.cursor()
-		try:
-			cursor.execute("""
-				SELECT
-					RTRIM(TABSCHEMA) AS "keySchema",
-					RTRIM(TABNAME)   AS "keyTable",
-					RTRIM(CONSTNAME) AS "keyName",
-					RTRIM(COLNAME)   AS "fieldName"
-				FROM
-					%(schema)s.COLCHECKS
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.check_fields = {}
-			for (key_schema, key_table, key_name, field_name) in cursor.fetchall():
-				if not (key_schema, key_table, key_name) in self.check_fields:
-					self.check_fields[(key_schema, key_table, key_name)] = []
-				self.check_fields[(key_schema, key_table, key_name)].append(field_name)
-		finally:
-			cursor.close()
-			del cursor
-	
+		cursor.execute("""
+			SELECT
+				RTRIM(T.TABSCHEMA)    AS TABSCHEMA,
+				RTRIM(T.TABNAME)      AS TABNAME,
+				RTRIM(T.CONSTNAME)    AS CHECKNAME,
+				RTRIM(T.OWNER)        AS OWNER,
+				CASE
+					WHEN TABSCHEMA LIKE 'SYS%' THEN 'Y'
+					WHEN C.TYPE IN ('A', 'S') THEN 'Y'
+					ELSE 'N'
+				END                   AS SYSTEM,
+				CHAR(C.CREATE_TIME)   AS CREATED,
+				C.TEXT                AS SQL,
+				T.REMARKS             AS DESCRIPTION
+			FROM
+				%(schema)s.TABCONST T
+				INNER JOIN %(schema)s.CHECKS C
+					ON T.TABSCHEMA = C.TABSCHEMA
+					AND T.TABNAME = C.TABNAME
+					AND T.CONSTNAME = C.CONSTNAME
+					AND T.TYPE = 'K'
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+		result = []
+		for (schema, name, checkname, owner, system, created, sql, desc) in cursor.fetchall():
+			system = _make_bool(system)
+			created = _make_datetime(created)
+			sql = str(sql)
+			result.append((schema, name, checkname, owner, system, created, sql, desc))
+		return result
+
+	def _get_check_cols(self):
+		"""Retrieves the list of columns belonging to checks.
+
+		Override this function to return a list of tuples detailing the columns
+		that are referenced by each check in the database.  The tuples contain
+		the following details in the order specified:
+
+		schema       -- The schema of the table containing the check
+		name         -- The name of the table containing the check
+		checkname    -- The name of the check
+		colname      -- The name of the column
+		"""
+		cursor = self.connection.cursor()
+		cursor.execute("""
+			SELECT
+				RTRIM(TABSCHEMA) AS TABSCHEMA,
+				RTRIM(TABNAME)   AS TABNAME,
+				RTRIM(CONSTNAME) AS CHECKNAME,
+				RTRIM(COLNAME)   AS COLNAME
+			FROM
+				%(schema)s.COLCHECKS
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+		return cursor.fetchall()
+
 	def _get_functions(self):
-		logging.debug("Retrieving functions")
+		"""Retrieves the details of functions stored in the database.
+
+		Override this function to return a list of tuples containing details of
+		the functions defined in the database (including system functions). The
+		tuples contain the following details in the order specified:
+
+		schema         -- The schema of the function
+		specname       -- The unique name of the function in the schema
+		name           -- The (potentially overloaded) name of the function
+		owner*         -- The name of the user who owns the function
+		system         -- True if the function is system maintained (boolean)
+		created*       -- When the function was created (datetime)
+		functype       -- 'C' if the function is a column/aggregate function
+		                  'R' if the function returns a row
+		                  'T' if the function returns a table
+		                  'S' if the function is scalar
+		deterministic* -- True if the function is deterministic
+		extaction*     -- True if the function has an external action (affects
+		                  things outside the database)
+		nullcall*      -- True if the function is called on NULL input
+		access*        -- 'N' if the function contains no SQL
+		                  'C' if the function contains database independent SQL
+		                  'R' if the function contains SQL that reads the db
+		                  'M' if the function contains SQL that modifies the db
+		sql*           -- The SQL statement/query that defined the function
+		description*   -- Descriptive text
+
+		* Optional (can be None)
+		"""
 		cursor = self.connection.cursor()
-		try:
-			cursor.execute("""
-				SELECT
-					RTRIM(ROUTINESCHEMA)     AS "schemaName",
-					RTRIM(SPECIFICNAME)      AS "specificName",
-					RTRIM(ROUTINENAME)       AS "name",
-					RTRIM(DEFINER)           AS "definer",
-					RTRIM(RETURN_TYPESCHEMA) AS "rtypeSchema",
-					RTRIM(RETURN_TYPENAME)   AS "rtypeName",
-					ORIGIN                   AS "origin",
-					FUNCTIONTYPE             AS "type",
-					RTRIM(LANGUAGE)          AS "language",
-					DETERMINISTIC            AS "deterministic",
-					EXTERNAL_ACTION          AS "externalAction",
-					NULLCALL                 AS "nullCall",
-					CAST_FUNCTION            AS "castFunction",
-					ASSIGN_FUNCTION          AS "assignFunction",
-					PARALLEL                 AS "parallel",
-					FENCED                   AS "fenced",
-					SQL_DATA_ACCESS          AS "sqlAccess",
-					THREADSAFE               AS "threadSafe",
-					VALID                    AS "valid",
-					CHAR(CREATE_TIME)        AS "created",
-					RTRIM(QUALIFIER)         AS "qualifier",
-					RTRIM(FUNC_PATH)         AS "funcPath",
-					TEXT                     AS "sql",
-					REMARKS                  AS "description"
-				FROM
-					%(schema)s.ROUTINES
-				WHERE
-					ROUTINETYPE = 'F'
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.functions = dict([((row['schemaName'], row['specificName']), row) for row in _fetch_dict(cursor)])
-		finally:
-			cursor.close()
-			del cursor
-		for row in self.functions.itervalues():
-			row['created'] = _make_datetime(row['created'])
-			row['deterministic'] = _make_bool(row['deterministic'])
-			row['externalAction'] = _make_bool(row['externalAction'], 'E')
-			row['nullCall'] = _make_bool(row['nullCall'])
-			row['castFunction'] = _make_bool(row['castFunction'])
-			row['assignFunction'] = _make_bool(row['assignFunction'])
-			row['parallel'] = _make_bool(row['parallel'])
-			row['fenced'] = _make_bool(row['fenced'])
-			row['threadSafe'] = _make_bool(row['threadSafe'])
-			row['valid'] = _make_bool(row['valid'])
-			row['origin'] = {
-				'B': 'BUILT-IN',
-				'E': 'USER-DEFINED EXTERNAL',
-				'M': 'TEMPLATE',
-				'Q': 'SQL BODY',
-				'U': 'USER-DEFINED SOURCE',
-				'S': 'SYSTEM GENERATED',
-				'T': 'SYSTEM GENERATED TRANSFORM',
-			}[row['origin']]
-			row['type'] = {
-				'C': 'COLUMN',
-				'R': 'ROW',
-				'S': 'SCALAR',
-				'T': 'TABLE',
-			}[row['type']]
-			row['sqlAccess'] = {
-				'C': 'CONTAINS SQL',
-				'M': 'MODIFIES SQL',
-				'N': 'NO SQL',
-				'R': 'READS SQL',
-				' ': None,
-			}[row['sqlAccess']]
-			row['sql'] = str(row['sql'])
+		cursor.execute("""
+			SELECT
+				RTRIM(ROUTINESCHEMA)     AS FUNCSCHEMA,
+				RTRIM(SPECIFICNAME)      AS FUNCSPECNAME,
+				RTRIM(ROUTINENAME)       AS FUNCNAME,
+				RTRIM(OWNER)             AS OWNER,
+				CASE
+					WHEN ROUTINESCHEMA LIKE 'SYS%' THEN 'Y'
+					WHEN ORIGIN IN ('B', 'S', 'T') THEN 'Y'
+					ELSE 'N'
+				END                      AS SYSTEM,
+				CHAR(CREATE_TIME)        AS CREATED,
+				FUNCTIONTYPE             AS FUNCTYPE,
+				DETERMINISTIC            AS DETERMINISTIC,
+				EXTERNAL_ACTION          AS EXTACTION,
+				NULLCALL                 AS NULLCALL,
+				SQL_DATA_ACCESS          AS ACCESS,
+				TEXT                     AS SQL,
+				REMARKS                  AS DESCRIPTION
+			FROM
+				%(schema)s.ROUTINES
+			WHERE
+				ROUTINETYPE = 'F'
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+		result = []
+		for (schema, specname, name, owner, system, created, functype, deterministic, extaction, nullcall, access, sql, desc) in cursor.fetchall():
+			system = _make_bool(system)
+			created = _make_datetime(created)
+			deterministic = _make_bool(deterministic)
+			extaction = _make_bool(extaction, true_value='E')
+			nullcall = _make_bool(nullcall)
+			sql = str(sql)
+			result.append((schema, specname, name, owner, system, created, functype, deterministic, extaction, nullcall, access, sql, desc))
+		return result
 
 	def _get_function_params(self):
-		logging.debug("Retrieving function parameters")
+		"""Retrieves the list of parameters belonging to functions.
+
+		Override this function to return a list of tuples detailing the
+		parameters that are associated with each function in the database.  The
+		tuples contain the following details in the order specified:
+
+		schema         -- The schema of the function
+		specname       -- The unique name of the function in the schema
+		parmname       -- The name of the parameter
+		parmtype       -- 'I' = Input parameter
+		                  'O' = Output parameter
+		                  'B' = Input+Output parameter
+		                  'R' = Return value/column
+		typeschema     -- The schema of the parameter's datatype
+		typename       -- The name of the parameter's datatype
+		size*          -- The length of the parameter for character types, or
+		                  the numeric precision for decimal types (None if not
+		                  a character or decimal type)
+		scale*         -- The maximum scale for decimal types (None if not a
+		                  decimal type)
+		codepage*      -- The codepage of the parameter for character types
+		                  (None if not a character type)
+		description*   -- Descriptive text
+
+		Note that the each tuple details one parameter belonging to a function.
+		It is important that the list of tuples is in the order that each
+		parameter is declared in the function.
+
+		This is slightly complicated by the fact that the return column(s) of a
+		function are also considered parameters (see the parmtype field above).
+		It does not matter if parameters and return columns are interspersed in
+		the result provided that, taken separately, each set of parameters or
+		columns is in the correct order.
+
+		* Optional (can be None)
+		"""
 		cursor = self.connection.cursor()
-		try:
-			cursor.execute("""
-				SELECT
-					RTRIM(P.ROUTINESCHEMA)          AS "schemaName",
-					RTRIM(P.ROUTINENAME)            AS "routineName",
-					RTRIM(P.SPECIFICNAME)           AS "specificName",
-					RTRIM(COALESCE(P.PARMNAME, '')) AS "name",
-					P.ORDINAL                       AS "position",
-					P.ROWTYPE                       AS "type",
-					RTRIM(P.TYPESCHEMA)             AS "datatypeSchema",
-					RTRIM(P.TYPENAME)               AS "datatypeName",
-					P.LOCATOR                       AS "locator",
-					P.LENGTH                        AS "size",
-					P.SCALE                         AS "scale",
-					P.CODEPAGE                      AS "codepage",
-					P.REMARKS                       AS "description"
-				FROM
-					%(schema)s.ROUTINEPARMS P
-					INNER JOIN %(schema)s.ROUTINES R
-						ON P.ROUTINESCHEMA = R.ROUTINESCHEMA
-						AND P.SPECIFICNAME = R.SPECIFICNAME
-				WHERE
-					R.ROUTINETYPE = 'F'
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.func_params = dict([((row['schemaName'], row['specificName'], row['type'], row['position']), row) for row in _fetch_dict(cursor)])
-		finally:
-			cursor.close()
-			del cursor
-		for row in self.func_params.itervalues():
-			row['locator'] = _make_bool(row['locator'])
-			if row['size'] == 0: row['size'] = None
-			if row['scale'] == -1: row['scale'] = None
-			if not row['codepage']: row['codepage'] = None
-			row['type'] = {
-				'B': 'INOUT',
-				'O': 'OUT',
-				'P': 'IN',
-				'C': 'RESULT',
-				'R': 'RESULT',
-			}[row['type']]
+		cursor.execute("""
+			SELECT
+				RTRIM(P.ROUTINESCHEMA)          AS FUNCSCHEMA,
+				RTRIM(P.SPECIFICNAME)           AS FUNCSPECNAME,
+				RTRIM(COALESCE(P.PARMNAME, '')) AS PARMNAME,
+				CASE P.ROWTYPE
+					WHEN 'P' THEN 'I'
+					WHEN 'C' THEN 'R'
+					ELSE P.ROWTYPE
+				END                             AS PARMTYPE,
+				RTRIM(P.TYPESCHEMA)             AS TYPESCHEMA,
+				RTRIM(P.TYPENAME)               AS TYPENAME,
+				P.LENGTH                        AS SIZE,
+				P.SCALE                         AS SCALE,
+				P.CODEPAGE                      AS CODEPAGE,
+				P.REMARKS                       AS DESCRIPTION
+			FROM
+				%(schema)s.ROUTINEPARMS P
+				INNER JOIN %(schema)s.ROUTINES R
+					ON P.ROUTINESCHEMA = R.ROUTINESCHEMA
+					AND P.SPECIFICNAME = R.SPECIFICNAME
+			WHERE
+				R.ROUTINETYPE = 'F'
+			ORDER BY
+				P.ROUTINESCHEMA,
+				P.SPECIFICNAME,
+				P.ORDINAL
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+		result = []
+		for (schema, specname, parmname, parmtype, typeschema, typename, size, scale, codepage, desc) in cursor.fetchall():
+			if not size: size = None
+			if not scale: scale = None # XXX Not necessarily unknown (0 is a valid scale)
+			if not codepage: codepage = None
+			result.append((schema, specname, parmname, parmtype, typeschema, typename, size, scale, codepage, desc))
+		return result
 	
 	def _get_procedures(self):
-		logging.debug("Retrieving procedures")
+		"""Retrieves the details of stored procedures in the database.
+
+		Override this function to return a list of tuples containing details of
+		the procedures defined in the database (including system procedures).
+		The tuples contain the following details in the order specified:
+
+		schema         -- The schema of the procedure
+		specname       -- The unique name of the procedure in the schema
+		name           -- The (potentially overloaded) name of the procedure
+		owner*         -- The name of the user who owns the procedure
+		system         -- True if the procedure is system maintained (boolean)
+		created*       -- When the procedure was created (datetime)
+		deterministic* -- True if the procedure is deterministic
+		extaction*     -- True if the procedure has an external action (affects
+		                  things outside the database)
+		nullcall*      -- True if the procedure is called on NULL input
+		access*        -- 'N' if the procedure contains no SQL
+		                  'C' if the procedure contains database independent SQL
+		                  'R' if the procedure contains SQL that reads the db
+		                  'M' if the procedure contains SQL that modifies the db
+		sql*           -- The SQL statement/query that defined the procedure
+		description*   -- Descriptive text
+
+		* Optional (can be None)
+		"""
 		cursor = self.connection.cursor()
-		try:
-			cursor.execute("""
-				SELECT
-					RTRIM(ROUTINESCHEMA)     AS "schemaName",
-					RTRIM(SPECIFICNAME)      AS "specificName",
-					RTRIM(ROUTINENAME)       AS "name",
-					RTRIM(DEFINER)           AS "definer",
-					ORIGIN                   AS "origin",
-					RTRIM(LANGUAGE)          AS "language",
-					DETERMINISTIC            AS "deterministic",
-					EXTERNAL_ACTION          AS "externalAction",
-					NULLCALL                 AS "nullCall",
-					FENCED                   AS "fenced",
-					SQL_DATA_ACCESS          AS "sqlAccess",
-					THREADSAFE               AS "threadSafe",
-					VALID                    AS "valid",
-					CHAR(CREATE_TIME)        AS "created",
-					RTRIM(QUALIFIER)         AS "qualifier",
-					RTRIM(FUNC_PATH)         AS "funcPath",
-					TEXT                     AS "sql",
-					REMARKS                  AS "description"
-				FROM
-					%(schema)s.ROUTINES
-				WHERE
-					ROUTINETYPE = 'P'
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.procedures = dict([((row['schemaName'], row['specificName']), row) for row in _fetch_dict(cursor)])
-		finally:
-			cursor.close()
-			del cursor
-		for row in self.procedures.itervalues():
-			row['created'] = _make_datetime(row['created'])
-			row['deterministic'] = _make_bool(row['deterministic'])
-			row['externalAction'] = _make_bool(row['externalAction'], 'E')
-			row['nullCall'] = _make_bool(row['nullCall'])
-			row['fenced'] = _make_bool(row['fenced'])
-			row['threadSafe'] = _make_bool(row['threadSafe'])
-			row['valid'] = _make_bool(row['valid'])
-			row['origin'] = {
-				'B': 'BUILT-IN',
-				'E': 'USER-DEFINED EXTERNAL',
-				'M': 'TEMPLATE',
-				'Q': 'SQL BODY',
-				'U': 'USER-DEFINED SOURCE',
-				'S': 'SYSTEM GENERATED',
-				'T': 'SYSTEM GENERATED TRANSFORM',
-			}[row['origin']]
-			row['sqlAccess'] = {
-				'C': 'CONTAINS SQL',
-				'M': 'MODIFIES SQL',
-				'N': 'NO SQL',
-				'R': 'READS SQL',
-				' ': None,
-			}[row['sqlAccess']]
-			row['sql'] = str(row['sql'])
+		cursor.execute("""
+			SELECT
+				RTRIM(ROUTINESCHEMA)     AS PROCSCHEMA,
+				RTRIM(SPECIFICNAME)      AS PROCSPECNAME,
+				RTRIM(ROUTINENAME)       AS PROCNAME,
+				RTRIM(OWNER)             AS OWNER,
+				CASE
+					WHEN ROUTINESCHEMA LIKE 'SYS%' THEN 'Y'
+					WHEN ORIGIN IN ('B', 'S', 'T') THEN 'Y'
+					ELSE 'N'
+				END                      AS SYSTEM,
+				CHAR(CREATE_TIME)        AS CREATED,
+				DETERMINISTIC            AS DETERMINISTIC,
+				EXTERNAL_ACTION          AS EXTACTION,
+				NULLCALL                 AS NULLCALL,
+				SQL_DATA_ACCESS          AS ACCESS,
+				TEXT                     AS SQL,
+				REMARKS                  AS DESCRIPTION
+			FROM
+				%(schema)s.ROUTINES
+			WHERE
+				ROUTINETYPE = 'P'
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+		result = []
+		for (schema, specname, name, owner, system, created, functype, deterministic, extaction, nullcall, access, sql, desc) in cursor.fetchall():
+			system = _make_bool(system)
+			created = _make_datetime(created)
+			deterministic = _make_bool(deterministic)
+			extaction = _make_bool(extaction, true_value='E')
+			nullcall = _make_bool(nullcall)
+			sql = str(sql)
+			result.append((schema, specname, name, owner, system, created, functype, deterministic, extaction, nullcall, access, sql, desc))
+		return result
 	
 	def _get_procedure_params(self):
-		logging.debug("Retrieving procedure parameters")
+		"""Retrieves the list of parameters belonging to procedures.
+
+		Override this function to return a list of tuples detailing the
+		parameters that are associated with each procedure in the database.
+		The tuples contain the following details in the order specified:
+
+		schema         -- The schema of the procedure
+		specname       -- The unique name of the procedure in the schema
+		parmname       -- The name of the parameter
+		parmtype       -- 'I' = Input parameter
+		                  'O' = Output parameter
+		                  'B' = Input+Output parameter
+		                  'R' = Return value/column
+		typeschema     -- The schema of the parameter's datatype
+		typename       -- The name of the parameter's datatype
+		size*          -- The length of the parameter for character types, or
+		                  the numeric precision for decimal types (None if not
+		                  a character or decimal type)
+		scale*         -- The maximum scale for decimal types (None if not a
+		                  decimal type)
+		codepage*      -- The codepage of the parameter for character types
+		                  (None if not a character type)
+		description*   -- Descriptive text
+
+		Note that the each tuple details one parameter belonging to a
+		procedure.  It is important that the list of tuples is in the order
+		that each parameter is declared in the procedure.
+
+		This is slightly complicated by the fact that the return column(s) of a
+		procedure are also considered parameters (see the parmtype field
+		above).  It does not matter if parameters and return columns are
+		interspersed in the result provided that, taken separately, each set of
+		parameters or columns is in the correct order.
+
+		* Optional (can be None)
+		"""
 		cursor = self.connection.cursor()
-		try:
-			cursor.execute("""
-				SELECT
-					RTRIM(P.ROUTINESCHEMA)          AS "schemaName",
-					RTRIM(P.ROUTINENAME)            AS "routineName",
-					RTRIM(P.SPECIFICNAME)           AS "specificName",
-					RTRIM(COALESCE(P.PARMNAME, '')) AS "name",
-					P.ORDINAL                       AS "position",
-					P.ROWTYPE                       AS "type",
-					RTRIM(P.TYPESCHEMA)             AS "datatypeSchema",
-					RTRIM(P.TYPENAME)               AS "datatypeName",
-					P.LENGTH                        AS "size",
-					P.SCALE                         AS "scale",
-					P.CODEPAGE                      AS "codepage",
-					P.REMARKS                       AS "description"
-				FROM
-					%(schema)s.ROUTINEPARMS P
-					INNER JOIN %(schema)s.ROUTINES R
-						ON P.ROUTINESCHEMA = R.ROUTINESCHEMA
-						AND P.SPECIFICNAME = R.SPECIFICNAME
-				WHERE
-					R.ROUTINETYPE = 'P'
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.proc_params = dict([((row['schemaName'], row['specificName'], row['type'], row['position']), row) for row in _fetch_dict(cursor)])
-		finally:
-			cursor.close()
-			del cursor
-		for row in self.proc_params.itervalues():
-			if row['size'] == 0: row['size'] = None
-			if row['scale'] == -1: row['scale'] = None
-			if not row['codepage']: row['codepage'] = None
-			row['type'] = {
-				'B': 'INOUT',
-				'O': 'OUT',
-				'P': 'IN',
-				'C': 'RESULT',
-				'R': 'RESULT',
-			}[row['type']]
+		cursor.execute("""
+			SELECT
+				RTRIM(P.ROUTINESCHEMA)          AS PROCSCHEMA,
+				RTRIM(P.SPECIFICNAME)           AS PROCSPECNAME,
+				RTRIM(COALESCE(P.PARMNAME, '')) AS PARMNAME,
+				CASE P.ROWTYPE
+					WHEN 'P' THEN 'I'
+					WHEN 'C' THEN 'R'
+					ELSE P.ROWTYPE
+				END                             AS PARMTYPE,
+				RTRIM(P.TYPESCHEMA)             AS TYPESCHEMA,
+				RTRIM(P.TYPENAME)               AS TYPENAME,
+				P.LENGTH                        AS SIZE,
+				P.SCALE                         AS SCALE,
+				P.CODEPAGE                      AS CODEPAGE,
+				P.REMARKS                       AS DESCRIPTION
+			FROM
+				%(schema)s.ROUTINEPARMS P
+				INNER JOIN %(schema)s.ROUTINES R
+					ON P.ROUTINESCHEMA = R.ROUTINESCHEMA
+					AND P.SPECIFICNAME = R.SPECIFICNAME
+			WHERE
+				R.ROUTINETYPE = 'P'
+			ORDER BY
+				P.ROUTINESCHEMA,
+				P.SPECIFICNAME,
+				P.ORDINAL
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+		result = []
+		for (schema, specname, parmname, parmtype, typeschema, typename, size, scale, codepage, desc) in cursor.fetchall():
+			if not size: size = None
+			if not scale: scale = None # XXX Not necessarily unknown (0 is a valid scale)
+			if not codepage: codepage = None
+			result.append((schema, specname, parmname, parmtype, typeschema, typename, size, scale, codepage, desc))
+		return result
 	
 	def _get_triggers(self):
-		logging.debug("Retrieving triggers")
-		cursor = self.connection.cursor()
-		try:
-			cursor.execute("""
-				SELECT
-					RTRIM(TRIGSCHEMA) AS "schemaName",
-					RTRIM(TRIGNAME)   AS "name",
-					RTRIM(DEFINER)    AS "definer",
-					RTRIM(TABSCHEMA)  AS "tableSchema",
-					RTRIM(TABNAME)    AS "tableName",
-					TRIGTIME          AS "triggerTime",
-					TRIGEVENT         AS "triggerEvent",
-					GRANULARITY       AS "granularity",
-					VALID             AS "valid",
-					CHAR(CREATE_TIME) AS "created",
-					RTRIM(QUALIFIER)  AS "qualifier",
-					RTRIM(FUNC_PATH)  AS "funcPath",
-					TEXT              AS "sql",
-					REMARKS           AS "description"
-				FROM
-					%(schema)s.TRIGGERS
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.triggers = dict([((row['schemaName'], row['name']), row) for row in _fetch_dict(cursor)])
-		finally:
-			cursor.close()
-			del cursor
-		for row in self.triggers.itervalues():
-			row['created'] = _make_datetime(row['created'])
-			row['valid'] = _make_bool(row['valid'], false_value='X')
-			row['triggerTime'] = {
-				'A': 'AFTER',
-				'B': 'BEFORE',
-				'I': 'INSTEAD OF',
-			}[row['triggerTime']]
-			row['triggerEvent'] = {
-				'I': 'INSERT',
-				'U': 'UPDATE',
-				'D': 'DELETE',
-			}[row['triggerEvent']]
-			row['granularity'] = {
-				'S': 'STATEMENT',
-				'R': 'ROW',
-			}[row['granularity']]
-			row['sql'] = str(row['sql'])
+		"""Retrieves the details of table triggers in the database.
 
-	def _get_relation_triggers(self):
-		logging.debug("Retrieving table triggers")
+		Override this function to return a list of tuples containing details of
+		the triggers defined in the database (including system triggers).  The
+		tuples contain the following details in the order specified:
+
+		schema         -- The schema of the trigger
+		name           -- The unique name of the trigger in the schema
+		owner*         -- The name of the user who owns the trigger
+		system         -- True if the trigger is system maintained (boolean)
+		created*       -- When the trigger was created (datetime)
+		tabschema      -- The schema of the table that activates the trigger
+		tabname        -- The name of the table that activates the trigger
+		trigtime       -- When the trigger is fired:
+		                  'A' = The trigger fires after the statement
+		                  'B' = The trigger fires before the statement
+		                  'I' = The trigger fires instead of the statement
+		trigevent      -- What statement fires the trigger:
+		                  'I' = The trigger fires on INSERT
+		                  'U' = The trigger fires on UPDATE
+		                  'D' = The trigger fires on DELETE
+		granularity    -- The granularity of trigger executions:
+		                  'R' = The trigger fires for each row affected
+		                  'S' = The trigger fires once per activating statement
+		sql*           -- The SQL statement/query that defined the trigger
+		description*   -- Descriptive text
+
+		* Optional (can be None)
+		"""
 		cursor = self.connection.cursor()
-		try:
-			cursor.execute("""
-				SELECT
-					RTRIM(TABSCHEMA)  AS "tableSchema",
-					RTRIM(TABNAME)    AS "tableName",
-					RTRIM(TRIGSCHEMA) AS "triggerSchema",
-					RTRIM(TRIGNAME)   AS "triggerName"
-				FROM
-					%(schema)s.TRIGGERS
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.relation_triggers = {}
-			for (table_schema, table_name, trigger_schema, trigger_name) in cursor.fetchall():
-				if not (table_schema, table_name) in self.relation_triggers:
-					self.relation_triggers[(table_schema, table_name)] = []
-				self.relation_triggers[(table_schema, table_name)].append((trigger_schema, trigger_name))
-		finally:
-			cursor.close()
-			del cursor
+		cursor.execute("""
+			SELECT
+				RTRIM(TRIGSCHEMA) AS TRIGSCHEMA,
+				RTRIM(TRIGNAME)   AS TRIGNAME,
+				RTRIM(OWNER)      AS OWNER,
+				CASE
+					WHEN TRIGSCHEMA LIKE 'SYS%' THEN 'Y'
+					ELSE 'N'
+				END               AS SYSTEM,
+				CHAR(CREATE_TIME) AS CREATED,
+				RTRIM(TABSCHEMA)  AS TABSCHEMA,
+				RTRIM(TABNAME)    AS TABNAME,
+				TRIGTIME          AS TRIGTIME,
+				TRIGEVENT         AS TRIGEVENT,
+				GRANULARITY       AS GRANULARITY
+				TEXT              AS SQL,
+				REMARKS           AS DESCRIPTION
+			FROM
+				%(schema)s.TRIGGERS
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+		result = []
+		for (schema, name, owner, system, created, tabschema, tabname, trigtime, trigevent, granularity, sql, desc) in cursor.fetchall():
+			system = _make_bool(system)
+			created = _make_datetime(created)
+			sql = str(sql)
+			result.append((schema, name, owner, system, created, tabschema, tabname, trigtime, trigevent, granularity, sql, desc))
+		return result
+
+	def _get_trigger_dependencies(self):
+		"""Retrieves the details of trigger dependencies.
+
+		Override this function to return a list of tuples containing details of
+		the relations upon which triggers depend (the tables that a trigger
+		references in its body).  The tuples contain the following details in
+		the order specified:
+
+		schema       -- The schema of the trigger
+		name         -- The name of the trigger
+		dep_schema   -- The schema of the relation upon which the trigger depends
+		dep_name     -- The name of the relation upon which the trigger depends
+		"""
+		cursor = self.connection.cursor()
+		cursor.execute("""
+			SELECT
+				RTRIM(D.TRIGSCHEMA) AS TRIGSCHEMA,
+				RTRIM(D.TRIGNAME)   AS TRIGNAME,
+				RTRIM(D.BSCHEMA)    AS DEPSCHEMA,
+				RTRIM(D.BNAME)      AS DEPNAME
+			FROM
+				%(schema)s.TRIGDEP D
+				INNER JOIN %(schema)s.TRIGGERS T
+					ON D.TRIGSCHEMA = T.TRIGSCHEMA
+					AND D.TRIGNAME = T.TRIGNAME
+			WHERE
+				BTYPE IN ('A', 'S', 'T', 'U', 'V', 'W')
+				AND NOT (D.BSCHEMA = T.TABSCHEMA AND D.BNAME = T.TABNAME)
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+		return cursor.fetchall()
 
 	def _get_tablespaces(self):
-		logging.debug("Retrieving tablespaces")
+		"""Retrieves the details of the tablespaces in the database.
+
+		Override this function to return a list of tuples containing details of
+		the tablespaces defined in the database (including system tablespaces).
+		The tuples contain the following details in the order specified:
+
+		tbspace       -- The tablespace name
+		owner*        -- The name of the user who owns the tablespace
+		system        -- True if the tablespace is system maintained (boolean)
+		created*      -- When the tablespace was created (datetime)
+		type*         -- The type of the tablespace (regular, temporary, system
+		              -- or database managed, etc) as free text
+		description*  -- Descriptive text
+
+		* Optional (can be None)
+		"""
 		cursor = self.connection.cursor()
-		try:
-			cursor.execute("""
-				SELECT
-					RTRIM(TBSPACE)    AS "name",
-					RTRIM(DEFINER)    AS "definer",
-					CHAR(CREATE_TIME) AS "created",
-					TBSPACETYPE       AS "managedBy",
-					DATATYPE          AS "dataType",
-					EXTENTSIZE        AS "extentSize",
-					PREFETCHSIZE      AS "prefetchSize",
-					OVERHEAD          AS "overhead",
-					TRANSFERRATE      AS "transferRate",
-					PAGESIZE          AS "pageSize",
-					DROP_RECOVERY     AS "dropRecovery",
-					REMARKS           AS "description"
-				FROM %(schema)s.TABLESPACES
-				WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
-			self.tablespaces = dict([(row['name'], row) for row in _fetch_dict(cursor)])
-		finally:
-			cursor.close()
-			del cursor
-		for row in self.tablespaces.itervalues():
-			row['created'] = _make_datetime(row['created'])
-			row['dropRecovery'] = _make_bool(row['dropRecovery'])
-			if row['prefetchSize'] < 0: row['prefetchSize'] = 'Auto'
-			row['managedBy'] = {
-				'S': 'SYSTEM',
-				'D': 'DATABASE',
-			}[row['managedBy']]
-			row['dataType'] = {
-				'A': 'ANY',
-				'L': 'LONG/INDEX',
-				'T': 'SYSTEM TEMPORARY',
-				'U': 'USER TEMPORARY',
-			}[row['dataType']]
-
-	def _get_tablespace_tables(self):
-		# Note: Must be run AFTER _get_tables and _get_tablespaces
-		logging.debug("Retrieving tablespace tables")
-		self.tablespace_tables = dict([
-			(tbspace, [(row['schemaName'], row['name'])
-				for row in self.tables.itervalues()
-				if row['dataTbspace'] == tbspace
-				or row['indexTbspace'] == tbspace
-				or row['longTbspace'] == tbspace
-			])
-			for tbspace in self.tablespaces
-		])
-
-	def _get_tablespace_indexes(self):
-		# Note: Must be run AFTER _get_indexes and _get_tablespaces
-		logging.debug("Retrieving tablespace indexes")
-		self.tablespace_indexes = dict([
-			(tbspace, [
-				(row['schemaName'], row['name'])
-				for row in self.indexes.itervalues() if row['tablespaceName'] == tbspace
-			])
-			for tbspace in self.tablespaces
-		])
+		cursor.execute("""
+			SELECT
+				RTRIM(TBSPACE)    AS TBSPACE,
+				RTRIM(OWNER)      AS OWNER,
+				CASE TBSPACE
+					WHEN 'SYSCATSPACE' THEN 'Y'
+					WHEN 'SYSTOOLSPACE' THEN 'Y'
+					ELSE 'N'
+				END               AS SYSTEM,
+				CHAR(CREATE_TIME) AS CREATED,
+				CASE DATATYPE
+					WHEN 'A' THEN 'Regular'
+					WHEN 'L' THEN 'Long'
+					WHEN 'T' THEN 'System temporary'
+					WHEN 'U' THEN 'User temporary'
+				END ||
+				' ' ||
+				CASE TBSPACETYPE
+					WHEN 'D' THEN 'DMS'
+					WHEN 'S' THEN 'SMS'
+				END ||
+				' tablespace with ' ||
+				RTRIM(CHAR(PAGESIZE / 1024)) ||
+				'k page size' ||
+				CASE DROP_RECOVERY
+					WHEN 'Y' THEN ' and drop recovery'
+					WHEN 'N' THEN ''
+				END               AS TYPE,
+				REMARKS           AS DESCRIPTION
+			FROM
+				%(schema)s.TABLESPACES
+			WITH UR""" % {'schema': ['SYSCAT', 'DOCCAT'][self.doccat]})
+		result = []
+		for (tbspace, owner, system, created, tstype, desc) in cursor.fetchall():
+			system = _make_bool(system)
+			created = _make_datetime(created)
+			result.append((tbspace, owner, system, created, tstype, desc))
+		return result
 

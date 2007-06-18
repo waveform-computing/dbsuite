@@ -10,24 +10,34 @@ from db2makedoc.db.util import format_ident
 class Trigger(SchemaObject):
 	"""Class representing an index in a DB2 database"""
 
-	def __init__(self, schema, input, **row):
+	def __init__(self, schema, input, *row):
 		"""Initializes an instance of the class from a input row"""
-		super(Trigger, self).__init__(schema, row['name'])
+		super(Trigger, self).__init__(schema, row[1])
 		logging.debug("Building trigger %s" % (self.qualified_name))
+		(
+			_,
+			_,
+			self.owner,
+			self._system,
+			self.created,
+			self._relation_schema,
+			self._relation_name,
+			self.trigger_time,
+			self.trigger_event,
+			self.granularity,
+			self.sql,
+			desc
+		) = row
 		self.type_name = 'Trigger'
-		self.description = row.get('description', None) or self.description
-		self.definer = row.get('definer', None)
-		self.created = row.get('created', None)
-		self.valid = row.get('valid', None)
-		self.qualifier = row.get('qualifier', None)
-		self.func_path = row.get('funcPath', None)
-		self.sql = row.get('sql', None)
-		self.trigger_time = row['triggerTime']
-		self.trigger_event = row['triggerEvent']
-		self.dependencies = RelationsDict(self.database, input.trigger_dependencies.get((schema.name, self.name)))
-		self.dependency_list = RelationsList(self.database, input.trigger_dependencies.get((schema.name, self.name)))
-		self._relation_schema = row['tableSchema']
-		self._relation_name = row['tableName']
+		self.description = desc or self.description
+		self.dependencies = RelationsDict(
+			self.database,
+			input.trigger_dependencies[(schema.name, self.name)]
+		)
+		self.dependency_list = RelationsList(
+			self.database,
+			input.trigger_dependencies[(schema.name, self.name)]
+		)
 
 	def _get_identifier(self):
 		return "trigger_%s_%s" % (self.schema.name, self.name)

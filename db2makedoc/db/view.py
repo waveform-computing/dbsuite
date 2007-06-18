@@ -11,30 +11,54 @@ from db2makedoc.db.util import format_ident
 class View(Relation):
 	"""Class representing a view in a DB2 database"""
 	
-	def __init__(self, schema, input, **row):
+	def __init__(self, schema, input, *row):
 		"""Initializes an instance of the class from a input row"""
-		super(View, self).__init__(schema, row['name'])
+		super(View, self).__init__(schema, row[1])
 		logging.debug("Building view %s" % (self.qualified_name))
+		(
+			_,
+			_,
+			self.owner,
+			self._system,
+			self.created,
+			self.read_only,
+			self.sql,
+			desc
+		) = row
 		self.type_name = 'View'
-		self.description = row.get('description', None) or self.description
-		self.definer = row.get('definer', None)
-		self.created = row.get('created', None)
-		self.check = row.get('check', None)
-		self.read_only = row.get('readOnly', None)
-		self.valid = row.get('valid', None)
-		self.qualifier = row.get('qualifier', None)
-		self.func_path = row.get('funcPath', None)
-		self.sql = row.get('sql', None)
-		self._fields = {}
-		for field in [input.fields[(schema_name, view_name, field_name)] for (schema_name, view_name, field_name) in input.fields if schema_name == schema.name and view_name == self.name]:
-			self._fields[field['name']] = Field(self, input, **field)
-		self._field_list = sorted(self._fields.itervalues(), key=lambda field:field.position)
-		self._dependents = RelationsDict(self.database, input.relation_dependents.get((schema.name, self.name)))
-		self._dependent_list = RelationsList(self.database, input.relation_dependents.get((schema.name, self.name)))
-		self.dependencies = RelationsDict(self.database, input.relation_dependencies.get((schema.name, self.name)))
-		self.dependency_list = RelationsList(self.database, input.relation_dependencies.get((schema.name, self.name)))
-		self.triggers = TriggersDict(self.database, input.relation_triggers.get((schema.name, self.name)))
-		self.trigger_list = TriggersList(self.database, input.relation_triggers.get((schema.name, self.name)))
+		self.description = desc or self.description
+		self._field_list = [
+			Field(self, input, position + 1, *item)
+			for (position, item) in enumerate(input.relation_cols[(schema.name, self.name)])
+		]
+		self._fields = dict([
+			(field.name, field)
+			for field in self._field_list
+		])
+		self._dependents = RelationsDict(
+			self.database,
+			input.relation_dependents[(schema.name, self.name)]
+		)
+		self._dependent_list = RelationsList(
+			self.database,
+			input.relation_dependents[(schema.name, self.name)]
+		)
+		self.dependencies = RelationsDict(
+			self.database,
+			input.relation_dependencies.[schema.name, self.name)]
+		)
+		self.dependency_list = RelationsList(
+			self.database,
+			input.relation_dependencies.[(schema.name, self.name)]
+		)
+		self.triggers = TriggersDict(
+			self.database,
+			input.relation_triggers[(schema.name, self.name)]
+		)
+		self.trigger_list = TriggersList(
+			self.database,
+			input.relation_triggers[(schema.name, self.name)]
+		)
 
 	def _get_dependents(self):
 		return self._dependents

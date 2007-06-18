@@ -9,29 +9,28 @@ from db2makedoc.db.util import format_size, format_ident
 class Field(RelationObject):
 	"""Class representing a field in a relation in a DB2 database"""
 
-	def __init__(self, relation, input, **row):
+	def __init__(self, relation, input, position, *row):
 		"""Initializes an instance of the class from a input row"""
-		super(Field, self).__init__(relation, row['name'])
+		super(Field, self).__init__(relation, row[0])
 		logging.debug("Building field %s" % (self.qualified_name))
+		(
+			_,
+			self._datatype_schema,
+			self._datatype_name,
+			self.identity,
+			self._size,
+			self._scale,
+			self.codepage,
+			self.nullable,
+			self.cardinality,
+			self.null_cardinality,
+			self.generated,
+			self.default,
+			desc
+		) = row
 		self.type_name = 'Field'
-		self.description = row.get('description', None) or self.description
-		self.codepage = row.get('codepage', None)
-		self.logged = row.get('logged', None)
-		self.compact = row.get('compact', None)
-		self.cardinality = row.get('cardinality', None)
-		self.averageSize = row.get('averageSize', None)
-		self.nullCardinality = row.get('nullCardinality', None)
-		self.identity = row.get('identity', None)
-		self.generated = row.get('generated', None)
-		self.generate_expression = row.get('generateExpression', None)
-		self.compressDefault = row.get('compressDefault', None)
-		self.default = row['default']
-		self.nullable = row['nullable']
-		self.position = row['position']
-		self._size = row['size']
-		self._scale = row['scale']
-		self._datatype_schema = row['datatypeSchema']
-		self._datatype_name = row['datatypeName']
+		self.description = desc or self.description
+		self.position = position
 
 	def _get_identifier(self):
 		return "field_%s_%s_%s" % (self.schema.name, self.relation.name, self.name)
@@ -49,7 +48,7 @@ class Field(RelationObject):
 				'fielddef': self.prototype
 			})
 		else:
-			return ""
+			return ''
 	
 	def _get_drop_sql(self):
 		from doctable import Table
@@ -61,7 +60,7 @@ class Field(RelationObject):
 				'field': format_ident(self.name)
 			})
 		else:
-			return ""
+			return ''
 	
 	def _get_prototype(self):
 		"""Returns the SQL prototype of the field.
@@ -75,15 +74,13 @@ class Field(RelationObject):
 		if not self.nullable:
 			items.append('NOT NULL')
 		if self.default:
-			items.append('WITH DEFAULT %s' % (self.default))
-		if not self.logged is None:
-			if not self.logged:
-				items.append('NOT LOGGED')
-		if not self.compact is None:
-			if self.compact:
-				items.append('COMPACT')
-		if self.generated and self.generated != 'NEVER':
-			items.append('GENERATED %s AS (%s)' % (self.generated, self.generate_expression))
+			if self.generated == 'N':
+				items.append('WITH DEFAULT %s' % (self.default))
+			else:
+				items.append('GENERATED %s AS (%s)' % (
+					{'A': 'ALWAYS', 'D': 'BY DEFAULT'}[self.generated],
+					self.default
+				))
 		return ' '.join(items)
 		
 	def _get_datatype(self):

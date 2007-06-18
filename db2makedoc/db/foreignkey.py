@@ -11,7 +11,7 @@ class ForeignKeyFieldsList(object):
 
 	def __init__(self, table, ref_schema_name, ref_table_name, fields):
 		"""Initializes the list from a list of (field, parent_field) name tuples"""
-		assert type(fields) == type([])
+		assert isinstance(fields, list)
 		self._table = table
 		self._database = table.database
 		self._ref_schema_name = ref_schema_name
@@ -21,7 +21,7 @@ class ForeignKeyFieldsList(object):
 	def __len__(self):
 		return len(self._items)
 
-	def __getItem__(self, key):
+	def __getitem__(self, key):
 		assert type(key) == int
 		(field_name, parent_name) = self._items[key]
 		parent_table = self._database.schemas[self._ref_schema_name].tables[self._ref_table_name]
@@ -41,25 +41,30 @@ class ForeignKeyFieldsList(object):
 class ForeignKey(Constraint):
 	"""Class representing a foreign key in a table in a DB2 database"""
 
-	def __init__(self, table, input, **row):
+	def __init__(self, table, input, *row):
 		"""Initializes an instance of the class from a input row"""
-		super(ForeignKey, self).__init__(table, row['name'])
+		super(ForeignKey, self).__init__(table, row[0])
 		logging.debug("Building foreign key %s" % (self.qualified_name))
 		self.type_name = 'Foreign Key'
-		self.description = row.get('description', None) or self.description
-		self.created = row.get('created', None)
-		self.definer = row.get('definer', None)
-		self.enforced = row.get('enforced', None)
-		self.check_existing = row.get('checkExisting', None)
-		self.query_optimize = row.get('queryOptimize', None)
-		self.delete_rule = row.get('deleteRule', None)
-		self.update_rule = row.get('updateRule', None)
-		self._ref_table_schema = row['refTableSchema']
-		self._ref_table_name = row['refTableName']
-		self._ref_key_name = row['refKeyName']
-		self._fields = ForeignKeyFieldsList(table, self._ref_table_schema, self._ref_table_name, input.foreign_key_fields[(table.schema.name, table.name, self.name)])
+		(
+			_,
+			self.owner,
+			self._system,
+			self.created,
+			self._ref_table_schema,
+			self._ref_table_name,
+			self._ref_key_name,
+			self.delete_rule,
+			self.update_rule,
+			desc
+		) = row
+		self.description = desc or self.description
 		# XXX DB2 specific
 		self._anonymous = re.match('^SQL\d{15}$', self.name)
+		self._fields = ForeignKeyFieldsList(
+			table, self._ref_table_schema, self._ref_table_name,
+			input.foreign_key_cols[(table.schema.name, table.name, self.name)]
+		)
 
 	def _get_fields(self):
 		return self._fields
@@ -71,10 +76,16 @@ class ForeignKey(Constraint):
 			format_ident(self.ref_table.name),
 			', '.join([format_ident(reffield.name) for (myfield, reffield) in self.fields])
 		)
+		rules = {
+			'A': 'NO ACTION',
+			'C': 'CASCADE',
+			'N': 'SET NULL',
+			'R': 'RESTRICT',
+		}
 		if self.delete_rule:
-			sql += ' ON DELETE ' + self.delete_rule
+			sql += ' ON DELETE ' + rules[self.delete_rule]
 		if self.update_rule:
-			sql += ' ON UPDATE ' + self.update_rule
+			sql += ' ON UPDATE ' + rules[self.update_rule]
 		if not self._anonymous:
 			sql = 'CONSTRAINT %s %s' % (self.name, sql)
 		return sql

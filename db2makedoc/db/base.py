@@ -140,7 +140,7 @@ class DocBase(object):
 		"""Returns the SQL required to create the object.
 
 		This property returns the SQL required to create the object. It need
-		not be the exact statement that created the object, or even valid for
+		not be the exact statement that created the object, or even valid for a
 		specific platform. It is simply intended to provide a useful complement
 		to the documentation for those well-versed enough in SQL that they
 		prefer reading raw SQL to a bunch of text.

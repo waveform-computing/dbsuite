@@ -7,22 +7,26 @@ from db2makedoc.db.schemabase import SchemaObject
 class Datatype(SchemaObject):
 	"""Class representing a datatype in a DB2 database"""
 	
-	def __init__(self, schema, input, **row):
+	def __init__(self, schema, input, *row):
 		"""Initializes an instance of the class from a input row"""
-		super(Datatype, self).__init__(schema, row['name'])
+		super(Datatype, self).__init__(schema, row[1])
 		logging.debug("Building datatype %s" % (self.qualified_name))
+		(
+			_,
+			_,
+			self.owner,
+			self._system,
+			self.created,
+			self._source_schema,
+			self._source_name,
+			self.size,
+			self.scale,
+			self.codepage,
+			self.final,
+			desc
+		) = row
 		self.type_name = 'Data Type'
-		self.description = row.get('description', None) or self.description
-		self.definer = row.get('definer', None)
-		self.codepage = row.get('codepage', None)
-		self.created = row.get('created', None)
-		self.final = row.get('final', None)
-		self.type = row['type']
-		self.size = row['size']
-		self.scale = row['scale']
-		self._system = (self.type == 'SYSTEM')
-		self._source_schema = row['sourceSchema']
-		self._source_name = row['sourceName']
+		self.description = desc or self.description
 		# XXX DB2 specific
 		self.variable_size = self._system and (self.size is None) and (self.name != "REFERENCE")
 		self.variable_scale = self._system and (self.name == "DECIMAL")

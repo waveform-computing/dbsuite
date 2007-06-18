@@ -14,14 +14,22 @@ class Database(DocBase):
 		super(Database, self).__init__(None, input.name)
 		logging.debug("Building database")
 		self.type_name = 'Database'
-		self.tablespaces = {}
-		for row in input.tablespaces.itervalues():
-			self.tablespaces[row['name']] = Tablespace(self, input, **row)
-		self.tablespace_list = sorted(self.tablespaces.itervalues(), key=lambda tbspace:tbspace.name)
-		self.schemas = {}
-		for row in input.schemas.itervalues():
-			self.schemas[row['name']] = Schema(self, input, **row)
-		self.schema_list = sorted(self.schemas.itervalues(), key=lambda schema:schema.name)
+		self.tablespace_list = sorted([
+			Tablespace(self, input, *item)
+			for item in input.tablespaces
+		], key=lambda item:item.name)
+		self.tablespaces = dict([
+			(tbspace.name, tbspace)
+			for tbspace in self.tablespace_list
+		])
+		self.schema_list = sorted([
+			Schema(self, input, *item)
+			for item in input.schemas
+		], key=lambda item:item.name)
+		self.schemas = dict([
+			(schema.name, schema)
+			for schema in self.schema_list
+		])
 
 	def find(self, qualified_name):
 		"""Find an object in the hierarchy by its qualified name.
