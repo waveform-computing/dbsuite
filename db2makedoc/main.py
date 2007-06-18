@@ -141,7 +141,7 @@ def main():
 			# configuration values from input_section
 			logging.info(READING_INPUT_MSG % (config_file, input_section, s))
 			try:
-				input = input_plugin.Input(dict(parser.items(input_section)))
+				input = input_plugin.InputPlugin(dict(parser.items(input_section)))
 			except Exception, e:
 				# Unless we're in debug mode, just log errors and continue on
 				# to the next input section
@@ -162,7 +162,7 @@ def main():
 				# Get the output_plugin to generate output from db
 				logging.info(WRITING_OUTPUT_MSG % (config_file, output_section, s))
 				try:
-					output_plugin.Output(db, dict(parser.items(output_section)))
+					output_plugin.OutputPlugin(db, dict(parser.items(output_section)))
 				except Exception, e:
 					# Again, just log errors and continue onto the next output
 					# section unless in debug mode
