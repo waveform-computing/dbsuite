@@ -1086,7 +1086,7 @@ class SQLFormatter(BaseFormatter):
 			try:
 				# Attempt to parse a parenthesized search condition
 				self._expect('(')
-				self._parse_search_condition()
+				self._parse_search_condition(linebreaks)
 				self._expect(')')
 			except ParseError:
 				# If that fails, rewind and parse a predicate instead (which
@@ -1321,6 +1321,7 @@ class SQLFormatter(BaseFormatter):
 		"""Parses a searched CASE expression (CASE WHEN expression...)"""
 		# CASE WHEN already matched
 		# Parse all WHEN cases
+		self._indent(-1)
 		while True:
 			self._parse_search_condition(linebreaks=False) # WHEN Search condition
 			self._expect('THEN')
