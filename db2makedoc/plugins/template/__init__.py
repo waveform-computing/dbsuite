@@ -91,7 +91,7 @@ options = {
 	COPYRIGHT_OPTION: COPYRIGHT_DESC,
 }
 
-def Output(database, config):
+def OutputPlugin(database, config):
 	# Check the config dictionary for missing stuff
 	if not PATH_OPTION in config:
 		raise Exception(MISSING_OPTION % PATH_OPTION)

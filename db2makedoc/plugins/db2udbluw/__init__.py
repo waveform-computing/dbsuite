@@ -14,7 +14,7 @@ mswindows = sys.platform == 'win32'
 import logging
 import datetime
 import re
-import db2makedoc.plugins.input
+import db2makedoc.inputplugin
 
 # Constants
 DATABASE_OPTION = 'database'
@@ -78,7 +78,7 @@ def _make_bool(value, true_value='Y', false_value='N', none_value=' ', unknown_e
 		else:
 			return unknown_result
 
-class InputPlugin(db2makedoc.plugins.input.InputPlugin):
+class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 	def __init__(self, config):
 		super(InputPlugin, self).__init__()
 		# Check the config dictionary for missing stuff

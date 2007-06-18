@@ -246,7 +246,7 @@ def is_input_plugin(module):
 	A module is an input plugin if it exports a callable (function or class
 	definition) called Input.
 	"""
-	return hasattr(module, 'Input') and callable(module.Input)
+	return hasattr(module, 'InputPlugin') and callable(module.InputPlugin)
 
 def is_output_plugin(module):
 	"""Determines whether the specified module is an output plugin.
@@ -254,7 +254,7 @@ def is_output_plugin(module):
 	A module is an output plugin if it exports a callable (function or class
 	definition) called Output.
 	"""
-	return hasattr(module, 'Output') and callable(module.Output)
+	return hasattr(module, 'OutputPlugin') and callable(module.OutputPlugin)
 
 def is_plugin(module):
 	"""Determines whether the specified module is a plugin of either kind."""

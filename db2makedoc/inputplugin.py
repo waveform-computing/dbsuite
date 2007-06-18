@@ -48,7 +48,7 @@ class InputPlugin(object):
 		self.__tablespace_tables = None
 		self.__tablespace_indexes = None
 
-	# METHODS TO OVERRIDE IN PLUGINS ##########################################
+	# METHODS TO OVERRIDE #####################################################
 
 	def _get_schemas(self):
 		"""Retrieves the details of schemas stored in the database.
