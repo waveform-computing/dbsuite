@@ -9,7 +9,7 @@ from db2makedoc.db.field import Field
 from db2makedoc.db.uniquekey import UniqueKey, PrimaryKey
 from db2makedoc.db.foreignkey import ForeignKey
 from db2makedoc.db.check import Check
-from db2makedoc.db.util import format_ident
+from db2makedoc.db.util import format_ident, format_size
 
 class Table(Relation):
 	"""Class representing a table in a DB2 database"""
@@ -33,7 +33,7 @@ class Table(Relation):
 		self.type_name = 'Table'
 		self.description = desc or self.description
 		self._field_list = [
-			Field(self, input, position + 1, *item)
+			Field(self, input, position, *item)
 			for (position, item) in enumerate(input.relation_cols[(schema.name, self.name)])
 		]
 		self._fields = dict([
@@ -115,6 +115,9 @@ class Table(Relation):
 			(constraint.name, constraint)
 			for constraint in self.constraint_list
 		])
+	
+	def _get_size_str(self):
+		return format_size(self.size, for_sql=False)
 
 	def _get_fields(self):
 		return self._fields
@@ -159,4 +162,5 @@ class Table(Relation):
 		"""Returns the tablespace in which the table's data is stored"""
 		return self.database.tablespaces[self._tablespace]
 
+	size_str = property(_get_size_str)
 	tablespace = property(_get_tablespace)

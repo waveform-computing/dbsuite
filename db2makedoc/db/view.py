@@ -28,7 +28,7 @@ class View(Relation):
 		self.type_name = 'View'
 		self.description = desc or self.description
 		self._field_list = [
-			Field(self, input, position + 1, *item)
+			Field(self, input, position, *item)
 			for (position, item) in enumerate(input.relation_cols[(schema.name, self.name)])
 		]
 		self._fields = dict([

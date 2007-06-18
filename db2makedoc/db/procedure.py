@@ -31,7 +31,7 @@ class Procedure(Routine):
 		self.type_name = 'Procedure'
 		self.description = desc or self.description
 		self._param_list = [
-			Param(self, input, position + 1, *item)
+			Param(self, input, position, *item)
 			for (position, item) in enumerate(input.procedure_params[(schema.name, self.specific_name)])
 			if item[1] != 'R'
 		]
@@ -52,22 +52,23 @@ class Procedure(Routine):
 	def _get_prototype(self):
 		
 		def format_params(params):
+			parmtype = {
+				'I': 'IN',
+				'O': 'OUT',
+				'B': 'INOUT',
+			}
 			return ', '.join([
-				'%s %s %s' % (param.type, param.name, param.datatype_str)
+				'%s %s %s' % (parmtype[param.type], param.name, param.datatype_str)
 				for param in params
 			])
 
 		return "%s(%s)" % (self.qualified_name, format_params(self.param_list))
 	
 	def _get_create_sql(self):
-		if self.language == 'SQL':
-			if self.sql:
-				return self.sql + '!'
-			else:
-				return ''
+		if self.sql:
+			return self.sql + '!'
 		else:
-			# XXX Add ability to generate CREATE PROCEDURE for externals
-			raise NotImplementedError
+			return ''
 	
 	def _get_drop_sql(self):
 		sql = Template('DROP SPECIFIC PROCEDURE $schema.$specific;')

@@ -119,11 +119,16 @@ class Schema(DocBase):
 			(routine.name, routine)
 			for routine in self.routine_list
 		])
+		self.specific_routines = dict([
+			(routine.specific_name, routine)
+			for routine in self.routine_list
+		])
 		# XXX Add support for methods
 		# XXX Add support for sequences
 		self.trigger_list = sorted([
 			Trigger(self, input, *item)
 			for item in input.triggers
+			if item[0] == self.name
 		], key=lambda item:item.name)
 		self.triggers = dict([
 			(trigger.name, trigger)

@@ -32,7 +32,7 @@ class Function(Routine):
 		self.type_name = 'Function'
 		self.description = desc or self.description
 		self._param_list = [
-			Param(self, input, position + 1, *item)
+			Param(self, input, position, *item)
 			for (position, item) in enumerate(input.function_params[(schema.name, self.specific_name)])
 			if item[1] != 'R'
 		]
@@ -41,7 +41,7 @@ class Function(Routine):
 			for param in self._param_list
 		])
 		self._return_list = [
-			Param(self, input, position + 1, *item)
+			Param(self, input, position, *item)
 			for (position, item) in enumerate(input.function_params[(schema.name, self.specific_name)])
 			if item[1] == 'R'
 		]
@@ -89,14 +89,10 @@ class Function(Routine):
 		)
 	
 	def _get_create_sql(self):
-		if self.language == 'SQL':
-			if self.sql:
-				return self.sql + '!'
-			else:
-				return ''
+		if self.sql:
+			return self.sql + '!'
 		else:
-			# XXX Add ability to generate CREATE FUNCTION for externals
-			raise NotImplementedError
+			return ''
 	
 	def _get_drop_sql(self):
 		sql = Template('DROP SPECIFIC FUNCTION $schema.$specific;')
