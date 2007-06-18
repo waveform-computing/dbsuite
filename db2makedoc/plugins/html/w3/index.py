@@ -17,66 +17,41 @@ class W3IndexDocument(W3MainDocument):
 		self.section('attributes', 'Attributes')
 		self.add(self.p("""The following table notes various "vital statistics"
 			of the index."""))
-		if not self.dbobject.cluster_factor is None:
-			cluster_ratio = self.dbobject.cluster_factor # XXX Convert as necessary
-		else:
-			cluster_ratio = self.dbobject.cluster_ratio
-		head=[(
-			"Attribute",
-			"Value",
-			"Attribute",
-			"Value"
-		)]
-		data=[
-			(
-				'Table',
-				self.a_to(self.dbobject.table),
-				'Tablespace',
-				self.a_to(self.dbobject.tablespace),
-			),
-			(
-				self.a(self.site.documents['created.html']),
-				self.dbobject.created,
-				self.a(self.site.documents['laststats.html']),
-				self.dbobject.stats_updated,
-			),
-			(
-				self.a(self.site.documents['createdby.html']),
-				self.dbobject.definer,
-				self.a(self.site.documents['colcount.html']),
-				len(fields),
-			),
-			(
-				self.a(self.site.documents['unique.html']),
-				self.dbobject.unique,
-				self.a(self.site.documents['reversescans.html']),
-				self.dbobject.reverse_scans,
-			),
-			(
-				self.a(self.site.documents['leafpages.html']),
-				self.dbobject.leaf_pages,
-				self.a(self.site.documents['sequentialpages.html']),
-				self.dbobject.sequential_pages,
-			),
-			(
-				self.a(self.site.documents['clusterratio.html']),
-				cluster_ratio, # see above
-				self.a(self.site.documents['density.html']),
-				self.dbobject.density,
-			),
-			(
-				self.a(self.site.documents['cardinality.html']),
-				self.dbobject.cardinality[0],
-				(self.a(self.site.documents['levels.html']), {'rowspan': str(len(self.dbobject.cardinality[1]) + 1)}),
-				(self.dbobject.levels,                       {'rowspan': str(len(self.dbobject.cardinality[1]) + 1)}),
-			),
-		]
-		for (cardix, card) in enumerate(self.dbobject.cardinality[1]):
-			data.append((
-				self.a(self.site.documents['cardinality.html']),
-				card,
-			))
-		self.add(self.table(head=head, data=data))
+		self.add(self.table(head=[(
+				"Attribute",
+				"Value",
+				"Attribute",
+				"Value"
+			)],
+			data=[
+				(
+					'Table',
+					self.a_to(self.dbobject.table),
+					'Tablespace',
+					self.a_to(self.dbobject.tablespace),
+				),
+				(
+					self.a(self.site.documents['created.html']),
+					self.dbobject.created,
+					self.a(self.site.documents['laststats.html']),
+					self.dbobject.last_stats,
+				),
+				(
+					self.a(self.site.documents['createdby.html']),
+					self.dbobject.owner,
+					self.a(self.site.documents['colcount.html']),
+					len(fields),
+				),
+				(
+					self.a(self.site.documents['unique.html']),
+					self.dbobject.unique,
+					self.a(self.site.documents['cardinality.html']),
+					self.dbobject.cardinality,
+				),
+				# XXX Include size?
+				# XXX Include system?
+			]
+		))
 		if len(fields) > 0:
 			self.section('fields', 'Fields')
 			self.add(self.table(

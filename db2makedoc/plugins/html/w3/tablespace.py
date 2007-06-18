@@ -31,27 +31,13 @@ class W3TablespaceDocument(W3MainDocument):
 				),
 				(
 					self.a(self.site.documents['createdby.html']),
-					self.dbobject.definer,
+					self.dbobject.owner,
 					self.a(self.site.documents['cardinality.html']),
 					len(indexes),
 				),
 				(
-					self.a(self.site.documents['managedby.html']),
-					self.dbobject.managed_by,
 					self.a(self.site.documents['tbspacetype.html']),
-					self.dbobject.data_type,
-				),
-				(
-					self.a(self.site.documents['extentsize.html']),
-					self.dbobject.extent_size,
-					self.a(self.site.documents['prefetchsize.html']),
-					self.dbobject.prefetch_size,
-				),
-				(
-					self.a(self.site.documents['pagesize.html']),
-					self.dbobject.page_size,
-					self.a(self.site.documents['droprecovery.html']),
-					self.dbobject.drop_recovery,
+					(self.dbobject.type, {'colspan': 3}),
 				),
 			]))
 		if len(tables) > 0:

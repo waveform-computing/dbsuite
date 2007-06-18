@@ -10,6 +10,12 @@ class W3ProcedureDocument(W3MainDocument):
 		super(W3ProcedureDocument, self).__init__(site, procedure)
 	
 	def create_sections(self):
+		access = {
+			'N': 'No SQL',
+			'C': 'Contains SQL',
+			'R': 'Read-only SQL',
+			'M': 'Modifies SQL',
+		}
 		overloads = self.dbobject.schema.procedures[self.dbobject.name]
 		self.section('description', 'Description')
 		self.add(self.p(self.format_prototype(self.dbobject.prototype)))
@@ -31,18 +37,12 @@ class W3ProcedureDocument(W3MainDocument):
 				(
 					self.a(self.site.documents['created.html']),
 					self.dbobject.created,
-					self.a(self.site.documents['funcorigin.html']),
-					self.dbobject.origin,
-				),
-				(
 					self.a(self.site.documents['createdby.html']),
-					self.dbobject.definer,
-					self.a(self.site.documents['funclanguage.html']),
-					self.dbobject.language,
+					self.dbobject.owner,
 				),
 				(
 					self.a(self.site.documents['sqlaccess.html']),
-					self.dbobject.sql_access,
+					access[self.dbobject.sql_access],
 					self.a(self.site.documents['nullcall.html']),
 					self.dbobject.null_call,
 				),
@@ -51,12 +51,6 @@ class W3ProcedureDocument(W3MainDocument):
 					self.dbobject.external_action,
 					self.a(self.site.documents['deterministic.html']),
 					self.dbobject.deterministic,
-				),
-				(
-					self.a(self.site.documents['fenced.html']),
-					self.dbobject.fenced,
-					self.a(self.site.documents['threadsafe.html']),
-					self.dbobject.thread_safe,
 				),
 				(
 					self.a(self.site.documents['specificname.html']),
@@ -76,7 +70,7 @@ class W3ProcedureDocument(W3MainDocument):
 					self.a(self.site.document_map[overload].url, overload.specific_name)
 				) for overload in overloads if overload != self.dbobject]
 			))
-		if self.dbobject.language == 'SQL':
+		if self.dbobject.create_sql:
 			self.section('sql', 'SQL Definition')
 			self.add(self.pre(self.format_sql(self.dbobject.create_sql,
 				terminator='!'), attrs={'class': 'sql'}))

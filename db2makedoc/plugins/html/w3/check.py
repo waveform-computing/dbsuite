@@ -26,13 +26,7 @@ class W3CheckDocument(W3MainDocument):
 					self.a(self.site.documents['created.html']),
 					self.dbobject.created,
 					self.a(self.site.documents['createdby.html']),
-					self.dbobject.definer,
-				),
-				(
-					self.a(self.site.documents['enforced.html']),
-					self.dbobject.enforced,
-					self.a(self.site.documents['queryoptimize.html']),
-					self.dbobject.query_optimize,
+					self.dbobject.owner,
 				),
 			]
 		))

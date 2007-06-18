@@ -29,19 +29,13 @@ class W3ViewDocument(W3MainDocument):
 					self.a(self.site.documents['created.html']),
 					self.dbobject.created,
 					self.a(self.site.documents['createdby.html']),
-					self.dbobject.definer,
+					self.dbobject.owner,
 				),
 				(
 					self.a(self.site.documents['colcount.html']),
 					len(self.dbobject.fields),
-					self.a(self.site.documents['valid.html']),
-					self.dbobject.valid,
-				),
-				(
 					self.a(self.site.documents['readonly.html']),
 					self.dbobject.read_only,
-					self.a(self.site.documents['checkoption.html']),
-					self.dbobject.check,
 				),
 				(
 					self.a(self.site.documents['dependentrel.html']),

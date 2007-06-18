@@ -27,7 +27,7 @@ class W3AliasDocument(W3MainDocument):
 					self.a(self.site.documents['created.html']),
 					self.dbobject.created,
 					self.a(self.site.documents['createdby.html']),
-					self.dbobject.definer,
+					self.dbobject.owner,
 				),
 				(
 					'Alias For',

@@ -25,7 +25,7 @@ class W3UniqueKeyDocument(W3MainDocument):
 			data=[
 				(
 					self.a(self.site.documents['createdby.html']),
-					self.dbobject.definer,
+					self.dbobject.owner,
 					self.a(self.site.documents['colcount.html']),
 					len(fields),
 				),

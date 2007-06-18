@@ -10,6 +10,12 @@ class W3ForeignKeyDocument(W3MainDocument):
 		super(W3ForeignKeyDocument, self).__init__(site, foreignkey)
 	
 	def create_sections(self):
+		rules = {
+			'C': 'Cascade',
+			'N': 'Set NULL',
+			'A': 'Raise Error',
+			'R': 'Raise Error',
+		}
 		self.section('description', 'Description')
 		self.add(self.p(self.format_comment(self.dbobject.description)))
 		self.section('attributes', 'Attributes')
@@ -31,19 +37,13 @@ class W3ForeignKeyDocument(W3MainDocument):
 					self.a(self.site.documents['created.html']),
 					self.dbobject.created,
 					self.a(self.site.documents['createdby.html']),
-					self.dbobject.definer,
-				),
-				(
-					self.a(self.site.documents['enforced.html']),
-					self.dbobject.enforced,
-					self.a(self.site.documents['queryoptimize.html']),
-					self.dbobject.query_optimize,
+					self.dbobject.owner,
 				),
 				(
 					self.a(self.site.documents['deleterule.html']),
-					self.dbobject.delete_rule,
+					rules[self.dbobject.delete_rule],
 					self.a(self.site.documents['updaterule.html']),
-					self.dbobject.update_rule,
+					rules[self.dbobject.update_rule],
 				),
 			]
 		))

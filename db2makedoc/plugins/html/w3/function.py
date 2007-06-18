@@ -10,9 +10,22 @@ class W3FunctionDocument(W3MainDocument):
 		super(W3FunctionDocument, self).__init__(site, function)
 	
 	def create_sections(self):
+		functype = {
+			'C': 'Column/Aggregate',
+			'R': 'Row',
+			'T': 'Table',
+			'S': 'Scalar',
+		}
+		access = {
+			' ': 'No SQL', # XXX Workaround for a bug in DB2 UDB LUW v8.2 (UCASE has SQL_DATA_ACCESS = ' ' when it should be 'N')
+			'N': 'No SQL',
+			'C': 'Contains SQL',
+			'R': 'Read-only SQL',
+			'M': 'Modifies SQL',
+		}
 		overloads = self.dbobject.schema.functions[self.dbobject.name]
 		params = list(self.dbobject.param_list) # Take a copy of the parameter list
-		if self.dbobject.type in ['Row', 'Table']:
+		if self.dbobject.type in ['R', 'T']:
 			# Extend the list with return parameters if the function is a ROW
 			# or TABLE function (and hence, returns multiple named parms)
 			params.extend(self.dbobject.return_list)
@@ -35,26 +48,14 @@ class W3FunctionDocument(W3MainDocument):
 				(
 					self.a(self.site.documents['created.html']),
 					self.dbobject.created,
-					self.a(self.site.documents['funcorigin.html']),
-					self.dbobject.origin,
-				),
-				(
 					self.a(self.site.documents['createdby.html']),
-					self.dbobject.definer,
-					self.a(self.site.documents['funclanguage.html']),
-					self.dbobject.language,
+					self.dbobject.owner,
 				),
 				(
 					self.a(self.site.documents['functype.html']),
-					self.dbobject.type,
+					functype[self.dbobject.type],
 					self.a(self.site.documents['sqlaccess.html']),
-					self.dbobject.sql_access,
-				),
-				(
-					self.a(self.site.documents['castfunc.html']),
-					self.dbobject.cast_function,
-					self.a(self.site.documents['assignfunc.html']),
-					self.dbobject.assign_function,
+					access[self.dbobject.sql_access],
 				),
 				(
 					self.a(self.site.documents['externalaction.html']),
@@ -65,18 +66,8 @@ class W3FunctionDocument(W3MainDocument):
 				(
 					self.a(self.site.documents['nullcall.html']),
 					self.dbobject.null_call,
-					self.a(self.site.documents['fenced.html']),
-					self.dbobject.fenced,
-				),
-				(
-					self.a(self.site.documents['parallelcall.html']),
-					self.dbobject.parallel,
-					self.a(self.site.documents['threadsafe.html']),
-					self.dbobject.thread_safe,
-				),
-				(
 					self.a(self.site.documents['specificname.html']),
-					(self.dbobject.specific_name, {'colspan': 3}),
+					self.dbobject.specific_name,
 				),
 			]
 		))
@@ -92,7 +83,7 @@ class W3FunctionDocument(W3MainDocument):
 					self.a(self.site.document_map[overload].url, overload.specific_name)
 				) for overload in overloads if overload != self.dbobject]
 			))
-		if self.dbobject.language == 'SQL':
+		if self.dbobject.create_sql:
 			self.section('sql', 'SQL Definition')
 			self.add(self.pre(self.format_sql(self.dbobject.create_sql,
 				terminator='!'), attrs={'class': 'sql'}))

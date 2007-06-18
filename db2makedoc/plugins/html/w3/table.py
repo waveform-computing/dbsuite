@@ -35,26 +35,14 @@ class W3TableDocument(W3MainDocument):
 			)],
 			data=[
 				(
-					'Data Tablespace',
-					self.a_to(self.dbobject.data_tablespace),
-					'Index Tablespace',
-					self.a_to(self.dbobject.index_tablespace),
-				),
-				(
-					'Long Tablespace',
-					self.a_to(self.dbobject.long_tablespace),
-					self.a(self.site.documents['clustered.html']),
-					self.dbobject.clustered,
-				),
-				(
 					self.a(self.site.documents['created.html']),
 					self.dbobject.created,
 					self.a(self.site.documents['laststats.html']),
-					self.dbobject.stats_updated,
+					self.dbobject.last_stats,
 				),
 				(
 					self.a(self.site.documents['createdby.html']),
-					self.dbobject.definer,
+					self.dbobject.owner,
 					self.a(self.site.documents['cardinality.html']),
 					self.dbobject.cardinality,
 				),
@@ -65,23 +53,12 @@ class W3TableDocument(W3MainDocument):
 					len(self.dbobject.fields),
 				),
 				(
-					self.a(self.site.documents['rowpages.html']),
-					self.dbobject.row_pages,
-					self.a(self.site.documents['totalpages.html']),
-					self.dbobject.total_pages,
-				),
-				(
 					self.a(self.site.documents['dependentrel.html']),
 					len(self.dbobject.dependent_list),
-					self.a(self.site.documents['locksize.html']),
-					self.dbobject.lock_size,
+					self.a(self.site.documents['size.html']),
+					self.dbobject.size_str,
 				),
-				(
-					self.a(self.site.documents['append.html']),
-					self.dbobject.append,
-					self.a(self.site.documents['volatile.html']),
-					self.dbobject.volatile,
-				),
+				# XXX Include system?
 			]
 		))
 		if len(fields) > 0:
