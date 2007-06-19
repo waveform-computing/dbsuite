@@ -790,7 +790,7 @@ class InputPlugin(object):
 		if self.__checks_list is None:
 			self.__checks_list = reduce(lambda a,b: a+b,
 				[
-					[(schema, name, check) for check in checks]
+					[(schema, name, check[0]) for check in checks]
 					for ((schema, name), checks) in self.checks.iteritems()
 					if len(checks) > 0
 				], []
