@@ -67,7 +67,8 @@ class DocBase(object):
 		name).
 		"""
 		result = self.name
-		if self.parent: result = self.parent.qualified_name + "." + result
+		if self.parent:
+			result = self.parent.qualified_name + '.' + result
 		return result
 
 	def _get_system(self):
@@ -77,7 +78,10 @@ class DocBase(object):
 		user defined (false). Any object which is directly or indirectly owned
 		by a system-defined object is considered system-defined itself.
 		"""
-		return self._system or self.parent.system
+		if self.parent:
+			return self._system or self.parent.system
+		else:
+			return self._system
 
 	def _get_next(self):
 		"""Returns the next sibling of this object.
