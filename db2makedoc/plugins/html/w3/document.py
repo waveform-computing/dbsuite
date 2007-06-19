@@ -544,6 +544,7 @@ class W3CSSDocument(CSSDocument):
 		# We only need one supplemental CSS stylesheet (the default w3v8 are
 		# pretty comprehensive). So this class is brutally simple...
 		self.doc = """\
+/* SQL syntax highlighting */
 .sql {
 	font-size: 8pt;
 	font-family: "Courier New", monospace;
@@ -572,8 +573,12 @@ pre.sql {
 .sql span.sql_parameter  { font-style: italic; }
 .sql span.sql_terminator { }
 
+/* Cell formats for line-numbered SQL */
 td.num_cell { background-color: silver; }
 td.sql_cell { background-color: gray; }
+
+/* Fix display of border around diagrams in Firefox */
+#content-main img { border: 0 none; }
 """
 
 class W3GraphDocument(GraphDocument):
