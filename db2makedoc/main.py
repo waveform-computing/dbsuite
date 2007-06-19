@@ -46,7 +46,7 @@ PLUGIN_DESC_MSG = 'Description:'
 PLUGIN_OPTIONS_MSG = 'Options:'
 
 # Formatting strings
-if hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
+if not mswindows and hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
 	BOLD = '\x1b[1m'
 	NORMAL = '\x1b[0m'
 	RED = '\x1b[31m'
