@@ -5,6 +5,7 @@ import os.path
 import logging
 import codecs
 from db2makedoc.db.base import DocBase
+from db2makedoc.db.database import Database
 from db2makedoc.db.schema import Schema
 from db2makedoc.db.schemabase import Relation
 from db2makedoc.db.table import Table
@@ -37,7 +38,20 @@ class W3CommentHighlighter(HTMLCommentHighlighter):
 		super(W3CommentHighlighter, self).__init__(document)
 
 	def handle_link(self, target):
-		return self.document._a_to(target, qualifiedname=True)
+		# If the target is something we don't generate a document for (like
+		# a column), scan upwards in the hierarchy until we find a document
+		# and return a link to that document with the in between objects added
+		# as normal text suffixes
+		suffixes = []
+		while not target in self.document.site.document_map:
+			suffixes.insert(0, target.name)
+			target = target.parent
+			if isinstance(target, Database):
+				return '.'.join(suffixes)
+		return [
+			self.document._a_to(target, qualifiedname=True),
+			''.join(['.' + s for s in suffixes]),
+		]
 
 	def find_target(self, name):
 		return self.document.site.database.find(name)
