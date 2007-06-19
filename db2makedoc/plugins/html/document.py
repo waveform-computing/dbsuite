@@ -1014,7 +1014,7 @@ class GraphDocument(WebSiteDocument):
 		# Generate the graph and write it out to the specified file
 		if not self._content_done:
 			self._create_content()
-		f = open(self.filename, 'w')
+		f = open(self.filename, 'wb')
 		try:
 			method(f)
 		finally:
