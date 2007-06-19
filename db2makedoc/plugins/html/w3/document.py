@@ -4,8 +4,6 @@
 import os.path
 import logging
 import codecs
-import xml.dom
-import xml.dom.minidom
 from db2makedoc.db.base import DocBase
 from db2makedoc.db.schema import Schema
 from db2makedoc.db.schemabase import Relation
@@ -16,6 +14,22 @@ from db2makedoc.db.trigger import Trigger
 from db2makedoc.dot.graph import Graph, Node, Edge, Cluster
 from db2makedoc.plugins.html.document import AttrDict, HTMLCommentHighlighter, WebSite, HTMLDocument, CSSDocument, GraphDocument
 
+# Try and import the ElementTree API, favouring the faster cElementTree
+# implementation if it's available
+try:
+	import xml.etree.cElementTree as et
+except ImportError:
+	try:
+		import cElementTree as et
+	except ImportError:
+		try:
+			import xml.etree.ElementTree as et
+		except ImportError:
+			try:
+				import elementTree.ElementTree as et
+			except ImportError:
+				raise ImportError('Unable to find an ElementTree implementation')
+
 class W3CommentHighlighter(HTMLCommentHighlighter):
 	def __init__(self, document):
 		"""Initializes an instance of the class."""
@@ -23,7 +37,7 @@ class W3CommentHighlighter(HTMLCommentHighlighter):
 		super(W3CommentHighlighter, self).__init__(document)
 
 	def handle_link(self, target):
-		return self.document.a_to(target, qualifiedname=True)
+		return self.document._a_to(target, qualifiedname=True)
 
 	def find_target(self, name):
 		return self.document.site.database.find(name)
@@ -48,23 +62,23 @@ class W3Document(HTMLDocument):
 		assert isinstance(site, W3Site)
 		super(W3Document, self).__init__(site, url)
 	
-	def init_comment_highlighter(self):
+	def _init_comment_highlighter(self):
 		return W3CommentHighlighter(self)
 
-	def create_content(self):
+	def _create_content(self):
 		# Call the inherited method to create the skeleton document
-		super(W3Document, self).create_content()
+		super(W3Document, self)._create_content()
 		# Add stylesheets and scripts specific to the w3v8 style
-		headnode = self.doc.getElementsByTagName('head')[0]
-		headnode.appendChild(self.meta('IBM.Country', 'US'))
-		headnode.appendChild(self.meta('IBM.Effective', self.date.strftime('%Y-%m-%d'), 'iso8601'))
-		headnode.appendChild(self.script(src='//w3.ibm.com/ui/v8/scripts/scripts.js'))
-		headnode.appendChild(self.style(src='//w3.ibm.com/ui/v8/css/v4-screen.css'))
+		headnode = self._find_element('head')
+		headnode.append(self._meta('IBM.Country', 'US'))
+		headnode.append(self._meta('IBM.Effective', self.date.strftime('%Y-%m-%d'), 'iso8601'))
+		headnode.append(self._script(src='//w3.ibm.com/ui/v8/scripts/scripts.js'))
+		headnode.append(self._style(src='//w3.ibm.com/ui/v8/css/v4-screen.css'))
 	
 	# HTML CONSTRUCTION METHODS
 	# Overridden versions specific to w3 formatting
 	
-	def a_to(self, dbobject, typename=False, qualifiedname=False):
+	def _a_to(self, dbobject, typename=False, qualifiedname=False):
 		# Special version of "a" to create a link to a database object
 		assert isinstance(dbobject, DocBase)
 		href = self.site.document_map[dbobject].url
@@ -74,63 +88,61 @@ class W3Document(HTMLDocument):
 			content = dbobject.name
 		if typename:
 			content = '%s %s' % (dbobject.type_name, content)
-		return self.a(href, content)
+		return self._a(href, content)
 
-	def img_of(self, dbobject):
+	def _img_of(self, dbobject):
 		# Special version of "img" to create diagrams of a database object
 		assert isinstance(dbobject, DocBase)
 		for graph in self.site.graph_map[dbobject]:
-			if graph.usemap:
+			if graph._usemap:
 				# If the graph uses a client side image map for links a bit
 				# more work is required. We need to get the graph to generate
 				# the <map> document, then import all elements from that
 				# document into the document this instance contains...
-				image = self.img(graph.url, attrs={'usemap': graph.url})
-				mapdoc = graph.map()
-				map = self.doc.importNode(mapdoc.documentElement, deep=True)
-				mapdoc.unlink()
-				map.setAttribute('id', graph.url)
-				map.setAttribute('name', graph.url)
+				image = self._img(graph.url, attrs={'usemap': '#' + graph.url})
+				map = graph._map()
+				map.attrib['id'] = graph.url
+				map.attrib['name'] = graph.url
 				return [image, map]
 			else:
-				return self.img(graph.url)
+				return self._img(graph.url)
 
-	def hr(self, attrs={}):
+	def _hr(self, attrs={}):
 		# Overridden to use the w3 dotted line style (uses <div> instead of <hr>)
-		return self.element('div', AttrDict({'class': 'hrule-dots'}) + attrs, u'\u00A0') # \u00A0 == &nbsp;
+		return self._element('div', AttrDict({'class': 'hrule-dots'}) + attrs, u'\u00A0') # \u00A0 == &nbsp;
 	
-	def table(self, data, head=[], foot=[], caption='', attrs={}):
+	def _table(self, data, head=[], foot=[], caption='', attrs={}):
 		# Overridden to color alternate rows white & gray and to apply the
 		# 'title' class to all header rows
-		tablenode = super(W3Document, self).table(data, head, foot, caption, attrs)
-		tablenode.setAttribute('cellpadding', '0')
-		tablenode.setAttribute('cellspacing', '1')
-		tablenode.setAttribute('class', 'basic-table')
+		tablenode = super(W3Document, self)._table(data, head, foot, caption, attrs)
+		tablenode.attrib['cellpadding'] = '0'
+		tablenode.attrib['cellspacing'] = '1'
+		tablenode.attrib['class'] = 'basic-table'
 		try:
-			theadnode = tablenode.getElementsByTagName('thead')[0]
+			theadnode = tablenode.find('thead')
 		except:
 			theadnode = None
 		if theadnode:
-			for rownode in theadnode.getElementsByTagName('tr'):
-				classes = rownode.getAttribute('class').split()
+			for rownode in theadnode.findall('tr'):
+				classes = rownode.attrib.get('class', '').split()
 				classes.append('blue-med-dark')
-				rownode.setAttribute('class', ' '.join(classes))
+				rownode.attrib['class'] = ' '.join(classes)
 		try:
-			tfootnode = tablenode.getElementsByTagName('tfoot')[0]
+			tfootnode = tablenode.find('tfoot')
 		except:
 			tfootnode = None
 		if tfootnode:
-			for rownode in tfootnode.getElementsByTagName('tr'):
-				classes = rownode.getAttribute('class').split()
+			for rownode in tfootnode.findall('tr'):
+				classes = rownode.attrib.get('class', '').split()
 				classes.append('blue-med-dark')
-				rownode.setAttribute('class', ' '.join(classes))
+				rownode.attrib['class'] = ' '.join(classes)
 		# The <tbody> element is mandatory, no try..except necessary
 		colors = ['white', 'gray']
-		tbodynode = tablenode.getElementsByTagName('tbody')[0]
-		for (index, rownode) in enumerate(tbodynode.getElementsByTagName('tr')):
-			classes = rownode.getAttribute('class').split()
+		tbodynode = tablenode.find('tbody')
+		for (index, rownode) in enumerate(tbodynode.findall('tr')):
+			classes = rownode.attrib.get('class', '').split()
 			classes.append(colors[index % 2])
-			rownode.setAttribute('class', ' '.join(classes))
+			rownode.attrib['class'] = ' '.join(classes)
 		return tablenode
 
 class W3MainDocument(W3Document):
@@ -138,12 +150,10 @@ class W3MainDocument(W3Document):
 
 	# Template of the <body> element of a w3v8 document. This is parsed into a
 	# DOM tree, grafted onto the generated document and then filled in by
-	# searching for elements by id in the create_content() method below.
-	template = xml.dom.minidom.parseString(codecs.getencoder('UTF-8')(u"""<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE html
-	PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
-	"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+	# searching for elements by id in the _create_content() method below.
+	template = codecs.getencoder('UTF-8')(u"""\
+<?xml version="1.0" encoding="UTF-8"?>
+<html>
 <head>
 </head>
 <body id="w3-ibm-com" class="article">
@@ -229,7 +239,7 @@ class W3MainDocument(W3Document):
 
 </body>
 </html>
-""")[0])
+""")[0]
 
 	def __init__(self, site, dbobject):
 		"""Initializes an instance of the class."""
@@ -245,10 +255,10 @@ class W3MainDocument(W3Document):
 		logging.debug('Writing documentation for %s %s to %s' % (self.dbobject.type_name, self.dbobject.name, self.filename))
 		super(W3MainDocument, self).write()
 
-	def create_content(self):
+	def _create_content(self):
 		# Overridden to automatically set the link objects and generate the
 		# content from the sections filled in by descendent classes in
-		# create_sections
+		# _create_sections()
 		if not self.link_first:
 			self.link_first = self.site.document_map.get(self.dbobject.first)
 		if not self.link_prior:
@@ -260,42 +270,40 @@ class W3MainDocument(W3Document):
 		if not self.link_up:
 			self.link_up = self.site.document_map.get(self.dbobject.parent)
 		# Call the inherited method to create the skeleton document
-		super(W3MainDocument, self).create_content()
+		super(W3MainDocument, self)._create_content()
 		# Add styles specific to w3v8 main documents
-		headnode = self.doc.getElementsByTagName('head')[0]
-		headnode.appendChild(self.style(content="""
+		headnode = self.doc.find('head')
+		headnode.append(self._style(content="""
 			@import url("//w3.ibm.com/ui/v8/css/screen.css");
 			@import url("//w3.ibm.com/ui/v8/css/icons.css");
 			@import url("//w3.ibm.com/ui/v8/css/tables.css");
 			@import url("//w3.ibm.com/ui/v8/css/interior.css");
 			@import url("//w3.ibm.com/ui/v8/css/interior-1-col.css");
 		""", media='all'))
-		headnode.appendChild(self.style(src='sql.css', media='all'))
-		headnode.appendChild(self.style(src='//w3.ibm.com/ui/v8/css/print.css', media='print'))
+		headnode.append(self._style(src='sql.css', media='all'))
+		headnode.append(self._style(src='//w3.ibm.com/ui/v8/css/print.css', media='print'))
 		# Parse the HTML in template and graft the <body> element onto the
 		# <body> element in self.doc
-		oldbodynode = self.doc.getElementsByTagName('body')[0]
-		newbodynode = self.template.getElementsByTagName('body')[0]
-		newbodynode = self.doc.importNode(newbodynode, deep=True)
-		self.doc.documentElement.replaceChild(newbodynode, oldbodynode)
+		self.doc.remove(self.doc.find('body'))
+		self.doc.append(et.fromstring(self.template).find('body'))
 		# Fill in the template
-		self.append_content(self.find_element('div', 'site-title-only'), '%s Documentation' % self.dbobject.database.name)
-		self.append_content(self.find_element('p', 'date-stamp'), 'Updated on %s' % self.date.strftime('%a, %d %b %Y'))
-		self.create_crumbs()
-		self.create_menu()
 		self.sections = []
-		self.create_sections()
-		mainnode = self.find_element('div', 'content-main')
-		mainnode.appendChild(self.h('%s %s' % (self.dbobject.type_name, self.dbobject.qualified_name), level=1))
-		mainnode.appendChild(self.ul([self.a('#%s' % section['id'], section['title'], 'Jump to section') for section in self.sections]))
+		self._append_content(self._find_element('div', 'site-title-only'), '%s Documentation' % self.dbobject.database.name)
+		self._append_content(self._find_element('p', 'date-stamp'), 'Updated on %s' % self.date.strftime('%a, %d %b %Y'))
+		self._create_crumbs()
+		self._create_menu()
+		self._create_sections()
+		mainnode = self._find_element('div', 'content-main')
+		mainnode.append(self._h('%s %s' % (self.dbobject.type_name, self.dbobject.qualified_name), level=1))
+		mainnode.append(self._ul([self._a('#%s' % section['id'], section['title'], 'Jump to section') for section in self.sections]))
 		for section in self.sections:
-			mainnode.appendChild(self.hr())
-			mainnode.appendChild(self.h(section['title'], level=2, attrs={'id': section['id']}))
-			self.append_content(mainnode, section['content'])
-			mainnode.appendChild(self.p(self.a('#masthead', 'Back to top', 'Jump to top')))
-		mainnode.appendChild(self.p(self.a('http://w3.ibm.com/w3/info_terms_of_use.html', 'Terms of use'), attrs={'class': 'terms'}))
+			mainnode.append(self._hr())
+			mainnode.append(self._h(section['title'], level=2, attrs={'id': section['id']}))
+			self._append_content(mainnode, section['content'])
+			mainnode.append(self._p(self._a('#masthead', 'Back to top', 'Jump to top')))
+		mainnode.append(self._p(self._a('http://w3.ibm.com/w3/info_terms_of_use.html', 'Terms of use'), attrs={'class': 'terms'}))
 
-	def create_menu(self):
+	def _create_menu(self):
 		"""Creates the content of left-hand navigation menu."""
 		
 		def make_menu_level(selitem, active, subitems):
@@ -393,39 +401,43 @@ class W3MainDocument(W3Document):
 			level -- (optional) The current nesting level
 			"""
 			classes = ['top-level', 'second-level', 'third-level']
-			parent = parent.appendChild(self.doc.createElement('div'))
-			parent.setAttribute('class', classes[level])
+			e = self._div('', attrs={
+				'class': classes[level]
+			})
+			parent.append(e)
+			parent = e
 			for (url, content, title, active, children) in items:
-				link = parent.appendChild(self.a(url, content, title))
+				link = self._a(url, content, title)
+				parent.append(link)
 				if active:
-					link.setAttribute('class', 'active')
+					link.attrib['class'] = 'active'
 				if len(children) > 0 and level + 1 < len(classes):
 					make_menu_dom(parent, children, level + 1)
 
-		make_menu_dom(self.find_element('div', 'left-nav'), make_menu_tree(self.dbobject))
+		make_menu_dom(self._find_element('div', 'left-nav'), make_menu_tree(self.dbobject))
 
-	def create_crumbs(self):
+	def _create_crumbs(self):
 		"""Creates the breadcrumb links at the top of the page."""
 		crumbs = []
 		item = self.dbobject
 		while item is not None:
-			crumbs.insert(0, self.a_to(item, typename=True, qualifiedname=False))
-			crumbs.insert(0, self.doc.createTextNode(u' \u00BB ')) # \u00BB == &raquo;
+			crumbs.insert(0, self._a_to(item, typename=True, qualifiedname=False))
+			crumbs.insert(0, u' \u00BB ') # \u00BB == &raquo;
 			item = item.parent
-		crumbs.insert(0, self.a('index.html', 'Home'))
-		self.append_content(self.find_element('p', 'breadcrumbs'), crumbs)
+		crumbs.insert(0, self._a('index.html', 'Home'))
+		self._append_content(self._find_element('p', 'breadcrumbs'), crumbs)
 	
 	# CONTENT METHODS
 	# The following methods are for use in descendent classes to fill the
 	# sections list with content. Basically, all descendent classes need to do
-	# is override the create_sections() method, calling section() and add() in
+	# is override the _create_sections() method, calling section() and add() in
 	# their implementation
 
-	def create_sections(self):
+	def _create_sections(self):
 		# Override in descendent classes
 		pass
 
-	def section(self, id, title):
+	def _section(self, id, title):
 		"""Starts a new section in the body of the current document.
 
 		Parameters:
@@ -434,7 +446,7 @@ class W3MainDocument(W3Document):
 		"""
 		self.sections.append({'id': id, 'title': title, 'content': []})
 	
-	def add(self, content):
+	def _add(self, content):
 		"""Add HTML content or elements to the end of the current section.
 
 		Parameters:
@@ -447,22 +459,10 @@ class W3PopupDocument(W3Document):
 
 	# Template of the <body> element of a popup document. This is parsed into a
 	# DOM tree, grafted onto the generated document and then filled in by
-	# searching for elements by id in the create_content() method below.
-
-	def __init__(self, site, url, title, body, width=400, height=300):
-		"""Initializes an instance of the class."""
-		super(W3PopupDocument, self).__init__(site, url)
-		# Modify the url to use the JS popup() routine. Note that this won't
-		# affect the filename property (used by write()) as the super-class'
-		# constructor will already have set that
-		self.url = 'javascript:popup("%s","internal",%d,%d)' % (url, height, width)
-		self.title = title
-		self.content = xml.dom.minidom.parseString(codecs.getencoder('UTF-8')(u"""\
+	# searching for elements by id in the _create_content() method below.
+	template = codecs.getencoder('UTF-8')(u"""\
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE html
-	PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
-	"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<html>
 <head>
 </head>
 <body id="w3-ibm-com">
@@ -499,32 +499,40 @@ class W3PopupDocument(W3Document):
 
 </body>
 </html>
-""" % (title, body))[0])
+""")[0]
+
+	def __init__(self, site, url, title, body, width=400, height=300):
+		"""Initializes an instance of the class."""
+		super(W3PopupDocument, self).__init__(site, url)
+		# Modify the url to use the JS popup() routine. Note that this won't
+		# affect the filename property (used by write()) as the super-class'
+		# constructor will already have set that
+		self.url = 'javascript:popup("%s","internal",%d,%d)' % (url, height, width)
+		self.title = title
+		self.body = body
 	
 	def write(self):
 		# Overridden to add logging
 		logging.debug('Writing popup document to %s' % self.filename)
 		super(W3PopupDocument, self).write()
 
-	def create_content(self):
+	def _create_content(self):
 		# Call the inherited method to create the skeleton document
-		super(W3PopupDocument, self).create_content()
+		super(W3PopupDocument, self)._create_content()
 		# Add styles specific to w3v8 popup documents
-		headnode = self.doc.getElementsByTagName('head')[0]
-		headnode.appendChild(self.style(src='//w3.ibm.com/ui/v8/css/v4-interior.css'))
-		headnode.appendChild(self.style(content="""
+		headnode = self.doc.find('head')
+		headnode.append(self._style(src='//w3.ibm.com/ui/v8/css/v4-interior.css'))
+		headnode.append(self._style(content="""
 			@import url("//w3.ibm.com/ui/v8/css/screen.css");
 			@import url("//w3.ibm.com/ui/v8/css/interior.css");
 			@import url("//w3.ibm.com/ui/v8/css/popup-window.css");
 		""", media='all'))
-		headnode.appendChild(self.style(src='sql.css', media='all'))
-		headnode.appendChild(self.style(src='//w3.ibm.com/ui/v8/css/print.css', media='print'))
+		headnode.append(self._style(src='sql.css', media='all'))
+		headnode.append(self._style(src='//w3.ibm.com/ui/v8/css/print.css', media='print'))
 		# Graft the <body> element from self.content onto the <body> element in
 		# self.doc
-		oldbodynode = self.doc.getElementsByTagName('body')[0]
-		newbodynode = self.content.getElementsByTagName('body')[0]
-		newbodynode = self.doc.importNode(newbodynode, deep=True)
-		self.doc.documentElement.replaceChild(newbodynode, oldbodynode)
+		self.doc.remove(self.doc.find('body'))
+		self.doc.append(et.fromstring(self.template % (self.title, self.body)).find('body'))
 
 class W3CSSDocument(CSSDocument):
 	"""Stylesheet class to supplement the w3v8 style with SQL syntax highlighting."""
@@ -586,20 +594,20 @@ class W3GraphDocument(GraphDocument):
 			count = 1
 		super(W3GraphDocument, self).__init__(site, '%s%d.png' % (dbobject.identifier, count))
 	
-	def create_graph(self):
+	def _create_graph(self):
 		# Override in descendent classes to generate nodes, edges, etc. in the
 		# graph
 		pass
 
-	def create_content(self):
+	def _create_content(self):
 		# Call the inherited method in case it does anything
-		super(W3GraphDocument, self).create_content()
-		# Call create_graph to create the content of the graph
-		self.create_graph()
+		super(W3GraphDocument, self)._create_content()
+		# Call _create_graph to create the content of the graph
+		self._create_graph()
 		# Tweak some of the graph attributes to make it scale a bit more nicely
 		self.graph.rankdir = 'LR'
 		self.graph.dpi = '75'
-		self.graph.ratio = '1.5' # See width and height attributes in img_of()
+		self.graph.ratio = '1.5' # See width and height attributes in _img_of()
 		# Transform dbobject attributes on Node, Edge and Cluster objects into
 		# URL attributes 
 
@@ -623,7 +631,7 @@ class W3GraphDocument(GraphDocument):
 		logging.debug('Writing graph for %s %s to %s' % (self.dbobject.type_name, self.dbobject.name, f))
 		super(W3GraphDocument, self).write()
 	
-	def add_dbobject(self, dbobject, selected=False):
+	def _add_dbobject(self, dbobject, selected=False):
 		"""Utility method to add a database object to the graph.
 
 		This utility method adds the specified database object along with
@@ -639,7 +647,7 @@ class W3GraphDocument(GraphDocument):
 				o.fillcolor = '#ece6d7'
 				o.color = '#ece6d7'
 			elif isinstance(dbobject, Relation):
-				cluster = self.add_dbobject(dbobject.schema)
+				cluster = self._add_dbobject(dbobject.schema)
 				o = Node(cluster, dbobject.qualified_name)
 				o.shape = 'rectangle'
 				o.style = 'filled'
@@ -655,7 +663,7 @@ class W3GraphDocument(GraphDocument):
 					o.fillcolor = '#ffffbb'
 				o.color = '#000000'
 			elif isinstance(dbobject, Trigger):
-				cluster = self.add_dbobject(dbobject.schema)
+				cluster = self._add_dbobject(dbobject.schema)
 				o = Node(cluster, dbobject.qualified_name)
 				o.shape = 'hexagon'
 				o.style = 'filled'

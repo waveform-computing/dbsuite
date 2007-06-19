@@ -9,13 +9,13 @@ class W3TablespaceDocument(W3MainDocument):
 		assert isinstance(tablespace, Tablespace)
 		super(W3TablespaceDocument, self).__init__(site, tablespace)
 
-	def create_sections(self):
+	def _create_sections(self):
 		tables = [obj for (name, obj) in sorted(self.dbobject.tables.items(), key=lambda (name, obj): name)]
 		indexes = [obj for (name, obj) in sorted(self.dbobject.indexes.items(), key=lambda (name, obj): name)]
-		self.section('description', 'Description')
-		self.add(self.p(self.format_comment(self.dbobject.description)))
-		self.section('attributes', 'Attributes')
-		self.add(self.table(
+		self._section('description', 'Description')
+		self._add(self._p(self._format_comment(self.dbobject.description)))
+		self._section('attributes', 'Attributes')
+		self._add(self._table(
 			head=[(
 				'Attribute',
 				'Value',
@@ -24,46 +24,46 @@ class W3TablespaceDocument(W3MainDocument):
 			)],
 			data=[
 				(
-					self.a(self.site.documents['created.html']),
+					self._a(self.site.documents['created.html']),
 					self.dbobject.created,
-					self.a(self.site.documents['tables.html']),
+					self._a(self.site.documents['tables.html']),
 					len(tables),
 				),
 				(
-					self.a(self.site.documents['createdby.html']),
+					self._a(self.site.documents['createdby.html']),
 					self.dbobject.owner,
-					self.a(self.site.documents['cardinality.html']),
+					self._a(self.site.documents['cardinality.html']),
 					len(indexes),
 				),
 				(
-					self.a(self.site.documents['tbspacetype.html']),
+					self._a(self.site.documents['tbspacetype.html']),
 					(self.dbobject.type, {'colspan': 3}),
 				),
 			]))
 		if len(tables) > 0:
-			self.section('tables', 'Tables')
-			self.add(self.table(
+			self._section('tables', 'Tables')
+			self._add(self._table(
 				head=[(
 					'Name',
 					'Description'
 				)],
 				data=[(
-					self.a_to(table, qualifiedname=True),
-					self.format_comment(table.description, summary=True)
+					self._a_to(table, qualifiedname=True),
+					self._format_comment(table.description, summary=True)
 				) for table in tables]
 			))
 		if len(indexes) > 0:
-			self.section('indexes', 'Indexes')
-			self.add(self.table(
+			self._section('indexes', 'Indexes')
+			self._add(self._table(
 				head=[(
 					'Name',
 					'Applies To',
 					'Description'
 				)],
 				data=[(
-					self.a_to(index, qualifiedname=True),
-					self.a_to(index.table, qualifiedname=True),
-					self.format_comment(index.description, summary=True)
+					self._a_to(index, qualifiedname=True),
+					self._a_to(index.table, qualifiedname=True),
+					self._format_comment(index.description, summary=True)
 				) for index in indexes]
 			))
 

@@ -9,12 +9,12 @@ class W3CheckDocument(W3MainDocument):
 		assert isinstance(check, Check)
 		super(W3CheckDocument, self).__init__(site, check)
 
-	def create_sections(self):
+	def _create_sections(self):
 		fields = sorted(list(self.dbobject.fields), key=lambda field: field.name)
-		self.section('description', 'Description')
-		self.add(self.p(self.format_comment(self.dbobject.description)))
-		self.section('attributes', 'Attributes')
-		self.add(self.table(
+		self._section('description', 'Description')
+		self._add(self._p(self._format_comment(self.dbobject.description)))
+		self._section('attributes', 'Attributes')
+		self._add(self._table(
 			head=[(
 				"Attribute",
 				"Value",
@@ -23,25 +23,25 @@ class W3CheckDocument(W3MainDocument):
 			)],
 			data=[
 				(
-					self.a(self.site.documents['created.html']),
+					self._a(self.site.documents['created.html']),
 					self.dbobject.created,
-					self.a(self.site.documents['createdby.html']),
+					self._a(self.site.documents['createdby.html']),
 					self.dbobject.owner,
 				),
 			]
 		))
 		if len(fields) > 0:
-			self.section('fields', 'Fields')
-			self.add(self.table(
+			self._section('fields', 'Fields')
+			self._add(self._table(
 				head=[(
 					"Field",
 					"Description"
 				)],
 				data=[(
 					field.name,
-					self.format_comment(field.description, summary=True)
+					self._format_comment(field.description, summary=True)
 				) for field in fields]
 			))
-		self.section('sql', 'SQL Definition')
-		self.add(self.pre(self.format_sql(self.dbobject.create_sql), attrs={'class': 'sql'}))
+		self._section('sql', 'SQL Definition')
+		self._add(self._pre(self._format_sql(self.dbobject.create_sql), attrs={'class': 'sql'}))
 

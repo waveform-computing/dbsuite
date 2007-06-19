@@ -161,13 +161,14 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				try:
 					# Try the mxODBC framework
 					import mx.ODBC
-					# XXX Fix connection string
+					# XXX Check whether escaping/quoting is required
+					connectstr = 'DSN=%s;UID=%s;PWD=%s' % (dsn, username, password)
 					if mswindows:
 						import mx.ODBC.Windows
-						return mx.ODBC.Windows.DriverConnect('DSN=%s;UID=%s;PWD=%s')
+						return mx.ODBC.Windows.DriverConnect(connectstr)
 					else:
 						import mx.ODBC.iODBC
-						return mx.ODBC.iODBC.DriverConnect('DSN=%s;UID=%s;PWD=%s')
+						return mx.ODBC.iODBC.DriverConnect(connectstr)
 				except ImportError:
 					raise Exception('Unable to find a suitable connection framework')
 
@@ -411,7 +412,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				END                   AS SYSTEM,
 				CHAR(T.CREATE_TIME)   AS CREATED,
 				V.READONLY            AS READONLY,
-				COALESCE(V.TEXT, '')  AS SQL,
+				V.TEXT                AS SQL,
 				T.REMARKS             AS DESCRIPTION
 			FROM
 				%(schema)s.TABLES T
@@ -761,10 +762,8 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 					WHEN 'D' THEN 'D'
 					ELSE 'N'
 				END                              AS GENERATED,
-				CASE GENERATED
-					WHEN ' ' THEN RTRIM(DEFAULT)
-					ELSE RTRIM(COALESCE(TEXT, ''))
-				END                              AS DEFAULT,
+				TEXT                             AS TEXT,
+				COALESCE(DEFAULT, '')            AS DEFAULT,
 				REMARKS                          AS DESCRIPTION
 			FROM
 				%(schema)s.COLUMNS
@@ -789,13 +788,14 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				cardinality,
 				nullcard,
 				generated,
+				gendefault,
 				default,
 				desc
 			) in cursor.fetchall():
 			identity = _make_bool(identity)
 			nullable = _make_bool(nullable)
 			if not codepage: codepage = None
-			default = str(default)
+			if generated != 'N': default = str(gendefault)
 			result.append((
 				schema,
 				name,
@@ -1107,7 +1107,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 					ELSE 'N'
 				END                   AS SYSTEM,
 				CHAR(C.CREATE_TIME)   AS CREATED,
-				COALESCE(C.TEXT, '')  AS SQL,
+				C.TEXT                AS SQL,
 				T.REMARKS             AS DESCRIPTION
 			FROM
 				%(schema)s.TABCONST T
@@ -1605,7 +1605,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				TRIGTIME           AS TRIGTIME,
 				TRIGEVENT          AS TRIGEVENT,
 				GRANULARITY        AS GRANULARITY,
-				COALESCE(TEXT, '') AS SQL,
+				TEXT               AS SQL,
 				REMARKS            AS DESCRIPTION
 			FROM
 				%(schema)s.TRIGGERS

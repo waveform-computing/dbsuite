@@ -9,7 +9,7 @@ class W3ProcedureDocument(W3MainDocument):
 		assert isinstance(procedure, Procedure)
 		super(W3ProcedureDocument, self).__init__(site, procedure)
 	
-	def create_sections(self):
+	def _create_sections(self):
 		access = {
 			'N': 'No SQL',
 			'C': 'Contains SQL',
@@ -17,16 +17,16 @@ class W3ProcedureDocument(W3MainDocument):
 			'M': 'Modifies SQL',
 		}
 		overloads = self.dbobject.schema.procedures[self.dbobject.name]
-		self.section('description', 'Description')
-		self.add(self.p(self.format_prototype(self.dbobject.prototype)))
-		self.add(self.p(self.format_comment(self.dbobject.description)))
+		self._section('description', 'Description')
+		self._add(self._p(self._format_prototype(self.dbobject.prototype)))
+		self._add(self._p(self._format_comment(self.dbobject.description)))
 		# XXX What about the IN/OUT/INOUT state of procedure parameters?
-		self.add(self.dl([
-			(param.name, self.format_comment(param.description))
+		self._add(self._dl([
+			(param.name, self._format_comment(param.description))
 			for param in self.dbobject.param_list
 		]))
-		self.section('attributes', 'Attributes')
-		self.add(self.table(
+		self._section('attributes', 'Attributes')
+		self._add(self._table(
 			head=[(
 				"Attribute",
 				"Value",
@@ -35,43 +35,43 @@ class W3ProcedureDocument(W3MainDocument):
 			)],
 			data=[
 				(
-					self.a(self.site.documents['created.html']),
+					self._a(self.site.documents['created.html']),
 					self.dbobject.created,
-					self.a(self.site.documents['createdby.html']),
+					self._a(self.site.documents['createdby.html']),
 					self.dbobject.owner,
 				),
 				(
-					self.a(self.site.documents['sqlaccess.html']),
+					self._a(self.site.documents['sqlaccess.html']),
 					access[self.dbobject.sql_access],
-					self.a(self.site.documents['nullcall.html']),
+					self._a(self.site.documents['nullcall.html']),
 					self.dbobject.null_call,
 				),
 				(
-					self.a(self.site.documents['externalaction.html']),
+					self._a(self.site.documents['externalaction.html']),
 					self.dbobject.external_action,
-					self.a(self.site.documents['deterministic.html']),
+					self._a(self.site.documents['deterministic.html']),
 					self.dbobject.deterministic,
 				),
 				(
-					self.a(self.site.documents['specificname.html']),
+					self._a(self.site.documents['specificname.html']),
 					(self.dbobject.specific_name, {'colspan': 3}),
 				),
 			]
 		))
 		if len(overloads) > 1:
-			self.section('overloads', 'Overloaded Versions')
-			self.add(self.table(
+			self._section('overloads', 'Overloaded Versions')
+			self._add(self._table(
 				head=[(
 					'Prototype',
 					'Specific Name',
 				)],
 				data=[(
-					self.format_prototype(overload.prototype),
-					self.a(self.site.document_map[overload].url, overload.specific_name)
+					self._format_prototype(overload.prototype),
+					self._a(self.site.document_map[overload].url, overload.specific_name)
 				) for overload in overloads if overload != self.dbobject]
 			))
 		if self.dbobject.create_sql:
-			self.section('sql', 'SQL Definition')
-			self.add(self.pre(self.format_sql(self.dbobject.create_sql,
+			self._section('sql', 'SQL Definition')
+			self._add(self._pre(self._format_sql(self.dbobject.create_sql,
 				terminator='!'), attrs={'class': 'sql'}))
 

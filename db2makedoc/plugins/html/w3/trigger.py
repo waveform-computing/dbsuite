@@ -9,7 +9,7 @@ class W3TriggerDocument(W3MainDocument):
 		assert isinstance(trigger, Trigger)
 		super(W3TriggerDocument, self).__init__(site, trigger)
 
-	def create_sections(self):
+	def _create_sections(self):
 		trigtime = {
 			'A': 'After',
 			'B': 'Before',
@@ -24,10 +24,10 @@ class W3TriggerDocument(W3MainDocument):
 			'R': 'Row',
 			'S': 'Statement',
 		}
-		self.section('description', 'Description')
-		self.add(self.p(self.format_comment(self.dbobject.description)))
-		self.section('attributes', 'Attributes')
-		self.add(self.table(
+		self._section('description', 'Description')
+		self._add(self._p(self._format_comment(self.dbobject.description)))
+		self._section('attributes', 'Attributes')
+		self._add(self._table(
 			head=[(
 				'Attribute',
 				'Value',
@@ -36,25 +36,25 @@ class W3TriggerDocument(W3MainDocument):
 			)],
 			data=[
 				(
-					self.a(self.site.documents['created.html']),
+					self._a(self.site.documents['created.html']),
 					self.dbobject.created,
-					self.a(self.site.documents['createdby.html']),
+					self._a(self.site.documents['createdby.html']),
 					self.dbobject.owner,
 				),
 				(
-					self.a(self.site.documents['triggertiming.html']),
+					self._a(self.site.documents['triggertiming.html']),
 					trigtime[self.dbobject.trigger_time],
-					self.a(self.site.documents['triggerevent.html']),
+					self._a(self.site.documents['triggerevent.html']),
 					trigevent[self.dbobject.trigger_event],
 				),
 				(
-					self.a(self.site.documents['granularity.html']),
+					self._a(self.site.documents['granularity.html']),
 					granularity[self.dbobject.granularity],
 					'Relation',
-					self.a_to(self.dbobject.relation, qualifiedname=True),
+					self._a_to(self.dbobject.relation, qualifiedname=True),
 				),
 			]))
-		self.section('sql', 'SQL Definition')
-		self.add(self.pre(self.format_sql(self.dbobject.create_sql,
+		self._section('sql', 'SQL Definition')
+		self._add(self._pre(self._format_sql(self.dbobject.create_sql,
 			terminator='!'), attrs={'class': 'sql'}))
 

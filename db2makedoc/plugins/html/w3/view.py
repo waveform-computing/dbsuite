@@ -9,15 +9,15 @@ class W3ViewDocument(W3MainDocument):
 		assert isinstance(view, View)
 		super(W3ViewDocument, self).__init__(site, view)
 	
-	def create_sections(self):
+	def _create_sections(self):
 		fields = [obj for (name, obj) in sorted(self.dbobject.fields.items(), key=lambda (name, obj): name)]
 		triggers = [obj for (name, obj) in sorted(self.dbobject.triggers.items(), key=lambda (name, obj): name)]
 		dependencies = [obj for (name, obj) in sorted(self.dbobject.dependencies.items(), key=lambda (name, obj): name)]
 		dependents = [obj for (name, obj) in sorted(self.dbobject.dependents.items(), key=lambda (name, obj): name)]
-		self.section('description', 'Description')
-		self.add(self.p(self.format_comment(self.dbobject.description)))
-		self.section('attributes', 'Attributes')
-		self.add(self.table(
+		self._section('description', 'Description')
+		self._add(self._p(self._format_comment(self.dbobject.description)))
+		self._section('attributes', 'Attributes')
+		self._add(self._table(
 			head=[(
 				'Attribute',
 				'Value',
@@ -26,38 +26,38 @@ class W3ViewDocument(W3MainDocument):
 			)],
 			data=[
 				(
-					self.a(self.site.documents['created.html']),
+					self._a(self.site.documents['created.html']),
 					self.dbobject.created,
-					self.a(self.site.documents['createdby.html']),
+					self._a(self.site.documents['createdby.html']),
 					self.dbobject.owner,
 				),
 				(
-					self.a(self.site.documents['colcount.html']),
+					self._a(self.site.documents['colcount.html']),
 					len(self.dbobject.fields),
-					self.a(self.site.documents['readonly.html']),
+					self._a(self.site.documents['readonly.html']),
 					self.dbobject.read_only,
 				),
 				(
-					self.a(self.site.documents['dependentrel.html']),
+					self._a(self.site.documents['dependentrel.html']),
 					len(self.dbobject.dependent_list),
-					self.a(self.site.documents['dependenciesrel.html']),
+					self._a(self.site.documents['dependenciesrel.html']),
 					len(self.dbobject.dependency_list),
 				)
 			]))
 		if len(fields) > 0:
-			self.section('fields', 'Field Descriptions')
-			self.add(self.table(
+			self._section('fields', 'Field Descriptions')
+			self._add(self._table(
 				head=[(
 					'Name',
 					'Description'
 				)],
 				data=[(
 					field.name,
-					self.format_comment(field.description, summary=True)
+					self._format_comment(field.description, summary=True)
 				) for field in fields]
 			))
-			self.section('field_schema', 'Field Schema')
-			self.add(self.table(
+			self._section('field_schema', 'Field Schema')
+			self._add(self._table(
 				head=[(
 					'#',
 					'Name',
@@ -72,8 +72,8 @@ class W3ViewDocument(W3MainDocument):
 				) for field in fields]
 			))
 		if len(triggers) > 0:
-			self.section('triggers', 'Triggers')
-			self.add(self.table(
+			self._section('triggers', 'Triggers')
+			self._add(self._table(
 				head=[(
 					'Name',
 					'Timing',
@@ -81,44 +81,44 @@ class W3ViewDocument(W3MainDocument):
 					'Description'
 				)],
 				data=[(
-					self.a_to(trigger, qualifiedname=True),
+					self._a_to(trigger, qualifiedname=True),
 					trigger.trigger_time,
 					trigger.trigger_event,
-					self.format_comment(trigger.description, summary=True)
+					self._format_comment(trigger.description, summary=True)
 				) for trigger in triggers]
 			))
 		if len(dependents) > 0:
-			self.section('dependents', 'Dependent Relations')
-			self.add(self.table(
+			self._section('dependents', 'Dependent Relations')
+			self._add(self._table(
 				head=[(
 					'Name',
 					'Type',
 					'Description'
 				)],
 				data=[(
-					self.a_to(dep, qualifiedname=True),
+					self._a_to(dep, qualifiedname=True),
 					dep.type_name,
-					self.format_comment(dep.description, summary=True)
+					self._format_comment(dep.description, summary=True)
 				) for dep in dependents]
 			))
 		if len(dependencies) > 0:
-			self.section('dependencies', 'Dependencies')
-			self.add(self.table(
+			self._section('dependencies', 'Dependencies')
+			self._add(self._table(
 				head=[(
 					'Name',
 					'Type',
 					'Description'
 				)],
 				data=[(
-					self.a_to(dep, qualifiedname=True),
+					self._a_to(dep, qualifiedname=True),
 					dep.type_name,
-					self.format_comment(dep.description, summary=True)
+					self._format_comment(dep.description, summary=True)
 				) for dep in dependencies]
 			))
-		self.section('diagram', 'Diagram')
-		self.add(self.img_of(self.dbobject))
-		self.section('sql', 'SQL Definition')
-		self.add(self.pre(self.format_sql(self.dbobject.create_sql),
+		self._section('diagram', 'Diagram')
+		self._add(self._img_of(self.dbobject))
+		self._section('sql', 'SQL Definition')
+		self._add(self._pre(self._format_sql(self.dbobject.create_sql),
 			attrs={'class': 'sql'}))
 
 class W3ViewGraph(W3GraphDocument):
@@ -126,17 +126,17 @@ class W3ViewGraph(W3GraphDocument):
 		assert isinstance(view, View)
 		super(W3ViewGraph, self).__init__(site, view)
 
-	def create_graph(self):
-		super(W3ViewGraph, self).create_graph()
+	def _create_graph(self):
+		super(W3ViewGraph, self)._create_graph()
 		view = self.dbobject
-		view_node = self.add_dbobject(view, selected=True)
+		view_node = self._add_dbobject(view, selected=True)
 		for dependent in view.dependent_list:
-			dep_node = self.add_dbobject(dependent)
+			dep_node = self._add_dbobject(dependent)
 			dep_edge = dep_node.connect_to(view_node)
 			dep_edge.label = '<uses>'
 			dep_edge.arrowhead = 'onormal'
 		for dependency in view.dependency_list:
-			dep_node = self.add_dbobject(dependency)
+			dep_node = self._add_dbobject(dependency)
 			dep_edge = view_node.connect_to(dep_node)
 			dep_edge.label = '<uses>'
 			dep_edge.arrowhead = 'onormal'

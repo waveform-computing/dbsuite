@@ -9,13 +9,13 @@ class W3UniqueKeyDocument(W3MainDocument):
 		assert isinstance(uniquekey, UniqueKey)
 		super(W3UniqueKeyDocument, self).__init__(site, uniquekey)
 
-	def create_sections(self):
+	def _create_sections(self):
 		fields = [(field, position) for (position, field) in enumerate(self.dbobject.fields)]
 		fields = sorted(fields, key=lambda(field, position): field.name)
-		self.section('description', 'Description')
-		self.add(self.p(self.format_comment(self.dbobject.description)))
-		self.section('attributes', 'Attributes')
-		self.add(self.table(
+		self._section('description', 'Description')
+		self._add(self._p(self._format_comment(self.dbobject.description)))
+		self._section('attributes', 'Attributes')
+		self._add(self._table(
 			head=[(
 				'Attribute',
 				'Value',
@@ -24,15 +24,15 @@ class W3UniqueKeyDocument(W3MainDocument):
 			)],
 			data=[
 				(
-					self.a(self.site.documents['createdby.html']),
+					self._a(self.site.documents['createdby.html']),
 					self.dbobject.owner,
-					self.a(self.site.documents['colcount.html']),
+					self._a(self.site.documents['colcount.html']),
 					len(fields),
 				),
 			]))
 		if len(fields) > 0:
-			self.section('fields', 'Fields')
-			self.add(self.table(
+			self._section('fields', 'Fields')
+			self._add(self._table(
 				head=[(
 					'#',
 					'Field',
@@ -41,9 +41,9 @@ class W3UniqueKeyDocument(W3MainDocument):
 				data=[(
 					position + 1,
 					field.name,
-					self.format_comment(field.description, summary=True)
+					self._format_comment(field.description, summary=True)
 				) for (field, position) in fields]
 			))
-		self.section('sql', 'SQL Definition')
-		self.add(self.pre(self.format_sql(self.dbobject.create_sql), attrs={'class': 'sql'}))
+		self._section('sql', 'SQL Definition')
+		self._add(self._pre(self._format_sql(self.dbobject.create_sql), attrs={'class': 'sql'}))
 

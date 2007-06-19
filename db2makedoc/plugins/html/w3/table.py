@@ -12,21 +12,21 @@ class W3TableDocument(W3MainDocument):
 		assert isinstance(table, Table)
 		super(W3TableDocument, self).__init__(site, table)
 
-	def create_sections(self):
+	def _create_sections(self):
 		fields = [obj for (name, obj) in sorted(self.dbobject.fields.items(), key=lambda (name, obj): name)]
 		indexes = [obj for (name, obj) in sorted(self.dbobject.indexes.items(), key=lambda (name, obj): name)]
 		constraints = [obj for (name, obj) in sorted(self.dbobject.constraints.items(), key=lambda (name, obj): name)]
 		triggers = [obj for (name, obj) in sorted(self.dbobject.triggers.items(), key=lambda (name, obj): name)]
 		dependents = [obj for (name, obj) in sorted(self.dbobject.dependents.items(), key=lambda (name, obj): name)]
 		olstyle = {'style': 'list-style-type: none; padding: 0; margin: 0;'}
-		self.section('description', 'Description')
-		self.add(self.p(self.format_comment(self.dbobject.description)))
-		self.section('attributes', 'Attributes')
+		self._section('description', 'Description')
+		self._add(self._p(self._format_comment(self.dbobject.description)))
+		self._section('attributes', 'Attributes')
 		if self.dbobject.primary_key is None:
 			key_count = 0
 		else:
 			key_count = len(self.dbobject.primary_key.fields)
-		self.add(self.table(
+		self._add(self._table(
 			head=[(
 				"Attribute",
 				"Value",
@@ -35,46 +35,46 @@ class W3TableDocument(W3MainDocument):
 			)],
 			data=[
 				(
-					self.a(self.site.documents['created.html']),
+					self._a(self.site.documents['created.html']),
 					self.dbobject.created,
-					self.a(self.site.documents['laststats.html']),
+					self._a(self.site.documents['laststats.html']),
 					self.dbobject.last_stats,
 				),
 				(
-					self.a(self.site.documents['createdby.html']),
+					self._a(self.site.documents['createdby.html']),
 					self.dbobject.owner,
-					self.a(self.site.documents['cardinality.html']),
+					self._a(self.site.documents['cardinality.html']),
 					self.dbobject.cardinality,
 				),
 				(
-					self.a(self.site.documents['keycolcount.html']),
+					self._a(self.site.documents['keycolcount.html']),
 					key_count,
-					self.a(self.site.documents['colcount.html']),
+					self._a(self.site.documents['colcount.html']),
 					len(self.dbobject.fields),
 				),
 				(
-					self.a(self.site.documents['dependentrel.html']),
+					self._a(self.site.documents['dependentrel.html']),
 					len(self.dbobject.dependent_list),
-					self.a(self.site.documents['size.html']),
+					self._a(self.site.documents['size.html']),
 					self.dbobject.size_str,
 				),
 				# XXX Include system?
 			]
 		))
 		if len(fields) > 0:
-			self.section('field_desc', 'Field Descriptions')
-			self.add(self.table(
+			self._section('field_desc', 'Field Descriptions')
+			self._add(self._table(
 				head=[(
 					"Name",
 					"Description"
 				)],
 				data=[(
 					field.name,
-					self.format_comment(field.description, summary=True)
+					self._format_comment(field.description, summary=True)
 				) for field in fields]
 			))
-			self.section('field_schema', 'Field Schema')
-			self.add(self.table(
+			self._section('field_schema', 'Field Schema')
+			self._add(self._table(
 				head=[(
 					"#",
 					"Name",
@@ -93,8 +93,8 @@ class W3TableDocument(W3MainDocument):
 				) for field in fields]
 			))
 		if len(indexes) > 0:
-			self.section('indexes', 'Indexes')
-			self.add(self.table(
+			self._section('indexes', 'Indexes')
+			self._add(self._table(
 				head=[(
 					"Name",
 					"Unique",
@@ -103,35 +103,35 @@ class W3TableDocument(W3MainDocument):
 					"Description"
 				)],
 				data=[(
-					self.a_to(index, qualifiedname=True),
+					self._a_to(index, qualifiedname=True),
 					index.unique,
-					self.ol([ixfield.name for (ixfield, ixorder) in index.field_list], attrs=olstyle),
-					self.ol([ixorder for (ixfield, ixorder) in index.field_list], attrs=olstyle),
-					self.format_comment(index.description, summary=True)
+					self._ol([ixfield.name for (ixfield, ixorder) in index.field_list], attrs=olstyle),
+					self._ol([ixorder for (ixfield, ixorder) in index.field_list], attrs=olstyle),
+					self._format_comment(index.description, summary=True)
 				) for index in indexes]
 			))
 		if len(constraints) > 0:
-			self.section('constraints', 'Constraints')
+			self._section('constraints', 'Constraints')
 			rows = []
 			for constraint in constraints:
 				if isinstance(constraint, ForeignKey):
 					expression = [
 						'References ',
-						self.a_to(constraint.ref_table),
-						self.ol(['%s -> %s' % (cfield.name, pfield.name)
+						self._a_to(constraint.ref_table),
+						self._ol(['%s -> %s' % (cfield.name, pfield.name)
 							for (cfield, pfield) in constraint.fields], attrs=olstyle)
 					]
 				elif isinstance(constraint, PrimaryKey) or isinstance(constraint, UniqueKey) or isinstance(constraint, Check):
-					expression = self.ol([cfield.name for cfield in constraint.fields], attrs=olstyle)
+					expression = self._ol([cfield.name for cfield in constraint.fields], attrs=olstyle)
 				else:
 					expression = ''
 				rows.append((
-					self.a_to(constraint),
+					self._a_to(constraint),
 					constraint.type_name,
 					expression,
-					self.format_comment(constraint.description, summary=True)
+					self._format_comment(constraint.description, summary=True)
 				))
-			self.add(self.table(
+			self._add(self._table(
 				head=[(
 					"Name",
 					"Type",
@@ -141,8 +141,8 @@ class W3TableDocument(W3MainDocument):
 				data=rows
 			))
 		if len(triggers) > 0:
-			self.section('triggers', 'Triggers')
-			self.add(self.table(
+			self._section('triggers', 'Triggers')
+			self._add(self._table(
 				head=[(
 					"Name",
 					"Timing",
@@ -150,30 +150,30 @@ class W3TableDocument(W3MainDocument):
 					"Description"
 				)],
 				data=[(
-					self.a_to(trigger, qualifiedname=True),
+					self._a_to(trigger, qualifiedname=True),
 					trigger.trigger_time,
 					trigger.trigger_event,
-					self.format_comment(trigger.description, summary=True)
+					self._format_comment(trigger.description, summary=True)
 				) for trigger in triggers]
 			))
 		if len(dependents) > 0:
-			self.section('dependents', 'Dependent Relations')
-			self.add(self.table(
+			self._section('dependents', 'Dependent Relations')
+			self._add(self._table(
 				head=[(
 					"Name",
 					"Type",
 					"Description"
 				)],
 				data=[(
-					self.a_to(dep, qualifiedname=True),
+					self._a_to(dep, qualifiedname=True),
 					dep.type_name,
-					self.format_comment(dep.description, summary=True)
+					self._format_comment(dep.description, summary=True)
 				) for dep in dependents]
 			))
-		self.section('diagram', 'Diagram')
-		self.add(self.img_of(self.dbobject))
-		self.section('sql', 'SQL Definition')
-		self.add(self.pre(self.format_sql(self.dbobject.create_sql),
+		self._section('diagram', 'Diagram')
+		self._add(self._img_of(self.dbobject))
+		self._section('sql', 'SQL Definition')
+		self._add(self._pre(self._format_sql(self.dbobject.create_sql),
 			attrs={'class': 'sql'}))
 
 class W3TableGraph(W3GraphDocument):
@@ -181,28 +181,28 @@ class W3TableGraph(W3GraphDocument):
 		assert isinstance(table, Table)
 		super(W3TableGraph, self).__init__(site, table)
 	
-	def create_graph(self):
-		super(W3TableGraph, self).create_graph()
+	def _create_graph(self):
+		super(W3TableGraph, self)._create_graph()
 		table = self.dbobject
-		table_node = self.add_dbobject(table, selected=True)
+		table_node = self._add_dbobject(table, selected=True)
 		for dependent in table.dependent_list:
-			dep_node = self.add_dbobject(dependent)
+			dep_node = self._add_dbobject(dependent)
 			dep_edge = dep_node.connect_to(table_node)
 			dep_edge.label = '<uses>'
 			dep_edge.arrowhead = 'onormal'
 		for key in table.foreign_key_list:
-			key_node = self.add_dbobject(key.ref_table)
+			key_node = self._add_dbobject(key.ref_table)
 			key_edge = table_node.connect_to(key_node)
 			key_edge.dbobject = key
 			key_edge.label = key.name
 			key_edge.arrowhead = 'normal'
 		for trigger in table.trigger_list:
-			trig_node = self.add_dbobject(trigger)
+			trig_node = self._add_dbobject(trigger)
 			trig_edge = table_node.connect_to(trig_node)
 			trig_edge.label = ('<%s %s>' % (trigger.trigger_time, trigger.trigger_event)).lower()
 			trig_edge.arrowhead = 'vee'
 			for dependency in trigger.dependency_list:
-				dep_node = self.add_dbobject(dependency)
+				dep_node = self._add_dbobject(dependency)
 				dep_edge = trig_node.connect_to(dep_node)
 				dep_edge.label = '<uses>'
 				dep_edge.arrowhead = 'onormal'

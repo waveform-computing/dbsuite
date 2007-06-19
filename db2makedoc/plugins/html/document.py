@@ -6,16 +6,48 @@ import os.path
 import codecs
 import re
 import datetime
-import shutil
-import xml.dom
-from db2makedoc.dot.graph import Graph, Node, Edge, Cluster
-from db2makedoc.highlighters.comments import CommentHighlighter
-from db2makedoc.highlighters.sql import SQLHighlighter, ERROR, COMMENT, KEYWORD, IDENTIFIER, DATATYPE, REGISTER, NUMBER, STRING, OPERATOR, PARAMETER, TERMINATOR, STATEMENT
+from db2makedoc.dot.graph import (Graph, Node, Edge, Cluster)
+from db2makedoc.highlighters.comments import (CommentHighlighter,)
+from db2makedoc.highlighters.sql import (
+	SQLHighlighter,
+	ERROR,
+	COMMENT,
+	KEYWORD,
+	IDENTIFIER,
+	DATATYPE,
+	REGISTER,
+	NUMBER,
+	STRING,
+	OPERATOR,
+	PARAMETER,
+	TERMINATOR,
+	STATEMENT
+)
 
+# Try and import the ElementTree API, favouring the faster cElementTree
+# implementation if it's available
+try:
+	import xml.etree.cElementTree as et
+except ImportError:
+	try:
+		import cElementTree as et
+	except ImportError:
+		try:
+			import xml.etree.ElementTree as et
+		except ImportError:
+			try:
+				import elementTree.ElementTree as et
+			except ImportError:
+				raise ImportError('Unable to find an ElementTree implementation')
+
+# Import the fastest StringIO implementation we can find
 try:
 	from cStringIO import StringIO
 except ImportError:
-	from StringIO import StringIO
+	try:
+		from StringIO import StringIO
+	except ImportError:
+		raise ImportError('Unable to find a StringIO implementation')
 
 # Constants for HTML versions
 
@@ -32,10 +64,6 @@ except ImportError:
 	TRANSITIONAL, # Transitional DTD
 	FRAMESET,     # Frameset DTD
 ) = range(3)
-
-# Global DOM implementation
-
-DOM = xml.dom.getDOMImplementation()
 
 # HTML character entities from the HTML4.01 spec
 # <http://www.w3.org/TR/REC-html40/sgml/entities.html> (see
@@ -334,15 +362,15 @@ class HTMLCommentHighlighter(CommentHighlighter):
 
 	def handle_strong(self, text):
 		"""Highlights strong text with HTML <strong> elements."""
-		return self.document.strong(text)
+		return self.document._strong(text)
 
 	def handle_emphasize(self, text):
 		"""Highlights emphasized text with HTML <em> elements."""
-		return self.document.em(text)
+		return self.document._em(text)
 
 	def handle_underline(self, text):
 		"""Highlights underlined text with HTML <u> elements."""
-		return self.document.u(text)
+		return self.document._u(text)
 
 	def start_para(self, summary):
 		"""Emits an empty string for the start of a paragraph."""
@@ -350,7 +378,7 @@ class HTMLCommentHighlighter(CommentHighlighter):
 
 	def end_para(self, summary):
 		"""Emits an HTML <br>eak element for the end of a paragraph."""
-		return self.document.br()
+		return self.document._br()
 
 class HTMLSQLHighlighter(SQLHighlighter):
 	def __init__(self, document):
@@ -383,13 +411,13 @@ class HTMLSQLHighlighter(SQLHighlighter):
 		except KeyError:
 			css_class = self.css_classes.get(token_type, None)
 		if css_class is not None:
-			return self.document.span(source, {'class': css_class})
+			return self.document._span(source, {'class': css_class})
 		else:
 			return source
 
 	def format_line(self, index, line):
 		if self.number_lines:
-			return self.document.tr([
+			return self.document._tr([
 				(index, {'class': self.number_class}),
 				([self.format_token(token) for token in line], {'class': self.sql_class})
 			])
@@ -457,26 +485,10 @@ class HTMLDocument(WebSiteDocument):
 	def __init__(self, site, url):
 		"""Initializes an instance of the class."""
 		super(HTMLDocument, self).__init__(site, url)
-		if self.site.htmlver >= XHTML10:
-			namespace = 'http://www.w3.org/1999/xhtml'
-		else:
-			namespace = None
-		try:
-			(public_id, system_id) = {
-				(HTML4, STRICT):         ('-//W3C//DTD HTML 4.01//EN', 'http://www.w3.org/TR/html4/strict.dtd'),
-				(HTML4, TRANSITIONAL):   ('-//W3C//DTD HTML 4.01 Transitional//EN', 'http://www.w3.org/TR/html4/loose.dtd'),
-				(HTML4, FRAMESET):       ('-//W3C//DTD HTML 4.01 Frameset//EN', 'http://www.w3.org/TR/html4/frameset.dtd'),
-				(XHTML10, STRICT):       ('-//W3C//DTD XHTML 1.0 Strict//EN', 'http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd'),
-				(XHTML10, TRANSITIONAL): ('-//W3C//DTD XHTML 1.0 Transitional//EN', 'http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd'),
-				(XHTML10, FRAMESET):     ('-//W3C//DTD XHTML 1.0 Frameset//EN', 'http://www.w3.org/TR/xhtml1/DTD/xhtml1-frameset.dtd'),
-				(XHTML11, STRICT):       ('-//W3C//DTD XHTML 1.1//EN', 'xhtml11-flat.dtd'),
-			}[(self.site.htmlver, self.site.htmlstyle)]
-		except KeyError:
-			raise KeyError('Invalid HTML version and style (XHTML11 only supports the STRICT style)')
-		self.doc = DOM.createDocument(namespace, 'html', DOM.createDocumentType('html', public_id, system_id))
-		self.comment_highlighter = self.init_comment_highlighter()
+		self.doc = self._html()
+		self.comment_highlighter = self._init_comment_highlighter()
 		assert isinstance(self.comment_highlighter, CommentHighlighter)
-		self.sql_highlighter = self.init_sql_highlighter()
+		self.sql_highlighter = self._init_sql_highlighter()
 		assert isinstance(self.sql_highlighter, SQLHighlighter)
 		self.link_first = None
 		self.link_prior = None
@@ -499,11 +511,11 @@ class HTMLDocument(WebSiteDocument):
 		self.sublang = None
 		self.copyright = None
 	
-	def init_comment_highlighter(self):
+	def _init_comment_highlighter(self):
 		"""Instantiates an object for highlighting comment markup."""
 		return HTMLCommentHighlighter(self)
 
-	def init_sql_highlighter(self):
+	def _init_sql_highlighter(self):
 		"""Instantiates an object for highlighting SQL."""
 		return HTMLSQLHighlighter(self)
 	
@@ -530,97 +542,109 @@ class HTMLDocument(WebSiteDocument):
 		unichr(max(HTML_ENTITIES.iterkeys()))
 	))
 
-	# Regex which matches the XML PI at the start of an XML document
-	xmlpire = re.compile(ur"""^<\?xml +version=(['"])([0-9]+(\.[0-9]+))*\1( +encoding=(['"])(.*?)\5)?( +standalone=(['"])(yes|no)\8)? *\?>""")
-
 	def write(self):
 		"""Writes this document to a file in the site's path"""
-
+		self._create_content()
+		# "Pure" XML won't handle HTML character entities. So we do it
+		# manually. First, get the XML as a Unicode string (without any XML
+		# PI or DOCTYPE)
+		if self.site.htmlver >= XHTML10:
+			self.doc.attrib['xmlns'] = 'http://www.w3.org/1999/xhtml'
+		s = unicode(et.tostring(self.doc))
+		# Convert any characters into HTML entities that can be
 		def subfunc(match):
 			if ord(match.group()) in HTML_ENTITIES:
 				return u'&%s;' % HTML_ENTITIES[ord(match.group())]
 			else:
 				return match.group()
-
+		s = self.entitiesre.sub(subfunc, s)
+		# Insert an XML PI at the start reflecting the target encoding (and
+		# a DOCTYPE as ElementTree doesn't handle this for us directly)
+		try:
+			(public_id, system_id) = {
+				(HTML4, STRICT):         ('-//W3C//DTD HTML 4.01//EN', 'http://www.w3.org/TR/html4/strict.dtd'),
+				(HTML4, TRANSITIONAL):   ('-//W3C//DTD HTML 4.01 Transitional//EN', 'http://www.w3.org/TR/html4/loose.dtd'),
+				(HTML4, FRAMESET):       ('-//W3C//DTD HTML 4.01 Frameset//EN', 'http://www.w3.org/TR/html4/frameset.dtd'),
+				(XHTML10, STRICT):       ('-//W3C//DTD XHTML 1.0 Strict//EN', 'http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd'),
+				(XHTML10, TRANSITIONAL): ('-//W3C//DTD XHTML 1.0 Transitional//EN', 'http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd'),
+				(XHTML10, FRAMESET):     ('-//W3C//DTD XHTML 1.0 Frameset//EN', 'http://www.w3.org/TR/xhtml1/DTD/xhtml1-frameset.dtd'),
+				(XHTML11, STRICT):       ('-//W3C//DTD XHTML 1.1//EN', 'xhtml11-flat.dtd'),
+			}[(self.site.htmlver, self.site.htmlstyle)]
+		except KeyError:
+			raise KeyError('Invalid HTML version and style (XHTML11 only supports the STRICT style)')
+		s = u'''\
+<?xml version="1.0" encoding="%(encoding)s"?>
+<!DOCTYPE html
+  PUBLIC %(publicid)s
+  %(systemid)s>
+%(content)s''' % {
+			'encoding': self.site.encoding,
+			'publicid': public_id,
+			'systemid': system_id,
+			'content': s,
+		}
+		# Transcode the document into the target encoding
+		s = codecs.getencoder(self.site.encoding)(s)[0]
+		# Finally, write the output to the destination file
 		f = open(self.filename, 'w')
 		try:
-			self.create_content()
-			try:
-				# "Pure XML" DOM won't handle HTML character entities. So we do
-				# it manually... First, get the XML as a Unicode string
-				s = self.doc.toxml()
-				# Convert any characters into HTML entities that can be
-				s = self.entitiesre.sub(subfunc, s)
-				# Patch the XML PI at the start to reflect the target encoding
-				s = self.xmlpire.sub(ur'<?xml version="\2" encoding="%s" ?>' % self.site.encoding, s)
-				# Transcode the XML into the target encoding
-				s = codecs.getencoder(self.site.encoding)(s)[0]
-				f.write(s)
-			finally:
-				# XXX Because DOM takes up a truly stupid amount of memory, and
-				# because this class is used in a one-shot manner, we unlink
-				# (destroy) the document contents as soon as they're written.
-				# Without this, in practice, db2makedoc can easily chew up 1Gb
-				# of RAM (!) even with relatively small databases
-				self.doc.unlink()
+			f.write(s)
 		finally:
 			f.close()
 
-	def create_content(self):
+	def _create_content(self):
 		"""Constructs the content of the document."""
 		# Add some standard <meta> elements (encoding, keywords, author, robots
 		# info, Dublin Core stuff, etc.)
 		content = [
-			self.meta('Robots', ','.join([
+			self._meta('Robots', ','.join([
 				'%sindex'  % ['no', ''][bool(self.robots_index)],
 				'%sfollow' % ['no', ''][bool(self.robots_follow)]
 			])),
-			self.meta('DC.Date', self.date.strftime('%Y-%m-%d'), 'iso8601'),
-			self.meta('DC.Language', '%s-%s' % (self.lang, self.sublang), 'rfc1766'),
+			self._meta('DC.Date', self.date.strftime('%Y-%m-%d'), 'iso8601'),
+			self._meta('DC.Language', '%s-%s' % (self.lang, self.sublang), 'rfc1766'),
 		]
 		if self.copyright is not None:
-			content.append(self.meta('DC.Rights', self.copyright))
+			content.append(self._meta('DC.Rights', self.copyright))
 		if self.description is not None:
-			content.append(self.meta('Description', self.description))
+			content.append(self._meta('Description', self.description))
 		if len(self.keywords) > 0:
-			content.append(self.meta('Keywords', ', '.join(self.keywords), 'iso8601'))
+			content.append(self._meta('Keywords', ', '.join(self.keywords), 'iso8601'))
 		if self.author_email is not None:
-			content.append(self.meta('Owner', self.author_email))
-			content.append(self.meta('Feedback', self.author_email))
-			content.append(self.link('author', 'mailto:%s' % self.author_email, self.author_name))
+			content.append(self._meta('Owner', self.author_email))
+			content.append(self._meta('Feedback', self.author_email))
+			content.append(self._link('author', 'mailto:%s' % self.author_email, self.author_name))
 		# Add some navigation <link> elements
-		content.append(self.link('home', 'index.html'))
+		content.append(self._link('home', 'index.html'))
 		if isinstance(self.link_first, HTMLDocument):
-			content.append(self.link('first', self.link_first.url))
+			content.append(self._link('first', self.link_first.url))
 		if isinstance(self.link_prior, HTMLDocument):
-			content.append(self.link('prev', self.link_prior.url))
+			content.append(self._link('prev', self.link_prior.url))
 		if isinstance(self.link_next, HTMLDocument):
-			content.append(self.link('next', self.link_next.url))
+			content.append(self._link('next', self.link_next.url))
 		if isinstance(self.link_last, HTMLDocument):
-			content.append(self.link('last', self.link_last.url))
+			content.append(self._link('last', self.link_last.url))
 		if isinstance(self.link_up, HTMLDocument):
-			content.append(self.link('up', self.link_up.url))
+			content.append(self._link('up', self.link_up.url))
 		# Add the title
 		if self.title is not None:
-			titlenode = self.doc.createElement('title')
-			self.append_content(titlenode, self.title)
-			content.append(titlenode)
+			content.append(self._title(self.title))
 		# Create the <head> element with the above content, and an empty <body>
 		# element
-		self.doc.documentElement.appendChild(self.head(content))
-		self.doc.documentElement.appendChild(self.body(''))
+		self.doc.append(self._head(content))
+		self.doc.append(self._body(''))
 		# Override this in descendent classes to include additional content
 
-	def format_comment(self, comment, summary=False):
+	def _format_comment(self, comment, summary=False):
 		return self.comment_highlighter.parse(comment, summary)
 
-	def format_sql(self, sql, terminator=';', splitlines=False):
+	def _format_sql(self, sql, terminator=';', splitlines=False):
 		return self.sql_highlighter.parse(sql, terminator, splitlines)
 
-	def format_prototype(self, sql):
+	def _format_prototype(self, sql):
 		return self.sql_highlighter.parse_prototype(sql)
 	
-	def format_content(self, content):
+	def _format_content(self, content):
 		if content is None:
 			# Format None as 'n/a'
 			return 'n/a'
@@ -642,46 +666,57 @@ class HTMLDocument(WebSiteDocument):
 			# Everything else is converted to an ASCII string
 			return str(content)
 	
-	def append_content(self, node, content):
+	def _append_content(self, node, content):
 		"""Adds content (string, node, node-list, etc.) to a node"""
 		if isinstance(content, basestring):
 			if content != '':
-				node.appendChild(self.doc.createTextNode(self.format_content(content)))
-		elif isinstance(content, xml.dom.Node) or hasattr(content, 'nodeType'):
-			node.appendChild(content)
-		elif isinstance(content, (list, tuple)) or hasattr(content, '__iter__'):
-			# We use recursion here to allow for mixed lists of strings and
-			# nodes
-			for n in content:
-				self.append_content(node, n)
+				if len(node) == 0:
+					if node.text is None:
+						node.text = content
+					else:
+						node.text += content
+				else:
+					if node[-1].tail is None:
+						node[-1].tail = content
+					else:
+						node[-1].tail += content
+		elif et.iselement(content):
+			node.append(content)
 		else:
-			# Attempt to convert anything else into a string with format_content()
-			node.appendChild(self.doc.createTextNode(self.format_content(content)))
+			try:
+				for n in iter(content):
+					self._append_content(node, n)
+			except TypeError:
+				self._append_content(node, self._format_content(content))
 	
-	def find_element(self, tagname, id=None):
+	def _find_element(self, tagname, id=None):
 		"""Returns the first element with the specified tagname and id"""
 		if id is None:
-			try:
-				return self.doc.getElementsByTagName(tagname)[0]
-			except IndexError:
+			result = self.doc.find('.//%s' % tagname)
+			if result is None:
 				raise Exception('Cannot find any %s elements' % tagname)
+			else:
+				return result
 		else:
-			try:
-				return [
-					elem for elem in self.doc.getElementsByTagName(tagname)
-					if elem.hasAttribute('id') and elem.getAttribute('id') == id
-				][0]
-			except IndexError:
+			result = [
+				elem for elem in self.doc.findall('.//%s' % tagname)
+				if elem.attrib.get('id', '') == id
+			]
+			if len(result) == 0:
 				raise Exception('Cannot find a %s element with id %s' % (tagname, id))
+			elif len(result) > 1:
+				raise Exception('Found multiple %s elements with id %s' % (tagname, id))
+			else:
+				return result[0]
 	
-	def element(self, name, attrs={}, content=''):
+	def _element(self, name, attrs={}, content=''):
 		"""Returns an element with the specified name, attributes and content."""
-		node = self.doc.createElement(name)
-		for name, value in attrs.iteritems():
-			if value is not None:
-				node.setAttribute(name, str(value))
-		self.append_content(node, content)
-		return node
+		attrs = dict([
+			(n, str(v)) for (n, v) in attrs.iteritems() if v is not None
+		])
+		e = et.Element(name, attrs)
+		self._append_content(e, content)
+		return e
 
 	# HTML CONSTRUCTION METHODS
 	# These methods are named after the HTML element they return. The
@@ -690,214 +725,232 @@ class HTMLDocument(WebSiteDocument):
 	# reasonably generic and would likely fit most applications that need to
 	# generate HTML.
 
-	def a(self, href, content=None, title=None, attrs={}):
+	def _a(self, href, content=None, title=None, attrs={}):
 		if isinstance(href, HTMLDocument):
 			if content is None:
 				content = href.title
 			if title is None:
 				title = href.title
 			href = href.url
-		return self.element('a', AttrDict(href=href, title=title) + attrs, content)
+		return self._element('a', AttrDict(href=href, title=title) + attrs, content)
 
-	def abbr(self, content, title, attrs={}):
-		return self.element('abbr', AttrDict(title=title) + attrs, content)
+	def _abbr(self, content, title, attrs={}):
+		return self._element('abbr', AttrDict(title=title) + attrs, content)
 
-	def acronym(self, content, title, attrs={}):
-		return self.element('acronym', AttrDict(title=title) + attrs, content)
+	def _acronym(self, content, title, attrs={}):
+		return self._element('acronym', AttrDict(title=title) + attrs, content)
 
-	def b(self, content, attrs={}):
-		return self.element('b', attrs, content)
+	def _b(self, content, attrs={}):
+		return self._element('b', attrs, content)
 
-	def big(self, content, attrs={}):
-		return self.element('big', attrs, content)
+	def _big(self, content, attrs={}):
+		return self._element('big', attrs, content)
 
-	def blockquote(self, content, attrs={}):
-		return self.element('blockquote', attrs, content)
+	def _blockquote(self, content, attrs={}):
+		return self._element('blockquote', attrs, content)
 
-	def body(self, content, attrs={}):
-		return self.element('body', attrs, content)
+	def _body(self, content, attrs={}):
+		return self._element('body', attrs, content)
 
-	def br(self):
-		return self.element('br')
+	def _br(self):
+		return self._element('br')
 
-	def caption(self, content, attrs={}):
-		return self.element('caption', attrs, content)
+	def _caption(self, content, attrs={}):
+		return self._element('caption', attrs, content)
 
-	def cite(self, content, attrs={}):
-		return self.element('cite', attrs, content)
+	def _cite(self, content, attrs={}):
+		return self._element('cite', attrs, content)
 
-	def code(self, content, attrs={}):
-		return self.element('code', attrs, content)
+	def _code(self, content, attrs={}):
+		return self._element('code', attrs, content)
 
-	def dd(self, content, attrs={}):
-		return self.element('dd', attrs, content)
+	def _dd(self, content, attrs={}):
+		return self._element('dd', attrs, content)
 
-	# Renamed from del as del is a Python keyword
 	def _del(self, content, attrs={}):
-		return self.element('del', attrs, content)
+		return self._element('del', attrs, content)
 
-	def dfn(self, content, attrs={}):
-		return self.element('dfn', attrs, content)
+	def _dfn(self, content, attrs={}):
+		return self._element('dfn', attrs, content)
 
-	def div(self, content, attrs={}):
-		return self.element('div', attrs, content)
+	def _div(self, content, attrs={}):
+		return self._element('div', attrs, content)
 
-	def dl(self, items, attrs={}):
-		return self.element('dl', attrs, [(self.dt(term), self.dd(defn)) for (term, defn) in items])
+	def _dl(self, items, attrs={}):
+		return self._element('dl', attrs, [
+			(self._dt(term), self._dd(defn))
+			for (term, defn) in items
+		])
 
-	def dt(self, content, attrs={}):
-		return self.element('dt', attrs, content)
+	def _dt(self, content, attrs={}):
+		return self._element('dt', attrs, content)
 
-	def em(self, content, attrs={}):
-		return self.element('em', attrs, content)
+	def _em(self, content, attrs={}):
+		return self._element('em', attrs, content)
 
-	def h(self, content, level=1, attrs={}):
-		return self.element('h%d' % level, attrs, content)
+	def _h(self, content, level=1, attrs={}):
+		return self._element('h%d' % level, attrs, content)
 
-	def head(self, content, attrs={}):
-		return self.element('head', attrs, content)
+	def _head(self, content, attrs={}):
+		return self._element('head', attrs, content)
 	
-	def hr(self, attrs={}):
-		return self.element('hr', attrs)
+	def _hr(self, attrs={}):
+		return self._element('hr', attrs)
 
-	def i(self, content, attrs={}):
-		return self.element('i', attrs, content)
+	def _html(self, head=None, body=None, attrs={}):
+		elem = self._element('html', attrs)
+		if head is not None:
+			elem.append(head)
+		if body is not None:
+			elem.append(body)
+		return elem
 
-	def img(self, src, alt=None, width=None, height=None, attrs={}):
+	def _i(self, content, attrs={}):
+		return self._element('i', attrs, content)
+
+	def _img(self, src, alt=None, width=None, height=None, attrs={}):
 		if isinstance(src, GraphDocument):
 			src = src.url
-		return self.element('img', AttrDict(src=src, alt=alt, width=width, height=height) + attrs)
+		return self._element('img', AttrDict(src=src, alt=alt, width=width, height=height) + attrs)
 
-	def ins(self, content, attrs={}):
-		return self.element('ins', attrs, content)
+	def _ins(self, content, attrs={}):
+		return self._element('ins', attrs, content)
 
-	def kbd(self, content, attrs={}):
-		return self.element('kbd', attrs, content)
+	def _kbd(self, content, attrs={}):
+		return self._element('kbd', attrs, content)
 
-	def li(self, content, attrs={}):
-		return self.element('li', attrs, content)
+	def _li(self, content, attrs={}):
+		return self._element('li', attrs, content)
 
-	def link(self, rel, href, title=None, attrs={}):
-		return self.element('link', AttrDict(rel=rel, href=href, title=title) + attrs)
+	def _link(self, rel, href, title=None, attrs={}):
+		return self._element('link', AttrDict(rel=rel, href=href, title=title) + attrs)
 
-	def meta(self, name, content, scheme=None, attrs={}):
-		return self.element('meta', AttrDict(name=name, content=content, scheme=scheme) + attrs)
+	def _meta(self, name, content, scheme=None, attrs={}):
+		return self._element('meta', AttrDict(name=name, content=content, scheme=scheme) + attrs)
 
-	def ol(self, items, attrs={}):
-		return self.element('ol', attrs, [self.li(item) for item in items])
+	def _ol(self, items, attrs={}):
+		return self._element('ol', attrs, [
+			self._li(item)
+			for item in items
+		])
 
-	def pre(self, content, attrs={}):
-		return self.element('pre', attrs, content)
+	def _pre(self, content, attrs={}):
+		return self._element('pre', attrs, content)
 
-	def p(self, content, attrs={}):
-		return self.element('p', attrs, content)
+	def _p(self, content, attrs={}):
+		return self._element('p', attrs, content)
 
-	def q(self, content, attrs={}):
-		return self.element('q', attrs, content)
+	def _q(self, content, attrs={}):
+		return self._element('q', attrs, content)
 
-	def samp(self, content, attrs={}):
-		return self.element('samp', attrs, content)
+	def _samp(self, content, attrs={}):
+		return self._element('samp', attrs, content)
 
-	def script(self, content='', src=None):
+	def _script(self, content='', src=None):
 		# Either content or src must be specified, but not both
 		assert content or src
-		# The script element cannot be "empty" (MSIE doesn't like it)
-		n = self.element('script', AttrDict(type='text/javascript', src=src), content)
-		if not content:
-			n.appendChild(self.doc.createTextNode(''))
+		# XXX Workaround: the script element cannot be "empty" (IE fucks up)
+		if not content: content = ' '
+		n = self._element('script', AttrDict(type='text/javascript', src=src), content)
 		return n
 
-	def small(self, content, attrs={}):
-		return self.element('small', attrs, content)
+	def _small(self, content, attrs={}):
+		return self._element('small', attrs, content)
 
-	def span(self, content, attrs={}):
-		return self.element('span', attrs, content)
+	def _span(self, content, attrs={}):
+		return self._element('span', attrs, content)
 
-	def strong(self, content, attrs={}):
-		return self.element('strong', attrs, content)
+	def _strong(self, content, attrs={}):
+		return self._element('strong', attrs, content)
 
-	def style(self, content='', src=None, media='screen'):
+	def _style(self, content='', src=None, media='screen'):
 		# Either content or src must be specified, but not both
 		assert content or src
 		# If content is specified, output a <style> element, otherwise output a
 		# <link> element
 		if content:
-			return self.element('style', AttrDict(type='text/css', media=media), self.doc.createComment(content))
+			return self._element('style', AttrDict(type='text/css', media=media), et.Comment(content))
 		else:
-			return self.element('link', AttrDict(type='text/css', media=media, rel='stylesheet', href=src))
+			return self._element('link', AttrDict(type='text/css', media=media, rel='stylesheet', href=src))
 
-	def sub(self, content, attrs={}):
-		return self.element('sub', attrs, content)
+	def _sub(self, content, attrs={}):
+		return self._element('sub', attrs, content)
 
-	def sup(self, content, attrs={}):
-		return self.element('sup', attrs, content)
+	def _sup(self, content, attrs={}):
+		return self._element('sup', attrs, content)
 
-	def table(self, data, head=[], foot=[], caption='', attrs={}):
-		tablenode = self.element('table', attrs)
-		tablenode.appendChild(self.caption(caption))
+	def _table(self, data, head=[], foot=[], caption='', attrs={}):
+		tablenode = self._element('table', attrs)
+		tablenode.append(self._caption(caption))
 		if len(head) > 0:
-			theadnode = self.doc.createElement('thead')
+			theadnode = self._element('thead')
 			for row in head:
 				if isinstance(row, tuple) and len(row) == 2 and isinstance(row[1], dict):
 					# If the row is a two-element tuple, where the second
 					# element is a dictionary then the first element contains
 					# the content of the row and the second the attributes of
 					# the row.
-					theadnode.appendChild(self.tr(row[0], head=True, attrs=row[1]))
+					theadnode.append(self._tr(row[0], head=True, attrs=row[1]))
 				else:
-					theadnode.appendChild(self.tr(row, head=True))
-			tablenode.appendChild(theadnode)
+					theadnode.append(self._tr(row, head=True))
+			tablenode.append(theadnode)
 		if len(foot) > 0:
-			tfootnode = self.doc.createElement('tfoot')
+			tfootnode = self._element('tfoot')
 			for row in foot:
 				if isinstance(row, tuple) and len(row) == 2 and isinstance(row[1], dict):
 					# See comments above
-					tfootnode.appendChild(self.tr(row[0], head=True, attrs=row[1]))
+					tfootnode.append(self._tr(row[0], head=True, attrs=row[1]))
 				else:
-					tfootnode.appendChild(self.tr(row, head=True))
-			tablenode.appendChild(tfootnode)
+					tfootnode.append(self._tr(row, head=True))
+			tablenode.append(tfootnode)
 		# The <tbody> element is mandatory, even if no rows are present
-		tbodynode = self.doc.createElement('tbody')
+		tbodynode = self._element('tbody')
 		for row in data:
 			if isinstance(row, tuple) and len(row) == 2 and isinstance(row[1], dict):
 				# See comments above
-				tbodynode.appendChild(self.tr(row[0], head=False, attrs=row[1]))
+				tbodynode.append(self._tr(row[0], head=False, attrs=row[1]))
 			else:
-				tbodynode.appendChild(self.tr(row, head=False))
-		tablenode.appendChild(tbodynode)
+				tbodynode.append(self._tr(row, head=False))
+		tablenode.append(tbodynode)
 		return tablenode
 	
-	def td(self, content, head=False, attrs={}):
+	def _td(self, content, head=False, attrs={}):
 		if content == '':
 			content = u'\u00A0' # \u00A0 = &nbsp;
 		if head:
-			return self.element('th', attrs, content)
+			return self._element('th', attrs, content)
 		else:
-			return self.element('td', attrs, content)
+			return self._element('td', attrs, content)
 	
-	def tr(self, cells, head=False, attrs={}):
-		rownode = self.element('tr', attrs)
+	def _title(self, content, attrs={}):
+		return self._element('title', attrs, content)
+	
+	def _tr(self, cells, head=False, attrs={}):
+		rownode = self._element('tr', attrs)
 		for cell in cells:
 			if isinstance(cell, tuple) and len(cell) == 2 and isinstance(cell[1], dict):
 				# If the cell is a two-element tuple, where the second cell is
 				# a dictionary, then the first element contains the cell's
 				# content and the second the cell's attributes.
-				rownode.appendChild(self.td(cell[0], head, cell[1]))
+				rownode.append(self._td(cell[0], head, cell[1]))
 			else:
-				rownode.appendChild(self.td(cell, head))
+				rownode.append(self._td(cell, head))
 		return rownode
 	
-	def tt(self, content, attrs={}):
-		return self.element('tt', attrs, content)
+	def _tt(self, content, attrs={}):
+		return self._element('tt', attrs, content)
 
-	def u(self, content, attrs={}):
-		return self.element('u', attrs, content)
+	def _u(self, content, attrs={}):
+		return self._element('u', attrs, content)
 
-	def ul(self, items, attrs={}):
-		return self.element('ul', attrs, [self.li(item) for item in items])
+	def _ul(self, items, attrs={}):
+		return self._element('ul', attrs, [
+			self._li(item)
+			for item in items
+		])
 
-	def var(self, content, attrs={}):
-		return self.element('var', attrs, content)
+	def _var(self, content, attrs={}):
+		return self._element('var', attrs, content)
 	
 class CSSDocument(WebSiteDocument):
 	"""Represents a simple CSS document.
@@ -934,11 +987,11 @@ class GraphDocument(WebSiteDocument):
 		super(GraphDocument, self).__init__(site, url)
 		self.graph = Graph('G')
 		# PNGs and GIFs use a client-side image-map to define link locations
-		self.usemap = os.path.splitext(self.filename)[1].lower() in ('.png', '.gif')
-		# content_done is simply used to ensure that we don't generate the
+		self._usemap = os.path.splitext(self.filename)[1].lower() in ('.png', '.gif')
+		# _content_done is simply used to ensure that we don't generate the
 		# graph content more than once when dealing with image maps (which have
 		# to run through graphviz twice, once for the image, once for the map)
-		self.content_done = False
+		self._content_done = False
 
 	def write(self):
 		"""Writes this document to a file in the site's path"""
@@ -959,28 +1012,28 @@ class GraphDocument(WebSiteDocument):
 		except KeyError:
 			raise Exception('Unknown image extension "%s"' % ext)
 		# Generate the graph and write it out to the specified file
-		if not self.content_done:
-			self.create_content()
+		if not self._content_done:
+			self._create_content()
 		f = open(self.filename, 'w')
 		try:
 			method(f)
 		finally:
 			f.close()
 
-	def map(self):
-		"""Returns a DOM tree containing the client-side image map."""
-		assert self.usemap
-		if not self.content_done:
-			self.create_content()
+	def _map(self):
+		"""Returns an Element containing the client-side image map."""
+		assert self._usemap
+		if not self._content_done:
+			self._create_content()
 		f = StringIO()
 		try:
 			self.graph.to_map(f)
-			return xml.dom.minidom.parseString(f.getvalue())
+			return et.fromstring(f.getvalue())
 		finally:
 			f.close()
 
-	def create_content(self):
+	def _create_content(self):
 		"""Constructs the content of the graph."""
 		# Child classes can override this to build the graph before writing
-		self.content_done = True
+		self._content_done = True
 
