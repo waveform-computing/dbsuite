@@ -218,15 +218,15 @@ W3_POPUPS = [
 		possible values:</p>
 		<dl>
 			<dt>Raise Error</dt>
-			<dd>The DELETE statement will fail with an integrity violation
+			<dd>The UPDATE statement will fail with an integrity violation
 			error.</dd>
 			<dt>Cascade</dt>
-			<dd>The DELETE statement will cascade to the foreign key's table,
-			deleting any rows which reference the deleted row. Note: this
+			<dd>The UPDATE statement will cascade to the foreign key's table,
+			updating any rows which reference the updated row. Note: this
 			action is not currently supported by DB2.</dd>
 			<dt>Set NULL</dt>
-			<dd>The DELETE statement will succeed, and rows referencing the
-			deleted row in the foreign key's table will have their key values
+			<dd>The UPDATE statement will succeed, and rows referencing the
+			updated row in the foreign key's table will have their key values
 			set to NULL. Note: This action is not currently supported by
 			DB2.</dd>
 		</dl>
