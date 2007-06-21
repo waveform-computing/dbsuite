@@ -4,6 +4,7 @@
 
 import sys
 import os
+import subprocess
 from distutils.core import setup
 from db2makedoc.main import __version__
 
