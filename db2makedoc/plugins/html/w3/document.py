@@ -27,7 +27,7 @@ except ImportError:
 			import xml.etree.ElementTree as et
 		except ImportError:
 			try:
-				import elementTree.ElementTree as et
+				import elementtree.ElementTree as et
 			except ImportError:
 				raise ImportError('Unable to find an ElementTree implementation')
 
