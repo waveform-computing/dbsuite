@@ -120,9 +120,9 @@ pre.sql span.var {
         </li>
 
         <li>For the db2udbluw input plugin (for reading meta-data from an IBM
-        DB2 UDB v8+ for Linux/UNIX/Windows database), one of the following
-        database connection packages must be installed, along with the client
-        for IBM DB2 UDB v8 or above for Linux/UNIX/Windows:
+        DB2 UDB v8+ for Linux/UNIX/Windows database), one or more of the
+        following database connection packages must be installed, along with
+        the client for IBM DB2 UDB v8 or above for Linux/UNIX/Windows:
 
             <ul>
                 <li>IBM DB2 UDB &lt;<a href="http://www.ibm.com/db2">http://www.ibm.com/db2</a>&gt;</li>
@@ -130,6 +130,16 @@ pre.sql span.var {
                 <li>PyWin32 &lt;<a href="http://sourceforge.net/projects/pywin32">http://sourceforge.net/projects/pywin32</a>&gt;</li>
                 <li>mxODBC &lt;<a href="http://www.egenix.com/files/python/mxODBC.html">http://www.egenix.com/files/python/mxODBC.html</a>&gt;</li>
             </ul>
+        </li>
+
+        <li>For the HTML output plugins (html.*), if you are using Python 2.4
+        you must install the ElementTree framework (this is built in to Python
+        2.5 and above):
+
+            <ul>
+                <li>ElementTree &lt;<a href="http://effbot.org/zone/element-index.htm">http://effbot.org/zone/element-index.htm</a>&gt;</li>
+            </ul>
+
         </li>
 
         <li>For the template output plugin (for generating XML/HTML output
