@@ -170,9 +170,9 @@ $strict$graph $id {
 		"""
 		s = StringIO()
 		self._call_graphviz(s, converter, SVG_FORMAT, graph_attr, node_attr, edge_attr)
-		# The regex substitution below is to fix a bug in GraphViz's SVG
-		# output; the font-size style element needs a unit, usually px, to
-		# work correctly in Firefox, Opera, etc.
+		# XXX Workaround: Fix a bug in GraphViz's SVG output; the font-size
+		# style element needs a unit, usually px, to work correctly in Firefox,
+		# Opera, etc.
 		output.write(self.svg_fix.sub(r'\1px\3', s.getvalue()))
 	
 	def to_ps(self, output, converter=DEFAULT_CONVERTER, graph_attr={}, node_attr={}, edge_attr={}):

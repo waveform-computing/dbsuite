@@ -7,6 +7,22 @@ from db2makedoc.db.uniquekey import PrimaryKey, UniqueKey
 from db2makedoc.db.check import Check
 from db2makedoc.plugins.html.w3.document import W3MainDocument, W3GraphDocument
 
+orders = {
+	'A': 'Ascending',
+	'D': 'Descending',
+	'I': 'Include',
+}
+times = {
+	'A': 'After',
+	'B': 'Before',
+	'I': 'Instead of',
+}
+events = {
+	'I': 'Insert',
+	'U': 'Update',
+	'D': 'Delete',
+}
+
 class W3TableDocument(W3MainDocument):
 	def __init__(self, site, table):
 		assert isinstance(table, Table)
@@ -88,7 +104,7 @@ class W3TableDocument(W3MainDocument):
 					field.name,
 					field.datatype_str,
 					field.nullable,
-					field.key_index,
+					field.key_index + 1,
 					field.cardinality
 				) for field in fields]
 			))
@@ -105,8 +121,8 @@ class W3TableDocument(W3MainDocument):
 				data=[(
 					self._a_to(index, qualifiedname=True),
 					index.unique,
-					self._ol([ixfield.name for (ixfield, ixorder) in index.field_list], attrs=olstyle),
-					self._ol([ixorder for (ixfield, ixorder) in index.field_list], attrs=olstyle),
+					self._ol([ixfield.name for (ixfield, _) in index.field_list], attrs=olstyle),
+					self._ol([orders[ixorder] for (_, ixorder) in index.field_list], attrs=olstyle),
 					self._format_comment(index.description, summary=True)
 				) for index in indexes]
 			))
@@ -151,8 +167,8 @@ class W3TableDocument(W3MainDocument):
 				)],
 				data=[(
 					self._a_to(trigger, qualifiedname=True),
-					trigger.trigger_time,
-					trigger.trigger_event,
+					times[trigger.trigger_time],
+					events[trigger.trigger_event],
 					self._format_comment(trigger.description, summary=True)
 				) for trigger in triggers]
 			))
@@ -199,7 +215,7 @@ class W3TableGraph(W3GraphDocument):
 		for trigger in table.trigger_list:
 			trig_node = self._add_dbobject(trigger)
 			trig_edge = table_node.connect_to(trig_node)
-			trig_edge.label = ('<%s %s>' % (trigger.trigger_time, trigger.trigger_event)).lower()
+			trig_edge.label = ('<%s %s>' % (times[trigger.trigger_time], events[trigger.trigger_event])).lower()
 			trig_edge.arrowhead = 'vee'
 			for dependency in trigger.dependency_list:
 				dep_node = self._add_dbobject(dependency)

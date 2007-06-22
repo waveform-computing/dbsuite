@@ -637,6 +637,7 @@ class W3GraphDocument(GraphDocument):
 		def rewrite_font(node):
 			if isinstance(node, (Node, Edge, Cluster)):
 				node.fontname = 'Verdana'
+				node.fontsize = 10.0
 
 		self.graph.touch(rewrite_url)
 		self.graph.touch(rewrite_font)
