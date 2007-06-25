@@ -11,11 +11,11 @@ reformatted SQL is intended to be more palatable for human consumption (aka
 
 The class is capable of reformatting the vast majority of the DB2 SQL dialect
 (both DDL and DML commands).
-
 """
 
 import re
 import sys
+import math
 from db2makedoc.sql.dialects import *
 from db2makedoc.sql.tokenizer import *
 
@@ -51,6 +51,85 @@ SUFFIX_KMG = {
 	'M': 1024**2,
 	'G': 1024**3,
 }
+
+def quote_str(s, qchar="'"):
+	"""Quotes a string, doubling all quotation characters within it.
+	
+	The s parameter provides the string to be quoted. The optional qchar
+	parameter provides the quotation mark used to enclose the string. If the
+	string contains any non-printable control characters (e.g. NULL) it will be
+	quoted as a hex-string (i.e. a string prefixed by X which contains bytes
+	encoded as two hex numbers).
+	"""
+	ctrlchars = set(chr(c) for c in xrange(32))
+	if ctrlchars & set(s):
+		return 'X%s%s%s' % (qchar, ''.join('%.2X' % (ord(c),) for c in s), qchar)
+	else:
+		return '%s%s%s' % (qchar, s.replace(qchar, qchar*2), qchar)
+
+def format_ident(ident, identchars=set(ibmdb2udb_identchars), qchar='"'):
+	"""Format an SQL identifier with quotes if required.
+	
+	The ident parameter provides the identifier to format. The optional
+	identchars parameter provides the set of characters which are permitted in
+	unquoted identifers.  If the entire identifier consists of such characters
+	(excepting the initial character which is not permitted to be a numeral) it
+	will be returned unquoted, but folded to uppercase. Otherwise, quote_str()
+	will be called with the optional qchar parameter to quote the identifier.
+	"""
+	firstchars = identchars - set('0123456789')
+	if len(ident) == 0:
+		raise ValueError('Blank identifier')
+	if not ident[0] in firstchars:
+		return quote_str(ident, qchar)
+	for c in ident[1:]:
+		if not c in identchars:
+			return quote_str(ident, qchar)
+	return ident.upper()
+
+def format_param(param):
+	"""Format a parameter with quotes if required.
+	
+	Performs a similar role to format_ident but for parameters instead of
+	identifiers.  If the parameter specified by param is None (indicating an
+	anonymous parameter) a question mark (?) will be returned. Otherwise, the
+	parameter will be returned quoted (if necessary) and prefixed with colon
+	(:).
+	"""
+	if param is None:
+		return '?'
+	else:
+		return ':%s' % (format_ident(param))
+	
+def format_size(value, for_sql=True):
+	"""Formats sizes with standard K/M/G/T/etc. suffixes.
+	
+	Given a value, this function returns it with the largest scale suffix
+	possible while leaving the value >= 1. If the optional for_sql parameter is
+	True (which it is by default), only exact powers will be used when scaling,
+	i.e. the result is guaranteed to be a whole number followed by a suffix (if
+	value is not an exact binary power it will be returned without scaling).
+	Otherwise, the result will be an imprecise scaling intended for human
+	readability rather than machine interpreting.
+	"""
+	if value is None:
+		return None
+	elif value == 0:
+		return str(value)
+	else:
+		power = math.log(value, 2)
+		index = int(power / 10)
+		if not for_sql or (value % (1024 ** index) == 0):
+			if for_sql:
+				suffix = ['', 'K', 'M', 'G', 'T', 'E', 'P'][index]
+				size = value / (1024 ** index)
+				return "%d%s" % (int(size), suffix)
+			else:
+				suffix = ['b', 'Kb', 'Mb', 'Gb', 'Tb', 'Eb', 'Pb'][index]
+				size = float(value) / (1024 ** index)
+				return "%.2f %s" % (size, suffix)
+		else:
+			return str(value)
 
 class Error(Exception):
 	"""Base class for errors in this module"""
@@ -654,37 +733,6 @@ class SQLFormatter(BaseFormatter):
 	def _format_token(self, t):
 		"""Reformats a token for output"""
 		
-		def quote_str(s, qchar):
-			"""Quote a string, doubling all quotation characters within it"""
-			ctrlchars = set(chr(c) for c in xrange(32))
-			if ctrlchars & set(s):
-				# If the string contains non-printable control characters,
-				# format it as a hexstring
-				return 'X%s%s%s' % (qchar, ''.join('%.2X' % (ord(c),) for c in s), qchar)
-			else:
-				return '%s%s%s' % (qchar, s.replace(qchar, qchar*2), qchar)
-		
-		def format_ident(ident):
-			"""Format an SQL identifier with quotes if required"""
-			identchars = set(ibmdb2udb_identchars)
-			quotedident = not ident[0] in (identchars - set('0123456789'))
-			if not quotedident:
-				for c in ident[1:]:
-					if not c in identchars:
-						quotedident = True
-						break
-			if quotedident:
-				return quote_str(ident, '"')
-			else:
-				return ident
-		
-		def format_param(param):
-			"""Format a parameter with quotes if required"""
-			if param is None:
-				return '?'
-			else:
-				return ':%s' % (format_ident(param))
-			
 		# Override this method in descendent classes to transform the token in
 		# whatever manner you wish. Return the transformed token without the
 		# line and column elements (the last two) as these will be recalculated
@@ -4738,7 +4786,7 @@ class SQLFormatter(BaseFormatter):
 		else:
 			self._parse_select_statement()
 
-	def parseRoutinePrototype(self, tokens):
+	def parse_routine_prototype(self, tokens):
 		"""Parses a routine prototype"""
 		# It's a bit of hack sticking this here. This method doesn't really
 		# belong here and should probably be in a sub-class (it's only used
