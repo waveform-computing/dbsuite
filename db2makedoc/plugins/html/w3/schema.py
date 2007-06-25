@@ -1,8 +1,7 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-from db2makedoc.db.schema import Schema
-from db2makedoc.db.table import Table
+from db2makedoc.db import Schema, Table
 from db2makedoc.plugins.html.w3.document import W3MainDocument, W3GraphDocument
 
 class W3SchemaDocument(W3MainDocument):

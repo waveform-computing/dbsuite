@@ -1,10 +1,7 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-from db2makedoc.db.table import Table
-from db2makedoc.db.foreignkey import ForeignKey
-from db2makedoc.db.uniquekey import PrimaryKey, UniqueKey
-from db2makedoc.db.check import Check
+from db2makedoc.db import Table, ForeignKey, PrimaryKey, UniqueKey, Check
 from db2makedoc.plugins.html.w3.document import W3MainDocument, W3GraphDocument
 
 orders = {

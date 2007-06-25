@@ -1,7 +1,7 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-from db2makedoc.db.function import Function
+from db2makedoc.db import Function
 from db2makedoc.plugins.html.w3.document import W3MainDocument
 
 class W3FunctionDocument(W3MainDocument):
