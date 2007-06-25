@@ -263,9 +263,14 @@ class WebSiteDocument(object):
 		self.site.add_document(self)
 	
 	def write(self):
-		"""Writes this document to a file in the site's path"""
-		# Stub method to be overridden in descendent classes
-		pass
+		"""Writes this document to a file in the site's path.
+		
+		Derived classes should override this method to write the content of the
+		document to the file specified by the instance's filename property.  If
+		writing a text-based format, remember to encode the output with the
+		encoding specified by the owning site object.
+		"""
+		logging.debug('Writing %s' % self.filename)
 
 
 class HTMLDocument(WebSiteDocument):
