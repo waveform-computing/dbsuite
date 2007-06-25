@@ -1,6 +1,20 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
+"""Defines the base class for input plugins.
+
+This module defines the base class for input plugins. Input plugins are
+expected to retrieve certain details from a database structured in the manner
+dictated by the docstrings in this module.
+
+Developers of input plugins should define their own module containing an
+InputPlugin class, derived from the InputPlugin class in this module. The new
+InputPlugin class should override as many of the public "get_X" methods as are
+relevant for their particular database system; i.e. if the database system the
+input plugin targets has no concept of aliases, don't bother overriding
+get_aliases().
+"""
+
 import sys
 import logging
 
@@ -51,9 +65,11 @@ class InputPlugin(object):
 		self.__tablespace_tables = None
 		self.__tablespace_indexes = None
 
+
 	# METHODS TO OVERRIDE #####################################################
 
-	def _get_schemas(self):
+
+	def get_schemas(self):
 		"""Retrieves the details of schemas stored in the database.
 
 		Override this function to return a list of tuples containing details of
@@ -71,7 +87,7 @@ class InputPlugin(object):
 		logging.debug('Retrieving schemas')
 		return []
 
-	def _get_datatypes(self):
+	def get_datatypes(self):
 		"""Retrieves the details of datatypes stored in the database.
 
 		Override this function to return a list of tuples containing details of
@@ -97,7 +113,7 @@ class InputPlugin(object):
 		logging.debug('Retrieving datatypes')
 		return []
 
-	def _get_tables(self):
+	def get_tables(self):
 		"""Retrieves the details of tables stored in the database.
 
 		Override this function to return a list of tuples containing details of
@@ -121,7 +137,7 @@ class InputPlugin(object):
 		logging.debug('Retrieving tables')
 		return []
 
-	def _get_views(self):
+	def get_views(self):
 		"""Retrieves the details of views stored in the database.
 
 		Override this function to return a list of tuples containing details of
@@ -142,7 +158,7 @@ class InputPlugin(object):
 		logging.debug('Retrieving views')
 		return []
 
-	def _get_aliases(self):
+	def get_aliases(self):
 		"""Retrieves the details of aliases stored in the database.
 
 		Override this function to return a list of tuples containing details of
@@ -164,7 +180,7 @@ class InputPlugin(object):
 		logging.debug('Retrieving aliases')
 		return []
 
-	def _get_view_dependencies(self):
+	def get_view_dependencies(self):
 		"""Retrieves the details of view dependencies.
 
 		Override this function to return a list of tuples containing details of
@@ -180,7 +196,7 @@ class InputPlugin(object):
 		logging.debug('Retrieving view dependencies')
 		return []
 
-	def _get_indexes(self):
+	def get_indexes(self):
 		"""Retrieves the details of indexes stored in the database.
 
 		Override this function to return a list of tuples containing details of
@@ -206,7 +222,7 @@ class InputPlugin(object):
 		logging.debug('Retrieving indexes')
 		return []
 
-	def _get_index_cols(self):
+	def get_index_cols(self):
 		"""Retrieves the list of columns belonging to indexes.
 
 		Override this function to return a list of tuples detailing the columns
@@ -228,7 +244,7 @@ class InputPlugin(object):
 		logging.debug('Retrieving index columns')
 		return []
 
-	def _get_relation_cols(self):
+	def get_relation_cols(self):
 		"""Retrieves the list of columns belonging to relations.
 
 		Override this function to return a list of tuples detailing the columns
@@ -261,16 +277,16 @@ class InputPlugin(object):
 		                 if the column has no default
 		description*  -- Descriptive text
 
-		Note that the each tuple details one column belonging to a relation. It
-		is important that the list of tuples is in the order that each column
-		is declared in a relation.
+		Note that each tuple details one column belonging to a relation. It is
+		important that the list of tuples is in the order that each column is
+		declared in a relation.
 
 		* Optional (can be None)
 		"""
 		logging.debug('Retrieving relation columns')
 		return []
 
-	def _get_unique_keys(self):
+	def get_unique_keys(self):
 		"""Retrieves the details of unique keys stored in the database.
 
 		Override this function to return a list of tuples containing details of
@@ -291,7 +307,7 @@ class InputPlugin(object):
 		logging.debug('Retrieving unique keys')
 		return []
 
-	def _get_unique_key_cols(self):
+	def get_unique_key_cols(self):
 		"""Retrieves the list of columns belonging to unique keys.
 
 		Override this function to return a list of tuples detailing the columns
@@ -306,7 +322,7 @@ class InputPlugin(object):
 		logging.debug('Retrieving unique key columns')
 		return []
 
-	def _get_foreign_keys(self):
+	def get_foreign_keys(self):
 		"""Retrieves the details of foreign keys stored in the database.
 
 		Override this function to return a list of tuples containing details of
@@ -339,7 +355,7 @@ class InputPlugin(object):
 		logging.debug('Retrieving foreign keys')
 		return []
 
-	def _get_foreign_key_cols(self):
+	def get_foreign_key_cols(self):
 		"""Retrieves the list of columns belonging to foreign keys.
 
 		Override this function to return a list of tuples detailing the columns
@@ -356,7 +372,7 @@ class InputPlugin(object):
 		logging.debug('Retrieving foreign key columns')
 		return []
 
-	def _get_checks(self):
+	def get_checks(self):
 		"""Retrieves the details of checks stored in the database.
 
 		Override this function to return a list of tuples containing details of
@@ -377,7 +393,7 @@ class InputPlugin(object):
 		logging.debug('Retrieving check constraints')
 		return []
 
-	def _get_check_cols(self):
+	def get_check_cols(self):
 		"""Retrieves the list of columns belonging to checks.
 
 		Override this function to return a list of tuples detailing the columns
@@ -392,7 +408,7 @@ class InputPlugin(object):
 		logging.debug('Retrieving check constraint columns')
 		return []
 
-	def _get_functions(self):
+	def get_functions(self):
 		"""Retrieves the details of functions stored in the database.
 
 		Override this function to return a list of tuples containing details of
@@ -425,7 +441,7 @@ class InputPlugin(object):
 		logging.debug('Retrieving functions')
 		return []
 
-	def _get_function_params(self):
+	def get_function_params(self):
 		"""Retrieves the list of parameters belonging to functions.
 
 		Override this function to return a list of tuples detailing the
@@ -465,7 +481,7 @@ class InputPlugin(object):
 		logging.debug('Retrieving function parameters')
 		return []
 
-	def _get_procedures(self):
+	def get_procedures(self):
 		"""Retrieves the details of stored procedures in the database.
 
 		Override this function to return a list of tuples containing details of
@@ -494,7 +510,7 @@ class InputPlugin(object):
 		logging.debug('Retrieving procedures')
 		return []
 
-	def _get_procedure_params(self):
+	def get_procedure_params(self):
 		"""Retrieves the list of parameters belonging to procedures.
 
 		Override this function to return a list of tuples detailing the
@@ -534,7 +550,7 @@ class InputPlugin(object):
 		logging.debug('Retrieving procedure parameters')
 		return []
 
-	def _get_triggers(self):
+	def get_triggers(self):
 		"""Retrieves the details of table triggers in the database.
 
 		Override this function to return a list of tuples containing details of
@@ -567,7 +583,7 @@ class InputPlugin(object):
 		logging.debug('Retrieving triggers')
 		return []
 
-	def _get_trigger_dependencies(self):
+	def get_trigger_dependencies(self):
 		"""Retrieves the details of trigger dependencies.
 
 		Override this function to return a list of tuples containing details of
@@ -583,7 +599,7 @@ class InputPlugin(object):
 		logging.debug('Retrieving trigger dependencies')
 		return []
 
-	def _get_tablespaces(self):
+	def get_tablespaces(self):
 		"""Retrieves the details of the tablespaces in the database.
 
 		Override this function to return a list of tuples containing details of
@@ -603,45 +619,47 @@ class InputPlugin(object):
 		logging.debug('Retrieving tablespaces')
 		return []
 
+
 	# PRIVATE PROPERTY GETTERS ################################################
-	
+
+
 	def __get_schemas(self):
 		if self.__schemas is None:
-			self.__schemas = self._get_schemas()
+			self.__schemas = self.get_schemas()
 		return self.__schemas
 
 	def __get_datatypes(self):
 		if self.__datatypes is None:
-			self.__datatypes = self._get_datatypes()
+			self.__datatypes = self.get_datatypes()
 		return self.__datatypes
 
 	def __get_tables(self):
 		if self.__tables is None:
-			self.__tables = self._get_tables()
+			self.__tables = self.get_tables()
 		return self.__tables
 
 	def __get_views(self):
 		if self.__views is None:
-			self.__views = self._get_views()
+			self.__views = self.get_views()
 		return self.__views
 
 	def __get_aliases(self):
 		if self.__aliases is None:
-			self.__aliases = self._get_aliases()
+			self.__aliases = self.get_aliases()
 		return self.__aliases
 
 	def __get_relations(self):
 		for i in self.tables:
-			yield i[:6]
+			yield i[:5]
 		for i in self.views:
-			yield i[:6]
+			yield i[:5]
 		for i in self.aliases:
-			yield i[:6]
+			yield i[:5]
 
 	def __get_relation_dependencies(self):
 		if self.__relation_dependencies is None:
 			if self.__view_dependencies is None:
-				self.__view_dependencies = self._get_view_dependencies()
+				self.__view_dependencies = self.get_view_dependencies()
 			self.__relation_dependencies = dict([
 				(relation[:2], [dep[2:4]
 					for dep in self.__view_dependencies
@@ -654,7 +672,7 @@ class InputPlugin(object):
 	def __get_relation_dependents(self):
 		if self.__relation_dependents is None:
 			if self.__view_dependencies is None:
-				self.__view_dependencies = self._get_view_dependencies()
+				self.__view_dependencies = self.get_view_dependencies()
 			self.__relation_dependents = dict([
 				(relation[:2], [dep[:2]
 					for dep in self.__view_dependencies
@@ -666,12 +684,12 @@ class InputPlugin(object):
 
 	def __get_indexes(self):
 		if self.__indexes is None:
-			self.__indexes = self._get_indexes()
+			self.__indexes = self.get_indexes()
 		return self.__indexes
 
 	def __get_index_cols(self):
 		if self.__index_cols is None:
-			indexcols = self._get_index_cols()
+			indexcols = self.get_index_cols()
 			self.__index_cols = dict([
 				(index[:2], [indexcol[2:]
 					for indexcol in indexcols
@@ -694,7 +712,7 @@ class InputPlugin(object):
 
 	def __get_relation_cols(self):
 		if self.__relation_cols is None:
-			relationcols = self._get_relation_cols()
+			relationcols = self.get_relation_cols()
 			self.__relation_cols = dict([
 				(relation[:2], [relationcol[2:]
 					for relationcol in relationcols
@@ -706,7 +724,7 @@ class InputPlugin(object):
 
 	def __get_unique_keys(self):
 		if self.__unique_keys is None:
-			ukeys = self._get_unique_keys()
+			ukeys = self.get_unique_keys()
 			self.__unique_keys = dict([
 				(table[:2], [ukey[2:]
 					for ukey in ukeys
@@ -729,7 +747,7 @@ class InputPlugin(object):
 
 	def __get_unique_key_cols(self):
 		if self.__unique_key_cols is None:
-			ukeycols = self._get_unique_key_cols()
+			ukeycols = self.get_unique_key_cols()
 			self.__unique_key_cols = dict([
 				(ukey[:3], [ukeycol[3]
 					for ukeycol in ukeycols
@@ -741,7 +759,7 @@ class InputPlugin(object):
 
 	def __get_foreign_keys(self):
 		if self.__foreign_keys is None:
-			fkeys = self._get_foreign_keys()
+			fkeys = self.get_foreign_keys()
 			self.__foreign_keys = dict([
 				(table[:2], [fkey[2:]
 					for fkey in fkeys
@@ -764,7 +782,7 @@ class InputPlugin(object):
 
 	def __get_foreign_key_cols(self):
 		if self.__foreign_key_cols is None:
-			fkeycols = self._get_foreign_key_cols()
+			fkeycols = self.get_foreign_key_cols()
 			self.__foreign_key_cols = dict([
 				(fkey[:3], [fkeycol[3:]
 					for fkeycol in fkeycols
@@ -774,9 +792,20 @@ class InputPlugin(object):
 			])
 		return self.__foreign_key_cols
 
+	def __get_parent_keys(self):
+		if self.__parent_keys is None:
+			self.__parent_keys = dict([
+				(ukey, [fkey[:3]
+					for fkey in self.foreign_keys_list
+					if ukey == fkey[6:9]
+				])
+				for ukey in self.unique_keys_list
+			])
+		return self.__parent_keys
+
 	def __get_checks(self):
 		if self.__checks is None:
-			checks = self._get_checks()
+			checks = self.get_checks()
 			self.__checks = dict([
 				(table[:2], [check[2:]
 					for check in checks
@@ -799,7 +828,7 @@ class InputPlugin(object):
 
 	def __get_check_cols(self):
 		if self.__check_cols is None:
-			checkcols = self._get_check_cols()
+			checkcols = self.get_check_cols()
 			self.__check_cols = dict([
 				(check[:3], [checkcol[3]
 					for checkcol in checkcols
@@ -811,12 +840,12 @@ class InputPlugin(object):
 
 	def __get_functions(self):
 		if self.__functions is None:
-			self.__functions = self._get_functions()
+			self.__functions = self.get_functions()
 		return self.__functions
 
 	def __get_function_params(self):
 		if self.__function_params is None:
-			params = self._get_function_params()
+			params = self.get_function_params()
 			self.__function_params = dict([
 				(function[:2], [param[2:]
 					for param in params
@@ -828,12 +857,12 @@ class InputPlugin(object):
 
 	def __get_procedures(self):
 		if self.__procedures is None:
-			self.__procedures = self._get_procedures()
+			self.__procedures = self.get_procedures()
 		return self.__procedures
 
 	def __get_procedure_params(self):
 		if self.__procedure_params is None:
-			params = self._get_procedure_params()
+			params = self.get_procedure_params()
 			self.__procedure_params = dict([
 				(procedure[:2], [param[2:]
 					for param in params
@@ -845,12 +874,12 @@ class InputPlugin(object):
 
 	def __get_triggers(self):
 		if self.__triggers is None:
-			self.__triggers = self._get_triggers()
+			self.__triggers = self.get_triggers()
 		return self.__triggers
 
 	def __get_trigger_dependencies(self):
 		if self.__trigger_dependencies is None:
-			trigdeps = self._get_trigger_dependencies()
+			trigdeps = self.get_trigger_dependencies()
 			self.__trigger_dependencies = dict([
 				(trigger[:2], [trigdep[2:4]
 					for trigdep in trigdeps
@@ -873,7 +902,7 @@ class InputPlugin(object):
 
 	def __get_tablespaces(self):
 		if self.__tablespaces is None:
-			self.__tablespaces = self._get_tablespaces()
+			self.__tablespaces = self.get_tablespaces()
 		return self.__tablespaces
 
 	def __get_tablespace_tables(self):
@@ -918,6 +947,7 @@ class InputPlugin(object):
 	foreign_keys = property(__get_foreign_keys)
 	foreign_keys_list = property(__get_foreign_keys_list)
 	foreign_key_cols = property(__get_foreign_key_cols)
+	parent_keys = property(__get_parent_keys)
 	checks = property(__get_checks)
 	checks_list = property(__get_checks_list)
 	check_cols = property(__get_check_cols)
