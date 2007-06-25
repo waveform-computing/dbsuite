@@ -259,7 +259,9 @@ class WebSiteDocument(object):
 		super(WebSiteDocument, self).__init__()
 		self.site = site
 		self.url = url
-		self.filename = os.path.join(self.site.basepath, self.url)
+		parts = [self.site.basepath]
+		parts.extend(self.url.split('/'))
+		self.filename = os.path.join(*parts)
 		self.site.add_document(self)
 	
 	def write(self):
