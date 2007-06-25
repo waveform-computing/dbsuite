@@ -172,7 +172,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				except ImportError:
 					raise Exception('Unable to find a suitable connection framework')
 
-	def _get_schemas(self):
+	def get_schemas(self):
 		"""Retrieves the details of schemas stored in the database.
 
 		Override this function to return a list of tuples containing details of
@@ -187,7 +187,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
-		result = super(InputPlugin, self)._get_schemas()
+		result = super(InputPlugin, self).get_schemas()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -222,7 +222,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 			))
 		return result
 
-	def _get_datatypes(self):
+	def get_datatypes(self):
 		"""Retrieves the details of datatypes stored in the database.
 
 		Override this function to return a list of tuples containing details of
@@ -245,7 +245,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
-		result = super(InputPlugin, self)._get_datatypes()
+		result = super(InputPlugin, self).get_datatypes()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -303,7 +303,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 			))
 		return result
 
-	def _get_tables(self):
+	def get_tables(self):
 		"""Retrieves the details of tables stored in the database.
 
 		Override this function to return a list of tuples containing details of
@@ -324,7 +324,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
-		result = super(InputPlugin, self)._get_tables()
+		result = super(InputPlugin, self).get_tables()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -379,7 +379,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 			))
 		return result
 
-	def _get_views(self):
+	def get_views(self):
 		"""Retrieves the details of views stored in the database.
 
 		Override this function to return a list of tuples containing details of
@@ -397,7 +397,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
-		result = super(InputPlugin, self)._get_views()
+		result = super(InputPlugin, self).get_views()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -446,7 +446,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 			))
 		return result
 
-	def _get_aliases(self):
+	def get_aliases(self):
 		"""Retrieves the details of aliases stored in the database.
 
 		Override this function to return a list of tuples containing details of
@@ -465,7 +465,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
-		result = super(InputPlugin, self)._get_aliases()
+		result = super(InputPlugin, self).get_aliases()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -511,7 +511,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 			))
 		return result
 
-	def _get_view_dependencies(self):
+	def get_view_dependencies(self):
 		"""Retrieves the details of view dependencies.
 
 		Override this function to return a list of tuples containing details of
@@ -524,7 +524,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 		dep_schema   -- The schema of the relation upon which the view depends
 		dep_name     -- The name of the relation upon which the view depends
 		"""
-		result = super(InputPlugin, self)._get_view_dependencies()
+		result = super(InputPlugin, self).get_view_dependencies()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -551,7 +551,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 			))
 		return result
 
-	def _get_indexes(self):
+	def get_indexes(self):
 		"""Retrieves the details of indexes stored in the database.
 
 		Override this function to return a list of tuples containing details of
@@ -574,7 +574,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
-		result = super(InputPlugin, self)._get_indexes()
+		result = super(InputPlugin, self).get_indexes()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -654,7 +654,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 			))
 		return result
 
-	def _get_index_cols(self):
+	def get_index_cols(self):
 		"""Retrieves the list of columns belonging to indexes.
 
 		Override this function to return a list of tuples detailing the columns
@@ -673,7 +673,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 		important that the list of tuples is in the order that each column is
 		declared in an index.
 		"""
-		result = super(InputPlugin, self)._get_index_cols()
+		result = super(InputPlugin, self).get_index_cols()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -702,7 +702,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 			))
 		return result
 
-	def _get_relation_cols(self):
+	def get_relation_cols(self):
 		"""Retrieves the list of columns belonging to relations.
 
 		Override this function to return a list of tuples detailing the columns
@@ -741,7 +741,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
-		result = super(InputPlugin, self)._get_relation_cols()
+		result = super(InputPlugin, self).get_relation_cols()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -815,7 +815,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 			))
 		return result
 
-	def _get_unique_keys(self):
+	def get_unique_keys(self):
 		"""Retrieves the details of unique keys stored in the database.
 
 		Override this function to return a list of tuples containing details of
@@ -833,7 +833,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
-		result = super(InputPlugin, self)._get_unique_keys()
+		result = super(InputPlugin, self).get_unique_keys()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -883,7 +883,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 			))
 		return result
 
-	def _get_unique_key_cols(self):
+	def get_unique_key_cols(self):
 		"""Retrieves the list of columns belonging to unique keys.
 
 		Override this function to return a list of tuples detailing the columns
@@ -895,7 +895,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 		keyname      -- The name of the key
 		colname      -- The name of the column
 		"""
-		result = super(InputPlugin, self)._get_unique_key_cols()
+		result = super(InputPlugin, self).get_unique_key_cols()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -925,7 +925,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 			))
 		return result
 
-	def _get_foreign_keys(self):
+	def get_foreign_keys(self):
 		"""Retrieves the details of foreign keys stored in the database.
 
 		Override this function to return a list of tuples containing details of
@@ -955,7 +955,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
-		result = super(InputPlugin, self)._get_foreign_keys()
+		result = super(InputPlugin, self).get_foreign_keys()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -1016,7 +1016,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 			))
 		return result
 
-	def _get_foreign_key_cols(self):
+	def get_foreign_key_cols(self):
 		"""Retrieves the list of columns belonging to foreign keys.
 
 		Override this function to return a list of tuples detailing the columns
@@ -1030,7 +1030,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 		refcolname   -- The name of the column that this column references in
 		                the referenced table
 		"""
-		result = super(InputPlugin, self)._get_foreign_key_cols()
+		result = super(InputPlugin, self).get_foreign_key_cols()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -1073,7 +1073,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 			))
 		return result
 
-	def _get_checks(self):
+	def get_checks(self):
 		"""Retrieves the details of checks stored in the database.
 
 		Override this function to return a list of tuples containing details of
@@ -1091,7 +1091,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
-		result = super(InputPlugin, self)._get_checks()
+		result = super(InputPlugin, self).get_checks()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -1142,7 +1142,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 			))
 		return result
 
-	def _get_check_cols(self):
+	def get_check_cols(self):
 		"""Retrieves the list of columns belonging to checks.
 
 		Override this function to return a list of tuples detailing the columns
@@ -1154,7 +1154,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 		checkname    -- The name of the check
 		colname      -- The name of the column
 		"""
-		result = super(InputPlugin, self)._get_check_cols()
+		result = super(InputPlugin, self).get_check_cols()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -1179,7 +1179,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 			))
 		return result
 
-	def _get_functions(self):
+	def get_functions(self):
 		"""Retrieves the details of functions stored in the database.
 
 		Override this function to return a list of tuples containing details of
@@ -1209,7 +1209,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
-		result = super(InputPlugin, self)._get_functions()
+		result = super(InputPlugin, self).get_functions()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -1275,7 +1275,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 			))
 		return result
 
-	def _get_function_params(self):
+	def get_function_params(self):
 		"""Retrieves the list of parameters belonging to functions.
 
 		Override this function to return a list of tuples detailing the
@@ -1312,7 +1312,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
-		result = super(InputPlugin, self)._get_function_params()
+		result = super(InputPlugin, self).get_function_params()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -1371,7 +1371,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 			))
 		return result
 	
-	def _get_procedures(self):
+	def get_procedures(self):
 		"""Retrieves the details of stored procedures in the database.
 
 		Override this function to return a list of tuples containing details of
@@ -1397,7 +1397,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
-		result = super(InputPlugin, self)._get_procedures()
+		result = super(InputPlugin, self).get_procedures()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -1460,7 +1460,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 			))
 		return result
 	
-	def _get_procedure_params(self):
+	def get_procedure_params(self):
 		"""Retrieves the list of parameters belonging to procedures.
 
 		Override this function to return a list of tuples detailing the
@@ -1497,7 +1497,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
-		result = super(InputPlugin, self)._get_procedure_params()
+		result = super(InputPlugin, self).get_procedure_params()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -1556,7 +1556,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 			))
 		return result
 	
-	def _get_triggers(self):
+	def get_triggers(self):
 		"""Retrieves the details of table triggers in the database.
 
 		Override this function to return a list of tuples containing details of
@@ -1586,7 +1586,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
-		result = super(InputPlugin, self)._get_triggers()
+		result = super(InputPlugin, self).get_triggers()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -1643,7 +1643,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 			))
 		return result
 
-	def _get_trigger_dependencies(self):
+	def get_trigger_dependencies(self):
 		"""Retrieves the details of trigger dependencies.
 
 		Override this function to return a list of tuples containing details of
@@ -1656,7 +1656,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 		dep_schema   -- The schema of the relation upon which the trigger depends
 		dep_name     -- The name of the relation upon which the trigger depends
 		"""
-		result = super(InputPlugin, self)._get_trigger_dependencies()
+		result = super(InputPlugin, self).get_trigger_dependencies()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
@@ -1687,7 +1687,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 			))
 		return result
 
-	def _get_tablespaces(self):
+	def get_tablespaces(self):
 		"""Retrieves the details of the tablespaces in the database.
 
 		Override this function to return a list of tuples containing details of
@@ -1704,7 +1704,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 
 		* Optional (can be None)
 		"""
-		result = super(InputPlugin, self)._get_tablespaces()
+		result = super(InputPlugin, self).get_tablespaces()
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
