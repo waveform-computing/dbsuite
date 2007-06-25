@@ -69,6 +69,7 @@ class GraphObject(object):
 
 	dot_alpha_ident = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
 	dot_num_ident = re.compile(r'^-?(\.[0-9]+|[0-9]+(\.[0-9]*)?)$')
+
 	def _quote(self, s):
 		"""Internal utility method for quoting identifiers if they need to be"""
 		if s == '' or self.dot_alpha_ident.match(s) or self.dot_num_ident.match(s):
@@ -106,13 +107,22 @@ class GraphObject(object):
 	dot = property(lambda self: self._get_dot())
 
 class GraphBase(GraphObject):
+	"""Base class for all graph objects"""
+
 	def __init__(self, id):
+		"""Initializes an instance of the class.
+		
+		The id parameter specifies the id of the graph. Each object in a
+		graphviz graph must have a unique identifier.
+		"""
 		super(GraphBase, self).__init__()
 		self.children = []
 		self.parent = None
 		self.id = id
 
 class Graph(GraphBase):
+	"""Class representing a top level graph"""
+
 	_attributes = frozenset(('Damping', 'K', 'URL', 'bb', 'bgcolor', 'center',
 			'charset', 'clusterrank', 'colorscheme', 'comment', 'compound',
 			'concentrate', 'defaultdist', 'dim', 'diredgeconstraints', 'dpi',
@@ -127,6 +137,13 @@ class Graph(GraphBase):
 			'stylesheet', 'target', 'truecolor', 'viewport', 'voro_margin'))
 
 	def __init__(self, id, directed=True, strict=False):
+		"""Initializes an instance of the class.
+
+		The id parameter specifies the id of the graph. The optional directed
+		parameter specifies whether the graph is directed (each edge is one
+		way) or undirected (each edge is bidirectional).
+		"""
+		# XXX Document the strict parameter once you figure out what it's for :-)
 		super(Graph, self).__init__(id)
 		self.directed = directed
 		self.strict = strict
@@ -178,7 +195,7 @@ $strict$graph $id {
 	def to_ps(self, output, converter=DEFAULT_CONVERTER, graph_attr={}, node_attr={}, edge_attr={}):
 		"""Converts the Graph into a PostScript document.
 
-		Parameters are identical to the to_svg() method above.
+		Parameters are identical to the to_svg() method.
 		"""
 		self._call_graphviz(output, converter, PS_FORMAT, graph_attr, node_attr, edge_attr)
 	
@@ -197,14 +214,14 @@ $strict$graph $id {
 	def to_gif(self, output, converter=DEFAULT_CONVERTER, graph_attr={}, node_attr={}, edge_attr={}):
 		"""Converts the Graph into a GIF image (and optionally a client-side image-map).
 
-		Parameters are identical to the to_png() method above.
+		Parameters are identical to the to_png() method.
 		"""
 		self._call_graphviz(output, converter, GIF_FORMAT, graph_attr, node_attr, edge_attr)
 	
 	def to_map(self, output, converter=DEFAULT_CONVERTER, graph_attr={}, node_attr={}, edge_attr={}):
 		"""Converts the Graph into a client-side image map.
 
-		Parameters are identical to the to_png() method above.
+		Parameters are identical to the to_png() method.
 		"""
 		self._call_graphviz(output, converter, MAP_FORMAT, graph_attr, node_attr, edge_attr)
 	
@@ -243,9 +260,16 @@ $strict$graph $id {
 		touch_sub(self, params)
 
 class Subgraph(GraphBase):
+	"""Class representing a subgraph within a graph (or subgraph)"""
+
 	_attributes = frozenset(('rank'))
 
 	def __init__(self, graph, id):
+		"""Initializes an instance of the class.
+		
+		The id parameter specifies the id of the graph. Each object in a
+		graphviz graph must have a unique identifier.
+		"""
 		super(Subgraph, self).__init__(id)
 		assert isinstance(graph, GraphBase)
 		self.parent = graph
@@ -264,12 +288,19 @@ subgraph $id {
 		})
 
 class Cluster(Subgraph):
+	"""Class representing a cluster-style subgraph within a top-level graph"""
+
 	_attributes = frozenset(('K', 'URL', 'bgcolor', 'color', 'colorscheme',
 			'fillcolor', 'fontcolor', 'fontname', 'fontsize', 'label',
 			'labeljust', 'labelloc', 'lp', 'nojustify', 'pencolor',
 			'peripheries', 'style', 'target', 'tooltip'))
 
 	def __init__(self, graph, id):
+		"""Initializes an instance of the class.
+		
+		The id parameter specifies the id of the graph. Each object in a
+		graphviz graph must have a unique identifier.
+		"""
 		super(Cluster, self).__init__(graph, id)
 		# XXX Hmm ... need to ensure id is provided and is unique with cluster_ prefix
 	
@@ -283,6 +314,8 @@ class Cluster(Subgraph):
 		return result
 
 class Node(GraphObject):
+	"""Class representing a node or vertex in a graph"""
+
 	_attributes = frozenset(('URL', 'color', 'comment', 'distortion',
 			'fillcolor', 'fixedsize', 'fontcolor', 'fontname', 'fontsize',
 			'group', 'height', 'label', 'layer', 'margin', 'nojustify',
@@ -291,6 +324,11 @@ class Node(GraphObject):
 			'skew', 'style', 'target', 'tooltip', 'vertices', 'width', 'z'))
 
 	def __init__(self, graph, id):
+		"""Initializes an instance of the class.
+		
+		The id parameter specifies the id of the node. Each object in a
+		graphviz graph must have a unique identifier.
+		"""
 		super(Node, self).__init__()
 		assert isinstance(graph, GraphBase)
 		self.parent = graph
@@ -378,6 +416,8 @@ class Node(GraphObject):
 		return edge[0]
 
 class Edge(GraphObject):
+	"""Class representing an edge between two nodes in a graph"""
+
 	_attributes = frozenset(('URL', 'arrowhead', 'arrowsize', 'arrowtail',
 			'color', 'comment', 'constraint', 'decorate', 'dir', 'fontcolor',
 			'fontname', 'fontsize', 'headURL', 'headclip', 'headhref',
@@ -390,6 +430,13 @@ class Edge(GraphObject):
 			'target', 'tooltip', 'weight'))
 
 	def __init__(self, graph, from_node, to_node):
+		"""Initializes an instance of the class.
+
+		The graph parameter specifies the graph (or subgraph) that the edge
+		belongs to. The from_node and to_node parameter provide the nodes that
+		the edge connects. If the graph is undirected, the edge effectively
+		joins to_node to from_node as well.
+		"""
 		super(Edge, self).__init__()
 		assert isinstance(graph, GraphBase)
 		assert isinstance(from_node, Node)
