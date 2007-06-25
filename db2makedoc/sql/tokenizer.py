@@ -277,12 +277,12 @@ class SQLTokenizerBase(object):
 		self._savedhandler = self._jump.get(value[0], None)
 		self._jump[value[0]] = self._handle_terminator
 
-	char = property(_get_char, doc="""The current character the tokenizer is looking at, or the NULL character if EOF has been reached""")
-	nextchar = property(_get_next_char, doc="""The character immediately after the current character, or the NULL character if it is past the EOF""")
-	markedchars = property(_get_marked_chars, doc="""The characters between the marked position and the current position in the source code""")
-	line = property(_get_line, doc="""Returns the 1-based line of the position of the tokenizer in the source code""")
-	column = property(_get_column, doc="""Returns the 1-based column of the position of the tokenizer in the source code""")
-	terminator = property(_get_terminator, _set_terminator, doc="""The current statement termination string. Defaults to ';'""")
+	char = property(_get_char)
+	nextchar = property(_get_next_char)
+	markedchars = property(_get_marked_chars)
+	line = property(_get_line)
+	column = property(_get_column)
+	terminator = property(_get_terminator, _set_terminator)
 
 	def _extract_string(self):
 		"""Extracts a quoted string from the source code.
@@ -537,7 +537,7 @@ class SQLTokenizerBase(object):
 			self._jump[char] = self._handle_ident
 		# If numerals were included in identchars above, they will be
 		# overwritten by the next bit (numerals are never permitted as the
-		# first character in an identifier)
+		# first character in an unquoted identifier)
 		for char in '0123456789':
 			self._jump[char] = self._handle_digit
 		# Add jump entries for symbols. Descendent classes will add extra
@@ -676,6 +676,10 @@ class DB2ZOSSQLTokenizer(SQLTokenizerBase):
 
 class DB2UDBSQLTokenizer(DB2ZOSSQLTokenizer):
 	"""IBM DB2 UDB for Linux/Unix/Windows tokenizer class."""
+
+	# XXX Need to add support for changing statement terminator on the fly
+	# with --# SET TERMINATOR c (override _handle_minus() to check if last
+	# token is a COMMENT, if so, set terminator property)
 
 	def __init__(self):
 		super(DB2UDBSQLTokenizer, self).__init__()
