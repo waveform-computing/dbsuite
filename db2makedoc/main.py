@@ -10,8 +10,8 @@ import fnmatch
 import os
 import imp
 import textwrap
+import db2makedoc.db
 import db2makedoc.plugins
-from db2makedoc.db.database import Database
 
 # Constants
 __version__ = "1.0.0pr3"
@@ -150,7 +150,7 @@ def main():
 					raise
 				continue
 			# Construct the internal representation of the metadata
-			db = Database(input)
+			db = db2makedoc.db.Database(input)
 			for output_section in output_sections:
 				s = parser.get(output_section, PLUGIN_OPTION)
 				try:
