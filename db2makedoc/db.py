@@ -2004,7 +2004,7 @@ class UniqueKey(Constraint):
 			self.database,
 			input.parent_keys[(table.schema.name, table.name, self.name)]
 		)
-		self.dependents_list = ConstraintsList(
+		self.dependent_list = ConstraintsList(
 			self.database,
 			input.parent_keys[(table.schema.name, table.name, self.name)]
 		)
