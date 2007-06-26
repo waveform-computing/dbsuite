@@ -237,15 +237,15 @@ class W3MainDocument(W3Document):
 		# content from the sections filled in by descendent classes in
 		# _create_sections()
 		if not self.link_first:
-			self.link_first = self.site.document_map.get(self.dbobject.first)
+			self.link_first = self.site.object_document(self.dbobject.first)
 		if not self.link_prior:
-			self.link_prior = self.site.document_map.get(self.dbobject.prior)
+			self.link_prior = self.site.object_document(self.dbobject.prior)
 		if not self.link_next:
-			self.link_next = self.site.document_map.get(self.dbobject.next)
+			self.link_next = self.site.object_document(self.dbobject.next)
 		if not self.link_last:
-			self.link_last = self.site.document_map.get(self.dbobject.last)
+			self.link_last = self.site.object_document(self.dbobject.last)
 		if not self.link_up:
-			self.link_up = self.site.document_map.get(self.dbobject.parent)
+			self.link_up = self.site.object_document(self.dbobject.parent)
 		# Call the inherited method to create the skeleton document
 		super(W3MainDocument, self)._create_content()
 		# Add styles specific to w3v8 main documents
@@ -328,9 +328,9 @@ class W3MainDocument(W3Document):
 				if len(content) > 10: content = '%s...' % content[:10]
 				title = '%s %s' % (item.type_name, item.qualified_name)
 				if item == selitem:
-					items.append((self.site.document_map[item].url, content, title, active, subitems))
+					items.append((self.site.object_document(item).url, content, title, active, subitems))
 				else:
-					items.append((self.site.document_map[item].url, content, title, False, []))
+					items.append((self.site.object_document(item).url, content, title, False, []))
 			if moretop:
 				items.insert(0, ('#', u'\u2191 More items...', 'More items', False, [])) # \u2191 == &uarr;
 			if morebot:
@@ -362,8 +362,8 @@ class W3MainDocument(W3Document):
 			items.insert(0, ('index.html', 'Home', 'Home', False, []))
 			return items
 
-		def make_menu_dom(parent, items, level=0):
-			"""Builds the actual DOM link elements for the menu.
+		def make_menu_elements(parent, items, level=0):
+			"""Builds the actual link elements for the menu.
 
 			The make_menu_dom() sub-routine takes the output of the
 			make_menu_tree() subroutine and converts it into actual DOM
@@ -373,7 +373,7 @@ class W3MainDocument(W3Document):
 			make_menu_dom()).
 
 			Parameters:
-			parent -- The DOM node which will be the parent of the menu elements
+			parent -- The element which will be the parent of the menu elements
 			items -- The output of the make_menu_tree() subroutine
 			level -- (optional) The current nesting level
 			"""
@@ -389,9 +389,9 @@ class W3MainDocument(W3Document):
 				if active:
 					link.attrib['class'] = 'active'
 				if len(children) > 0 and level + 1 < len(classes):
-					make_menu_dom(parent, children, level + 1)
+					make_menu_elements(parent, children, level + 1)
 
-		make_menu_dom(self._find_element('div', 'left-nav'), make_menu_tree(self.dbobject))
+		make_menu_elements(self._find_element('div', 'left-nav'), make_menu_tree(self.dbobject))
 
 	def _create_crumbs(self):
 		"""Creates the breadcrumb links at the top of the page."""
