@@ -12,11 +12,9 @@ import imp
 import textwrap
 import db2makedoc.db
 import db2makedoc.plugins
-import db2makedoc.inputplugin
-import db2makedoc.outputplugin
 
 # Constants
-__version__ = "1.0.0pr3"
+__version__ = "1.0.0pr4"
 PLUGIN_OPTION = 'plugin'
 
 # Localizable strings
@@ -195,12 +193,12 @@ def list_plugins():
 		for (name, plugin) in get_plugins(db2makedoc.plugins)
 	]
 	input_plugins = [
-		(name, plugin)
+		(name, plugin.InputPlugin)
 		for (name, plugin) in plugins
 		if is_input_plugin(plugin)
 	]
 	output_plugins = [
-		(name, plugin)
+		(name, plugin.OutputPlugin)
 		for (name, plugin) in plugins
 		if is_output_plugin(plugin)
 	]
@@ -213,12 +211,12 @@ def list_plugins():
 	print BOLD + BLUE + INPUT_PLUGINS_MSG + NORMAL
 	for (name, plugin) in input_plugins:
 		print ' '*4 + BOLD + name + NORMAL
-		print tw.fill(plugin.__doc__.split('\n')[0])
+		print tw.fill(get_plugin_desc(plugin, summary=True))
 	print ''
 	print BOLD + BLUE + OUTPUT_PLUGINS_MSG + NORMAL
 	for (name, plugin) in output_plugins:
 		print ' '*4 + BOLD + name + NORMAL
-		print tw.fill(plugin.__doc__.split('\n')[0])
+		print tw.fill(get_plugin_desc(plugin, summary=True))
 	print ''
 
 def help_plugin(plugin_name):
@@ -236,7 +234,10 @@ def help_plugin(plugin_name):
 	tw = textwrap.TextWrapper()
 	tw.initial_indent = ' '*4
 	tw.subsequent_indent = tw.initial_indent
-	plugin_desc = '\n\n'.join(tw.fill(para) for para in plugin.__doc__.split('\n\n'))
+	plugin_desc = '\n\n'.join(
+		tw.fill(para)
+		for para in get_plugin_desc(plugin).split('\n\n')
+	)
 	print BOLD + BLUE + PLUGIN_DESC_MSG + NORMAL
 	print plugin_desc
 	print ''
@@ -250,6 +251,7 @@ def help_plugin(plugin_name):
 				print '(default: %s)' % default
 			else:
 				print
+			desc = '\n'.join(line.lstrip() for line in desc.split('\n'))
 			print tw.fill(desc)
 	print ""
 
@@ -259,7 +261,7 @@ def is_input_plugin(module):
 	A module is an input plugin if it exports a callable (function or class
 	definition) called Input.
 	"""
-	return hasattr(module, 'InputPlugin') and issubclass(module.InputPlugin, db2makedoc.inputplugin.InputPlugin)
+	return hasattr(module, 'InputPlugin') and issubclass(module.InputPlugin, db2makedoc.plugins.InputPlugin)
 
 def is_output_plugin(module):
 	"""Determines whether the specified module is an output plugin.
@@ -267,7 +269,7 @@ def is_output_plugin(module):
 	A module is an output plugin if it exports a callable (function or class
 	definition) called Output.
 	"""
-	return hasattr(module, 'OutputPlugin') and issubclass(module.OutputPlugin, db2makedoc.outputplugin.OutputPlugin)
+	return hasattr(module, 'OutputPlugin') and issubclass(module.OutputPlugin, db2makedoc.plugins.OutputPlugin)
 
 def is_plugin(module):
 	"""Determines whether the specified module is a plugin of either kind."""
@@ -340,6 +342,22 @@ def load_plugin(name):
 			if isinstance(modfile, file) and not modfile.closed:
 				modfile.close()
 	return module
+
+def get_plugin_desc(plugin, summary=False):
+	"""Retrieves the description of the plugin.
+
+	A plugin's description is stored in its classes' docstring. The first line
+	of the docstring is assumed to be the summary text. Leading indentation is
+	stripped from all lines. If the summary parameter is True, the first line
+	of the description is returned.
+	"""
+	s = plugin.__doc__
+	# Strip leading indentation
+	s = [line.lstrip() for line in s.split('\n')]
+	if summary:
+		return s[0]
+	else:
+		return '\n'.join(s)
 
 if __name__ == '__main__':
 	try:
