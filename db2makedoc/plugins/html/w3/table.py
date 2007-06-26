@@ -101,7 +101,7 @@ class W3TableDocument(W3MainDocument):
 					field.name,
 					field.datatype_str,
 					field.nullable,
-					field.key_index + 1,
+					field.key_index and field.key_index + 1,
 					field.cardinality
 				) for field in fields]
 			))
