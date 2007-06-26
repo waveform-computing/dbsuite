@@ -5,7 +5,7 @@
 
 import os
 import kid
-import db2makedoc.outputplugin
+import db2makedoc.plugins
 
 # Constants
 TEMPLATE_PATH_OPTION = 'template_path'
@@ -35,9 +35,9 @@ DEFAULT_FORMAT = 'default'
 DEFAULT_ENCODING = 'utf-8'
 
 # Localizable strings
-TEMPLATE_PATH_DESC = 'The folder which all template and static files exist ' \
-	'relative to. If a template filename is blank (all are blank by default), ' \
-	'nothing will be produced for objects of the associated type'
+TEMPLATE_PATH_DESC = '''The folder which all template and static files exist
+	relative to. If a template filename is blank (all are blank by default),
+	nothing will be produced for objects of the associated type'''
 STATIC_DESC = 'A space separated list of static files to be copied verbatim into the target directory (optional)'
 DB_TEMPLATE_DESC = 'The filename of the template used to transform the Database object (optional)'
 SCHEMA_TEMPLATE_DESC = 'The filename of the template used to transform Schema objects (optional)'
@@ -56,7 +56,6 @@ AUTHOR_NAME_DESC = 'The name of the author of the generated documentation (optio
 AUTHOR_MAIL_DESC = 'The e-mail address of the author of the generated documentation (optional)'
 COPYRIGHT_DESC = 'The copyright message to embed in the generated documentation (optional)'
 PATH_DESC = 'The folder into which all output files will be written'
-MISSING_OPTION = 'The "%s" option must be specified'
 
 
 class OutputOptions(object):
@@ -77,7 +76,7 @@ class OutputOptions(object):
 		self.encoding = DEFAULT_ENCODING
 
 
-class OutputPlugin(db2makedoc.outputplugin.OutputPlugin):
+class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 	"""Output plugin for kid XML templates.
 
 	This output plugin supports generating XML, HTML or plain text output by
@@ -117,11 +116,6 @@ class OutputPlugin(db2makedoc.outputplugin.OutputPlugin):
 	def configure(self, config):
 		"""Loads the plugin configuration."""
 		super(OutputPlugin, self).configure(config)
-		# Check for missing stuff
-		if not PATH_OPTION in self.options:
-			raise Exception(MISSING_OPTION % PATH_OPTION)
-		if not TEMPLATE_PATH_OPTION in self.options:
-			raise Exception(MISSING_OPTION % TEMPLATE_PATH_OPTION)
 		# Expand any variables or references in the path options
 		for path in (
 				TEMPLATE_PATH_OPTION,
