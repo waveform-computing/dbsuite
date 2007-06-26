@@ -16,16 +16,16 @@ from db2makedoc.plugins.html import AttrDict, WebSite, HTMLDocument, CSSDocument
 
 # Import the ElementTree API, favouring the faster cElementTree implementation
 try:
-	from xml.etree.cElementTree import fromstring, tostring, iselement, Element, Comment
+	from xml.etree.cElementTree import fromstring
 except ImportError:
 	try:
-		from cElementTree import fromstring, tostring, iselement, Element, Comment
+		from cElementTree import fromstring
 	except ImportError:
 		try:
-			from xml.etree.ElementTree import fromstring, tostring, iselement, Element, Comment
+			from xml.etree.ElementTree import fromstring
 		except ImportError:
 			try:
-				from elementtree.ElementTree import fromstring, tostring, iselement, Element, Comment
+				from elementtree.ElementTree import fromstring
 			except ImportError:
 				raise ImportError('Unable to find an ElementTree implementation')
 
@@ -262,7 +262,7 @@ class W3MainDocument(W3Document):
 		# Parse the HTML in template and graft the <body> element onto the
 		# <body> element in self.doc
 		self.doc.remove(self.doc.find('body'))
-		self.doc.append(et.fromstring(self.template).find('body'))
+		self.doc.append(fromstring(self.template).find('body'))
 		# Fill in the template
 		self.sections = []
 		self._append_content(self._find_element('div', 'site-title-only'), '%s Documentation' % self.dbobject.database.name)
@@ -505,7 +505,7 @@ class W3PopupDocument(W3Document):
 		# Graft the <body> element from self.content onto the <body> element in
 		# self.doc
 		self.doc.remove(self.doc.find('body'))
-		self.doc.append(et.fromstring(self.template % (self.title, self.body)).find('body'))
+		self.doc.append(fromstring(self.template % (self.title, self.body)).find('body'))
 
 
 class W3CSSDocument(CSSDocument):
@@ -585,19 +585,25 @@ class W3GraphDocument(GraphDocument):
 		self._create_graph()
 		# Tweak some of the graph attributes to make it scale a bit more nicely
 		self.graph.rankdir = 'LR'
-		self.graph.dpi = '75'
-		self.graph.ratio = '1.5' # See width and height attributes in _img_of()
+		self.graph.size = '10,20'
+		self.graph.dpi = '96'
+		self.graph.ratio = '1.5'
 		# Transform dbobject attributes on Node, Edge and Cluster objects into
 		# URL attributes 
 
 		def rewrite_url(node):
 			if isinstance(node, (Node, Edge, Cluster)) and hasattr(node, 'dbobject'):
-				node.URL = self.site.document_map[node.dbobject].url
+				doc = self.site.object_document(node.dbobject)
+				if doc:
+					node.URL = doc.url
 
 		def rewrite_font(node):
-			if isinstance(node, (Node, Edge, Cluster)):
+			if isinstance(node, (Node, Edge)):
 				node.fontname = 'Verdana'
-				node.fontsize = 10.0
+				node.fontsize = 9.0
+			elif isinstance(node, Cluster):
+				node.fontname = 'Verdana'
+				node.fontsize = 12.0
 
 		self.graph.touch(rewrite_url)
 		self.graph.touch(rewrite_font)
