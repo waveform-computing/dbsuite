@@ -6,31 +6,32 @@
 This module defines the base class for input plugins. Input plugins are
 expected to retrieve certain details from a database structured in the manner
 dictated by the docstrings in this module.
-
-Developers of input plugins should define their own module containing an
-InputPlugin class, derived from the InputPlugin class in this module. The new
-InputPlugin class should override as many of the public "get_X" methods as are
-relevant for their particular database system; i.e. if the database system the
-input plugin targets has no concept of aliases, don't bother overriding
-get_aliases().
 """
 
 import sys
 import logging
 
 class InputPlugin(object):
-	def __init__(self, config):
+	"""Base class for input plugins.
+	
+	Developers of input plugins should subclass this class to create their
+	plugins. The new class should include a new docstring which will become the
+	description of the plugin. It should also override all public methods below
+	(except the few cases where the docstring states the method should NOT be
+	overridden).
+	"""
+
+	def __init__(self):
 		"""Initializes an instance of the class.
+		
+		Plugins derived from this class are expected to set up the options that
+		the plugin can accept by calling the add_option() method during
+		construction. This allows the main application to present the user with
+		a list of possible configuration options when requested.
 
-		The config parameter passed to the constructor contains a dictionary of
-		values with the plugin configuration, as obtained from the
-		configuration file specified by the user on the command line.
-
-		The constructor is expected to use this configuration information to
-		open a connection to the database. The configuration need not be
-		retained after this. The constructor is NOT expected to query anything.
-		The property getter methods will take of querying and caching the
-		results where necessary.
+		Other than setting up the options, the derived constructor is expected
+		to do nothing else (other than call the inherited constructor of
+		course).
 		"""
 		super(InputPlugin, self).__init__()
 		self.__schemas = None
@@ -64,10 +65,71 @@ class InputPlugin(object):
 		self.__tablespaces = None
 		self.__tablespace_tables = None
 		self.__tablespace_indexes = None
+		self.options = {}
+
+	def add_option(self, name, default=None, doc=None):
+		"""Adds a new option to the configuration dictionary.
+
+		Derived classes should NOT override this method.
+
+		Derived classes are expected to call this method during construction to
+		define the configuration options they expect to receive. Currently,
+		this is a very basic mechanism. In future it may be expanded to include
+		some rudimentary type checking and validation (currently derived
+		classes must perform any validation themselves during the execute()
+		call).
+
+		As such future expansions may result in an extended prototype for this
+		function it is strongly recommended that keyword arguments are used
+		when calling it.
+		"""
+		self.options[name] = (default, doc)
+
+	def configure(self, config):
+		"""Loads the plugin configuration.
+
+		This method is called by the main application to load configuration
+		information from the file specified by the user. If derived classes
+		override this method they should call the inherited method and then
+		test that the configuration is valid.
+		"""
+		for (name, (default, doc)) in self.options:
+			if name in config:
+				self.options[name] = config[name]
+			else:
+				self.options[name] = default
 
 
 	# METHODS TO OVERRIDE #####################################################
 
+
+	def open(self):
+		"""Opens the database connection for data retrieval.
+
+		This method is called by the main application to "start" the plugin.
+		Derived classes should override this method to open the database
+		connection, using the configuration specified in the self.options
+		dictionary (which by this point will simply map names to values, with
+		any documentation stripped out).
+
+		This method is NOT expected to actually retrieve any data from the
+		database (although it can do if the developer wishes) - the private
+		property getters will handle calling the other derived methods to do
+		this.
+		"""
+		pass
+	
+	def close(self):
+		"""Closes the database connection and cleans up any resources.
+
+		This method is called by the main application to "stop" the plugin
+		once it has retrieved all the necessary data. Given Python's garbage
+		collection it is not usually necessary to do anything here. However,
+		if a plugin author has obtained any explicit locks on the source
+		database or wishes to ensure the connection closes as rapidly as
+		possible, this is the place to do it.
+		"""
+		pass
 
 	def get_schemas(self):
 		"""Retrieves the details of schemas stored in the database.

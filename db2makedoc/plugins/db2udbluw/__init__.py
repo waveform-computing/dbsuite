@@ -1,13 +1,7 @@
 # $Header$
 # vim: set noet sw=4 ts=4:
 
-"""Input plugin for IBM DB2 UDB for Linux/UNIX/Windows.
-
-This input plugin supports extracting documentation information from IBM DB2
-UDB for Linux/UNIX/Windows version 8 or above. If the DOCCAT schema (see the
-doccat_create.sql script in the contrib/db2udbluw directory) is present, it
-will be used to source documentation data instead of SYSCAT.
-"""
+"""Input plugin for IBM DB2 UDB for Linux/UNIX/Windows."""
 
 import sys
 mswindows = sys.platform == 'win32'
@@ -24,7 +18,7 @@ PASSWORD_OPTION = 'password'
 # Localizable strings
 DATABASE_DESC = 'The locally cataloged name of the database to connect to'
 USERNAME_DESC = 'The username to connect with (optional: if ommitted an implicit connection will be made)'
-PASSWORD_DESC = 'The password associated with the user given by the username option'
+PASSWORD_DESC = 'The password associated with the user given by the username option (mandatory if %s is supplied)' % USERNAME_OPTION
 MISSING_OPTION = 'The "%s" option must be specified'
 MISSING_DEPENDENT = 'If the "%s" option is given, the "%s" option must also be provided'
 
@@ -34,12 +28,55 @@ USING_SYSCAT = 'DOCCAT extension schema not found, using SYSCAT'
 USING_V9 = 'Detected IBM DB2 UDB 9+ catalog layout'
 USING_V8 = 'Did not detect IBM DB2 UDB 9+ catalog layout, defaulting to IBM DB2 UDB 8 layout'
 
-# Plugin options dictionary
-options = {
-	DATABASE_OPTION: DATABASE_DESC,
-	USERNAME_OPTION: USERNAME_DESC,
-	PASSWORD_OPTION: PASSWORD_DESC,
-}
+
+def _connect(self, dsn, username=None, password=None):
+	"""Create a connection to the specified database.
+
+	This utility method attempts to connect to the database named by dsn
+	using the (optional) username and password provided. The method
+	attempts to use a variety of connection frameworks (PyDB2, PythonWin's
+	ODBC stuff and mxODBC) depending on the underlying platform.
+
+	Note that the queries in the methods below are written to be agnostic
+	to the quirks of the various connection frameworks (e.g. PythonWin's
+	ODBC module doesn't correctly handle certain dates hence why all DATE
+	and TIMESTAMP fields are CAST to CHAR in the queries below).
+	"""
+	logging.info(CONNECTING_MSG % dsn)
+	try:
+		# Try the PyDB2 framework
+		import DB2
+		if username is not None:
+			return DB2.Connection(dsn, username, password)
+		else:
+			return DB2.Connection(dsn)
+	except ImportError:
+		try:
+			# Try the PythonWin ODBC framework
+			import dbi
+			import odbc
+			if username is not None:
+				# XXX Check whether escaping/quoting is required
+				return odbc.odbc("%s/%s/%s" % (dsn, username, password))
+			else:
+				return odbc.odbc(dsn)
+		except ImportError:
+			try:
+				# Try the mxODBC framework
+				import mx.ODBC
+				# XXX Check whether escaping/quoting is required
+				if username is not None:
+					connectstr = 'DSN=%s;UID=%s;PWD=%s' % (dsn, username, password)
+				else:
+					connectstr = 'DSN=%s' % dsn
+				if mswindows:
+					import mx.ODBC.Windows
+					return mx.ODBC.Windows.DriverConnect(connectstr)
+				else:
+					import mx.ODBC.iODBC
+					return mx.ODBC.iODBC.DriverConnect(connectstr)
+			except ImportError:
+				raise Exception('Unable to find a suitable connection framework')
 
 def _make_datetime(value):
 	"""Converts a date-time value from a database query to a datetime object.
@@ -78,21 +115,41 @@ def _make_bool(value, true_value='Y', false_value='N', none_value=' ', unknown_e
 		else:
 			return unknown_result
 
+
 class InputPlugin(db2makedoc.inputplugin.InputPlugin):
-	def __init__(self, config):
-		super(InputPlugin, self).__init__(config)
-		# Check the config dictionary for missing stuff
-		if not DATABASE_OPTION in config:
+	"""Input plugin for IBM DB2 UDB for Linux/UNIX/Windows.
+
+	This input plugin supports extracting documentation information from IBM
+	DB2 UDB for Linux/UNIX/Windows version 8 or above. If the DOCCAT schema
+	(see the doccat_create.sql script in the contrib/db2udbluw directory) is
+	present, it will be used to source documentation data instead of SYSCAT.
+	"""
+
+	def __init__(self):
+		"""Initializes an instance of the class."""
+		super(InputPlugin, self).__init__()
+		self.add_option(DATABASE_OPTION, default=None, doc=DATABASE_DESC)
+		self.add_option(USERNAME_OPTION, default=None, doc=USERNAME_DESC)
+		self.add_option(PASSWORD_OPTION, default=None, doc=PASSWORD_DESC)
+	
+	def configure(self, config):
+		"""Loads the plugin configuration."""
+		super(InputPlugin, self).configure(config)
+		# Check for missing stuff
+		if not self.options[DATABASE_OPTION]:
 			raise Exception(MISSING_OPTION % DATABASE_OPTION)
-		if USERNAME_OPTION in config and not PASSWORD_OPTION in config:
+		if self.options[USERNAME_OPTION] and not self.options[PASSWORD_OPTION]:
 			raise Exception(MISSING_DEPENDENT % (USERNAME_OPTION, PASSWORD_OPTION))
-		# Open the databsae connection
+
+	def open(self):
+		"""Opens the database connection for data retrieval."""
+		super(InputPlugin, self).open()
 		self.connection = self._connect(
-			config[DATABASE_OPTION],
-			config.get(USERNAME_OPTION, None),
-			config.get(PASSWORD_OPTION, None)
+			self.options[DATABASE_OPTION],
+			self.options[USERNAME_OPTION],
+			self.options[PASSWORD_OPTION]
 		)
-		self.name = config[DATABASE_OPTION]
+		self.name = self.options[DATABASE_OPTION]
 		# Test whether the DOCCAT extension is installed
 		cursor = self.connection.cursor()
 		cursor.execute("""
@@ -101,10 +158,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 			WHERE SCHEMANAME = 'DOCCAT'
 			WITH UR""")
 		self.doccat = bool(cursor.fetchall()[0][0])
-		if self.doccat:
-			logging.info(USING_DOCCAT)
-		else:
-			logging.info(USING_SYSCAT)
+		logging.info([USING_SYSCAT, USING_DOCCAT][self.doccat])
 		# Test which version of the system catalog is installed
 		cursor = self.connection.cursor()
 		cursor.execute("""
@@ -117,61 +171,19 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 			'schema': ['SYSCAT', 'DOCCAT'][self.doccat]
 		})
 		self.v9 = bool(cursor.fetchall()[0][0])
-		if self.v9:
-			logging.info(USING_V9)
-		else:
-			logging.info(USING_V8)
+		logging.info([USING_V8, USING_V9][self.v9])
 		# Set up a generic query substitution dictionary
 		self.query_subst = {
 			'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
 			'owner': ['DEFINER', 'OWNER'][self.v9],
 		}
 	
-	def _connect(self, dsn, username=None, password=None):
-		"""Create a connection to the specified database.
-
-		This utility method attempts to connect to the database named by dsn
-		using the (optional) username and password provided. The method
-		attempts to use a variety of connection frameworks (PyDB2, PythonWin's
-		ODBC stuff and mxODBC) depending on the underlying platform.
-
-		Note that the queries in the methods below are written to be agnostic
-		to the quirks of the various connection frameworks (e.g. PythonWin's
-		ODBC module doesn't correctly handle certain dates hence why all DATE
-		and TIMESTAMP fields are CAST to CHAR in the queries below).
-		"""
-		logging.info(CONNECTING_MSG % dsn)
-		try:
-			# Try the PyDB2 framework
-			import DB2
-			if username:
-				return DB2.Connection(dsn, username, password)
-			else:
-				return DB2.Connection(dsn)
-		except ImportError:
-			try:
-				# Try the PythonWin ODBC framework
-				import dbi
-				import odbc
-				if username:
-					return odbc.odbc("%s/%s/%s" % (dsn, username, password))
-				else:
-					return odbc.odbc(dsn)
-			except ImportError:
-				try:
-					# Try the mxODBC framework
-					import mx.ODBC
-					# XXX Check whether escaping/quoting is required
-					connectstr = 'DSN=%s;UID=%s;PWD=%s' % (dsn, username, password)
-					if mswindows:
-						import mx.ODBC.Windows
-						return mx.ODBC.Windows.DriverConnect(connectstr)
-					else:
-						import mx.ODBC.iODBC
-						return mx.ODBC.iODBC.DriverConnect(connectstr)
-				except ImportError:
-					raise Exception('Unable to find a suitable connection framework')
-
+	def close(self):
+		"""Closes the database connection and cleans up any resources."""
+		super(InputPlugin, self).close()
+		self.connection.close()
+		del self.connection
+	
 	def get_schemas(self):
 		"""Retrieves the details of schemas stored in the database.
 

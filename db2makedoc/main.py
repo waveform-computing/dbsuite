@@ -12,6 +12,8 @@ import imp
 import textwrap
 import db2makedoc.db
 import db2makedoc.plugins
+import db2makedoc.inputplugin
+import db2makedoc.outputplugin
 
 # Constants
 __version__ = "1.0.0pr3"
@@ -33,8 +35,6 @@ NO_FILES_ERR = 'you did not specify any filenames'
 MISSING_VALUE_ERR = '%s: [%s]: missing a "%s" value'
 INVALID_PLUGIN_ERR = '%s: [%s]: invalid plugin name "%s" (plugin names must be fully qualified; must begin with "input." or "output.")'
 PLUGIN_IMPORT_ERR = '%s: [%s]: plugin "%s" not found or failed to load (error: %s)'
-PLUGIN_NOT_INPUT_ERR = '%s: [%s]: plugin "%s" is not a valid input plugin'
-PLUGIN_NOT_OUTPUT_ERR = '%s: [%s]: plugin "%s" is not a valid output plugin'
 PLUGIN_EXEC_ERR = '%s: [%s]: plugin "%s" failed (error: %s)'
 
 READING_INPUT_MSG = '%s: [%s]: Reading input (%s)'
@@ -135,34 +135,37 @@ def main():
 				input_plugin = load_plugin(s)
 			except ImportError, e:
 				raise Exception(PLUGIN_IMPORT_ERR % (config_file, input_section, s, str(e)))
-			if not is_input_plugin(input_plugin):
-				raise Exception(PLUGIN_NOT_INPUT_ERR % (config_file, input_section, s))
 			# Get input_plugin to read data from the source specified by the
 			# configuration values from input_section
 			logging.info(READING_INPUT_MSG % (config_file, input_section, s))
 			try:
-				input = input_plugin.InputPlugin(dict(parser.items(input_section)))
+				ip = input_plugin.InputPlugin()
+				ip.configure(dict(parser.items(input_section)))
+				ip.open()
+				try:
+					# Construct the internal representation of the metadata
+					db = db2makedoc.db.Database(ip)
+				finally:
+					ip.close()
 			except Exception, e:
 				# Unless we're in debug mode, just log errors and continue on
-				# to the next input section
+				# to the next ip section
 				logging.error(PLUGIN_EXEC_ERR % (config_file, input_section, s, str(e)))
 				if options.debug:
 					raise
 				continue
-			# Construct the internal representation of the metadata
-			db = db2makedoc.db.Database(input)
 			for output_section in output_sections:
 				s = parser.get(output_section, PLUGIN_OPTION)
 				try:
 					output_plugin = load_plugin(s)
 				except ImportError, e:
 					raise Exception(PLUGIN_IMPORT_ERR % (config_file, output_section, s, str(e)))
-				if not is_output_plugin(output_plugin):
-					raise Exception(PLUGIN_NOT_OUTPUT_ERR % (config_file, output_section, s))
 				# Get the output_plugin to generate output from db
 				logging.info(WRITING_OUTPUT_MSG % (config_file, output_section, s))
 				try:
-					output_plugin.OutputPlugin(db, dict(parser.items(output_section)))
+					op = output_plugin.OutputPlugin()
+					op.configure(dict(parser.items(output_section)))
+					op.execute(db)
 				except Exception, e:
 					# Again, just log errors and continue onto the next output
 					# section unless in debug mode
@@ -221,6 +224,12 @@ def list_plugins():
 def help_plugin(plugin_name):
 	"""Pretty-print some help text for the specified plugin."""
 	plugin = load_plugin(plugin_name)
+	if is_input_plugin(plugin):
+		plugin = plugin.InputPlugin()
+	elif is_output_plugin(plugin):
+		plugin = plugin.OutputPlugin()
+	else:
+		assert False
 	print BOLD + BLUE + PLUGIN_NAME_MSG + NORMAL
 	print ' '*4 + BOLD + plugin_name + NORMAL
 	print ''
@@ -235,8 +244,12 @@ def help_plugin(plugin_name):
 		print BOLD + BLUE + PLUGIN_OPTIONS_MSG + NORMAL
 		tw.initial_indent = ' '*8
 		tw.subsequent_indent = tw.initial_indent
-		for (name, desc) in sorted(plugin.options.iteritems(), key=lambda(name, desc): name):
-			print ' '*4 + BOLD + name + NORMAL
+		for (name, (default, desc)) in sorted(plugin.options.iteritems(), key=lambda(name, desc): name):
+			print ' '*4 + BOLD + name + NORMAL,
+			if default is not None:
+				print '(default: %s)' % default
+			else:
+				print
 			print tw.fill(desc)
 	print ""
 
@@ -246,7 +259,7 @@ def is_input_plugin(module):
 	A module is an input plugin if it exports a callable (function or class
 	definition) called Input.
 	"""
-	return hasattr(module, 'InputPlugin') and callable(module.InputPlugin)
+	return hasattr(module, 'InputPlugin') and issubclass(module.InputPlugin, db2makedoc.inputplugin.InputPlugin)
 
 def is_output_plugin(module):
 	"""Determines whether the specified module is an output plugin.
@@ -254,7 +267,7 @@ def is_output_plugin(module):
 	A module is an output plugin if it exports a callable (function or class
 	definition) called Output.
 	"""
-	return hasattr(module, 'OutputPlugin') and callable(module.OutputPlugin)
+	return hasattr(module, 'OutputPlugin') and issubclass(module.OutputPlugin, db2makedoc.outputplugin.OutputPlugin)
 
 def is_plugin(module):
 	"""Determines whether the specified module is a plugin of either kind."""
