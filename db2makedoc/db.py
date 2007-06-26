@@ -223,7 +223,7 @@ class ConstraintsList(object):
 		return self._database.schemas[schema_name].tables[table_name].constraints[constraint_name]
 	
 	def __iter__(self):
-		for (schema_name, constraint_name) in self._items:
+		for (schema_name, table_name, constraint_name) in self._items:
 			yield self._database.schemas[schema_name].tables[table_name].constraints[constraint_name]
 
 	def __contains__(self, key):
