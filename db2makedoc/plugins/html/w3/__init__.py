@@ -4,7 +4,7 @@
 """Output plugin for IBM Intranet w3v8 style web pages."""
 
 import os
-import db2makedoc.outputplugin
+import db2makedoc.plugins
 from db2makedoc.plugins.html.w3.document import W3Site, W3CSSDocument, W3PopupDocument
 from db2makedoc.plugins.html.w3.database import W3DatabaseDocument
 from db2makedoc.plugins.html.w3.schema import W3SchemaDocument, W3SchemaGraph
@@ -41,7 +41,7 @@ options = {
 	COPYRIGHT_OPTION: COPYRIGHT_DESC,
 }
 
-class OutputPlugin(db2makedoc.outputplugin.OutputPlugin):
+class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 	"""Output plugin for IBM Intranet w3v8 style web pages.
 
 	This output plugin supports generating XHTML documentation conforming to
@@ -60,17 +60,22 @@ class OutputPlugin(db2makedoc.outputplugin.OutputPlugin):
 		self.add_option(AUTHOR_MAIL_OPTION, default=None, doc=AUTHOR_MAIL_DESC)
 		self.add_option(COPYRIGHT_OPTION, default=None, doc=COPYRIGHT_DESC)
 
+	def configure(self, config):
+		super(OutputPlugin, self).configure(config)
+		# Expand any variables or references in the path option
+		self.options[PATH_OPTION] = os.path.expanduser(os.path.expandvars(self.options[PATH_OPTION]))
+
 	def execute(self, database):
 		"""Invokes the plugin to produce documentation."""
 		super(OutputPlugin, self).execute(database)
 		site = W3Site(database)
 		site.baseurl = ''
-		site.basepath = os.path.expanduser(os.path.expandvars(self.options[PATH_OPTION]))
-		if AUTHOR_NAME_OPTION in config:
+		site.basepath = self.options[PATH_OPTION]
+		if self.options[AUTHOR_NAME_OPTION]:
 			site.author_name = self.options[AUTHOR_NAME_OPTION]
-		if AUTHOR_MAIL_OPTION in config:
+		if self.options[AUTHOR_MAIL_OPTION]:
 			site.author_email = self.options[AUTHOR_MAIL_OPTION]
-		if COPYRIGHT_OPTION in config:
+		if self.options[COPYRIGHT_OPTION]:
 			site.copyright = self.options[COPYRIGHT_OPTION]
 		# Construct the supplementary SQL stylesheet
 		W3CSSDocument(site, 'sql.css')
