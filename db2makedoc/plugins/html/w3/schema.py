@@ -4,6 +4,17 @@
 from db2makedoc.db import Schema, Table
 from db2makedoc.plugins.html.w3.document import W3MainDocument, W3GraphDocument
 
+times = {
+	'A': 'After',
+	'B': 'Before',
+	'I': 'Instead of',
+}
+events = {
+	'I': 'Insert',
+	'U': 'Update',
+	'D': 'Delete',
+}
+
 class W3SchemaDocument(W3MainDocument):
 	def __init__(self, site, schema):
 		assert isinstance(schema, Schema)
@@ -56,8 +67,8 @@ class W3SchemaDocument(W3MainDocument):
 					"Description")],
 				data=[(
 					self._a_to(trigger),
-					trigger.trigger_time,
-					trigger.trigger_event,
+					times[trigger.trigger_time],
+					events[trigger.trigger_event],
 					self._a_to(trigger.relation, qualifiedname=True),
 					self._format_comment(trigger.description, summary=True)
 				) for trigger in triggers]
@@ -96,7 +107,6 @@ class W3SchemaGraph(W3GraphDocument):
 			for dependent in relation.dependent_list:
 				dep_node = self._add_dbobject(dependent)
 				dep_edge = dep_node.connect_to(rel_node)
-				dep_edge.label = '<uses>'
 				dep_edge.arrowhead = 'onormal'
 			if isinstance(relation, Table):
 				for key in relation.foreign_key_list:
@@ -107,21 +117,17 @@ class W3SchemaGraph(W3GraphDocument):
 				for trigger in relation.trigger_list:
 					trig_node = self._add_dbobject(trigger)
 					trig_edge = rel_node.connect_to(trig_node)
-					trig_edge.label = ('<%s %s>' % (trigger.trigger_time, trigger.trigger_event)).lower()
 					trig_edge.arrowhead = 'vee'
 					for dependency in trigger.dependency_list:
 						dep_node = self._add_dbobject(dependency)
 						dep_edge = trig_node.connect_to(dep_node)
-						dep_edge.label = '<uses>'
 						dep_edge.arrowhead = 'onormal'
 		for trigger in schema.trigger_list:
 			rel_node = self._add_dbobject(trigger.relation)
 			trig_node = self._add_dbobject(trigger)
 			trig_edge = rel_node.connect_to(trig_node)
-			trig_edge.label = ('<%s %s>' % (trigger.trigger_time, trigger.trigger_event)).lower()
 			trig_edge.arrowhead = 'vee'
 			for dependency in trigger.dependency_list:
 				dep_node = self._add_dbobject(dependency)
 				dep_edge = trig_node.connect_to(dep_node)
-				dep_edge.label = '<uses>'
 				dep_edge.arrowhead = 'onormal'
