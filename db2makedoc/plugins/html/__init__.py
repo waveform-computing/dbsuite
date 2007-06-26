@@ -12,10 +12,25 @@ import os
 import codecs
 import re
 import datetime
+import logging
 
 from db2makedoc.db import DatabaseObject, Database
 from db2makedoc.highlighters import CommentHighlighter, SQLHighlighter
 from db2makedoc.plugins.html.entities import HTML_ENTITIES
+from db2makedoc.sql.formatter import (
+	ERROR,
+	COMMENT,
+	KEYWORD,
+	IDENTIFIER,
+	DATATYPE,
+	REGISTER,
+	NUMBER,
+	STRING,
+	OPERATOR,
+	PARAMETER,
+	TERMINATOR,
+	STATEMENT
+)
 
 # Import the GraphViz API
 from db2makedoc.graph import Graph, Node, Edge, Cluster
@@ -369,6 +384,7 @@ class HTMLDocument(WebSiteDocument):
 
 	def write(self):
 		"""Writes this document to a file in the site's path"""
+		super(HTMLDocument, self).write()
 		self._create_content()
 		# "Pure" XML won't handle HTML character entities. So we do it
 		# manually. First, get the XML as a Unicode string (without any XML
@@ -835,6 +851,7 @@ class CSSDocument(WebSiteDocument):
 	
 	def write(self):
 		"""Writes this document to a file in the site's path"""
+		super(CSSDocument, self).write()
 		self._create_content()
 		f = open(self.filename, 'w')
 		try:
@@ -857,6 +874,7 @@ class GraphDocument(WebSiteDocument):
 		super(GraphDocument, self).__init__(site, url)
 		self.graph = Graph('G')
 		# PNGs and GIFs use a client-side image-map to define link locations
+		# (SVGs just use embedded links)
 		self._usemap = os.path.splitext(self.filename)[1].lower() in ('.png', '.gif')
 		# _content_done is simply used to ensure that we don't generate the
 		# graph content more than once when dealing with image maps (which have
@@ -865,6 +883,7 @@ class GraphDocument(WebSiteDocument):
 
 	def write(self):
 		"""Writes this document to a file in the site's path"""
+		super(GraphDocument, self).write()
 		# The following lookup tables are used to decide on the method used to
 		# write output based on the extension of the image filename
 		method_lookup = {
@@ -874,9 +893,6 @@ class GraphDocument(WebSiteDocument):
 			'.ps': self.graph.to_ps,
 			'.eps': self.graph.to_ps,
 		}
-		# If our filename is a compound (tuple) value, assume the first element
-		# refers to the image filename, and the second refers to the
-		# client-side image map
 		try:
 			method = method_lookup[os.path.splitext(self.filename)[1].lower()]
 		except KeyError:
