@@ -25,9 +25,6 @@ for Linux/UNIX/Windows"""
 
 packages=[
 	'db2makedoc',
-	'db2makedoc.db',
-	'db2makedoc.dot',
-	'db2makedoc.highlighters',
 	'db2makedoc.sql',
 	'db2makedoc.plugins',
 	'db2makedoc.plugins.db2udbluw',
