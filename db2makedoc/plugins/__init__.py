@@ -828,7 +828,7 @@ class InputPlugin(Plugin):
 		if self.__unique_keys_list is None:
 			self.__unique_keys_list = reduce(lambda a,b: a+b,
 				[
-					[(schema, name, key[0]) for key in keys]
+					[(schema, name) + key for key in keys]
 					for ((schema, name), keys) in self.unique_keys.iteritems()
 					if len(keys) > 0
 				], []
@@ -863,7 +863,7 @@ class InputPlugin(Plugin):
 		if self.__foreign_keys_list is None:
 			self.__foreign_keys_list = reduce(lambda a,b: a+b,
 				[
-					[(schema, name, key[0]) for key in keys]
+					[(schema, name) + key for key in keys]
 					for ((schema, name), keys) in self.foreign_keys.iteritems()
 					if len(keys) > 0
 				], []
@@ -909,7 +909,7 @@ class InputPlugin(Plugin):
 		if self.__checks_list is None:
 			self.__checks_list = reduce(lambda a,b: a+b,
 				[
-					[(schema, name, check[0]) for check in checks]
+					[(schema, name) + check for check in checks]
 					for ((schema, name), checks) in self.checks.iteritems()
 					if len(checks) > 0
 				], []
