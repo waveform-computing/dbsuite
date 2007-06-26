@@ -303,38 +303,73 @@ class W3MainDocument(W3Document):
 			active -- True if the database object is the focus of the document (and hence, selected)
 			subitems -- The child entries of selitem (if any)
 			"""
-			moretop = False
-			morebot = False
+			# Get the list of siblings and figure out the range of visible items
 			if selitem.parent_list is None:
-				slice = [selitem]
+				siblings = [selitem]
+				first_visible = 0
+				last_visible = 0
 			else:
 				index = selitem.parent_index
+				siblings = selitem.parent_list
 				if len(selitem.parent_list) <= 10:
-					slice = selitem.parent_list
+					first_visible = 0
+					last_visible = len(siblings) - 1
 				elif index <= 3:
-					slice = selitem.parent_list[:7]
-					morebot = True
+					first_visible = 0
+					last_visible = 6
 				elif index >= len(selitem.parent_list) - 4:
-					slice = selitem.parent_list[-7:]
-					moretop = True
+					first_visible = len(siblings) - 7
+					last_visible = len(siblings) - 1
 				else:
-					slice = selitem.parent_list[index - 3:index + 4]
-					moretop = True
-					morebot = True
-			# items is a list of tuples of (URL, content, title, active, [children])
+					first_visible = index - 3
+					last_visible = index + 3
+			more_above = first_visible > 0
+			more_below = last_visible < len(siblings) - 1
+			# items is a list of tuples of (URL, content, title, visible, active, [children])
 			items = []
-			for item in slice:
+			index = 0
+			for item in siblings:
 				content = item.name
-				if len(content) > 10: content = '%s...' % content[:10]
+				if len(content) > 10:
+					content = '%s...' % content[:10]
 				title = '%s %s' % (item.type_name, item.qualified_name)
-				if item == selitem:
-					items.append((self.site.object_document(item).url, content, title, active, subitems))
+				if item is selitem:
+					items.append((
+						self.site.object_document(item).url,
+						content,
+						title,
+						True,
+						active,
+						subitems
+					))
 				else:
-					items.append((self.site.object_document(item).url, content, title, False, []))
-			if moretop:
-				items.insert(0, ('#', u'\u2191 More items...', 'More items', False, [])) # \u2191 == &uarr;
-			if morebot:
-				items.append(('#', u'\u2193 More items...', 'More items', False, [])) # \u2193 == &darr;
+					items.append((
+						self.site.object_document(item).url,
+						content,
+						title,
+						first_visible <= index <= last_visible,
+						False,
+						[]
+					))
+				index += 1
+			if more_above:
+				items.insert(0, (
+					'#',
+					u'\u2191 More items...', # \u2191 == &uarr;
+					'More items',
+					True,
+					False,
+					[]
+				))
+			if more_below:
+				items.append((
+					'#',
+					u'\u2193 More items...', # \u2193 == &darr;
+					'More items',
+					True,
+					False,
+					[]
+				))
 			return items
 
 		def make_menu_tree(item, active=True):
@@ -353,13 +388,13 @@ class W3MainDocument(W3Document):
 			item -- The item to construct a menu tree for
 			active -- (optional) If True, item is the focus of the document (and hence, selected)
 			"""
-			# items is a list of tuples of (URL, content, title, active, [children])
+			# items is a list of tuples of (URL, content, title, visible, active, [children])
 			items = []
 			while item is not None:
 				items = make_menu_level(item, active, items)
 				active = False
 				item = item.parent
-			items.insert(0, ('index.html', 'Home', 'Home', False, []))
+			items.insert(0, ('index.html', 'Home', 'Home', True, False, []))
 			return items
 
 		def make_menu_elements(parent, items, level=0):
@@ -378,16 +413,16 @@ class W3MainDocument(W3Document):
 			level -- (optional) The current nesting level
 			"""
 			classes = ['top-level', 'second-level', 'third-level']
-			e = self._div('', attrs={
-				'class': classes[level]
-			})
+			e = self._div('', attrs={'class': classes[level]})
 			parent.append(e)
 			parent = e
-			for (url, content, title, active, children) in items:
+			for (url, content, title, visible, active, children) in items:
 				link = self._a(url, content, title)
-				parent.append(link)
 				if active:
-					link.attrib['class'] = 'active'
+					link.attrib['class'] = ' '.join(link.attrib.get('class', '').split(' ') + ['active'])
+				if not visible:
+					link.attrib['style'] = 'display: none;'
+				parent.append(link)
 				if len(children) > 0 and level + 1 < len(classes):
 					make_menu_elements(parent, children, level + 1)
 
