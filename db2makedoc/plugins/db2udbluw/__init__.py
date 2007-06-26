@@ -8,7 +8,7 @@ mswindows = sys.platform == 'win32'
 import logging
 import datetime
 import re
-import db2makedoc.inputplugin
+import db2makedoc.plugins
 
 # Constants
 DATABASE_OPTION = 'database'
@@ -29,7 +29,7 @@ USING_V9 = 'Detected IBM DB2 UDB 9+ catalog layout'
 USING_V8 = 'Did not detect IBM DB2 UDB 9+ catalog layout, defaulting to IBM DB2 UDB 8 layout'
 
 
-def _connect(self, dsn, username=None, password=None):
+def _connect(dsn, username=None, password=None):
 	"""Create a connection to the specified database.
 
 	This utility method attempts to connect to the database named by dsn
@@ -116,7 +116,7 @@ def _make_bool(value, true_value='Y', false_value='N', none_value=' ', unknown_e
 			return unknown_result
 
 
-class InputPlugin(db2makedoc.inputplugin.InputPlugin):
+class InputPlugin(db2makedoc.plugins.InputPlugin):
 	"""Input plugin for IBM DB2 UDB for Linux/UNIX/Windows.
 
 	This input plugin supports extracting documentation information from IBM
@@ -144,7 +144,7 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 	def open(self):
 		"""Opens the database connection for data retrieval."""
 		super(InputPlugin, self).open()
-		self.connection = self._connect(
+		self.connection = _connect(
 			self.options[DATABASE_OPTION],
 			self.options[USERNAME_OPTION],
 			self.options[PASSWORD_OPTION]
@@ -223,13 +223,11 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				created,
 				desc
 			) in cursor.fetchall():
-			system = _make_bool(system)
-			created = _make_datetime(created)
 			result.append((
 				name,
 				owner,
-				system,
-				created, 
+				_make_bool(system),
+				_make_datetime(created),
 				desc
 			))
 		return result
@@ -294,22 +292,17 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				final,
 				desc
 			) in cursor.fetchall():
-			system = _make_bool(system)
-			created = _make_datetime(created)
-			if not size: size = None
-			if not scale: scale = None # XXX Not necessarily unknown (0 is a valid scale)
-			if not codepage: codepage = None
 			result.append((
 				schema,
 				name,
 				owner,
-				system,
-				created,
+				_make_bool(system),
+				_make_datetime(created),
 				source_schema,
 				source_name,
-				size,
-				scale,
-				codepage,
+				size or None,
+				scale or None, # XXX Not necessarily unknown (0 is a valid scale)
+				codepage or None,
 				final,
 				desc
 			))
@@ -374,16 +367,13 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				tbspace,
 				desc
 			) in cursor.fetchall():
-			system = _make_bool(system)
-			created = _make_datetime(created)
-			laststats = _make_datetime(laststats)
 			result.append((
 				schema,
 				name,
 				owner,
-				system,
-				created,
-				laststats,
+				_make_bool(system),
+				_make_datetime(created),
+				_make_datetime(laststats),
 				cardinality,
 				size,
 				tbspace,
@@ -443,17 +433,14 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				sql,
 				desc
 			) in cursor.fetchall():
-			system = _make_bool(system)
-			created = _make_datetime(created)
-			sql = str(sql)
 			result.append((
 				schema,
 				name,
 				owner,
-				system,
-				created,
+				_make_bool(system),
+				_make_datetime(created),
 				readonly,
-				sql,
+				str(sql),
 				desc
 			))
 		return result
@@ -509,14 +496,12 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				base_table,
 				desc
 			) in cursor.fetchall():
-			system = _make_bool(system)
-			created = _make_datetime(created)
 			result.append((
 				schema,
 				name,
 				owner,
-				system,
-				created,
+				_make_bool(system),
+				_make_datetime(created),
 				base_schema,
 				base_table,
 				desc
@@ -639,10 +624,6 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				tbspace,
 				desc
 			) in cursor.fetchall():
-			system = _make_bool(system)
-			created = _make_datetime(created)
-			laststats = _make_datetime(laststats)
-			unique = _make_bool(unique)
 			# A little jiggery-pokery to get some more detailed cardinality
 			# stats
 			if card is not None:
@@ -655,12 +636,12 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				tabschema,
 				tabname,
 				owner,
-				system,
-				created,
-				laststats,
+				_make_bool(system),
+				_make_datetime(created),
+				_make_datetime(laststats),
 				card,
 				size,
-				unique,
+				_make_bool(unique),
 				tbspace,
 				desc
 			))
@@ -804,9 +785,6 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				default,
 				desc
 			) in cursor.fetchall():
-			identity = _make_bool(identity)
-			nullable = _make_bool(nullable)
-			if not codepage: codepage = None
 			if generated != 'N': default = str(gendefault)
 			result.append((
 				schema,
@@ -814,11 +792,11 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				colname,
 				typeschema,
 				typename,
-				identity,
+				_make_bool(identity),
 				size,
 				scale,
-				codepage,
-				nullable,
+				codepage or None,
+				_make_bool(nullable),
 				cardinality,
 				nullcard,
 				generated,
@@ -880,17 +858,14 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				primary,
 				desc
 			) in cursor.fetchall():
-			system = _make_bool(system)
-			created = _make_datetime(created)
-			primary = _make_bool(primary)
 			result.append((
 				schema,
 				name,
 				keyname,
 				owner,
-				system,
-				created,
-				primary,
+				_make_bool(system),
+				_make_datetime(created),
+				_make_bool(primary),
 				desc
 			))
 		return result
@@ -1010,15 +985,13 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				updaterule,
 				desc
 			) in cursor.fetchall():
-			system = _make_bool(system)
-			created = _make_datetime(created)
 			result.append((
 				schema,
 				name,
 				keyname,
 				owner,
-				system,
-				created,
+				_make_bool(system),
+				_make_datetime(created),
 				refschema,
 				refname,
 				refkeyname,
@@ -1139,17 +1112,14 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				sql,
 				desc
 			) in cursor.fetchall():
-			system = _make_bool(system)
-			created = _make_datetime(created)
-			sql = str(sql)
 			result.append((
 				schema,
 				name,
 				checkname,
 				owner,
-				system,
-				created,
-				sql,
+				_make_bool(system),
+				_make_datetime(created),
+				str(sql),
 				desc
 			))
 		return result
@@ -1264,25 +1234,19 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				sql,
 				desc
 			) in cursor.fetchall():
-			system = _make_bool(system)
-			created = _make_datetime(created)
-			deterministic = _make_bool(deterministic)
-			extaction = _make_bool(extaction, true_value='E')
-			nullcall = _make_bool(nullcall)
-			sql = str(sql)
 			result.append((
 				schema,
 				specname,
 				name,
 				owner,
-				system,
-				created,
+				_make_bool(system),
+				_make_datetime(created),
 				functype,
-				deterministic,
-				extaction,
-				nullcall,
+				_make_bool(deterministic),
+				_make_bool(extaction, true_value='E'),
+				_make_bool(nullcall),
 				access,
-				sql,
+				str(sql),
 				desc
 			))
 		return result
@@ -1366,9 +1330,6 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				codepage,
 				desc
 			) in cursor.fetchall():
-			if not size: size = None
-			if not scale: scale = None # XXX Not necessarily unknown (0 is a valid scale)
-			if not codepage: codepage = None
 			result.append((
 				schema,
 				specname,
@@ -1376,9 +1337,9 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				parmtype,
 				typeschema,
 				typename,
-				size,
-				scale,
-				codepage,
+				size or None,
+				scale or None, # XXX Not necessarily unknown (0 is a valid scale)
+				codepage or None,
 				desc
 			))
 		return result
@@ -1450,24 +1411,18 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				sql,
 				desc
 			) in cursor.fetchall():
-			system = _make_bool(system)
-			created = _make_datetime(created)
-			deterministic = _make_bool(deterministic)
-			extaction = _make_bool(extaction, true_value='E')
-			nullcall = _make_bool(nullcall)
-			sql = str(sql)
 			result.append((
 				schema,
 				specname,
 				name,
 				owner,
-				system,
-				created,
-				deterministic,
-				extaction,
-				nullcall,
+				_make_bool(system),
+				_make_datetime(created),
+				_make_bool(deterministic),
+				_make_bool(extaction, true_value='E'),
+				_make_bool(nullcall),
 				access,
-				sql,
+				str(sql),
 				desc
 			))
 		return result
@@ -1551,9 +1506,6 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				codepage,
 				desc
 			) in cursor.fetchall():
-			if not size: size = None
-			if not scale: scale = None # XXX Not necessarily unknown (0 is a valid scale)
-			if not codepage: codepage = None
 			result.append((
 				schema,
 				specname,
@@ -1561,9 +1513,9 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				parmtype,
 				typeschema,
 				typename,
-				size,
-				scale,
-				codepage,
+				size or None,
+				scale or None, # XXX Not necessarily unknown (0 is a valid scale)
+				codepage or None,
 				desc
 			))
 		return result
@@ -1636,21 +1588,18 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				sql,
 				desc
 			) in cursor.fetchall():
-			system = _make_bool(system)
-			created = _make_datetime(created)
-			sql = str(sql)
 			result.append((
 				schema,
 				name,
 				owner,
-				system,
-				created,
+				_make_bool(system),
+				_make_datetime(created),
 				tabschema,
 				tabname,
 				trigtime,
 				trigevent,
 				granularity,
-				sql,
+				str(sql),
 				desc
 			))
 		return result
@@ -1758,13 +1707,11 @@ class InputPlugin(db2makedoc.inputplugin.InputPlugin):
 				tstype,
 				desc
 			) in cursor.fetchall():
-			system = _make_bool(system)
-			created = _make_datetime(created)
 			result.append((
 				tbspace,
 				owner,
-				system,
-				created,
+				_make_bool(system),
+				_make_datetime(created),
 				tstype,
 				desc
 			))
