@@ -1738,7 +1738,7 @@ class Procedure(Routine):
 			specific_name,
 			name,
 			self.owner,
-			self._system,
+			system,
 			self.created,
 			self.deterministic,
 			self.external_action,
