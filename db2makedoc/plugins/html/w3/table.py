@@ -20,6 +20,12 @@ events = {
 	'D': 'Delete',
 }
 
+def _inc_index(i):
+	if i is None:
+		return i
+	else:
+		return i + 1
+
 class W3TableDocument(W3MainDocument):
 	def __init__(self, site, table):
 		assert isinstance(table, Table)
@@ -104,11 +110,12 @@ class W3TableDocument(W3MainDocument):
 					"Cardinality"
 				)],
 				data=[(
-					field.position + 1,
+					_inc_index(field.position),
 					field.name,
 					field.datatype_str,
 					field.nullable,
-					field.key_index and field.key_index + 1,
+					_inc_index(field.key_index),
+					# XXX For Py2.5: field.key_index + 1 if field.key_index is not None else None,
 					field.cardinality
 				) for field in fields]
 			))
