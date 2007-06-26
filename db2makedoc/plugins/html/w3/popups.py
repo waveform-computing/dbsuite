@@ -58,7 +58,8 @@ W3_POPUPS = [
 	('dependentrel.html', 'Dependent Relations', """
 		<p>The number of relations that depend on this one. Specifically, the
 		number of materialized query tables or views that reference this
-		relation in their SQL statements.</p>
+		relation in their SQL statements, plus the number of tables that have
+		a foreign key that references this relation.</p>
 		"""),
 	('deterministic.html', 'Deterministic', """
 		<p>If True, the routine is deterministic. That is, given the same input
