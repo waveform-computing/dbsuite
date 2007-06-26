@@ -885,9 +885,9 @@ class InputPlugin(Plugin):
 	def __get_parent_keys(self):
 		if self.__parent_keys is None:
 			self.__parent_keys = dict([
-				(ukey, [fkey[:3]
+				(ukey[:3], [fkey[:3]
 					for fkey in self.foreign_keys_list
-					if ukey == fkey[6:9]
+					if ukey[:3] == fkey[6:9]
 				])
 				for ukey in self.unique_keys_list
 			])
