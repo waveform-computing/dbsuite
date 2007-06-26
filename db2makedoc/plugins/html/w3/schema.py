@@ -112,7 +112,6 @@ class W3SchemaGraph(W3GraphDocument):
 				for key in relation.foreign_key_list:
 					key_node = self._add_dbobject(key.ref_table)
 					key_edge = rel_node.connect_to(key_node)
-					key_edge.label = key.name
 					key_edge.arrowhead = 'normal'
 				for trigger in relation.trigger_list:
 					trig_node = self._add_dbobject(trigger)

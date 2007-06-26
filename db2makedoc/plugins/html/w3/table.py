@@ -31,6 +31,13 @@ class W3TableDocument(W3MainDocument):
 		constraints = [obj for (name, obj) in sorted(self.dbobject.constraints.items(), key=lambda (name, obj): name)]
 		triggers = [obj for (name, obj) in sorted(self.dbobject.triggers.items(), key=lambda (name, obj): name)]
 		dependents = [obj for (name, obj) in sorted(self.dbobject.dependents.items(), key=lambda (name, obj): name)]
+		dependents += reduce(lambda a,b: a+b, 
+			[
+				[fkey.relation for fkey in ukey.dependent_list]
+				for ukey in self.dbobject.unique_key_list
+				if len(ukey.dependent_list) > 0
+			], []
+		)
 		olstyle = {'style': 'list-style-type: none; padding: 0; margin: 0;'}
 		self._section('description', 'Description')
 		self._add(self._p(self._format_comment(self.dbobject.description)))
@@ -67,7 +74,7 @@ class W3TableDocument(W3MainDocument):
 				),
 				(
 					self._a(self.site.documents['dependentrel.html']),
-					len(self.dbobject.dependent_list),
+					len(dependents),
 					self._a(self.site.documents['size.html']),
 					self.dbobject.size_str,
 				),
@@ -209,6 +216,13 @@ class W3TableGraph(W3GraphDocument):
 			key_edge.dbobject = key
 			key_edge.label = key.name
 			key_edge.arrowhead = 'normal'
+		for key in table.unique_key_list:
+			for dependent in key.dependent_list:
+				dep_node = self._add_dbobject(dependent.relation)
+				dep_edge = dep_node.connect_to(table_node)
+				dep_edge.label = dependent.name
+				dep_edge.arrowhead = 'normal'
+		# XXX Need to work on reverse trigger dependencies at some point...
 		for trigger in table.trigger_list:
 			trig_node = self._add_dbobject(trigger)
 			trig_edge = table_node.connect_to(trig_node)
