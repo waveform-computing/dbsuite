@@ -12,7 +12,7 @@ certain methods to provide formatting specific to the w3 style [1].
 import codecs
 from db2makedoc.graph import Graph, Node, Edge, Cluster
 from db2makedoc.db import DatabaseObject, Database, Schema, Relation, Table, View, Alias, Trigger
-from db2makedoc.plugins.html import AttrDict, HTMLCommentHighlighter, WebSite, HTMLDocument, CSSDocument, GraphDocument
+from db2makedoc.plugins.html import AttrDict, WebSite, HTMLDocument, CSSDocument, GraphDocument
 
 # Import the ElementTree API, favouring the faster cElementTree implementation
 try:
@@ -30,41 +30,12 @@ except ImportError:
 				raise ImportError('Unable to find an ElementTree implementation')
 
 
-class W3CommentHighlighter(HTMLCommentHighlighter):
-	def __init__(self, document):
-		"""Initializes an instance of the class."""
-		assert isinstance(document, W3Document)
-		super(W3CommentHighlighter, self).__init__(document)
-
-	def handle_link(self, target):
-		# If the target is something we don't generate a document for (like
-		# a column), scan upwards in the hierarchy until we find a document
-		# and return a link to that document with the in between objects added
-		# as normal text suffixes
-		suffixes = []
-		while not target in self.document.site.document_map:
-			suffixes.insert(0, target.name)
-			target = target.parent
-			if isinstance(target, Database):
-				return '.'.join(suffixes)
-		return [
-			self.document._a_to(target, qualifiedname=True),
-			''.join(['.' + s for s in suffixes]),
-		]
-
-	def find_target(self, name):
-		return self.document.site.database.find(name)
-
-
 class W3Site(WebSite):
 	"""Site class representing a collection of W3Document instances."""
 
 	def __init__(self, database):
 		"""Initializes an instance of the class."""
-		super(W3Site, self).__init__()
-		self.database = database
-		self.title = '%s Documentation' % self.database.name
-		self.keywords = [self.database.name]
+		super(W3Site, self).__init__(database)
 		self.copyright = 'Copyright (c) 2006-2007 by IBM corporation'
 		self.document_map = {}
 		self.graph_map = {}
@@ -105,9 +76,6 @@ class W3Document(HTMLDocument):
 		assert isinstance(site, W3Site)
 		super(W3Document, self).__init__(site, url)
 	
-	def _init_comment_highlighter(self):
-		return W3CommentHighlighter(self)
-
 	def _create_content(self):
 		# Call the inherited method to create the skeleton document
 		super(W3Document, self)._create_content()
@@ -543,13 +511,10 @@ class W3PopupDocument(W3Document):
 class W3CSSDocument(CSSDocument):
 	"""Stylesheet class to supplement the w3v8 style with SQL syntax highlighting."""
 
-	def __init__(self, site, url):
-		"""Initializes an instance of the class."""
-		assert isinstance(site, W3Site)
-		super(W3CSSDocument, self).__init__(site, url)
-		# We only need one supplemental CSS stylesheet (the default w3v8 styles
-		# are reasonably comprehensive). So this class is brutally simple...
-		self.doc = """\
+	# Template of the <body> element of a popup document. This is parsed into
+	# an element tree, grafted onto the generated document and then filled in
+	# by searching for elements by id in the _create_content() method below.
+	template = u"""\
 /* SQL syntax highlighting */
 .sql {
 	font-size: 8pt;
@@ -586,6 +551,16 @@ td.sql_cell { background-color: gray; }
 /* Fix display of border around diagrams in Firefox */
 #content-main img { border: 0 none; }
 """
+
+	def __init__(self, site, url):
+		"""Initializes an instance of the class."""
+		assert isinstance(site, W3Site)
+		super(W3CSSDocument, self).__init__(site, url)
+	
+	def _create_content(self):
+		# We only need one supplemental CSS stylesheet (the default w3v8 styles
+		# are reasonably comprehensive). So this method is brutally simple...
+		self.doc = self.template
 
 
 class W3GraphDocument(GraphDocument):

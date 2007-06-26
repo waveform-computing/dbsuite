@@ -13,9 +13,9 @@ import codecs
 import re
 import datetime
 
-from db2makedoc.db import DatabaseObject
+from db2makedoc.db import DatabaseObject, Database
+from db2makedoc.highlighters import CommentHighlighter, SQLHighlighter
 from db2makedoc.plugins.html.entities import HTML_ENTITIES
-from db2makedoc.plugins.html.highlighters import HTMLCommentHighlighter, HTMLSQLHighlighter
 
 # Import the GraphViz API
 from db2makedoc.graph import Graph, Node, Edge, Cluster
@@ -131,6 +131,27 @@ class HTMLCommentHighlighter(CommentHighlighter):
 		"""Emits an HTML <br>eak element for the end of a paragraph."""
 		return self.document._br()
 
+	def handle_link(self, target):
+		"""Emits an HTML <a>nchor element linking to the object's documentation."""
+		# If the target is something we don't generate a document for (like
+		# a column), scan upwards in the hierarchy until we find a document
+		# and return a link to that document with the in between objects added
+		# as normal text suffixes
+		suffixes = []
+		while self.document.site.object_document(target) is None:
+			suffixes.insert(0, target.name)
+			target = target.parent
+			if isinstance(target, Database):
+				return '.'.join(suffixes)
+		return [
+			self.document._a_to(target, qualifiedname=True),
+			''.join(['.' + s for s in suffixes]),
+		]
+
+	def find_target(self, name):
+		"""Searches the site's associated database for the named object."""
+		return self.document.site.database.find(name)
+
 
 class HTMLSQLHighlighter(SQLHighlighter):
 	"""Class which marks up SQL with HTML.
@@ -203,17 +224,19 @@ class WebSite(object):
 	like).
 	"""
 
-	def __init__(self):
+	def __init__(self, database):
 		"""Initializes an instance of the class."""
+		assert isinstance(database, Database)
 		super(WebSite, self).__init__()
+		self.database = database
 		# Set various defaults
 		self.htmlver = XHTML10
 		self.htmlstyle = STRICT
 		self.baseurl = ''
 		self.basepath = '.'
-		self.title = None
+		self.title = '%s Documentation' % self.database.name
 		self.description = None
-		self.keywords = []
+		self.keywords = [self.database.name]
 		self.author_name = None
 		self.author_email = None
 		self.date = datetime.datetime.today()
@@ -804,9 +827,15 @@ class CSSDocument(WebSiteDocument):
 		"""Initializes an instance of the class."""
 		super(CSSDocument, self).__init__(site, url)
 		self.doc = ''
+
+	def _create_content(self):
+		"""Constructs the content of the stylesheet."""
+		# Child classes can override this to build the stylesheet
+		pass
 	
 	def write(self):
 		"""Writes this document to a file in the site's path"""
+		self._create_content()
 		f = open(self.filename, 'w')
 		try:
 			# Transcode the CSS into the target encoding and write to the file
