@@ -12,7 +12,7 @@ certain methods to provide formatting specific to the w3 style [1].
 import codecs
 from db2makedoc.graph import Graph, Node, Edge, Cluster
 from db2makedoc.db import DatabaseObject, Database, Schema, Relation, Table, View, Alias, Trigger
-from db2makedoc.plugins.html import AttrDict, WebSite, HTMLDocument, CSSDocument, GraphDocument
+from db2makedoc.plugins.html import AttrDict, WebSite, HTMLDocument, CSSDocument, JavaScriptDocument, GraphDocument
 
 # Import the ElementTree API, favouring the faster cElementTree implementation
 try:
@@ -72,10 +72,6 @@ class W3Site(WebSite):
 class W3Document(HTMLDocument):
 	"""Document class for use with the w3v8 style."""
 
-	def __init__(self, site, url):
-		assert isinstance(site, W3Site)
-		super(W3Document, self).__init__(site, url)
-	
 	def _create_content(self):
 		# Call the inherited method to create the skeleton document
 		super(W3Document, self)._create_content()
@@ -236,19 +232,19 @@ class W3MainDocument(W3Document):
 		# Overridden to automatically set the link objects and generate the
 		# content from the sections filled in by descendent classes in
 		# _create_sections()
-		if not self.link_first:
+		if not self.link_first and self.dbobject.first:
 			self.link_first = self.site.object_document(self.dbobject.first)
-		if not self.link_prior:
+		if not self.link_prior and self.dbobject.prior:
 			self.link_prior = self.site.object_document(self.dbobject.prior)
-		if not self.link_next:
+		if not self.link_next and self.dbobject.next:
 			self.link_next = self.site.object_document(self.dbobject.next)
-		if not self.link_last:
+		if not self.link_last and self.dbobject.last:
 			self.link_last = self.site.object_document(self.dbobject.last)
-		if not self.link_up:
+		if not self.link_up and self.dbobject.parent:
 			self.link_up = self.site.object_document(self.dbobject.parent)
 		# Call the inherited method to create the skeleton document
 		super(W3MainDocument, self)._create_content()
-		# Add styles specific to w3v8 main documents
+		# Add styles and scripts specific to w3v8 main documents
 		headnode = self.doc.find('head')
 		headnode.append(self._style(content="""
 			@import url("//w3.ibm.com/ui/v8/css/screen.css");
@@ -259,6 +255,7 @@ class W3MainDocument(W3Document):
 		""", media='all'))
 		headnode.append(self._style(src='sql.css', media='all'))
 		headnode.append(self._style(src='//w3.ibm.com/ui/v8/css/print.css', media='print'))
+		headnode.append(self._script(src='scripts.js'))
 		# Parse the HTML in template and graft the <body> element onto the
 		# <body> element in self.doc
 		self.doc.remove(self.doc.find('body'))
@@ -325,7 +322,8 @@ class W3MainDocument(W3Document):
 					last_visible = index + 3
 			more_above = first_visible > 0
 			more_below = last_visible < len(siblings) - 1
-			# items is a list of tuples of (URL, content, title, visible, active, [children])
+			# items is a list of tuples of the following fields:
+			# (URL, content, title, visible, active, onclick, [children])
 			items = []
 			index = 0
 			for item in siblings:
@@ -335,40 +333,44 @@ class W3MainDocument(W3Document):
 				title = '%s %s' % (item.type_name, item.qualified_name)
 				if item is selitem:
 					items.append((
-						self.site.object_document(item).url,
-						content,
-						title,
-						True,
-						active,
-						subitems
+						self.site.object_document(item).url, # url/href
+						content,    # content
+						title,      # title
+						True,       # visible
+						active,     # active
+						None,       # onclick
+						subitems    # children
 					))
 				else:
 					items.append((
-						self.site.object_document(item).url,
-						content,
-						title,
-						first_visible <= index <= last_visible,
-						False,
-						[]
+						self.site.object_document(item).url, # url/href
+						content,    # content
+						title,      # title
+						first_visible <= index <= last_visible, # visible
+						False,      # active
+						None,       # onclick
+						[]          # children
 					))
 				index += 1
 			if more_above:
 				items.insert(0, (
-					'#',
-					u'\u2191 More items...', # \u2191 == &uarr;
-					'More items',
-					True,
-					False,
-					[]
+					'#',                     # url/href
+					u'\u2191 More items...', # content, \u2191 == &uarr;
+					'More items',            # title
+					True,                    # visible
+					False,                   # active
+					'show_items(this);',     # onclick
+					[]                       # children
 				))
 			if more_below:
 				items.append((
-					'#',
-					u'\u2193 More items...', # \u2193 == &darr;
-					'More items',
-					True,
-					False,
-					[]
+					'#',                     # url/href
+					u'\u2193 More items...', # content, \u2193 == &darr;
+					'More items',            # title
+					True,                    # visible
+					False,                   # active
+					'show_items(this);',     # onclick
+					[]                       # children
 				))
 			return items
 
@@ -388,13 +390,20 @@ class W3MainDocument(W3Document):
 			item -- The item to construct a menu tree for
 			active -- (optional) If True, item is the focus of the document (and hence, selected)
 			"""
-			# items is a list of tuples of (URL, content, title, visible, active, [children])
 			items = []
 			while item is not None:
 				items = make_menu_level(item, active, items)
 				active = False
 				item = item.parent
-			items.insert(0, ('index.html', 'Home', 'Home', True, False, []))
+			items.insert(0, (
+				'index.html', # url/href
+				'Home',       # content
+				'Home',       # title
+				True,         # visible
+				False,        # active
+				None,         # onclick
+				[]            # children
+			))
 			return items
 
 		def make_menu_elements(parent, items, level=0):
@@ -416,12 +425,14 @@ class W3MainDocument(W3Document):
 			e = self._div('', attrs={'class': classes[level]})
 			parent.append(e)
 			parent = e
-			for (url, content, title, visible, active, children) in items:
+			for (url, content, title, visible, active, onclick, children) in items:
 				link = self._a(url, content, title)
 				if active:
 					link.attrib['class'] = ' '.join(link.attrib.get('class', '').split(' ') + ['active'])
 				if not visible:
 					link.attrib['style'] = 'display: none;'
+				if onclick:
+					link.attrib['onclick'] = onclick
 				parent.append(link)
 				if len(children) > 0 and level + 1 < len(classes):
 					make_menu_elements(parent, children, level + 1)
@@ -546,10 +557,10 @@ class W3PopupDocument(W3Document):
 class W3CSSDocument(CSSDocument):
 	"""Stylesheet class to supplement the w3v8 style with SQL syntax highlighting."""
 
-	# Template of the <body> element of a popup document. This is parsed into
-	# an element tree, grafted onto the generated document and then filled in
-	# by searching for elements by id in the _create_content() method below.
-	template = u"""\
+	def _create_content(self):
+		# We only need one supplemental CSS stylesheet (the default w3v8 styles
+		# are reasonably comprehensive). So this method is brutally simple...
+		self.doc = u"""\
 /* SQL syntax highlighting */
 .sql {
 	font-size: 8pt;
@@ -587,15 +598,26 @@ td.sql_cell { background-color: gray; }
 #content-main img { border: 0 none; }
 """
 
-	def __init__(self, site, url):
-		"""Initializes an instance of the class."""
-		assert isinstance(site, W3Site)
-		super(W3CSSDocument, self).__init__(site, url)
-	
+
+class W3JavaScriptDocument(JavaScriptDocument):
+	"""Code class to supplement the w3v8 style with some simple routines."""
+
 	def _create_content(self):
-		# We only need one supplemental CSS stylesheet (the default w3v8 styles
-		# are reasonably comprehensive). So this method is brutally simple...
-		self.doc = self.template
+		self.doc = u"""\
+// Replace the "More items..." link (e) with the items it's hiding
+function show_items(e) {
+	var n;
+	n = e;
+	while (n = n.previousSibling)
+		if ((n.nodeType == Node.ELEMENT_NODE) && (n.tagName.toLowerCase() == 'a'))
+			n.style.display = 'block';
+	n = e;
+	while (n = n.nextSibling)
+		if ((n.nodeType == Node.ELEMENT_NODE) && (n.tagName.toLowerCase() == 'a'))
+			n.style.display = 'block';
+	e.style.display = 'none';
+}
+"""
 
 
 class W3GraphDocument(GraphDocument):
@@ -603,7 +625,6 @@ class W3GraphDocument(GraphDocument):
 
 	def __init__(self, site, dbobject):
 		"""Initializes an instance of the class."""
-		assert isinstance(site, W3Site)
 		self.dbobject = dbobject # must be set before calling the inherited method
 		super(W3GraphDocument, self).__init__(site, '%s.png' % dbobject.identifier)
 		self.dbobject_map = {}

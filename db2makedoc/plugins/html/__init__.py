@@ -861,6 +861,36 @@ class CSSDocument(WebSiteDocument):
 			f.close()
 
 
+class JavaScriptDocument(WebSiteDocument):
+	"""Represents a simple JavaScript document.
+
+	This is the base class for JavaScript libraries. It provides no methods for
+	constructing or editing JavaScript; it simply contains a "doc" property
+	which stores the JavaScript to write to the file when write() is called.
+	"""
+
+	def __init__(self, site, url):
+		"""Initializes an instance of the class."""
+		super(JavaScriptDocument, self).__init__(site, url)
+		self.doc = ''
+
+	def _create_content(self):
+		"""Constructs the content of the stylesheet."""
+		# Child classes can override this to build the library
+		pass
+	
+	def write(self):
+		"""Writes this document to a file in the site's path"""
+		super(JavaScriptDocument, self).write()
+		self._create_content()
+		f = open(self.filename, 'w')
+		try:
+			# Transcode the JavaScript into the target encoding and write to the file
+			f.write(codecs.getencoder(self.site.encoding)(self.doc)[0])
+		finally:
+			f.close()
+
+
 class GraphDocument(WebSiteDocument):
 	"""Represents a graph in GraphViz dot language.
 

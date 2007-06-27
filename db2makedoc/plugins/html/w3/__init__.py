@@ -5,7 +5,7 @@
 
 import os
 import db2makedoc.plugins
-from db2makedoc.plugins.html.w3.document import W3Site, W3CSSDocument, W3PopupDocument
+from db2makedoc.plugins.html.w3.document import W3Site, W3CSSDocument, W3JavaScriptDocument, W3PopupDocument
 from db2makedoc.plugins.html.w3.database import W3DatabaseDocument
 from db2makedoc.plugins.html.w3.schema import W3SchemaDocument, W3SchemaGraph
 from db2makedoc.plugins.html.w3.table import W3TableDocument, W3TableGraph
@@ -79,6 +79,8 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 			site.copyright = self.options[COPYRIGHT_OPTION]
 		# Construct the supplementary SQL stylesheet
 		W3CSSDocument(site, 'sql.css')
+		# Construct the supplementary JavaScript library
+		W3JavaScriptDocument(site, 'scripts.js')
 		# Construct all popups (this must be done before constructing database
 		# object documents as some of the templates refer to the popup document
 		# objects)
