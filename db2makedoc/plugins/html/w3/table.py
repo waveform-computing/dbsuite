@@ -227,6 +227,7 @@ class W3TableGraph(W3GraphDocument):
 			for dependent in key.dependent_list:
 				dep_node = self._add_dbobject(dependent.relation)
 				dep_edge = dep_node.connect_to(table_node)
+				dep_edge.dbobject = dependent
 				dep_edge.label = dependent.name
 				dep_edge.arrowhead = 'normal'
 		# XXX Need to work on reverse trigger dependencies at some point...
