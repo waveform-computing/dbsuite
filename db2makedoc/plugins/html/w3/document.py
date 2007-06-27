@@ -604,17 +604,26 @@ class W3JavaScriptDocument(JavaScriptDocument):
 
 	def _create_content(self):
 		self.doc = u"""\
+// IE doesn't have a clue (no Node built-in) so we'll define one just for it...
+var ELEMENT_NODE = 1;
+
 // Replace the "More items..." link (e) with the items it's hiding
 function show_items(e) {
 	var n;
 	n = e;
 	while (n = n.previousSibling)
-		if ((n.nodeType == Node.ELEMENT_NODE) && (n.tagName.toLowerCase() == 'a'))
-			n.style.display = 'block';
+		if ((n.nodeType == ELEMENT_NODE) && (n.tagName.toLowerCase() == 'a'))
+			if (n.style.display == 'none')
+				n.style.display = 'block'
+			else
+				break;
 	n = e;
 	while (n = n.nextSibling)
-		if ((n.nodeType == Node.ELEMENT_NODE) && (n.tagName.toLowerCase() == 'a'))
-			n.style.display = 'block';
+		if ((n.nodeType == ELEMENT_NODE) && (n.tagName.toLowerCase() == 'a'))
+			if (n.style.display == 'none')
+				n.style.display = 'block'
+			else
+				break;
 	e.style.display = 'none';
 }
 """
