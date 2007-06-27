@@ -121,6 +121,15 @@ class W3SchemaGraph(W3GraphDocument):
 						dep_node = self._add_dbobject(dependency)
 						dep_edge = trig_node.connect_to(dep_node)
 						dep_edge.arrowhead = 'onormal'
+			elif isinstance(relation, View):
+				for dependency in relation.dependency_list:
+					dep_node = self._add_dbobject(dependency)
+					dep_edge = rel_node.connect_to(dep_node)
+					dep_edge.arrowhead = 'onormal'
+			elif isinstance(relation, Alias):
+				ref_node = self._add_dbobject(relation.relation)
+				ref_edge = rel_node.connect_to(ref_node)
+				ref_edge.arrowhead = 'onormal'
 		for trigger in schema.trigger_list:
 			rel_node = self._add_dbobject(trigger.relation)
 			trig_node = self._add_dbobject(trigger)
