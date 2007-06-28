@@ -14,7 +14,7 @@ import db2makedoc.db
 import db2makedoc.plugins
 
 # Constants
-__version__ = "1.0.0pr4"
+__version__ = "1.0.0"
 PLUGIN_OPTION = 'plugin'
 
 # Localizable strings
