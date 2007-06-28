@@ -13,6 +13,47 @@ application.
 
 import sys
 import logging
+from fnmatch import fnmatchcase as fnmatch
+
+if sys.hexversion < 0x02050000:
+	# Define the any() and all() functions for backward compatibility with
+	# Python 2.4
+	def all(iterable):
+		for element in iterable:
+			if not element:
+				return False
+		return True
+
+	def any(iterable):
+		for element in iterable:
+			if element:
+				return True
+		return False
+
+# Constants
+EXCLUDE_OPTION = 'exclude'
+INCLUDE_OPTION = 'include'
+
+# Localizable strings
+EXCLUDE_DESC = """A comma-separated list of schema name patterns to
+	exclude from the documentation. If nothing is specified, no
+	objects are excluded. See the "%(include)s" definition for more
+	information""" % {
+		'include': INCLUDE_OPTION,
+	}
+INCLUDE_DESC = """A comma-separated list of schema name patterns to
+	include in the documentation. If nothing is specified, all
+	objects are included. Patterns may include * and ? as traditional
+	wildcard characters. If both "%(include)s" and "%(exclude)s"
+	are specified, include filtering occurs first. Note that the
+	filtering does not apply to schemas themselves, just to objects
+	with schemas excluding datatypes.  This ensures that, if system
+	schemas are excluded, all objects with built-in datatypes do not
+	also disappear""" % {
+		'include': INCLUDE_OPTION,
+		'exclude': EXCLUDE_OPTION,
+	}
+
 
 class Plugin(object):
 	"""Abstract base class for plugins.
@@ -87,6 +128,13 @@ class OutputPlugin(Plugin):
 		override this method to implement this action, using the configuration
 		supplied in the self.options dictionary (which by this point will
 		simply map names to values with any documentation stripped out).
+
+		This base class provides no "help" for implementing this method as the
+		number of different types of documentation that could be produced (and
+		the ways in which to produce them) are infinite. Output plugin
+		developers should explore the output plugins distributed with the
+		application to determine whether one of them could be subclassed as a
+		more convenient implementation base.
 		"""
 		pass
 
@@ -102,6 +150,8 @@ class InputPlugin(Plugin):
 	def __init__(self):
 		"""Initializes an instance of the class."""
 		super(InputPlugin, self).__init__()
+		self.add_option(EXCLUDE_OPTION, default=None, doc=EXCLUDE_DESC)
+		self.add_option(INCLUDE_OPTION, default=None, doc=INCLUDE_DESC)
 		self.__schemas = None
 		self.__datatypes = None
 		self.__tables = None
@@ -134,6 +184,18 @@ class InputPlugin(Plugin):
 		self.__tablespaces = None
 		self.__tablespace_tables = None
 		self.__tablespace_indexes = None
+
+	def configure(self, config):
+		"""Loads the plugin configuration."""
+		super(InputPlugin, self).configure(config)
+		if self.options[INCLUDE_OPTION]:
+			self.include = [s.strip() for s in self.options[INCLUDE_OPTION].split(',')]
+		else:
+			self.include = []
+		if self.options[EXCLUDE_OPTION]:
+			self.exclude = [s.strip() for s in self.options[EXCLUDE_OPTION].split(',')]
+		else:
+			self.exclude = []
 
 	def open(self):
 		"""Opens the database connection for data retrieval.
@@ -713,32 +775,58 @@ class InputPlugin(Plugin):
 		logging.debug('Retrieving tablespaces')
 		return []
 
-	def __get_schemas(self):
+	def _filter(self, items, *elements):
+		"""Filters the items list of tuples  on the specified elements.
+
+		This method returns the list of tuples from elements which match one or
+		more filters in the "include" list specified in the configuration (or
+		all tuples if the "include" list is empty), and which do not match any
+		of the filters in the "exclude" list. The elements iterable specifies
+		the numeric indices of the element(s) in each tuple that should be
+		compared to the filter lists.
+		"""
+		assert len(elements) > 0
+		for element in elements:
+			items = [
+				item for item in items
+				if (len(self.include) == 0 or any([
+					fnmatch(item[element], pattern)
+					for pattern in self.include
+				]))
+				and not any([
+					fnmatch(item[element], pattern)
+					for pattern in self.exclude
+				])
+			]
+		return items
+
+	def _get_schemas(self):
 		if self.__schemas is None:
+			# Note: schemas themselves are not filtered
 			self.__schemas = self.get_schemas()
 		return self.__schemas
 
-	def __get_datatypes(self):
+	def _get_datatypes(self):
 		if self.__datatypes is None:
 			self.__datatypes = self.get_datatypes()
 		return self.__datatypes
 
-	def __get_tables(self):
+	def _get_tables(self):
 		if self.__tables is None:
-			self.__tables = self.get_tables()
+			self.__tables = self._filter(self.get_tables(), 0)
 		return self.__tables
 
-	def __get_views(self):
+	def _get_views(self):
 		if self.__views is None:
-			self.__views = self.get_views()
+			self.__views = self._filter(self.get_views(), 0)
 		return self.__views
 
-	def __get_aliases(self):
+	def _get_aliases(self):
 		if self.__aliases is None:
-			self.__aliases = self.get_aliases()
+			self.__aliases = self._filter(self.get_aliases(), 0, 5)
 		return self.__aliases
 
-	def __get_relations(self):
+	def _get_relations(self):
 		for i in self.tables:
 			yield i[:5]
 		for i in self.views:
@@ -746,10 +834,10 @@ class InputPlugin(Plugin):
 		for i in self.aliases:
 			yield i[:5]
 
-	def __get_relation_dependencies(self):
+	def _get_relation_dependencies(self):
 		if self.__relation_dependencies is None:
 			if self.__view_dependencies is None:
-				self.__view_dependencies = self.get_view_dependencies()
+				self.__view_dependencies = self._filter(self.get_view_dependencies(), 0, 2)
 			self.__relation_dependencies = dict([
 				(relation[:2], [dep[2:4]
 					for dep in self.__view_dependencies
@@ -759,10 +847,10 @@ class InputPlugin(Plugin):
 			])
 		return self.__relation_dependencies
 
-	def __get_relation_dependents(self):
+	def _get_relation_dependents(self):
 		if self.__relation_dependents is None:
 			if self.__view_dependencies is None:
-				self.__view_dependencies = self.get_view_dependencies()
+				self.__view_dependencies = self._filter(self.get_view_dependencies(), 0, 2)
 			self.__relation_dependents = dict([
 				(relation[:2], [dep[:2]
 					for dep in self.__view_dependencies
@@ -772,14 +860,14 @@ class InputPlugin(Plugin):
 			])
 		return self.__relation_dependents
 
-	def __get_indexes(self):
+	def _get_indexes(self):
 		if self.__indexes is None:
-			self.__indexes = self.get_indexes()
+			self.__indexes = self._filter(self.get_indexes(), 0, 2)
 		return self.__indexes
 
-	def __get_index_cols(self):
+	def _get_index_cols(self):
 		if self.__index_cols is None:
-			indexcols = self.get_index_cols()
+			indexcols = self._filter(self.get_index_cols(), 0)
 			self.__index_cols = dict([
 				(index[:2], [indexcol[2:]
 					for indexcol in indexcols
@@ -789,7 +877,7 @@ class InputPlugin(Plugin):
 			])
 		return self.__index_cols
 
-	def __get_table_indexes(self):
+	def _get_table_indexes(self):
 		if self.__table_indexes is None:
 			self.__table_indexes = dict([
 				(table[:2], [index[:2]
@@ -800,9 +888,9 @@ class InputPlugin(Plugin):
 			])
 		return self.__table_indexes
 
-	def __get_relation_cols(self):
+	def _get_relation_cols(self):
 		if self.__relation_cols is None:
-			relationcols = self.get_relation_cols()
+			relationcols = self._filter(self.get_relation_cols(), 0)
 			self.__relation_cols = dict([
 				(relation[:2], [relationcol[2:]
 					for relationcol in relationcols
@@ -812,9 +900,9 @@ class InputPlugin(Plugin):
 			])
 		return self.__relation_cols
 
-	def __get_unique_keys(self):
+	def _get_unique_keys(self):
 		if self.__unique_keys is None:
-			ukeys = self.get_unique_keys()
+			ukeys = self._filter(self.get_unique_keys(), 0)
 			self.__unique_keys = dict([
 				(table[:2], [ukey[2:]
 					for ukey in ukeys
@@ -824,7 +912,7 @@ class InputPlugin(Plugin):
 			])
 		return self.__unique_keys
 
-	def __get_unique_keys_list(self):
+	def _get_unique_keys_list(self):
 		if self.__unique_keys_list is None:
 			self.__unique_keys_list = reduce(lambda a,b: a+b,
 				[
@@ -835,9 +923,9 @@ class InputPlugin(Plugin):
 			)
 		return self.__unique_keys_list
 
-	def __get_unique_key_cols(self):
+	def _get_unique_key_cols(self):
 		if self.__unique_key_cols is None:
-			ukeycols = self.get_unique_key_cols()
+			ukeycols = self._filter(self.get_unique_key_cols(), 0)
 			self.__unique_key_cols = dict([
 				(ukey[:3], [ukeycol[3]
 					for ukeycol in ukeycols
@@ -847,9 +935,9 @@ class InputPlugin(Plugin):
 			])
 		return self.__unique_key_cols
 
-	def __get_foreign_keys(self):
+	def _get_foreign_keys(self):
 		if self.__foreign_keys is None:
-			fkeys = self.get_foreign_keys()
+			fkeys = self._filter(self.get_foreign_keys(), 0, 6)
 			self.__foreign_keys = dict([
 				(table[:2], [fkey[2:]
 					for fkey in fkeys
@@ -859,7 +947,7 @@ class InputPlugin(Plugin):
 			])
 		return self.__foreign_keys
 
-	def __get_foreign_keys_list(self):
+	def _get_foreign_keys_list(self):
 		if self.__foreign_keys_list is None:
 			self.__foreign_keys_list = reduce(lambda a,b: a+b,
 				[
@@ -870,9 +958,9 @@ class InputPlugin(Plugin):
 			)
 		return self.__foreign_keys_list
 
-	def __get_foreign_key_cols(self):
+	def _get_foreign_key_cols(self):
 		if self.__foreign_key_cols is None:
-			fkeycols = self.get_foreign_key_cols()
+			fkeycols = self._filter(self.get_foreign_key_cols(), 0)
 			self.__foreign_key_cols = dict([
 				(fkey[:3], [fkeycol[3:]
 					for fkeycol in fkeycols
@@ -882,7 +970,7 @@ class InputPlugin(Plugin):
 			])
 		return self.__foreign_key_cols
 
-	def __get_parent_keys(self):
+	def _get_parent_keys(self):
 		if self.__parent_keys is None:
 			self.__parent_keys = dict([
 				(ukey[:3], [fkey[:3]
@@ -893,9 +981,9 @@ class InputPlugin(Plugin):
 			])
 		return self.__parent_keys
 
-	def __get_checks(self):
+	def _get_checks(self):
 		if self.__checks is None:
-			checks = self.get_checks()
+			checks = self._filter(self.get_checks(), 0)
 			self.__checks = dict([
 				(table[:2], [check[2:]
 					for check in checks
@@ -905,7 +993,7 @@ class InputPlugin(Plugin):
 			])
 		return self.__checks
 
-	def __get_checks_list(self):
+	def _get_checks_list(self):
 		if self.__checks_list is None:
 			self.__checks_list = reduce(lambda a,b: a+b,
 				[
@@ -916,9 +1004,9 @@ class InputPlugin(Plugin):
 			)
 		return self.__checks_list
 
-	def __get_check_cols(self):
+	def _get_check_cols(self):
 		if self.__check_cols is None:
-			checkcols = self.get_check_cols()
+			checkcols = self._filter(self.get_check_cols(), 0)
 			self.__check_cols = dict([
 				(check[:3], [checkcol[3]
 					for checkcol in checkcols
@@ -928,14 +1016,14 @@ class InputPlugin(Plugin):
 			])
 		return self.__check_cols
 
-	def __get_functions(self):
+	def _get_functions(self):
 		if self.__functions is None:
-			self.__functions = self.get_functions()
+			self.__functions = self._filter(self.get_functions(), 0)
 		return self.__functions
 
-	def __get_function_params(self):
+	def _get_function_params(self):
 		if self.__function_params is None:
-			params = self.get_function_params()
+			params = self._filter(self.get_function_params(), 0)
 			self.__function_params = dict([
 				(function[:2], [param[2:]
 					for param in params
@@ -945,14 +1033,14 @@ class InputPlugin(Plugin):
 			])
 		return self.__function_params
 
-	def __get_procedures(self):
+	def _get_procedures(self):
 		if self.__procedures is None:
-			self.__procedures = self.get_procedures()
+			self.__procedures = self._filter(self.get_procedures(), 0)
 		return self.__procedures
 
-	def __get_procedure_params(self):
+	def _get_procedure_params(self):
 		if self.__procedure_params is None:
-			params = self.get_procedure_params()
+			params = self._filter(self.get_procedure_params(), 0)
 			self.__procedure_params = dict([
 				(procedure[:2], [param[2:]
 					for param in params
@@ -962,14 +1050,14 @@ class InputPlugin(Plugin):
 			])
 		return self.__procedure_params
 
-	def __get_triggers(self):
+	def _get_triggers(self):
 		if self.__triggers is None:
-			self.__triggers = self.get_triggers()
+			self.__triggers = self._filter(self.get_triggers(), 0, 5)
 		return self.__triggers
 
-	def __get_trigger_dependencies(self):
+	def _get_trigger_dependencies(self):
 		if self.__trigger_dependencies is None:
-			trigdeps = self.get_trigger_dependencies()
+			trigdeps = self._filter(self.get_trigger_dependencies(), 0, 2)
 			self.__trigger_dependencies = dict([
 				(trigger[:2], [trigdep[2:4]
 					for trigdep in trigdeps
@@ -979,7 +1067,7 @@ class InputPlugin(Plugin):
 			])
 		return self.__trigger_dependencies
 
-	def __get_relation_triggers(self):
+	def _get_relation_triggers(self):
 		if self.__relation_triggers is None:
 			self.__relation_triggers = dict([
 				(relation[:2], [trigger[:2]
@@ -990,12 +1078,12 @@ class InputPlugin(Plugin):
 			])
 		return self.__relation_triggers
 
-	def __get_tablespaces(self):
+	def _get_tablespaces(self):
 		if self.__tablespaces is None:
 			self.__tablespaces = self.get_tablespaces()
 		return self.__tablespaces
 
-	def __get_tablespace_tables(self):
+	def _get_tablespace_tables(self):
 		if self.__tablespace_tables is None:
 			self.__tablespace_tables = dict([
 				(tbspace[0], [table[:2]
@@ -1006,7 +1094,7 @@ class InputPlugin(Plugin):
 			])
 		return self.__tablespace_tables
 
-	def __get_tablespace_indexes(self):
+	def _get_tablespace_indexes(self):
 		if self.__tablespace_indexes is None:
 			self.__tablespace_indexes = dict([
 				(tbspace[0], [index[:2]
@@ -1017,36 +1105,36 @@ class InputPlugin(Plugin):
 			])
 		return self.__tablespace_indexes
 
-	schemas = property(__get_schemas)
-	datatypes = property(__get_datatypes)
-	tables = property(__get_tables)
-	table_indexes = property(__get_table_indexes)
-	views = property(__get_views)
-	aliases = property(__get_aliases)
-	relations = property(__get_relations)
-	relation_dependencies = property(__get_relation_dependencies)
-	relation_dependents = property(__get_relation_dependents)
-	indexes = property(__get_indexes)
-	index_cols = property(__get_index_cols)
-	relation_cols = property(__get_relation_cols)
-	unique_keys = property(__get_unique_keys)
-	unique_keys_list = property(__get_unique_keys_list)
-	unique_key_cols = property(__get_unique_key_cols)
-	foreign_keys = property(__get_foreign_keys)
-	foreign_keys_list = property(__get_foreign_keys_list)
-	foreign_key_cols = property(__get_foreign_key_cols)
-	parent_keys = property(__get_parent_keys)
-	checks = property(__get_checks)
-	checks_list = property(__get_checks_list)
-	check_cols = property(__get_check_cols)
-	functions = property(__get_functions)
-	function_params = property(__get_function_params)
-	procedures = property(__get_procedures)
-	procedure_params = property(__get_procedure_params)
-	triggers = property(__get_triggers)
-	trigger_dependencies = property(__get_trigger_dependencies)
-	relation_triggers = property(__get_relation_triggers)
-	tablespaces = property(__get_tablespaces)
-	tablespace_tables = property(__get_tablespace_tables)
-	tablespace_indexes = property(__get_tablespace_indexes)
+	schemas = property(lambda self: self._get_schemas())
+	datatypes = property(lambda self: self._get_datatypes())
+	tables = property(lambda self: self._get_tables())
+	table_indexes = property(lambda self: self._get_table_indexes())
+	views = property(lambda self: self._get_views())
+	aliases = property(lambda self: self._get_aliases())
+	relations = property(lambda self: self._get_relations())
+	relation_dependencies = property(lambda self: self._get_relation_dependencies())
+	relation_dependents = property(lambda self: self._get_relation_dependents())
+	indexes = property(lambda self: self._get_indexes())
+	index_cols = property(lambda self: self._get_index_cols())
+	relation_cols = property(lambda self: self._get_relation_cols())
+	unique_keys = property(lambda self: self._get_unique_keys())
+	unique_keys_list = property(lambda self: self._get_unique_keys_list())
+	unique_key_cols = property(lambda self: self._get_unique_key_cols())
+	foreign_keys = property(lambda self: self._get_foreign_keys())
+	foreign_keys_list = property(lambda self: self._get_foreign_keys_list())
+	foreign_key_cols = property(lambda self: self._get_foreign_key_cols())
+	parent_keys = property(lambda self: self._get_parent_keys())
+	checks = property(lambda self: self._get_checks())
+	checks_list = property(lambda self: self._get_checks_list())
+	check_cols = property(lambda self: self._get_check_cols())
+	functions = property(lambda self: self._get_functions())
+	function_params = property(lambda self: self._get_function_params())
+	procedures = property(lambda self: self._get_procedures())
+	procedure_params = property(lambda self: self._get_procedure_params())
+	triggers = property(lambda self: self._get_triggers())
+	trigger_dependencies = property(lambda self: self._get_trigger_dependencies())
+	relation_triggers = property(lambda self: self._get_relation_triggers())
+	tablespaces = property(lambda self: self._get_tablespaces())
+	tablespace_tables = property(lambda self: self._get_tablespace_tables())
+	tablespace_indexes = property(lambda self: self._get_tablespace_indexes())
 

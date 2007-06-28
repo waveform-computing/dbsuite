@@ -861,6 +861,17 @@ class Database(DatabaseObject):
 			Schema(self, input, *item)
 			for item in input.schemas
 		], key=lambda item:item.name)
+		# Prune completely empty schemas
+		self.schema_list = [
+			schema for schema in self.schema_list
+			if sum([
+				len(schema.relation_list),
+				len(schema.routine_list),
+				len(schema.trigger_list),
+				len(schema.index_list),
+				len(schema.datatype_list)
+			]) > 0
+		]
 		self.schemas = dict([
 			(schema.name, schema)
 			for schema in self.schema_list
