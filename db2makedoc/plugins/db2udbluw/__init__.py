@@ -18,15 +18,15 @@ PASSWORD_OPTION = 'password'
 # Localizable strings
 DATABASE_DESC = 'The locally cataloged name of the database to connect to'
 USERNAME_DESC = 'The username to connect with (optional: if ommitted an implicit connection will be made)'
-PASSWORD_DESC = 'The password associated with the user given by the username option (mandatory if %s is supplied)' % USERNAME_OPTION
+PASSWORD_DESC = 'The password associated with the user given by the username option (mandatory if "%s" is supplied)' % USERNAME_OPTION
 MISSING_OPTION = 'The "%s" option must be specified'
 MISSING_DEPENDENT = 'If the "%s" option is given, the "%s" option must also be provided'
 
-CONNECTING_MSG = 'Connecting to database %s'
+CONNECTING_MSG = 'Connecting to database "%s"'
 USING_DOCCAT = 'DOCCAT extension schema found, using DOCCAT instead of SYSCAT'
 USING_SYSCAT = 'DOCCAT extension schema not found, using SYSCAT'
-USING_V9 = 'Detected IBM DB2 UDB 9+ catalog layout'
-USING_V8 = 'Did not detect IBM DB2 UDB 9+ catalog layout, defaulting to IBM DB2 UDB 8 layout'
+USING_V9 = 'Detected IBM DB2 UDB 9 catalog layout'
+USING_V8 = 'Did not detect IBM DB2 UDB 9 catalog layout, defaulting to IBM DB2 UDB 8 layout'
 
 
 def _connect(dsn, username=None, password=None):
