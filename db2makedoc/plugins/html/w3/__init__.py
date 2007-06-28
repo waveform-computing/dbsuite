@@ -78,9 +78,9 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 		if self.options[COPYRIGHT_OPTION]:
 			site.copyright = self.options[COPYRIGHT_OPTION]
 		# Construct the supplementary SQL stylesheet
-		W3CSSDocument(site, 'sql.css')
+		W3CSSDocument(site)
 		# Construct the supplementary JavaScript library
-		W3JavaScriptDocument(site, 'scripts.js')
+		W3JavaScriptDocument(site)
 		# Construct all popups (this must be done before constructing database
 		# object documents as some of the templates refer to the popup document
 		# objects)

@@ -557,6 +557,9 @@ class W3PopupDocument(W3Document):
 class W3CSSDocument(CSSDocument):
 	"""Stylesheet class to supplement the w3v8 style with SQL syntax highlighting."""
 
+	def __init__(self, site):
+		super(W3CSSDocument, self).__init__(site, 'sql.css')
+
 	def _create_content(self):
 		# We only need one supplemental CSS stylesheet (the default w3v8 styles
 		# are reasonably comprehensive). So this method is brutally simple...
@@ -601,6 +604,9 @@ td.sql_cell { background-color: gray; }
 
 class W3JavaScriptDocument(JavaScriptDocument):
 	"""Code class to supplement the w3v8 style with some simple routines."""
+
+	def __init__(self, site):
+		super(W3JavaScriptDocument, self).__init__(site, 'scripts.js')
 
 	def _create_content(self):
 		self.doc = u"""\
