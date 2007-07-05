@@ -12,7 +12,7 @@ certain methods to provide formatting specific to the w3 style [1].
 import codecs
 from db2makedoc.graph import Graph, Node, Edge, Cluster
 from db2makedoc.db import DatabaseObject, Database, Schema, Relation, Table, View, Alias, Trigger
-from db2makedoc.plugins.html import AttrDict, WebSite, HTMLDocument, CSSDocument, JavaScriptDocument, GraphDocument
+from db2makedoc.plugins.html.document import AttrDict, WebSite, HTMLDocument, CSSDocument, JavaScriptDocument, GraphDocument
 
 # Import the ElementTree API, favouring the faster cElementTree implementation
 try:
@@ -36,9 +36,13 @@ class W3Site(WebSite):
 	def __init__(self, database):
 		"""Initializes an instance of the class."""
 		super(W3Site, self).__init__(database)
-		self.copyright = 'Copyright (c) 2006-2007 by IBM corporation'
-		self.document_map = {}
-		self.graph_map = {}
+		self.breadcrumbs = True
+		self.last_updated = True
+		self.feedback_url = 'http://w3.ibm.com/feedback/'
+		self.menu_items = []
+		self.related_items = []
+		self._document_map = {}
+		self._graph_map = {}
 
 	def add_document(self, document):
 		"""Adds a document to the website.
@@ -48,25 +52,17 @@ class W3Site(WebSite):
 		"""
 		super(W3Site, self).add_document(document)
 		if isinstance(document, W3MainDocument):
-			self.document_map[document.dbobject] = document
+			self._document_map[document.dbobject] = document
 		elif isinstance(document, W3GraphDocument):
-			self.graph_map[document.dbobject] = document
-
+			self._graph_map[document.dbobject] = document
+	
 	def object_document(self, dbobject):
-		"""Locates the document associated with a database object.
-
-		This method overrides the stub in the base class to map a
-		DatabaseObject to a W3MainDocument instance.
-		"""
-		return super(W3Site, self).object_document(dbobject) or self.document_map.get(dbobject)
+		"""Returns the HTMLDocument associated with a database object."""
+		return self._document_map[dbobject]
 
 	def object_graph(self, dbobject):
-		"""Locates the graph associated with a database object.
-
-		This method overrides the stub in the base class to map a
-		DatabaseObject to a W3GraphDocument instance.
-		"""
-		return super(W3Site, self).object_graph(dbobject) or self.graph_map.get(dbobject)
+		"""Returns the GraphDocument associated with a database object."""
+		return self._graph_map[dbobject]
 
 
 class W3Document(HTMLDocument):
@@ -137,7 +133,6 @@ class W3MainDocument(W3Document):
 </head>
 <body id="w3-ibm-com" class="article">
 
-<!-- start accessibility prolog -->
 <div class="skip"><a href="#content-main" accesskey="2">Skip to main content</a></div>
 <div class="skip"><a href="#left-nav" accesskey="n">Skip to navigation</a></div>
 <div id="access-info">
@@ -152,9 +147,7 @@ class W3MainDocument(W3Document):
 	</ul>
 	<p class="access">Additional accessibility information for w3.ibm.com can be found <a href="http://w3.ibm.com/w3/access-stmt.html">on the w3 Accessibility Statement page.</a></p>
 </div>
-<!-- end accessibility prolog -->
 
-<!-- start masthead -->
 <div id="masthead">
 	<h2 class="access">Start of masthead</h2>
 	<div id="prt-w3-sitemark"><img src="//w3.ibm.com/ui/v8/images/id-w3-sitemark-simple.gif" alt="" width="54" height="33" /></div>
@@ -172,49 +165,18 @@ class W3MainDocument(W3Document):
 	</div>
 	<div id="browser-warning"><img src="//w3.ibm.com/ui/v8/images/icon-system-status-alert.gif" alt="" width="12" height="10" /> This Web page is best used in a modern browser. Since your browser is no longer supported by IBM, please upgrade your web browser at the <a href="http://w3.ibm.com/download/standardsoftware/">ISSI site</a>.</div>
 </div>
-<!-- stop masthead -->
 
-<!-- start content -->
 <div id="content">
 	<h1 class="access">Start of main content</h1>
 
-	<!-- start content head -->
-	<div id="content-head">
-		<p id="date-stamp" />
-		<div class="hrule-dots">\u00A0</div>
-		<p id="breadcrumbs" />
-	</div>
-	<!-- stop content head -->
-
-	<!-- start main content -->
-	<div id="content-main">
-	</div>
-	<!-- stop main content -->
-
+	<div id="content-head" />
+	<div id="content-main" />
 </div>
-<!-- stop content -->
 
-<!-- start navigation -->
 <div id="navigation">
 	<h2 class="access">Start of left navigation</h2>
-
-	<!-- left nav -->
-	<div id="left-nav">
-	</div>
-
-	<!-- start related links -->
-	<p>Related links:</p>
-	<ul>
-		<li><a href="http://isls.endicott.ibm.com/Documentation/nw3Doc.htm">IS&amp;LS Documentation Home</a></li>
-		<li><a href="http://isls5.endicott.ibm.com/bmsiwIC/index.html">BMS/IW Reference</a></li>
-		<li><a href="http://bmt.stuttgart.de.ibm.com/">BMT Homepage</a></li>
-		<li><a href="https://servicesim.portsmouth.uk.ibm.com/cgi-bin/db2www/~bmtdoc/docu_bmt.mac/report">BMT Dynamic Documentation</a></li>
-	    <li><a href="http://publib.boulder.ibm.com/infocenter/db2luw/v8/index.jsp">IBM DB2 UDB Info Center</a></li>
-	</ul>
-	<!-- stop related links -->
-
+	<div id="left-nav" />
 </div>
-<!-- stop navigation -->
 
 </body>
 </html>
@@ -227,6 +189,19 @@ class W3MainDocument(W3Document):
 		self.title = '%s - %s %s' % (self.site.title, self.dbobject.type_name, self.dbobject.qualified_name)
 		self.description = '%s %s' % (self.dbobject.type_name, self.dbobject.qualified_name)
 		self.keywords = [self.site.database.name, self.dbobject.type_name, self.dbobject.name, self.dbobject.qualified_name]
+		# Add the extra inheritable properties to the site attributes list
+		self.breadcrumbs = None
+		self.last_updated = None
+		self.feedback_url = None
+		self.menu_items = None
+		self.related_items = None
+		self._site_attributes += [
+			'breadcrumbs',
+			'last_updated',
+			'feedback_url',
+			'menu_items',
+			'related_items',
+		]
 	
 	def _create_content(self):
 		# Overridden to automatically set the link objects and generate the
@@ -253,9 +228,9 @@ class W3MainDocument(W3Document):
 			@import url("//w3.ibm.com/ui/v8/css/interior.css");
 			@import url("//w3.ibm.com/ui/v8/css/interior-1-col.css");
 		""", media='all'))
-		headnode.append(self._style(src='sql.css', media='all'))
+		headnode.append(self._script(src=W3JavaScriptDocument._url))
+		headnode.append(self._style(src=W3CSSDocument._url, media='all'))
 		headnode.append(self._style(src='//w3.ibm.com/ui/v8/css/print.css', media='print'))
-		headnode.append(self._script(src='scripts.js'))
 		# Parse the HTML in template and graft the <body> element onto the
 		# <body> element in self.doc
 		self.doc.remove(self.doc.find('body'))
@@ -263,21 +238,30 @@ class W3MainDocument(W3Document):
 		# Fill in the template
 		self.sections = []
 		self._append_content(self._find_element('div', 'site-title-only'), '%s Documentation' % self.dbobject.database.name)
-		self._append_content(self._find_element('p', 'date-stamp'), 'Updated on %s' % self.date.strftime('%a, %d %b %Y'))
-		self._create_crumbs()
-		self._create_menu()
+		e = self._find_element('a', 'feedback')
+		e.attrib['href'] = self.feedback_url
+		e = self._find_element('div', 'content-head')
+		if self.last_updated:
+			self._append_content(e, self._p('Updated on %s' % self.date.strftime('%a, %d %b %Y'), attrs={'id': 'date-stamp'}))
+			self._append_content(e, self._hr())
+		if self.breadcrumbs:
+			self._create_crumbs(e)
+		e = self._find_element('div', 'left-nav')
+		self._create_menu(e)
+		e = self._find_element('div', 'navigation')
+		self._create_related(e)
+		e = self._find_element('div', 'content-main')
 		self._create_sections()
-		mainnode = self._find_element('div', 'content-main')
-		mainnode.append(self._h('%s %s' % (self.dbobject.type_name, self.dbobject.qualified_name), level=1))
-		mainnode.append(self._ul([self._a('#%s' % section['id'], section['title'], 'Jump to section') for section in self.sections]))
+		e.append(self._h('%s %s' % (self.dbobject.type_name, self.dbobject.qualified_name), level=1))
+		e.append(self._ul([self._a('#%s' % section['id'], section['title'], 'Jump to section') for section in self.sections]))
 		for section in self.sections:
-			mainnode.append(self._hr())
-			mainnode.append(self._h(section['title'], level=2, attrs={'id': section['id']}))
-			self._append_content(mainnode, section['content'])
-			mainnode.append(self._p(self._a('#masthead', 'Back to top', 'Jump to top')))
-		mainnode.append(self._p(self._a('http://w3.ibm.com/w3/info_terms_of_use.html', 'Terms of use'), attrs={'class': 'terms'}))
+			e.append(self._hr())
+			e.append(self._h(section['title'], level=2, attrs={'id': section['id']}))
+			self._append_content(e, section['content'])
+			e.append(self._p(self._a('#masthead', 'Back to top', 'Jump to top')))
+		e.append(self._p(self._a('http://w3.ibm.com/w3/info_terms_of_use.html', 'Terms of use'), attrs={'class': 'terms'}))
 
-	def _create_menu(self):
+	def _create_menu(self, node):
 		"""Creates the content of left-hand navigation menu."""
 		
 		def make_menu_level(selitem, active, subitems):
@@ -354,7 +338,7 @@ class W3MainDocument(W3Document):
 				index += 1
 			if more_above:
 				items.insert(0, (
-					'#',                     # url/href
+					'',                      # url/href
 					u'\u2191 More items...', # content, \u2191 == &uarr;
 					'More items',            # title
 					True,                    # visible
@@ -364,7 +348,7 @@ class W3MainDocument(W3Document):
 				))
 			if more_below:
 				items.append((
-					'#',                     # url/href
+					'',                      # url/href
 					u'\u2193 More items...', # content, \u2193 == &darr;
 					'More items',            # title
 					True,                    # visible
@@ -395,15 +379,19 @@ class W3MainDocument(W3Document):
 				items = make_menu_level(item, active, items)
 				active = False
 				item = item.parent
-			items.insert(0, (
-				'index.html', # url/href
-				'Home',       # content
-				'Home',       # title
-				True,         # visible
-				False,        # active
-				None,         # onclick
-				[]            # children
-			))
+			index = 0
+			site_items = [(self.site.home_title, self.site.home_url)] + self.site.menu_items
+			for (title, url) in site_items:
+				items.insert(index, (
+					url,   # url/href
+					title, # content
+					title, # title
+					True,  # visible
+					False, # active
+					None,  # onclick
+					[]     # children
+				))
+				index += 1
 			return items
 
 		def make_menu_elements(parent, items, level=0):
@@ -437,9 +425,18 @@ class W3MainDocument(W3Document):
 				if len(children) > 0 and level + 1 < len(classes):
 					make_menu_elements(parent, children, level + 1)
 
-		make_menu_elements(self._find_element('div', 'left-nav'), make_menu_tree(self.dbobject))
+		make_menu_elements(node, make_menu_tree(self.dbobject))
+	
+	def _create_related(self, node):
+		"""Creates the related links after the left-hand navigation menu."""
+		if len(self.related_items):
+			self._append_content(node, self._p('Related links:'))
+			self._append_content(node, self._ul([
+				self._a(url, title)
+				for (title, url) in self.related_items
+			]))
 
-	def _create_crumbs(self):
+	def _create_crumbs(self, node):
 		"""Creates the breadcrumb links at the top of the page."""
 		crumbs = []
 		item = self.dbobject
@@ -448,7 +445,7 @@ class W3MainDocument(W3Document):
 			crumbs.insert(0, u' \u00BB ') # \u00BB == &raquo;
 			item = item.parent
 		crumbs.insert(0, self._a('index.html', 'Home'))
-		self._append_content(self._find_element('p', 'breadcrumbs'), crumbs)
+		self._append_content(node, self._p(crumbs, attrs={'id': 'breadcrumbs'}))
 	
 	# CONTENT METHODS
 	# The following methods are for use in descendent classes to fill the
@@ -491,19 +488,14 @@ class W3PopupDocument(W3Document):
 </head>
 <body id="w3-ibm-com">
 
-<!-- start popup masthead //////////////////////////////////////////// -->
 <div id="popup-masthead">
 	<img id="popup-w3-sitemark" src="//w3.ibm.com/ui/v8/images/id-w3-sitemark-small.gif" alt="" width="182" height="26" />
 </div>
-<!-- stop popup masthead //////////////////////////////////////////// -->
 
-<!-- start content //////////////////////////////////////////// -->
 <div id="content">
-	<!-- start main content -->
 	<div id="content-main">
 		<h1>%s</h1>
 		%s
-		<!-- start popup footer //////////////////////////////////////////// -->
 		<div id="popup-footer">
 			<div class="hrule-dots">\u00A0</div>
 			<div class="content">
@@ -512,14 +504,10 @@ class W3PopupDocument(W3Document):
 			</div>
 			<div style="clear:both;">\u00A0</div>
 		</div>
-		<!-- stop popup footer //////////////////////////////////////////// -->
 
 		<p class="terms"><a href="http://w3.ibm.com/w3/info_terms_of_use.html">Terms of use</a></p>
 	</div>
-	<!-- stop main content -->
-
 </div>
-<!-- stop content //////////////////////////////////////////// -->
 
 </body>
 </html>
@@ -546,7 +534,7 @@ class W3PopupDocument(W3Document):
 			@import url("//w3.ibm.com/ui/v8/css/interior.css");
 			@import url("//w3.ibm.com/ui/v8/css/popup-window.css");
 		""", media='all'))
-		headnode.append(self._style(src='sql.css', media='all'))
+		headnode.append(self._style(src=W3CSSDocument._url, media='all'))
 		headnode.append(self._style(src='//w3.ibm.com/ui/v8/css/print.css', media='print'))
 		# Graft the <body> element from self.content onto the <body> element in
 		# self.doc
@@ -557,8 +545,10 @@ class W3PopupDocument(W3Document):
 class W3CSSDocument(CSSDocument):
 	"""Stylesheet class to supplement the w3v8 style with SQL syntax highlighting."""
 
+	_url = 'sql.css'
+
 	def __init__(self, site):
-		super(W3CSSDocument, self).__init__(site, 'sql.css')
+		super(W3CSSDocument, self).__init__(site, self._url)
 
 	def _create_content(self):
 		# We only need one supplemental CSS stylesheet (the default w3v8 styles
@@ -578,7 +568,7 @@ pre.sql {
 	white-space: -o-pre-wrap;   /* Opera 7 */
 	white-space: -pre-wrap;     /* Opera 4-6 */
 	white-space: pre-wrap;      /* CSS 2.1 (Opera8+) */
-	/* No way to do this in IE? ... oh well */
+	/* No way to do this in IE... */
 }
 
 .sql span.sql_error      { background-color: red; }
@@ -605,8 +595,10 @@ td.sql_cell { background-color: gray; }
 class W3JavaScriptDocument(JavaScriptDocument):
 	"""Code class to supplement the w3v8 style with some simple routines."""
 
+	_url = 'scripts.js'
+
 	def __init__(self, site):
-		super(W3JavaScriptDocument, self).__init__(site, 'scripts.js')
+		super(W3JavaScriptDocument, self).__init__(site, self._url)
 
 	def _create_content(self):
 		self.doc = u"""\
@@ -642,7 +634,7 @@ class W3GraphDocument(GraphDocument):
 		"""Initializes an instance of the class."""
 		self.dbobject = dbobject # must be set before calling the inherited method
 		super(W3GraphDocument, self).__init__(site, '%s.png' % dbobject.identifier)
-		self.dbobject_map = {}
+		self._dbobject_map = {}
 	
 	def _create_graph(self):
 		# Override in descendent classes to generate nodes, edges, etc. in the
@@ -686,7 +678,7 @@ class W3GraphDocument(GraphDocument):
 		standardized formatting depending on the type of the object.
 		"""
 		assert isinstance(dbobject, DatabaseObject)
-		o = self.dbobject_map.get(dbobject, None)
+		o = self._dbobject_map.get(dbobject, None)
 		if o is None:
 			if isinstance(dbobject, Schema):
 				o = Cluster(self.graph, dbobject.qualified_name)
@@ -720,5 +712,5 @@ class W3GraphDocument(GraphDocument):
 			if selected:
 				o.style += ',setlinewidth(3)'
 			o.dbobject = dbobject
-			self.dbobject_map[dbobject] = o
+			self._dbobject_map[dbobject] = o
 		return o
