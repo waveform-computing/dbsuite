@@ -916,6 +916,52 @@ class Database(DatabaseObject):
 				None))
 		else:
 			return None
+	
+	def touch(self, method, *args, **kwargs):
+		"""Calls the specified method for each object within the database.
+
+		The touch() method can be used to perform an operation on all objects
+		or a sub-set of all objects in the database. It iterates over all
+		objects of the database, recursing into schemas, tables, etc. The
+		specified method is called for each object with a single parameter
+		(namely, the object).
+
+		Additional parameters can be passed which will be captured by args and
+		kwargs and passed verbatim to method on each invocation.
+
+		The return value of the method is ignored.
+		"""
+		method(self, *args, **kwargs)
+		for schema in self.schemas.itervalues():
+			method(schema, *args, **kwargs)
+			for table in schema.tables.itervalues():
+				method(table, *args, **kwargs)
+				for ukey in table.unique_keys.itervalues():
+					method(ukey, *args, **kwargs)
+				for fkey in table.foreign_keys.itervalues():
+					method(fkey, *args, **kwargs)
+				for check in table.checks.itervalues():
+					method(check, *args, **kwargs)
+				for field in table.fields.itervalues():
+					method(field, *args, **kwargs)
+			for view in schema.views.itervalues():
+				method(view, *args, **kwargs)
+				for field in view.fields.itervalues():
+					method(field, *args, **kwargs)
+			for alias in schema.aliases.itervalues():
+				method(alias, *args, **kwargs)
+				for field in alias.fields.itervalues():
+					method(field, *args, **kwargs)
+			for index in schema.indexes.itervalues():
+				method(index, *args, **kwargs)
+			for function in schema.specific_functions.itervalues():
+				method(function, *args, **kwargs)
+			for procedure in schema.specific_procedures.itervalues():
+				method(procedure, *args, **kwargs)
+			for trigger in schema.triggers.itervalues():
+				method(trigger, *args, **kwargs)
+		for tbspace in self.tablespaces.itervalues():
+			method(tbspace, *args, **kwargs)
 
 	def _get_identifier(self):
 		return "db"
@@ -1228,7 +1274,7 @@ class Table(Relation):
 		return self._dependent_list
 
 	def _get_create_sql(self):
-		sql = Template('CREATE TABLE $schema.$table ($elements) IN $tbspace;$indexes')
+		sql = Template('CREATE TABLE $schema.$table ($elements) IN $tbspace;')
 		return sql.substitute({
 			'schema': format_ident(self.schema.name),
 			'table': format_ident(self.name),	
@@ -1241,10 +1287,6 @@ class Table(Relation):
 					if not isinstance(constraint, Check) or not constraint.system
 				]),
 			'tbspace': format_ident(self.tablespace.name),
-			'indexes': ''.join([
-					'\n' + index.create_sql
-					for index in self.index_list
-				]),
 		})
 	
 	def _get_drop_sql(self):
@@ -1354,6 +1396,7 @@ class Alias(Relation):
 			desc
 		) = row
 		super(Alias, self).__init__(schema, name, system, desc)
+		# XXX An alias should have its own Field objects
 		self._dependents = RelationsDict(
 			self.database,
 			input.relation_dependents[(schema.name, self.name)]
