@@ -4,7 +4,9 @@
 """Output plugin for IBM Intranet w3v8 style web pages."""
 
 import os
-import db2makedoc.plugins
+import db2makedoc.plugins.html
+
+from db2makedoc.db import Database, Schema, Table, View, Alias, UniqueKey, ForeignKey, Check, Index, Trigger, Function, Procedure, Tablespace
 from db2makedoc.plugins.html.w3.document import W3Site, W3CSSDocument, W3JavaScriptDocument, W3PopupDocument
 from db2makedoc.plugins.html.w3.database import W3DatabaseDocument
 from db2makedoc.plugins.html.w3.schema import W3SchemaDocument, W3SchemaGraph
@@ -22,26 +24,33 @@ from db2makedoc.plugins.html.w3.tablespace import W3TablespaceDocument
 from db2makedoc.plugins.html.w3.popups import W3_POPUPS
 
 # Constants
-PATH_OPTION = 'path'
-AUTHOR_NAME_OPTION = 'author_name'
-AUTHOR_MAIL_OPTION = 'author_email'
-COPYRIGHT_OPTION = 'copyright'
+BREADCRUMBS_OPTION = 'breadcrumbs'
+LAST_UPDATED_OPTION = 'last_updated'
+FEEDBACK_URL_OPTION = 'feedback_url'
+MENU_ITEMS_OPTION = 'menu_items'
+RELATED_ITEMS_OPTION = 'related_items'
 
 # Localizable strings
-PATH_DESC = 'The folder into which all files (HTML, CSS, SVG, etc.) will be written (optional)'
-AUTHOR_NAME_DESC = 'The name of the author of the generated documentation (optional)'
-AUTHOR_MAIL_DESC = 'The e-mail address of the author of the generated documentation (optional)'
-COPYRIGHT_DESC = 'The copyright message to embed in the generated documentation (optional)'
+BREADCRUMBS_DESC = """If true, breadcrumb links will be shown at the
+	top of each page (optional)"""
+LAST_UPDATED_DESC = """If true, a line will be added to the top of
+	each page showing the date on which the page was generated
+	(optional)"""
+FEEDBACK_URL_DESC = """The URL which the feedback link at the top right of
+	each page points to (defaults to the standard w3 feedback page)"""
+MENU_ITEMS_DESC="""A comma-separated list of links to add to the top
+	of the left-hand menu. Links are name=url values, e.g. My
+	App=/myapp,Admin=/admin. Note that the "%s" and "%s" values are
+	implicitly included in this list""" % (
+		db2makedoc.plugins.html.HOME_TITLE_OPTION,
+		db2makedoc.plugins.html.HOME_URL_OPTION
+	)
+RELATED_ITEMS_DESC="""A comma-separated list of links to add after the
+	left-hand menu.  Links are name=url values, see the "%s" description for an
+	example""" % MENU_ITEMS_OPTION
 
-# Plugin options dictionary
-options = {
-	PATH_OPTION: PATH_DESC,
-	AUTHOR_NAME_OPTION: AUTHOR_NAME_DESC,
-	AUTHOR_MAIL_OPTION: AUTHOR_MAIL_DESC,
-	COPYRIGHT_OPTION: COPYRIGHT_DESC,
-}
 
-class OutputPlugin(db2makedoc.plugins.OutputPlugin):
+class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 	"""Output plugin for IBM Intranet w3v8 style web pages.
 
 	This output plugin supports generating XHTML documentation conforming to
@@ -55,75 +64,60 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 	def __init__(self):
 		"""Initializes an instance of the class."""
 		super(OutputPlugin, self).__init__()
-		self.add_option(PATH_OPTION, default='.', doc=PATH_DESC)
-		self.add_option(AUTHOR_NAME_OPTION, default=None, doc=AUTHOR_NAME_DESC)
-		self.add_option(AUTHOR_MAIL_OPTION, default=None, doc=AUTHOR_MAIL_DESC)
-		self.add_option(COPYRIGHT_OPTION, default=None, doc=COPYRIGHT_DESC)
+		self.add_option(BREADCRUMBS_OPTION, default='true', doc=BREADCRUMBS_DESC, convert=self.convert_bool)
+		self.add_option(LAST_UPDATED_OPTION, default='true', doc=LAST_UPDATED_DESC)
+		self.add_option(FEEDBACK_URL_OPTION, default='http://w3.ibm.com/feedback/', doc=FEEDBACK_URL_DESC)
+		self.add_option(MENU_ITEMS_OPTION, default=None, doc=MENU_ITEMS_DESC, convert=self.convert_odict)
+		self.add_option(RELATED_ITEMS_OPTION, default=None, doc=RELATED_ITEMS_DESC, convert=self.convert_odict)
+	
+	def _init_site(self, database):
+		# Overridden to use the W3Site class instead of HTMLSite
+		return W3Site(database)
 
-	def configure(self, config):
-		super(OutputPlugin, self).configure(config)
-		# Expand any variables or references in the path option
-		self.options[PATH_OPTION] = os.path.expanduser(os.path.expandvars(self.options[PATH_OPTION]))
-
-	def execute(self, database):
-		"""Invokes the plugin to produce documentation."""
-		super(OutputPlugin, self).execute(database)
-		site = W3Site(database)
-		site.baseurl = ''
-		site.basepath = self.options[PATH_OPTION]
-		if self.options[AUTHOR_NAME_OPTION]:
-			site.author_name = self.options[AUTHOR_NAME_OPTION]
-		if self.options[AUTHOR_MAIL_OPTION]:
-			site.author_email = self.options[AUTHOR_MAIL_OPTION]
-		if self.options[COPYRIGHT_OPTION]:
-			site.copyright = self.options[COPYRIGHT_OPTION]
-		# Construct the supplementary SQL stylesheet
+	def _config_site(self, site):
+		# Overridden to handle extra config attributes in W3Site
+		super(OutputPlugin, self)._config_site(site)
+		site.breadcrumbs = self.options[BREADCRUMBS_OPTION]
+		site.last_updated = self.options[LAST_UPDATED_OPTION]
+		if self.options[MENU_ITEMS_OPTION]:
+			site.menu_items = self.options[MENU_ITEMS_OPTION]
+		if self.options[RELATED_ITEMS_OPTION]:
+			site.related_items = self.options[RELATED_ITEMS_OPTION]
+	
+	def _create_documents(self, site):
+		# Overridden to add static CSS, JavaScript, and HTML documents
 		W3CSSDocument(site)
-		# Construct the supplementary JavaScript library
 		W3JavaScriptDocument(site)
-		# Construct all popups (this must be done before constructing database
-		# object documents as some of the templates refer to the popup document
-		# objects)
 		for (url, title, body) in W3_POPUPS:
 			W3PopupDocument(site, url, title, body)
-		# Construct all graphs (the graphs will add themselves to the documents
-		# attribute of the site object)
-		for schema in database.schemas.itervalues():
-			W3SchemaGraph(site, schema)
-			for table in schema.tables.itervalues():
-				W3TableGraph(site, table)
-			for view in schema.views.itervalues():
-				W3ViewGraph(site, view)
-			for alias in schema.aliases.itervalues():
-				W3AliasGraph(site, alias)
-		# Construct all document objects (the document objects will add themselves
-		# to the documents attribute of the site object)
-		W3DatabaseDocument(site, database)
-		for schema in database.schemas.itervalues():
-			W3SchemaDocument(site, schema)
-			for table in schema.tables.itervalues():
-				W3TableDocument(site, table)
-				for uniquekey in table.unique_keys.itervalues():
-					W3UniqueKeyDocument(site, uniquekey)
-				for foreignkey in table.foreign_keys.itervalues():
-					W3ForeignKeyDocument(site, foreignkey)
-				for check in table.checks.itervalues():
-					W3CheckDocument(site, check)
-			for view in schema.views.itervalues():
-				W3ViewDocument(site, view)
-			for alias in schema.aliases.itervalues():
-				W3AliasDocument(site, alias)
-			for index in schema.indexes.itervalues():
-				W3IndexDocument(site, index)
-			for function in schema.specific_functions.itervalues():
-				W3FunctionDocument(site, function)
-			for procedure in schema.specific_procedures.itervalues():
-				W3ProcedureDocument(site, procedure)
-			for trigger in schema.triggers.itervalues():
-				W3TriggerDocument(site, trigger)
-		for tablespace in database.tablespaces.itervalues():
-			W3TablespaceDocument(site, tablespace)
-		# Write all the documents in the site
-		for doc in site.documents.itervalues():
-			doc.write()
+		super(OutputPlugin, self)._create_documents(site)
+	
+	def _create_document(self, dbobject, site):
+		# Overridden to generate documents and graphs for specific types of
+		# database objects. Document and graph classes are determined from a
+		# dictionary lookup (a perfect class match is check for first, followed
+		# by a subclass match).
+		class_map = {
+			Database:   [W3DatabaseDocument],
+			Schema:     [W3SchemaGraph, W3SchemaDocument],
+			Table:      [W3TableGraph, W3TableDocument],
+			View:       [W3ViewGraph, W3ViewDocument],
+			Alias:      [W3AliasGraph, W3AliasDocument],
+			UniqueKey:  [W3UniqueKeyDocument],
+			ForeignKey: [W3ForeignKeyDocument],
+			Check:      [W3CheckDocument],
+			Index:      [W3IndexDocument],
+			Trigger:    [W3TriggerDocument],
+			Function:   [W3FunctionDocument],
+			Procedure:  [W3ProcedureDocument],
+			Tablespace: [W3TablespaceDocument],
+		}
+		classes = class_map.get(type(dbobject))
+		if classes is None:
+			for dbclass in class_map:
+				if isinstance(dbobject, dbclass):
+					classes = class_map[dbclass]
+		if classes is not None:
+			for docclass in classes:
+				docclass(site, dbobject)
 
