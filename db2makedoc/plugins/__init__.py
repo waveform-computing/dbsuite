@@ -11,8 +11,11 @@ from the hierarchy of database objects provided to them by the main
 application.
 """
 
+import os
 import sys
 import logging
+import datetime
+import re
 from fnmatch import fnmatchcase as fnmatch
 
 if sys.hexversion < 0x02050000:
@@ -47,9 +50,9 @@ INCLUDE_DESC = """A comma-separated list of schema name patterns to
 	wildcard characters. If both "%(include)s" and "%(exclude)s"
 	are specified, include filtering occurs first. Note that the
 	filtering does not apply to schemas themselves, just to objects
-	with schemas excluding datatypes.  This ensures that, if system
-	schemas are excluded, all objects with built-in datatypes do not
-	also disappear""" % {
+	within schemas excluding datatypes.  This ensures that, if system
+	schemas are excluded, all objects with built-in datatypes do
+	not also disappear""" % {
 		'include': INCLUDE_OPTION,
 		'exclude': EXCLUDE_OPTION,
 	}
@@ -75,28 +78,143 @@ class Plugin(object):
 		Other than setting up the options, the derived constructor is expected
 		to do nothing else (other than call the inherited constructor of
 		course).
-
 		"""
 		super(Plugin, self).__init__()
 		self.options = {}
 
-	def add_option(self, name, default=None, doc=None):
+	def add_option(self, name, default=None, doc=None, convert=None):
 		"""Adds a new option to the configuration directory.
 
 		Derived classes should NOT override this method.
 
 		Derived classes are expected to call this method during construction to
-		define the configuraiton options expect to receive. Currently, this is
-		a very basic mechanism. In future it may be expanded to include some
-		rudimentary type checking and validation (currently derived classes
-		must perform any validation themselves during the execute() call).
+		define the configuraiton options expect to receive. As future
+		expansions may result in an extended prototype for this function it is
+		strongly recommended that keyword arguments are used when calling it.
 
-		As such future expansions may result in an extended prototype for this
-		function it is strongly recommended that keyword arguments are used
-		when calling it.
+		Parameters:
+		name    -- The name of the option
+		default -- The default value for the option if it is not found in the
+		           configuration
+		doc     -- A description of the option and its possible values
+		convert -- A function to call which should convert the option value
+		           from a string into its intended type. See the utility
+		           convert_X methods below
 		"""
-		self.options[name] = (default, doc)
+		self.options[name] = (default, doc, convert)
 	
+	
+	def convert_path(self, value):
+		"""Conversion handler for configuration values containing paths."""
+		return os.path.expanduser(os.path.expandvars(value))
+
+	def convert_file(self, value, mode='rU'):
+		"""Conversion handler for configuration values containing filenames.
+
+		Note: This handler returns a file-object with the specified filename. If
+		you do not want the filename opened, use convert_path() instead. If you
+		wish to specify a different value for the optional mode parameter, specify
+		this function in a lambda function like so:
+
+			lambda self, value: self.convert_file(value, mode='w')
+		
+		Ths default is to opening the file for reading in univeral line-break mode.
+		"""
+		return open(convert_path(value), mode)
+
+	def convert_int(self, value):
+		"""Conversion handler for configuration values containing an integer."""
+		return int(value)
+
+	def convert_float(self, value):
+		"""Conversion handler for configuration values containing a float."""
+		return float(value)
+
+	def convert_bool(self, value, false_values=['false', 'no', 'off', '0'], true_values=['true', 'yes', 'on', '1']):
+		"""Conversion handler for configuration values containing a boolean."""
+		try:
+			return dict(
+				[(key, False) for key in false_values] +
+				[(key, True) for key in true_values]
+			)[value.lower()]
+		except KeyError:
+			raise Exception('Invalid boolean value "%s" (use true/false, yes/no, on/off, 1/0 instead)' % value)
+
+	convert_date_re = re.compile(r'(\d{4})[-/.](\d{2})[-/.](\d{2})([T -.](\d{2})[:.](\d{2})([:.](\d{2})(\.(\d{6})\d*)?)?)?')
+	def convert_date(self, value):
+		"""Conversion handler for configuration values containing a date/time.
+		
+		The value must contain a string containing a date and optionally time
+		in ISO8601 format (although some variation in field separators is
+		permitted.
+		"""
+		result = convert_date_re.match(value).groups()
+		if result is None:
+			raise Exception('Invalid date value "%s" (use ISO8601 format, YYYY-MM-DD HH:MM:SS)' % value)
+		(yr, mon, day, _, hr, min, _, sec, _, msec) = result
+		return datetime.datetime(*(int(i or '0') for i in (yr, mon, day, hr, min, sec, msec)))
+
+	def convert_list(self, value, separator=",", subconvert=None):
+		"""Conversion handler for configuration values containing a list.
+		
+		Use this method within a lambda function if you wish to specify values
+		for the optional separator or subconverter parameters. For example, if
+		you want to convert a comma separated list of integers:
+
+			lambda self, value: self.convert_list(value,
+		        subconverter=self.convert_int)
+		
+		The defaults for separator and subconverter handle converting a comma
+		separated list of strings. Note that no escaping mechanism is provided
+		for handling commas within elements of the list.
+		"""
+		if value.strip() == '':
+			return []
+		elif subconvert is None:
+			return value.split(separator)
+		else:
+			return [subconvert(item) for item in value.split(separator)]
+	
+	def convert_set(self, value, separator=",", subconvert=None):
+		"""Conversion handler for configuration values containing a set.
+
+		Use this method in the same way as convert_list() above.
+		"""
+		return set(self.convert_list(value, separator, subconvert))
+
+	def convert_dict(self, value, listsep=",", mapsep="=", subconvert=None):
+		"""Conversion handler for configuration values containing a set of mappings.
+
+		This method expects a comma-separated list of key=value items. Note
+		that no escaping mechanism is provided for handling elements containing
+		commas or equals characters, and that the subconvert function is
+		applied to the values only, not the keys.
+
+		Use this method in the same way as convert_list() above.
+		"""
+		return dict(self.convert_odict(value, listsep, mapsep, subconvert))
+
+	def convert_odict(self, value, listsep=",", mapsep="=", subconvert=None):
+		"""Conversion handler for configuration values containing a set of mappings.
+
+		This method is equivalent to convert_dict(), except it returns a list
+		of two-element tuples instead of a dictionary. This is useful when the
+		ordering of the mappings must be preserved (and can be easily converted
+		into a dictionary, if required).
+
+		Use this method in the same way as convert_dict() above.
+		"""
+		result = [
+			tuple(item.split(mapsep, 1))
+			for item in self.convert_list(value, listsep)
+		]
+		if subconvert is not None:
+			result = [
+				(key, subconvert(value))
+				for (key, value) in result
+			]
+		return result
+
 	def configure(self, config):
 		"""Loads the plugin configuration.
 
@@ -105,12 +223,18 @@ class Plugin(object):
 		override this method they should call the inherited method and then
 		test that the configuration is valid.
 		"""
-		for (name, (default, doc)) in self.options.iteritems():
+		for (name, (default, doc, convert)) in self.options.iteritems():
 			if name in config:
-				self.options[name] = config[name]
+				value = config[name]
 			else:
-				self.options[name] = default
-
+				value = default
+			# Note: Conversion is applied to defaults as well as explicitly
+			# specified values (unless the default is None, which is passed
+			# thru verbatim)
+			if convert is not None and value is not None:
+				value = convert(value)
+			self.options[name] = value
+	
 
 class OutputPlugin(Plugin):
 	"""Abstract base class for output plugins.
@@ -150,8 +274,8 @@ class InputPlugin(Plugin):
 	def __init__(self):
 		"""Initializes an instance of the class."""
 		super(InputPlugin, self).__init__()
-		self.add_option(EXCLUDE_OPTION, default=None, doc=EXCLUDE_DESC)
-		self.add_option(INCLUDE_OPTION, default=None, doc=INCLUDE_DESC)
+		self.add_option(EXCLUDE_OPTION, default=None, doc=EXCLUDE_DESC, convert=self.convert_list)
+		self.add_option(INCLUDE_OPTION, default=None, doc=INCLUDE_DESC, convert=self.convert_list)
 		self.__schemas = None
 		self.__datatypes = None
 		self.__tables = None
@@ -188,14 +312,8 @@ class InputPlugin(Plugin):
 	def configure(self, config):
 		"""Loads the plugin configuration."""
 		super(InputPlugin, self).configure(config)
-		if self.options[INCLUDE_OPTION]:
-			self.include = [s.strip() for s in self.options[INCLUDE_OPTION].split(',')]
-		else:
-			self.include = []
-		if self.options[EXCLUDE_OPTION]:
-			self.exclude = [s.strip() for s in self.options[EXCLUDE_OPTION].split(',')]
-		else:
-			self.exclude = []
+		self.include = self.options[INCLUDE_OPTION] or []
+		self.exclude = self.options[EXCLUDE_OPTION] or []
 
 	def open(self):
 		"""Opens the database connection for data retrieval.
