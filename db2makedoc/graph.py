@@ -225,7 +225,7 @@ $strict$graph $id {
 		"""
 		self._call_graphviz(output, converter, MAP_FORMAT, graph_attr, node_attr, edge_attr)
 	
-	def touch(self, method, **params):
+	def touch(self, method, *args, **kwargs):
 		"""Calls the specified method for each object within the graph.
 
 		The touch() method can be used to perform an operation on all objects
@@ -234,9 +234,8 @@ $strict$graph $id {
 		method is called for each object with a single parameter (namely, the
 		object).
 
-		Additional parameters can be passed which will be captured by the
-		keyword argument params and passed verbatim to method on each
-		invocation.
+		Additional parameters can be passed which will be captured by args and
+		kwargs and passed verbatim to method on each invocation.
 
 		The return value of the method can control when the recursion
 		terminates.  If the method returns a value which evaluates to True, the
@@ -245,19 +244,19 @@ $strict$graph $id {
 		default if no return is specified), the loop continues.
 		"""
 
-		def touch_sub(subgraph, params):
+		def touch_sub(subgraph, args, kwargs):
 			assert isinstance(subgraph, GraphBase)
-			if method(subgraph, **params):
+			if method(subgraph, *args, **kwargs):
 				return True
 			for i in subgraph.children:
 				if isinstance(i, GraphBase):
-					if touch_sub(i, params):
+					if touch_sub(i, args, kwargs):
 						return True
 				else:
-					if method(i, **params):
+					if method(i, *args, **kwargs):
 						return True
 
-		touch_sub(self, params)
+		touch_sub(self, args, kwargs)
 
 class Subgraph(GraphBase):
 	"""Class representing a subgraph within a graph (or subgraph)"""
