@@ -338,7 +338,7 @@ class W3MainDocument(W3Document):
 				index += 1
 			if more_above:
 				items.insert(0, (
-					'',                      # url/href
+					'#',                     # url/href
 					u'\u2191 More items...', # content, \u2191 == &uarr;
 					'More items',            # title
 					True,                    # visible
@@ -348,7 +348,7 @@ class W3MainDocument(W3Document):
 				))
 			if more_below:
 				items.append((
-					'',                      # url/href
+					'#',                     # url/href
 					u'\u2193 More items...', # content, \u2193 == &darr;
 					'More items',            # title
 					True,                    # visible
