@@ -58,11 +58,11 @@ class W3Site(WebSite):
 	
 	def object_document(self, dbobject):
 		"""Returns the HTMLDocument associated with a database object."""
-		return self._document_map[dbobject]
+		return self._document_map.get(dbobject)
 
 	def object_graph(self, dbobject):
 		"""Returns the GraphDocument associated with a database object."""
-		return self._graph_map[dbobject]
+		return self._graph_map.get(dbobject)
 
 
 class W3Document(HTMLDocument):

@@ -288,8 +288,10 @@ class WebSite(object):
 		used to allow weak references between documents by URL (as opposed to
 		an object reference), or to obtain references for documents with
 		static URLs that do not represent objects.
+
+		If the specified URL cannot be found, the method must return None.
 		"""
-		return self._documents[url]
+		return self._documents.get(url)
 
 	def object_document(self, dbobject, *args, **kwargs):
 		"""Returns the HTMLDocument associated with a database object.
@@ -297,6 +299,9 @@ class WebSite(object):
 		This is a stub method to be overridden in descendent classes. It is
 		used by the _a_to() method of the HTMLDocument class to generate a URL
 		for an <a> element pointing to the documentation for a database object.
+
+		If the specified object has no associated HTMLDocument object, the
+		method must return None.
 
 		The args and kwargs parameters capture any extra criteria that should
 		be used to select between documents in the case that a database object
@@ -314,6 +319,9 @@ class WebSite(object):
 		used by the _img_of() method of the HTMLDocument class to generate an
 		<img> element (and possibly an associated <map> element) in a document
 		for a database object.
+
+		If the specified has no associated GraphDocument object, the method
+		must return None.
 
 		The args and kwargs parameters capture any extra criteria that should
 		be used to select between graphs in the case that a database object is
