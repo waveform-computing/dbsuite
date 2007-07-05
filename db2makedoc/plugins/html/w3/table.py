@@ -61,27 +61,27 @@ class W3TableDocument(W3MainDocument):
 			)],
 			data=[
 				(
-					self._a(self.site.documents['created.html']),
+					self._a(self.site.url_document('created.html')),
 					self.dbobject.created,
-					self._a(self.site.documents['laststats.html']),
+					self._a(self.site.url_document('laststats.html')),
 					self.dbobject.last_stats,
 				),
 				(
-					self._a(self.site.documents['createdby.html']),
+					self._a(self.site.url_document('createdby.html')),
 					self.dbobject.owner,
-					self._a(self.site.documents['cardinality.html']),
+					self._a(self.site.url_document('cardinality.html')),
 					self.dbobject.cardinality,
 				),
 				(
-					self._a(self.site.documents['keycolcount.html']),
+					self._a(self.site.url_document('keycolcount.html')),
 					key_count,
-					self._a(self.site.documents['colcount.html']),
+					self._a(self.site.url_document('colcount.html')),
 					len(self.dbobject.fields),
 				),
 				(
-					self._a(self.site.documents['dependentrel.html']),
+					self._a(self.site.url_document('dependentrel.html')),
 					len(dependents),
-					self._a(self.site.documents['size.html']),
+					self._a(self.site.url_document('size.html')),
 					self.dbobject.size_str,
 				),
 				# XXX Include system?

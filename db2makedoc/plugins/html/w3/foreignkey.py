@@ -34,15 +34,15 @@ class W3ForeignKeyDocument(W3MainDocument):
 					self._a_to(self.dbobject.ref_key),
 				),
 				(
-					self._a(self.site.documents['created.html']),
+					self._a(self.site.url_document('created.html')),
 					self.dbobject.created,
-					self._a(self.site.documents['createdby.html']),
+					self._a(self.site.url_document('createdby.html')),
 					self.dbobject.owner,
 				),
 				(
-					self._a(self.site.documents['deleterule.html']),
+					self._a(self.site.url_document('deleterule.html')),
 					rules[self.dbobject.delete_rule],
-					self._a(self.site.documents['updaterule.html']),
+					self._a(self.site.url_document('updaterule.html')),
 					rules[self.dbobject.update_rule],
 				),
 			]

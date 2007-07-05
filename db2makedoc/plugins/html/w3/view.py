@@ -26,21 +26,21 @@ class W3ViewDocument(W3MainDocument):
 			)],
 			data=[
 				(
-					self._a(self.site.documents['created.html']),
+					self._a(self.site.url_document('created.html')),
 					self.dbobject.created,
-					self._a(self.site.documents['createdby.html']),
+					self._a(self.site.url_document('createdby.html')),
 					self.dbobject.owner,
 				),
 				(
-					self._a(self.site.documents['colcount.html']),
+					self._a(self.site.url_document('colcount.html')),
 					len(self.dbobject.fields),
-					self._a(self.site.documents['readonly.html']),
+					self._a(self.site.url_document('readonly.html')),
 					self.dbobject.read_only,
 				),
 				(
-					self._a(self.site.documents['dependentrel.html']),
+					self._a(self.site.url_document('dependentrel.html')),
 					len(self.dbobject.dependent_list),
-					self._a(self.site.documents['dependenciesrel.html']),
+					self._a(self.site.url_document('dependenciesrel.html')),
 					len(self.dbobject.dependency_list),
 				)
 			]))

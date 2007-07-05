@@ -46,27 +46,27 @@ class W3FunctionDocument(W3MainDocument):
 			)],
 			data=[
 				(
-					self._a(self.site.documents['created.html']),
+					self._a(self.site.url_document('created.html')),
 					self.dbobject.created,
-					self._a(self.site.documents['createdby.html']),
+					self._a(self.site.url_document('createdby.html')),
 					self.dbobject.owner,
 				),
 				(
-					self._a(self.site.documents['functype.html']),
+					self._a(self.site.url_document('functype.html')),
 					functype[self.dbobject.type],
-					self._a(self.site.documents['sqlaccess.html']),
+					self._a(self.site.url_document('sqlaccess.html')),
 					access[self.dbobject.sql_access],
 				),
 				(
-					self._a(self.site.documents['externalaction.html']),
+					self._a(self.site.url_document('externalaction.html')),
 					self.dbobject.external_action,
-					self._a(self.site.documents['deterministic.html']),
+					self._a(self.site.url_document('deterministic.html')),
 					self.dbobject.deterministic,
 				),
 				(
-					self._a(self.site.documents['nullcall.html']),
+					self._a(self.site.url_document('nullcall.html')),
 					self.dbobject.null_call,
-					self._a(self.site.documents['specificname.html']),
+					self._a(self.site.url_document('specificname.html')),
 					self.dbobject.specific_name,
 				),
 			]
@@ -80,7 +80,7 @@ class W3FunctionDocument(W3MainDocument):
 				)],
 				data=[(
 					self._format_prototype(overload.prototype),
-					self._a(self.site.document_map[overload].url, overload.specific_name)
+					self._a(self.site.object_document(overload), overload.specific_name)
 				) for overload in overloads if overload != self.dbobject]
 			))
 		if self.dbobject.create_sql:

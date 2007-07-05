@@ -15,8 +15,6 @@ class W3IndexDocument(W3MainDocument):
 		self._section('description', 'Description')
 		self._add(self._p(self._format_comment(self.dbobject.description)))
 		self._section('attributes', 'Attributes')
-		self._add(self._p("""The following table notes various "vital statistics"
-			of the index."""))
 		self._add(self._table(head=[(
 				"Attribute",
 				"Value",
@@ -31,21 +29,21 @@ class W3IndexDocument(W3MainDocument):
 					self._a_to(self.dbobject.tablespace),
 				),
 				(
-					self._a(self.site.documents['created.html']),
+					self._a(self.site.url_document('created.html')),
 					self.dbobject.created,
-					self._a(self.site.documents['laststats.html']),
+					self._a(self.site.url_document('laststats.html')),
 					self.dbobject.last_stats,
 				),
 				(
-					self._a(self.site.documents['createdby.html']),
+					self._a(self.site.url_document('createdby.html')),
 					self.dbobject.owner,
-					self._a(self.site.documents['colcount.html']),
+					self._a(self.site.url_document('colcount.html')),
 					len(fields),
 				),
 				(
-					self._a(self.site.documents['unique.html']),
+					self._a(self.site.url_document('unique.html')),
 					self.dbobject.unique,
-					self._a(self.site.documents['cardinality.html']),
+					self._a(self.site.url_document('cardinality.html')),
 					self.dbobject.cardinality,
 				),
 				# XXX Include size?

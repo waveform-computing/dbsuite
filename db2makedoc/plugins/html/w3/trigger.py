@@ -36,19 +36,19 @@ class W3TriggerDocument(W3MainDocument):
 			)],
 			data=[
 				(
-					self._a(self.site.documents['created.html']),
+					self._a(self.site.url_document('created.html')),
 					self.dbobject.created,
-					self._a(self.site.documents['createdby.html']),
+					self._a(self.site.url_document('createdby.html')),
 					self.dbobject.owner,
 				),
 				(
-					self._a(self.site.documents['triggertiming.html']),
+					self._a(self.site.url_document('triggertiming.html')),
 					trigtime[self.dbobject.trigger_time],
-					self._a(self.site.documents['triggerevent.html']),
+					self._a(self.site.url_document('triggerevent.html')),
 					trigevent[self.dbobject.trigger_event],
 				),
 				(
-					self._a(self.site.documents['granularity.html']),
+					self._a(self.site.url_document('granularity.html')),
 					granularity[self.dbobject.granularity],
 					'Relation',
 					self._a_to(self.dbobject.relation, qualifiedname=True),

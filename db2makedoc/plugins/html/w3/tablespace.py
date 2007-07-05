@@ -24,19 +24,19 @@ class W3TablespaceDocument(W3MainDocument):
 			)],
 			data=[
 				(
-					self._a(self.site.documents['created.html']),
+					self._a(self.site.url_document('created.html')),
 					self.dbobject.created,
-					self._a(self.site.documents['tables.html']),
+					self._a(self.site.url_document('tables.html')),
 					len(tables),
 				),
 				(
-					self._a(self.site.documents['createdby.html']),
+					self._a(self.site.url_document('createdby.html')),
 					self.dbobject.owner,
-					self._a(self.site.documents['cardinality.html']),
+					self._a(self.site.url_document('cardinality.html')),
 					len(indexes),
 				),
 				(
-					self._a(self.site.documents['tbspacetype.html']),
+					self._a(self.site.url_document('tbspacetype.html')),
 					(self.dbobject.type, {'colspan': 3}),
 				),
 			]))
