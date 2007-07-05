@@ -588,10 +588,10 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				END                              AS SYSTEM,
 				CHAR(I.CREATE_TIME)              AS CREATED,
 				CHAR(I.STATS_TIME)               AS LASTSTATS,
-				NULLIF(I.FIRSTKEYCARD, -1)       AS CARD1,
-				NULLIF(I.FIRST2KEYCARD, -1)      AS CARD2,
-				NULLIF(I.FIRST3KEYCARD, -1)      AS CARD3,
-				NULLIF(I.FIRST4KEYCARD, -1)      AS CARD4,
+				--NULLIF(I.FIRSTKEYCARD, -1)       AS CARD1,
+				--NULLIF(I.FIRST2KEYCARD, -1)      AS CARD2,
+				--NULLIF(I.FIRST3KEYCARD, -1)      AS CARD3,
+				--NULLIF(I.FIRST4KEYCARD, -1)      AS CARD4,
 				NULLIF(I.FULLKEYCARD, -1)        AS CARD,
 				NULLIF(I.NLEAF, -1) * T.PAGESIZE AS SIZE,
 				CASE I.UNIQUERULE
@@ -614,10 +614,10 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				system,
 				created,
 				laststats,
-				card1,
-				card2,
-				card3,
-				card4,
+				#card1,
+				#card2,
+				#card3,
+				#card4,
 				card,
 				size,
 				unique,
@@ -626,10 +626,10 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			) in cursor.fetchall():
 			# A little jiggery-pokery to get some more detailed cardinality
 			# stats
-			if card is not None:
-				card = '%d (%s)' % (card, ','.join([
-					str(i) for i in (card1, card2, card3, card4) if i != -1
-				]))
+			#if card is not None:
+			#	card = '%d (%s)' % (card, ','.join([
+			#		str(i) for i in (card1, card2, card3, card4) if i != -1
+			#	]))
 			result.append((
 				schema,
 				name,
