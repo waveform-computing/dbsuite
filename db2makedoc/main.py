@@ -208,16 +208,18 @@ def list_plugins():
 	tw = textwrap.TextWrapper()
 	tw.initial_indent = ' '*8
 	tw.subsequent_indent = tw.initial_indent
-	print BOLD + BLUE + INPUT_PLUGINS_MSG + NORMAL
-	for (name, plugin) in input_plugins:
-		print ' '*4 + BOLD + name + NORMAL
-		print tw.fill(get_plugin_desc(plugin, summary=True))
-	print ''
-	print BOLD + BLUE + OUTPUT_PLUGINS_MSG + NORMAL
-	for (name, plugin) in output_plugins:
-		print ' '*4 + BOLD + name + NORMAL
-		print tw.fill(get_plugin_desc(plugin, summary=True))
-	print ''
+	if len(input_plugins) > 0:
+		print BOLD + BLUE + INPUT_PLUGINS_MSG + NORMAL
+		for (name, plugin) in input_plugins:
+			print ' '*4 + BOLD + name + NORMAL
+			print tw.fill(get_plugin_desc(plugin, summary=True))
+			print
+	if len(output_plugins) > 0:
+		print BOLD + BLUE + OUTPUT_PLUGINS_MSG + NORMAL
+		for (name, plugin) in output_plugins:
+			print ' '*4 + BOLD + name + NORMAL
+			print tw.fill(get_plugin_desc(plugin, summary=True))
+			print
 
 def help_plugin(plugin_name):
 	"""Pretty-print some help text for the specified plugin."""
@@ -230,7 +232,7 @@ def help_plugin(plugin_name):
 		assert False
 	print BOLD + BLUE + PLUGIN_NAME_MSG + NORMAL
 	print ' '*4 + BOLD + plugin_name + NORMAL
-	print ''
+	print
 	tw = textwrap.TextWrapper()
 	tw.initial_indent = ' '*4
 	tw.subsequent_indent = tw.initial_indent
@@ -240,20 +242,20 @@ def help_plugin(plugin_name):
 	)
 	print BOLD + BLUE + PLUGIN_DESC_MSG + NORMAL
 	print plugin_desc
-	print ''
+	print
 	if hasattr(plugin, 'options'):
 		print BOLD + BLUE + PLUGIN_OPTIONS_MSG + NORMAL
 		tw.initial_indent = ' '*8
 		tw.subsequent_indent = tw.initial_indent
-		for (name, (default, desc)) in sorted(plugin.options.iteritems(), key=lambda(name, desc): name):
+		for (name, (default, desc, _)) in sorted(plugin.options.iteritems(), key=lambda(name, desc): name):
 			print ' '*4 + BOLD + name + NORMAL,
 			if default is not None:
-				print '(default: %s)' % default
+				print '(default: "%s")' % default
 			else:
 				print
 			desc = '\n'.join(line.lstrip() for line in desc.split('\n'))
 			print tw.fill(desc)
-	print ""
+			print
 
 def is_input_plugin(module):
 	"""Determines whether the specified module is an input plugin.
