@@ -10,6 +10,7 @@ import fnmatch
 import os
 import imp
 import textwrap
+import traceback
 import db2makedoc.db
 import db2makedoc.plugins
 
@@ -171,16 +172,19 @@ def main():
 					if options.debug:
 						raise
 
-def production_excepthook(type, value, traceback):
-	"""Exception hook for non-debug mode.
-
-	This exception hook uses the logging infrastructure set up by main to
-	record fatal (uncaught) exceptions. It also sets the app's exit code to an
-	appropriate value (currently 1 for any uncaught exception), and avoids
-	printing the stack trace (which'd just confuse most users). Users can
-	enable the normal exception hook by using the --debug or -D args.
-	"""
-	logging.critical(str(value))
+def production_excepthook(type, value, tb):
+	"""Exception hook for non-debug mode."""
+	# I/O errors should be simple to solve - no need to bother the user with a
+	# full stack trace, just the error message will suffice
+	if issubclass(type, IOError):
+		logging.critical(str(value))
+	else:
+		# Otherwise, log the stack trace and the exception into the log file
+		# for debugging purposes
+		for line in traceback.format_exception(type, value, tb):
+			for s in line.rstrip().split('\n'):
+				logging.critical(s)
+	# Pass a failure exit code to the calling shell
 	sys.exit(1)
 
 def list_plugins():
