@@ -1235,18 +1235,26 @@ class SQLFormatter(BaseFormatter):
 					self._restore_state()
 					self._save_state()
 					try:
-						# Try and parse a scalar function
-						self._parse_scalar_function_call()
+						# Try and parse an XML function
+						self._parse_xml_function_call()
 					except ParseError:
 						self._restore_state()
 						self._save_state()
 						try:
-							# Try and parse a special register
-							self._parse_special_register()
+							# Try and parse a scalar function
+							self._parse_scalar_function_call()
 						except ParseError:
 							self._restore_state()
-							# Parse a normal column reference
-							self._parse_column_name()
+							self._save_state()
+							try:
+								# Try and parse a special register
+								self._parse_special_register()
+							except ParseError:
+								self._restore_state()
+								# Parse a normal column reference
+								self._parse_column_name()
+							else:
+								self._forget_state()
 						else:
 							self._forget_state()
 					else:
@@ -1301,6 +1309,152 @@ class SQLFormatter(BaseFormatter):
 		# Parse an OLAP suffix if one exists
 		if self._match('OVER'):
 			self._parse_olap_function_call()
+	
+	def _parse_xml_function_call(self):
+		"""Parses an XML function call (which has non-standard internal syntax)"""
+		# Parse the optional SYSIBM schema prefix
+		self._match_sequence(['SYSIBM', '.'])
+		xmlfunc = self._expect_one_of([
+			'XMLSERIALIZE',
+			'XML2CLOB',
+		])[1]
+		self._expect('(')
+		if xmlfunc == 'XMLSERIALIZE':
+			self._expect('CONTENT')
+			self._parse_xml_value_function()
+			self._expect('AS')
+			# XXX Data type can only be CHAR/VARCHAR/CLOB
+			self._parse_datatype()
+		elif xmlfunc == 'XML2CLOB':
+			self._parse_xml_value_function()
+		self._expect(')')
+	
+	def _parse_xml_value_function(self):
+		"""Parses an XML value function (which has non-standard internal syntax)"""
+		# Parse the optional SYSIBM schema prefix
+		self._match_sequence(['SYSIBM', '.'])
+		xmlfunc = self._expect_one_of([
+			'XMLAGG',
+			'XMLELEMENT',
+			'XMLFOREST',
+			'XMLCONCAT',
+		])[1]
+		if xmlfunc == 'XMLAGG':
+			self._parse_xmlagg()
+		elif xmlfunc == 'XMLELEMENT':
+			self._parse_xmlelement()
+		elif xmlfunc == 'XMLFOREST':
+			self._parse_xmlforest()
+		elif xmlfunc == 'XMLCONCAT':
+			self._parse_xmlconcat()
+	
+	def _parse_xmlagg(self):
+		"""Parses an XMLAGG value function"""
+		# XMLAGG already matched
+		self._expect('(')
+		# Parse the optional SYSIBM schema prefix
+		self._match_sequence(['SYSIBM', '.'])
+		self._expect('XMLELEMENT')
+		self._parse_xml_element_function()
+		if self._match_sequence(['ORDER', 'BY']):
+			while True:
+				self._expect(IDENTIFIER)
+				self._match_one_of(['ASC', 'DESC'])
+				if not self._match(','):
+					break
+		self._expect(')')
+
+	def _parse_xmlelement(self):
+		"""Parses an XMLELEMENT value function"""
+		# XMLELEMENT already matched
+		self._expect('(')
+		self._expect('NAME')
+		self._expect(IDENTIFIER)
+		if self._match(','):
+			namespace = attributes = False
+			while True:
+				if not namespace and (self._match('XMLNAMESPACES') or
+						self._match_sequence(['SYSIBM', '.', 'XMLNAMESPACES'])):
+					self._parse_xmlnamespaces()
+					namespace = True
+				elif not attributes and (self._match('XMLATTRIBUTES') or
+						self._match_sequence(['SYSIBM', '.', 'XMLATTRIBUTES'])):
+					self._parse_xmlattributes()
+					namespace = attributes = True
+				else:
+					self._save_state()
+					try:
+						self._parse_xml_value_function()
+					except ParseError:
+						self._restore_state()
+						self._parse_expression()
+					else:
+						self._forget_state()
+					namespace = attributes = True
+				if not self._match(','):
+					break
+		self._expect(')')
+
+	def _parse_xmlforest(self):
+		"""Parses an XMLFOREST value function"""
+		# XMLFOREST already matched
+		self._expect('(')
+		namespace = False
+		while True:
+			if not namespace and (self._match('XMLNAMESPACES') or
+					self._match_sequence(['SYSIBM', '.', 'XMLNAMESPACES'])):
+				self._parse_xmlnamespaces()
+			else:
+				self._save_state()
+				try:
+					self._parse_xml_value_function()
+				except ParseError:
+					self._restore_state()
+					self._parse_expression()
+				else:
+					self._forget_state()
+				self._match_sequence(['AS', IDENTIFIER])
+			namespace = True
+			if not self._match(','):
+				break
+		self._expect(')')
+
+	def _parse_xmlconcat(self):
+		"""Parses an XMLCONCAT value function"""
+		# XMLCONCAT already matched
+		self._expect('(')
+		while True:
+			self._parse_xml_value_function()
+			if not self._match(','):
+				break
+		self._expect(')')
+	
+	def _parse_xmlnamespaces(self):
+		"""Parses an XMLNAMESPACES definition"""
+		# XMLNAMESPACES already matched
+		self._expect('(')
+		while True:
+			if self._match('DEFAULT'):
+				self._expect(STRING)
+			elif self._match('NO'):
+				self._expect_sequence(['DEFAULT', STRING])
+			else:
+				self._expect_sequence([STRING, 'AS', IDENTIFIER])
+			if not self._match(','):
+				break
+		self._expect(')')
+
+	def _parse_xmlattributes(self):
+		"""Parses an XMLATTRIBUTES definition"""
+		# XMLATTRIBUTES already matched
+		self._expect('(')
+		while True:
+			self._parse_expression()
+			if self._match('AS'):
+				self._expect(IDENTIFIER)
+			if not self._match(','):
+				break
+		self._expect(')')
 
 	def _parse_scalar_function_call(self):
 		"""Parses a scalar function call with all its arguments"""
