@@ -1355,7 +1355,7 @@ class SQLFormatter(BaseFormatter):
 		# Parse the optional SYSIBM schema prefix
 		self._match_sequence(['SYSIBM', '.'])
 		self._expect('XMLELEMENT')
-		self._parse_xml_element_function()
+		self._parse_xmlelement()
 		if self._match_sequence(['ORDER', 'BY']):
 			while True:
 				self._expect(IDENTIFIER)
