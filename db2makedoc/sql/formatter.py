@@ -1358,7 +1358,7 @@ class SQLFormatter(BaseFormatter):
 		self._parse_xmlelement()
 		if self._match_sequence(['ORDER', 'BY']):
 			while True:
-				self._expect(IDENTIFIER)
+				self._parse_expression()
 				self._match_one_of(['ASC', 'DESC'])
 				if not self._match(','):
 					break
