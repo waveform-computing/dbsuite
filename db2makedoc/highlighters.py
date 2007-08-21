@@ -167,9 +167,33 @@ class SQLHighlighter(object):
 		for descendent classes to perform by-line handling, e.g. converting the
 		SQL into a two-column table with line numbers in the left column.
 		"""
+		def excerpt(tokens):
+			if len(tokens) > 10:
+				excerpt = tokens[:10] + [(0, None, '...', 0, 0)]
+			else:
+				excerpt = tokens
+			return ''.join(token[2] for token in excerpt)
+
 		self.tokenizer.line_split = line_split
 		self.formatter.line_split = line_split
-		tokens = self.formatter.parse(self.tokenizer.parse(sql, terminator))
+		tokens = self.tokenizer.parse(sql, terminator)
+		# Check for errors in the tokens
+		errors = [token for token in tokens if token[0] == ERROR]
+		if len(errors) > 0:
+			# If errors were found, log a warning for each error and return the
+			# SQL highlighted from the tokenized stream without reformatting
+			logging.warning('While tokenizing %s' % excerpt(tokens))
+			for error in errors:
+				logging.warning('error %s found at line %d, column %d' % (error[1], error[3], error[4]))
+		else:
+			# If the SQL tokenized successfully, attempt to reformat it nicely
+			# but if an error occurs, just warn about it and continue with the
+			# SQL highlighted from the tokenized stream
+			try:
+				tokens = self.formatter.parse(tokens)
+			except ParseTokenError, e:
+				logging.warning('While formatting %s' % excerpt(tokens))
+				logging.warning('error %s found at line %d, column %d' % (e.message, e.line, e.col))
 		if line_split:
 			return [self.format_line(index + 1, line) for (index, line) in enumerate(tokens)]
 		else:
