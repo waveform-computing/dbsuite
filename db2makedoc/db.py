@@ -801,7 +801,7 @@ class Constraint(RelationObject):
 		self.table = self.parent
 	
 	def _get_identifier(self):
-		return "constraint_%s_%s_%s" % (self.relation.name, self.schema.name, self.name)
+		return "constraint_%s_%s_%s" % (self.schema.name, self.relation.name, self.name)
 
 	def _get_fields(self):
 		"""Returns a list of the fields constrained by this constraint"""
