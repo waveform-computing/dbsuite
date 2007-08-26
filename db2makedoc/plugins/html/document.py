@@ -472,8 +472,8 @@ class HTMLDocument(WebSiteDocument):
 		s = u'''\
 <?xml version="1.0" encoding="%(encoding)s"?>
 <!DOCTYPE html
-  PUBLIC %(publicid)s
-  %(systemid)s>
+  PUBLIC "%(publicid)s"
+  "%(systemid)s">
 %(content)s''' % {
 			'encoding': self.site.encoding,
 			'publicid': public_id,
