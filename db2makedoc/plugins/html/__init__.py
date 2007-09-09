@@ -20,6 +20,7 @@ HOME_URL_OPTION = 'home_url'
 AUTHOR_NAME_OPTION = 'author_name'
 AUTHOR_MAIL_OPTION = 'author_email'
 COPYRIGHT_OPTION = 'copyright'
+SITE_TITLE_OPTION = 'site_title'
 
 PATH_DESC = """The folder into which all files (HTML, CSS, SVG, etc.) will
 	be written (optional)"""
@@ -36,6 +37,9 @@ AUTHOR_MAIL_DESC = """The e-mail address of the author of the generated
 	documentation (optional)"""
 COPYRIGHT_DESC = """The copyright message to embed in the generated
 	documentation (optional)"""
+SITE_TITLE_DESC="""The title of the site as a whole. Defaults to "dbname
+	Documentation" where dbname is the name of the database for which
+	documentation is being generated"""
 
 
 class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
@@ -59,6 +63,7 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 		self.add_option(AUTHOR_NAME_OPTION, default=None, doc=AUTHOR_NAME_DESC)
 		self.add_option(AUTHOR_MAIL_OPTION, default=None, doc=AUTHOR_MAIL_DESC)
 		self.add_option(COPYRIGHT_OPTION, default=None, doc=COPYRIGHT_DESC)
+		self.add_option(SITE_TITLE_OPTION, default=None, doc=SITE_TITLE_DESC)
 	
 	def configure(self, config):
 		super(HTMLOutputPlugin, self).configure(config)
@@ -107,6 +112,8 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 		site.author_name = self.options[AUTHOR_NAME_OPTION]
 		site.author_email = self.options[AUTHOR_MAIL_OPTION]
 		site.copyright = self.options[COPYRIGHT_OPTION]
+		if self.options[SITE_TITLE_OPTION]:
+			site.title = self.options[SITE_TITLE_OPTION]
 
 	def _create_documents(self, site):
 		"""Creates the documents in the web-site.

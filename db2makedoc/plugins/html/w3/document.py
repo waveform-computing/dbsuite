@@ -237,7 +237,7 @@ class W3MainDocument(W3Document):
 		self.doc.append(fromstring(self.template).find('body'))
 		# Fill in the template
 		self.sections = []
-		self._append_content(self._find_element('div', 'site-title-only'), '%s Documentation' % self.dbobject.database.name)
+		self._append_content(self._find_element('div', 'site-title-only'), self.site.title)
 		e = self._find_element('a', 'feedback')
 		e.attrib['href'] = self.feedback_url
 		e = self._find_element('div', 'content-head')

@@ -67,7 +67,7 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 		"""Initializes an instance of the class."""
 		super(OutputPlugin, self).__init__()
 		self.add_option(BREADCRUMBS_OPTION, default='true', doc=BREADCRUMBS_DESC, convert=self.convert_bool)
-		self.add_option(LAST_UPDATED_OPTION, default='true', doc=LAST_UPDATED_DESC)
+		self.add_option(LAST_UPDATED_OPTION, default='true', doc=LAST_UPDATED_DESC, convert=self.convert_bool)
 		self.add_option(FEEDBACK_URL_OPTION, default='http://w3.ibm.com/feedback/', doc=FEEDBACK_URL_DESC)
 		self.add_option(MENU_ITEMS_OPTION, default=None, doc=MENU_ITEMS_DESC, convert=self.convert_odict)
 		self.add_option(RELATED_ITEMS_OPTION, default=None, doc=RELATED_ITEMS_DESC, convert=self.convert_odict)
