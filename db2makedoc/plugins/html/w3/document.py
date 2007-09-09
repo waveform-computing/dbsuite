@@ -87,10 +87,8 @@ class W3Document(HTMLDocument):
 	
 	def _table(self, data, head=[], foot=[], caption='', attrs={}):
 		# Overridden to color alternate rows white & gray and to apply the
-		# 'title' class to all header rows
+		# 'blue-dark' class to all header rows
 		tablenode = super(W3Document, self)._table(data, head, foot, caption, attrs)
-		tablenode.attrib['cellpadding'] = '0'
-		tablenode.attrib['cellspacing'] = '1'
 		tablenode.attrib['class'] = 'basic-table'
 		try:
 			theadnode = tablenode.find('thead')
@@ -99,7 +97,7 @@ class W3Document(HTMLDocument):
 		if theadnode:
 			for rownode in theadnode.findall('tr'):
 				classes = rownode.attrib.get('class', '').split()
-				classes.append('blue-med-dark')
+				classes.append('blue-dark')
 				rownode.attrib['class'] = ' '.join(classes)
 		try:
 			tfootnode = tablenode.find('tfoot')
@@ -108,10 +106,10 @@ class W3Document(HTMLDocument):
 		if tfootnode:
 			for rownode in tfootnode.findall('tr'):
 				classes = rownode.attrib.get('class', '').split()
-				classes.append('blue-med-dark')
+				classes.append('blue-dark')
 				rownode.attrib['class'] = ' '.join(classes)
 		# The <tbody> element is mandatory, no try..except necessary
-		colors = ['white', 'gray']
+		colors = ['even', 'odd']
 		tbodynode = tablenode.find('tbody')
 		for (index, rownode) in enumerate(tbodynode.findall('tr')):
 			classes = rownode.attrib.get('class', '').split()
