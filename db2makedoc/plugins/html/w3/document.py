@@ -113,7 +113,7 @@ class W3Document(HTMLDocument):
 		tbodynode = tablenode.find('tbody')
 		for (index, rownode) in enumerate(tbodynode.findall('tr')):
 			classes = rownode.attrib.get('class', '').split()
-			classes.append(colors[index % 2])
+			classes.append(colors[(index + 1) % 2])
 			rownode.attrib['class'] = ' '.join(classes)
 		return tablenode
 
