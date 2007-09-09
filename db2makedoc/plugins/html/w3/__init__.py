@@ -38,10 +38,12 @@ LAST_UPDATED_DESC = """If true, a line will be added to the top of
 	(optional)"""
 FEEDBACK_URL_DESC = """The URL which the feedback link at the top right of
 	each page points to (defaults to the standard w3 feedback page)"""
-MENU_ITEMS_DESC="""A comma-separated list of links to add to the top
-	of the left-hand menu. Links are name=url values, e.g. My
-	App=/myapp,Admin=/admin. Note that the "%s" and "%s" values are
-	implicitly included in this list""" % (
+MENU_ITEMS_DESC="""A comma-separated list of name=url values to appear in
+	the left-hand menu. The special URL # denotes the position of of the
+	database document, e.g.  My App=/myapp,Data Dictionary=#,Admin=/admin. If
+	the special URL does not appear in the list, the database document will
+	be the last menu entry. Note that the "%s" and "%s" values are implicitly
+	included at the top of this list""" % (
 		db2makedoc.plugins.html.HOME_TITLE_OPTION,
 		db2makedoc.plugins.html.HOME_URL_OPTION
 	)

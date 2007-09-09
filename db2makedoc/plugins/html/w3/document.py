@@ -379,18 +379,28 @@ class W3MainDocument(W3Document):
 				items = make_menu_level(item, active, items)
 				active = False
 				item = item.parent
-			index = 0
+			# Build a list of the top-level menu items
 			site_items = [(self.site.home_title, self.site.home_url)] + self.site.menu_items
+			# Combine the site_items array with the items tree. The special
+			# URL "#" in site_items indicates where the items tree should be
+			# positioned in the final menu. If not present, the items tree
+			# will wind up as the last item
+			index = 0
 			for (title, url) in site_items:
-				items.insert(index, (
-					url,   # url/href
-					title, # content
-					title, # title
-					True,  # visible
-					False, # active
-					None,  # onclick
-					[]     # children
-				))
+				if url == '#':
+					# Found the special entry. Replace the menu entry title,
+					# but copy everything else from the original entry
+					items[index] = items[index][:1] + (title,) + items[index][2:]
+				else:
+					items.insert(index, (
+						url,   # url/href
+						title, # content
+						title, # title
+						True,  # visible
+						False, # active
+						None,  # onclick
+						[],    # children
+					))
 				index += 1
 			return items
 
