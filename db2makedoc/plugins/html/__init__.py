@@ -111,6 +111,8 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 		site.encoding = self.options[ENCODING_OPTION]
 		site.author_name = self.options[AUTHOR_NAME_OPTION]
 		site.author_email = self.options[AUTHOR_MAIL_OPTION]
+		site.home_title = self.options[HOME_TITLE_OPTION]
+		self.home_url = self.options[HOME_URL_OPTION]
 		site.copyright = self.options[COPYRIGHT_OPTION]
 		if self.options[SITE_TITLE_OPTION]:
 			site.title = self.options[SITE_TITLE_OPTION]
