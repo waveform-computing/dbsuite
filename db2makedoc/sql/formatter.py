@@ -1951,17 +1951,23 @@ class SQLFormatter(BaseFormatter):
 		while True:
 			if self._match('('):
 				# Parse tuple assignment
-				self._parse_ident_list()
+				while True:
+					self._parse_subrelation_name()
+					if not self._match(','):
+						break
 				self._expect_sequence([')', '=', '('])
 				self._parse_tuple(allowdefault=True)
 				self._expect(')')
 			else:
 				# Parse simple assignment
-				self._expect_sequence([IDENTIFIER, '='])
+				self._parse_subrelation_name()
+				self._expect('=')
 				if not (allowdefault and self._match('DEFAULT')):
 					self._parse_expression()
 			if not self._match(','):
 				break
+			else:
+				self._newline()
 
 	def _parse_identity_options(self, alter=None):
 		"""Parses options for an IDENTITY column"""

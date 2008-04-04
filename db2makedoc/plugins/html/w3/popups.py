@@ -1,4 +1,3 @@
-# $Header$
 # vim: set noet sw=4 ts=4:
 
 W3_POPUPS = [
@@ -65,16 +64,12 @@ W3_POPUPS = [
 		<p>If True, the routine is deterministic. That is, given the same input
 		values, the routine always produces the same output or performs the
 		same action (it has no random aspects).</p>
-		<p>Not applicable unless the <a href="funcorigin.html">origin</a> is
-		user-defined external, or SQL body.</p>
 		"""),
 	('externalaction.html', 'External Action', """
 		<p>If True, the routine has external side effects (indicating that the
 		number of invocations of the routine is significant, and hence that the
 		optimizer cannot eliminate any otherwise unnecessary routine
 		calls).</p>
-		<p>Not applicable unless the <a href="funcorigin.html">origin</a> is
-		user-defined external, or SQL body.</p>
 		"""),
 	('functype.html', 'Type', """
 		<p>Indicates whether the function returns a single scalar value, a row
@@ -115,8 +110,6 @@ W3_POPUPS = [
 		<p>If True, the routine is called when one or more parameters is NULL.
 		Otherwise, the optimizer assumes that if one or more parameters is
 		NULL, the output will be NULL.</p>
-		<p>Not applicable unless the <a href="funcorigin.html">origin</a> is
-		user-defined external, or SQL body.</p>
 		"""),
 	('readonly.html', 'Read Only', """
 		<p>If True, the view is not updateable. If False, the view can be

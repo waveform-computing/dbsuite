@@ -202,26 +202,21 @@ $strict$graph $id {
 	def to_png(self, output, converter=DEFAULT_CONVERTER, graph_attr={}, node_attr={}, edge_attr={}):
 		"""Converts the Graph into a PNG image (and optionally a client-side image-map).
 
-		Parameters:
-		output -- A file-like object to write the PNG to
-		converter -- The path and name of the GraphViz application to use
-		graph_attr -- A dictionary of graph attributes to pass on the command line
-		node_attr -- A dictionary of node attributes to pass on the command line
-		edge_attr -- A dictionary of edge attributes to pass on the command line
+		Parameters are identical to the to_svg() method.
 		"""
 		self._call_graphviz(output, converter, PNG_FORMAT, graph_attr, node_attr, edge_attr)
 	
 	def to_gif(self, output, converter=DEFAULT_CONVERTER, graph_attr={}, node_attr={}, edge_attr={}):
 		"""Converts the Graph into a GIF image (and optionally a client-side image-map).
 
-		Parameters are identical to the to_png() method.
+		Parameters are identical to the to_svg() method.
 		"""
 		self._call_graphviz(output, converter, GIF_FORMAT, graph_attr, node_attr, edge_attr)
 	
 	def to_map(self, output, converter=DEFAULT_CONVERTER, graph_attr={}, node_attr={}, edge_attr={}):
 		"""Converts the Graph into a client-side image map.
 
-		Parameters are identical to the to_png() method.
+		Parameters are identical to the to_svg() method.
 		"""
 		self._call_graphviz(output, converter, MAP_FORMAT, graph_attr, node_attr, edge_attr)
 	

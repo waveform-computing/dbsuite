@@ -29,6 +29,7 @@ LAST_UPDATED_OPTION = 'last_updated'
 FEEDBACK_URL_OPTION = 'feedback_url'
 MENU_ITEMS_OPTION = 'menu_items'
 RELATED_ITEMS_OPTION = 'related_items'
+MAX_GRAPH_SIZE_OPTION = 'max_graph_size'
 
 # Localizable strings
 BREADCRUMBS_DESC = """If true, breadcrumb links will be shown at the
@@ -50,6 +51,10 @@ MENU_ITEMS_DESC="""A comma-separated list of name=url values to appear in
 RELATED_ITEMS_DESC="""A comma-separated list of links to add after the
 	left-hand menu.  Links are name=url values, see the "%s" description for an
 	example""" % MENU_ITEMS_OPTION
+MAX_GRAPH_SIZE_DESC="""The maximum size that diagrams are allowed to be on
+	the page. If diagrams are larger, they will be resized and a zoom function
+	will permit viewing the full size image. Values must be specified as
+	"widthxheight", e.g. "640x480". Defaults to "600x800"."""
 
 
 class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
@@ -66,11 +71,20 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 	def __init__(self):
 		"""Initializes an instance of the class."""
 		super(OutputPlugin, self).__init__()
-		self.add_option(BREADCRUMBS_OPTION, default='true', doc=BREADCRUMBS_DESC, convert=self.convert_bool)
-		self.add_option(LAST_UPDATED_OPTION, default='true', doc=LAST_UPDATED_DESC, convert=self.convert_bool)
-		self.add_option(FEEDBACK_URL_OPTION, default='http://w3.ibm.com/feedback/', doc=FEEDBACK_URL_DESC)
-		self.add_option(MENU_ITEMS_OPTION, default=None, doc=MENU_ITEMS_DESC, convert=self.convert_odict)
-		self.add_option(RELATED_ITEMS_OPTION, default=None, doc=RELATED_ITEMS_DESC, convert=self.convert_odict)
+		self.add_option(BREADCRUMBS_OPTION, default='true', doc=BREADCRUMBS_DESC,
+			convert=self.convert_bool)
+		self.add_option(LAST_UPDATED_OPTION, default='true', doc=LAST_UPDATED_DESC,
+			convert=self.convert_bool)
+		self.add_option(FEEDBACK_URL_OPTION, default='http://w3.ibm.com/feedback/',
+			doc=FEEDBACK_URL_DESC)
+		self.add_option(MENU_ITEMS_OPTION, default=None, doc=MENU_ITEMS_DESC,
+			convert=self.convert_odict)
+		self.add_option(RELATED_ITEMS_OPTION, default=None, doc=RELATED_ITEMS_DESC,
+			convert=self.convert_odict)
+		self.add_option(MAX_GRAPH_SIZE_OPTION, default='600x800', doc=MAX_GRAPH_SIZE_DESC,
+			convert=lambda value: self.convert_list(value, separator='x',
+			subconvert=lambda value: self.convert_int(value, minvalue=100),
+			minvalues=2, maxvalues=2))
 	
 	def _init_site(self, database):
 		# Overridden to use the W3Site class instead of HTMLSite
@@ -81,6 +95,7 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 		super(OutputPlugin, self)._config_site(site)
 		site.breadcrumbs = self.options[BREADCRUMBS_OPTION]
 		site.last_updated = self.options[LAST_UPDATED_OPTION]
+		site.max_graph_size = self.options[MAX_GRAPH_SIZE_OPTION]
 		if self.options[MENU_ITEMS_OPTION]:
 			site.menu_items = self.options[MENU_ITEMS_OPTION]
 		if self.options[RELATED_ITEMS_OPTION]:

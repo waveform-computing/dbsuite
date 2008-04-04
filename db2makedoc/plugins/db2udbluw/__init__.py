@@ -345,15 +345,16 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				CHAR(T.CREATE_TIME)    AS CREATED,
 				CHAR(T.STATS_TIME)     AS LASTSTATS,
 				NULLIF(T.CARD, -1)     AS CARDINALITY,
-				NULLIF(T.FPAGES, -1) * TS.PAGESIZE AS SIZE,
-				RTRIM(T.TBSPACE)       AS TBSPACE,
+				BIGINT(NULLIF(T.FPAGES, -1)) * TS.PAGESIZE  AS SIZE,
+				COALESCE(RTRIM(T.TBSPACE), 'NICKNAMESPACE') AS TBSPACE,
 				T.REMARKS              AS DESCRIPTION
 			FROM
 				%(schema)s.TABLES T
-				INNER JOIN %(schema)s.TABLESPACES TS
+				LEFT OUTER JOIN %(schema)s.TABLESPACES TS
 					ON T.TBSPACEID = TS.TBSPACEID
 			WHERE
-				TYPE = 'T'
+				T.TYPE IN ('T', 'N')
+				AND T.STATUS <> 'X'
 			WITH UR""" % self.query_subst)
 		for (
 				schema,
@@ -422,6 +423,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 					ON T.TABSCHEMA = V.VIEWSCHEMA
 					AND T.TABNAME = V.VIEWNAME
 					AND T.TYPE = 'V'
+			WHERE
+				V.VALID <> 'X'
 			WITH UR""" % self.query_subst)
 		for (
 				schema,
@@ -525,14 +528,19 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(TABSCHEMA) AS VIEWSCHEMA,
-				RTRIM(TABNAME)   AS VIEWNAME,
-				RTRIM(BSCHEMA)   AS DEPSCHEMA,
-				RTRIM(BNAME)     AS DEPNAME
+				RTRIM(T.TABSCHEMA) AS VIEWSCHEMA,
+				RTRIM(T.TABNAME)   AS VIEWNAME,
+				RTRIM(T.BSCHEMA)   AS DEPSCHEMA,
+				RTRIM(T.BNAME)     AS DEPNAME
 			FROM
-				%(schema)s.TABDEP
+				%(schema)s.TABDEP T
+				INNER JOIN %(schema)s.VIEWS V
+					ON T.TABSCHEMA = V.VIEWSCHEMA
+					AND T.TABNAME = V.VIEWNAME
 			WHERE
-				BTYPE IN ('A', 'S', 'T', 'U', 'V', 'W')
+				T.DTYPE = 'V'
+				AND T.BTYPE IN ('A', 'N', 'T', 'V')
+				AND V.VALID <> 'X'
 			WITH UR""" % self.query_subst)
 		for (
 				schema,
@@ -588,22 +596,23 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				END                              AS SYSTEM,
 				CHAR(I.CREATE_TIME)              AS CREATED,
 				CHAR(I.STATS_TIME)               AS LASTSTATS,
-				--NULLIF(I.FIRSTKEYCARD, -1)       AS CARD1,
-				--NULLIF(I.FIRST2KEYCARD, -1)      AS CARD2,
-				--NULLIF(I.FIRST3KEYCARD, -1)      AS CARD3,
-				--NULLIF(I.FIRST4KEYCARD, -1)      AS CARD4,
 				NULLIF(I.FULLKEYCARD, -1)        AS CARD,
-				NULLIF(I.NLEAF, -1) * T.PAGESIZE AS SIZE,
+				BIGINT(NULLIF(I.NLEAF, -1)) * TS.PAGESIZE    AS SIZE,
 				CASE I.UNIQUERULE
 					WHEN 'D' THEN 'N'
 					ELSE 'Y'
 				END                              AS UNIQUE,
-				RTRIM(T.TBSPACE)                 AS TBSPACE,
+				COALESCE(RTRIM(TS.TBSPACE), 'NICKNAMESPACE') AS TBSPACE,
 				I.REMARKS                        AS DESCRIPTION
 			FROM
 				%(schema)s.INDEXES I
-				INNER JOIN %(schema)s.TABLESPACES T
-					ON I.TBSPACEID = T.TBSPACEID
+				INNER JOIN %(schema)s.TABLES T
+					ON I.TABSCHEMA = T.TABSCHEMA
+					AND I.TABNAME = T.TABNAME
+				LEFT OUTER JOIN %(schema)s.TABLESPACES TS
+					ON I.TBSPACEID = TS.TBSPACEID
+			WHERE
+				T.STATUS <> 'X'
 			WITH UR""" % self.query_subst)
 		for (
 				schema,
@@ -614,22 +623,12 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				system,
 				created,
 				laststats,
-				#card1,
-				#card2,
-				#card3,
-				#card4,
 				card,
 				size,
 				unique,
 				tbspace,
 				desc
 			) in cursor.fetchall():
-			# A little jiggery-pokery to get some more detailed cardinality
-			# stats
-			#if card is not None:
-			#	card = '%d (%s)' % (card, ','.join([
-			#		str(i) for i in (card1, card2, card3, card4) if i != -1
-			#	]))
 			result.append((
 				schema,
 				name,
@@ -670,16 +669,24 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(INDSCHEMA) AS INDSCHEMA,
-				RTRIM(INDNAME)   AS INDNAME,
-				RTRIM(COLNAME)   AS COLNAME,
-				COLORDER         AS COLORDER
+				RTRIM(IC.INDSCHEMA) AS INDSCHEMA,
+				RTRIM(IC.INDNAME)   AS INDNAME,
+				RTRIM(IC.COLNAME)   AS COLNAME,
+				IC.COLORDER         AS COLORDER
 			FROM
-				%(schema)s.INDEXCOLUSE
+				%(schema)s.INDEXCOLUSE IC
+				INNER JOIN %(schema)s.INDEXES I
+					ON IC.INDSCHEMA = I.INDSCHEMA
+					AND IC.INDNAME = I.INDNAME
+				INNER JOIN %(schema)s.TABLES T
+					ON I.TABSCHEMA = T.TABSCHEMA
+					AND I.TABNAME = T.TABNAME
+			WHERE
+				T.STATUS <> 'X'
 			ORDER BY
-				INDSCHEMA,
-				INDNAME,
-				COLSEQ
+				IC.INDSCHEMA,
+				IC.INDNAME,
+				IC.COLSEQ
 			WITH UR""" % self.query_subst)
 		for (
 				schema,
@@ -738,34 +745,39 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(TABSCHEMA)                 AS TABSCHEMA,
-				RTRIM(TABNAME)                   AS TABNAME,
-				RTRIM(COLNAME)                   AS COLNAME,
-				RTRIM(TYPESCHEMA)                AS TYPESCHEMA,
-				RTRIM(TYPENAME)                  AS TYPENAME,
-				IDENTITY                         AS IDENTITY,
-				LENGTH                           AS SIZE,
-				SCALE                            AS SCALE,
-				CODEPAGE                         AS CODEPAGE,
-				NULLS                            AS NULLABLE,
-				NULLIF(NULLIF(COLCARD, -1), -2)  AS CARDINALITY,
-				NULLIF(NUMNULLS, -1)             AS NULLCARD,
-				CASE GENERATED
+				RTRIM(C.TABSCHEMA)                 AS TABSCHEMA,
+				RTRIM(C.TABNAME)                   AS TABNAME,
+				RTRIM(C.COLNAME)                   AS COLNAME,
+				RTRIM(C.TYPESCHEMA)                AS TYPESCHEMA,
+				RTRIM(C.TYPENAME)                  AS TYPENAME,
+				C.IDENTITY                         AS IDENTITY,
+				C.LENGTH                           AS SIZE,
+				C.SCALE                            AS SCALE,
+				C.CODEPAGE                         AS CODEPAGE,
+				C.NULLS                            AS NULLABLE,
+				NULLIF(NULLIF(C.COLCARD, -1), -2)  AS CARDINALITY,
+				NULLIF(C.NUMNULLS, -1)             AS NULLCARD,
+				CASE C.GENERATED
 					WHEN 'A' THEN 'A'
 					WHEN 'D' THEN 'D'
 					ELSE 'N'
 				END                              AS GENERATED,
-				TEXT                             AS TEXT,
-				COALESCE(DEFAULT, '')            AS DEFAULT,
-				REMARKS                          AS DESCRIPTION
+				C.TEXT                             AS TEXT,
+				COALESCE(C.DEFAULT, '')            AS DEFAULT,
+				C.REMARKS                          AS DESCRIPTION
 			FROM
-				%(schema)s.COLUMNS
+				%(schema)s.COLUMNS C
+				INNER JOIN %(schema)s.TABLES T
+					ON C.TABSCHEMA = T.TABSCHEMA
+					AND C.TABNAME = T.TABNAME 
 			WHERE
-				HIDDEN <> 'S'
+				C.HIDDEN <> 'S'
+				AND T.TYPE IN ('A', 'N', 'T', 'V')
+				AND T.STATUS <> 'X'
 			ORDER BY
-				TABSCHEMA,
-				TABNAME,
-				COLNO
+				C.TABSCHEMA,
+				C.TABNAME,
+				C.COLNO
 			WITH UR""" % self.query_subst)
 		for (
 				schema,
@@ -1218,6 +1230,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				%(schema)s.ROUTINES
 			WHERE
 				ROUTINETYPE = 'F'
+				AND VALID <> 'X'
 			WITH UR""" % self.query_subst)
 		for (
 				schema,
@@ -1313,6 +1326,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 					AND P.SPECIFICNAME = R.SPECIFICNAME
 			WHERE
 				R.ROUTINETYPE = 'F'
+				AND R.VALID <> 'X'
 			ORDER BY
 				P.ROUTINESCHEMA,
 				P.SPECIFICNAME,
@@ -1396,6 +1410,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				%(schema)s.ROUTINES
 			WHERE
 				ROUTINETYPE = 'P'
+				AND VALID <> 'X'
 			WITH UR""" % self.query_subst)
 		for (
 				schema,
@@ -1468,31 +1483,32 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(P.ROUTINESCHEMA)          AS PROCSCHEMA,
-				RTRIM(P.SPECIFICNAME)           AS PROCSPECNAME,
-				RTRIM(COALESCE(P.PARMNAME, '')) AS PARMNAME,
-				CASE P.ROWTYPE
+				RTRIM(RP.ROUTINESCHEMA)          AS PROCSCHEMA,
+				RTRIM(RP.SPECIFICNAME)           AS PROCSPECNAME,
+				RTRIM(COALESCE(RP.PARMNAME, '')) AS PARMNAME,
+				CASE RP.ROWTYPE
 					WHEN 'P' THEN 'I'
 					WHEN 'C' THEN 'R'
-					ELSE P.ROWTYPE
+					ELSE RP.ROWTYPE
 				END                             AS PARMTYPE,
-				RTRIM(P.TYPESCHEMA)             AS TYPESCHEMA,
-				RTRIM(P.TYPENAME)               AS TYPENAME,
-				P.LENGTH                        AS SIZE,
-				P.SCALE                         AS SCALE,
-				P.CODEPAGE                      AS CODEPAGE,
-				P.REMARKS                       AS DESCRIPTION
+				RTRIM(RP.TYPESCHEMA)             AS TYPESCHEMA,
+				RTRIM(RP.TYPENAME)               AS TYPENAME,
+				RP.LENGTH                        AS SIZE,
+				RP.SCALE                         AS SCALE,
+				RP.CODEPAGE                      AS CODEPAGE,
+				RP.REMARKS                       AS DESCRIPTION
 			FROM
-				%(schema)s.ROUTINEPARMS P
+				%(schema)s.ROUTINEPARMS RP
 				INNER JOIN %(schema)s.ROUTINES R
-					ON P.ROUTINESCHEMA = R.ROUTINESCHEMA
-					AND P.SPECIFICNAME = R.SPECIFICNAME
+					ON RP.ROUTINESCHEMA = R.ROUTINESCHEMA
+					AND RP.SPECIFICNAME = R.SPECIFICNAME
 			WHERE
 				R.ROUTINETYPE = 'P'
+				AND R.VALID <> 'X'
 			ORDER BY
-				P.ROUTINESCHEMA,
-				P.SPECIFICNAME,
-				P.ORDINAL
+				RP.ROUTINESCHEMA,
+				RP.SPECIFICNAME,
+				RP.ORDINAL
 			WITH UR""" % self.query_subst)
 		for (
 				schema,
@@ -1573,6 +1589,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				REMARKS            AS DESCRIPTION
 			FROM
 				%(schema)s.TRIGGERS
+			WHERE
+				VALID <> 'X'
 			WITH UR""" % self.query_subst)
 		for (
 				schema,
@@ -1621,18 +1639,19 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(D.TRIGSCHEMA) AS TRIGSCHEMA,
-				RTRIM(D.TRIGNAME)   AS TRIGNAME,
-				RTRIM(D.BSCHEMA)    AS DEPSCHEMA,
-				RTRIM(D.BNAME)      AS DEPNAME
+				RTRIM(TD.TRIGSCHEMA) AS TRIGSCHEMA,
+				RTRIM(TD.TRIGNAME)   AS TRIGNAME,
+				RTRIM(TD.BSCHEMA)    AS DEPSCHEMA,
+				RTRIM(TD.BNAME)      AS DEPNAME
 			FROM
-				%(schema)s.TRIGDEP D
+				%(schema)s.TRIGDEP TD
 				INNER JOIN %(schema)s.TRIGGERS T
-					ON D.TRIGSCHEMA = T.TRIGSCHEMA
-					AND D.TRIGNAME = T.TRIGNAME
+					ON TD.TRIGSCHEMA = T.TRIGSCHEMA
+					AND TD.TRIGNAME = T.TRIGNAME
 			WHERE
-				BTYPE IN ('A', 'S', 'T', 'U', 'V', 'W')
-				AND NOT (D.BSCHEMA = T.TABSCHEMA AND D.BNAME = T.TABNAME)
+				TD.BTYPE IN ('A', 'N', 'T', 'V')
+				AND T.VALID <> 'X'
+				AND NOT (TD.BSCHEMA = T.TABSCHEMA AND TD.BNAME = T.TABNAME)
 			WITH UR""" % self.query_subst)
 		for (
 				schema,
@@ -1698,6 +1717,26 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				REMARKS           AS DESCRIPTION
 			FROM
 				%(schema)s.TABLESPACES
+			
+			UNION ALL
+
+			SELECT
+				'NICKNAMESPACE',
+				'SYSIBM',
+				'N',
+				CHAR(CREATE_TIME),
+				'Fake tablespace',
+				'Fake tablespace which contains all nicknames in the database'
+			FROM
+				%(schema)s.TABLESPACES
+			WHERE
+				TBSPACE = 'SYSCATSPACE'
+				AND EXISTS (
+					SELECT 1
+					FROM SYSCAT.TABLES
+					WHERE TYPE = 'N'
+					FETCH FIRST 1 ROW ONLY
+				)
 			WITH UR""" % self.query_subst)
 		for (
 				tbspace,

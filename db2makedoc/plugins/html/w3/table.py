@@ -230,7 +230,6 @@ class W3TableGraph(W3GraphDocument):
 				dep_edge.dbobject = dependent
 				dep_edge.label = dependent.name
 				dep_edge.arrowhead = 'normal'
-		# XXX Need to work on reverse trigger dependencies at some point...
 		for trigger in table.trigger_list:
 			trig_node = self._add_dbobject(trigger)
 			trig_edge = table_node.connect_to(trig_node)
@@ -241,3 +240,12 @@ class W3TableGraph(W3GraphDocument):
 				dep_edge = trig_node.connect_to(dep_node)
 				dep_edge.label = '<uses>'
 				dep_edge.arrowhead = 'onormal'
+		for trigger in table.trigger_dependent_list:
+			trig_node = self._add_dbobject(trigger)
+			rel_node = self._add_dbobject(trigger.relation)
+			trig_edge = rel_node.connect_to(trig_node)
+			trig_edge.label = ('<%s %s>' % (times[trigger.trigger_time], events[trigger.trigger_event])).lower()
+			trig_edge.arrowhead = 'vee'
+			dep_edge = trig_node.connect_to(table_node)
+			dep_edge.label = '<uses>'
+			dep_edge.arrowhead = 'onormal'

@@ -32,7 +32,7 @@ class W3TablespaceDocument(W3MainDocument):
 				(
 					self._a(self.site.url_document('createdby.html')),
 					self.dbobject.owner,
-					self._a(self.site.url_document('cardinality.html')),
+					self._a(self.site.url_document('indexes.html')),
 					len(indexes),
 				),
 				(

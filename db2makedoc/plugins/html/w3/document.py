@@ -9,7 +9,10 @@ certain methods to provide formatting specific to the w3 style [1].
 [1] http://w3.ibm.com/standards/intranet/homepage/v8/index.html
 """
 
+import os
 import codecs
+import logging
+from PIL import Image
 from db2makedoc.graph import Graph, Node, Edge, Cluster
 from db2makedoc.db import DatabaseObject, Database, Schema, Relation, Table, View, Alias, Trigger
 from db2makedoc.plugins.html.document import AttrDict, WebSite, HTMLDocument, CSSDocument, JavaScriptDocument, GraphDocument
@@ -38,6 +41,7 @@ class W3Site(WebSite):
 		super(W3Site, self).__init__(database)
 		self.breadcrumbs = True
 		self.last_updated = True
+		self.max_graph_size = (600, 800)
 		self.feedback_url = 'http://w3.ibm.com/feedback/'
 		self.menu_items = []
 		self.related_items = []
@@ -341,7 +345,7 @@ class W3MainDocument(W3Document):
 					'More items',            # title
 					True,                    # visible
 					False,                   # active
-					'show_items(this);',     # onclick
+					'showItems(this);',      # onclick
 					[]                       # children
 				))
 			if more_below:
@@ -351,7 +355,7 @@ class W3MainDocument(W3Document):
 					'More items',            # title
 					True,                    # visible
 					False,                   # active
-					'show_items(this);',     # onclick
+					'showItems(this);',      # onclick
 					[]                       # children
 				))
 			return items
@@ -508,7 +512,7 @@ class W3PopupDocument(W3Document):
 			<div class="hrule-dots">\u00A0</div>
 			<div class="content">
 				<a class="float-right" href="javascript:close();">Close Window</a>
-				<a class="popup-print-link" href="javascript://">Print</a>
+				<a class="popup-print-link" href="javascript:window.print();">Print</a>
 			</div>
 			<div style="clear:both;">\u00A0</div>
 		</div>
@@ -595,6 +599,65 @@ pre.sql {
 td.num_cell { background-color: silver; }
 td.sql_cell { background-color: gray; }
 
+/* Styles for draggable zoom box */
+div.zoom {
+	border: 2px solid black;
+	padding: 0;
+	margin: 0;
+	background-color: #dd0;
+	overflow: hidden;
+	position: absolute;
+	width: 250px;
+	height: 250px;
+}
+
+div.zoom img {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 1;
+}
+
+div.zoom div {
+	cursor: move;
+	background: navy;
+	color: white;
+	font-weight: bold;
+	padding: 0;
+	margin: 0;
+	text-align: center;
+	position: absolute;
+	width: 250px;
+	height: 1.5em;
+	top: 0;
+	left: 0;
+	z-index: 2;
+}
+
+div.zoom :link,
+div.zoom :visited {
+	color: white;
+	text-decoration: underline;
+	padding: 0 0.5em;
+	margin: 0;
+	text-align: center;
+	display: block;
+	position: absolute;
+	width: auto;
+	height: 1.5em;
+	top: 0;
+	right: 0;
+	z-index: 3;
+}
+
+:link.zoom,
+:visited.zoom {
+	padding: 0.5em;
+	background: navy;
+	color: white;
+	text-decoration: underline;
+}
+
 /* Fix display of border around diagrams in Firefox */
 #content-main img { border: 0 none; }
 """
@@ -614,7 +677,7 @@ class W3JavaScriptDocument(JavaScriptDocument):
 var ELEMENT_NODE = 1;
 
 // Replace the "More items..." link (e) with the items it's hiding
-function show_items(e) {
+function showItems(e) {
 	var n;
 	n = e;
 	while (n = n.previousSibling)
@@ -632,6 +695,273 @@ function show_items(e) {
 				break;
 	e.style.display = 'none';
 }
+
+// Simple utility routine for adding a handler to an event
+function addEvent(obj, evt, fn) {
+	if (obj.addEventListener)
+		obj.addEventListener(evt, fn, false);
+	else if (obj.attachEvent)
+		obj.attachEvent('on' + evt, fn);
+}
+
+// Simple utility routine for removing a handler from an event
+function removeEvent(obj, evt, fn) {
+	if (obj.removeEventListener)
+		obj.removeEventListener(evt, fn, false);
+	else if (obj.detachEvent)
+		obj.detachEvent('on' + evt, fn);
+}
+
+// Simple class for storing 2D position. Either specify the X and Y coordinates
+// to the constructor, or specify an element (or an element ID), or another
+// Position object as the only parameter in which case the element's offset
+// will be used
+function Position(x, y) {
+	if (x === undefined) {
+		throw Error('must specify two coordinates or an object for Position');
+	}
+	else if (y === undefined) {
+		var obj = x;
+		if (typeof obj == 'string')
+			obj = document.getElementById(obj);
+		if (typeof obj == 'object') {
+			if ((typeof obj.x == 'number') && (typeof obj.y == 'number')) {
+				this.x = obj.x;
+				this.y = obj.y;
+			}
+			else {
+				this.x = this.y = 0;
+				do {
+					this.x += obj.offsetLeft;
+					this.y += obj.offsetTop
+				} while (obj = obj.offsetParent);
+			}
+		}
+		else {
+			throw Error('invalid object type for Position');
+		}
+	}
+	else {
+		this.x = x;
+		this.y = y;
+	}
+}
+
+// Global zoom object. Implements properties and methods used to control
+// draggable zoom boxes over a reduced size image. This code is a modified
+// version of PPK's excellent "Drag and drop" script. The original can be
+// found at: http://www.quirksmode.org/js/dragdrop.html
+zoom = {
+	// Configuration variables 
+	keySpeed: 10, // pixels per keypress event
+	defaultTitle: 'Zoom', // title bar of normal zoom box
+	mouseTitle: undefined, // title bar of zoom box during mouse drag
+	keyTitle: 'Keys: \\u2191\\u2193\\u2190\\u2192 \\u21B5', // title bar of zoom box during keypress drag
+	keyLink: 'Keys', // title of the key link
+
+	// Internal variables - do not alter
+	startMouse: undefined,
+	startElem: undefined,
+	min: undefined,
+	max: undefined,
+	ratioX: undefined,
+	ratioY: undefined,
+	dXKeys: undefined,
+	dYKeys: undefined,
+	box: undefined,
+	
+	toggle: function (thumb, src, map) {
+		if (typeof thumb == 'string')
+			thumb = document.getElementById(thumb);
+		if (thumb._zoom)
+			zoom.done(thumb)
+		else
+			zoom.init(thumb, src, map);
+		return false;
+	},
+
+	init: function (thumb, src, map) {
+		if (typeof thumb == 'string')
+			thumb = document.getElementById(thumb);
+		// Create the zoom box
+		var box = document.createElement('div');
+		var image = document.createElement('img');
+		var link = document.createElement('a');
+		var title = document.createElement('div');
+		image._box = box;
+		image.src = src;
+		if (map) image.useMap = map;
+		link._box = box;
+		link.appendChild(document.createTextNode(zoom.keyLink));
+		link.href = '#';
+		title._box = box;
+		title.appendChild(document.createTextNode(zoom.defaultTitle));
+		box._thumb = thumb;
+		box._title = title;
+		box._link = link;
+		box._image = image;
+		box.className = 'zoom';
+		var startPos = new Position(thumb);
+		box.style.left = startPos.x + 'px';
+		box.style.top = startPos.y + 'px';
+		// Place the elements into the document tree
+		box.appendChild(title);
+		box.appendChild(link);
+		box.appendChild(image);
+		document.body.appendChild(box);
+		thumb._zoom = box;
+		// Attach the drag event handlers
+		link.onclick = zoom.startDragKeys;
+		title.onmousedown = zoom.startDragMouse;
+		// Return the top-level <div> in case the caller wants to customize
+		// the content 
+		return box;
+	},
+	
+	done: function(thumb) {
+		if (zoom.box) zoom.endDrag();
+		if (typeof thumb == 'string')
+			thumb = document.getElementById(thumb);
+		// Break all the reference cycles we've setup just in case the JS
+		// implementation has shite gc
+		var box = thumb._zoom;
+		box._image._box = undefined;
+		box._image = undefined;
+		box._link._box = undefined;
+		box._link = undefined;
+		box._title = undefined;
+		box._thumb = undefined;
+		thumb._zoom = undefined;
+		// Remove the generated box
+		document.body.removeChild(box);
+		return false;
+	},
+
+	startDragMouse: function (e) {
+		if (zoom.mouseTitle !== undefined)
+			this._box._title.lastChild.data = zoom.mouseTitle;
+		zoom.startDrag(this._box);
+		if (!e) var e = window.event;
+		zoom.startMouse = new Position(e.clientX, e.clientY);
+		addEvent(document, 'mousemove', zoom.dragMouse);
+		addEvent(document, 'mouseup', zoom.endDrag);
+		return false;
+	},
+
+	startDragKeys: function () {
+		if (zoom.keyTitle !== undefined)
+			this._box._title.lastChild.data = zoom.keyTitle;
+		this._box._link.style.display = 'none';
+		zoom.startDrag(this._box);
+		zoom.dXKeys = zoom.dYKeys = 0;
+		addEvent(document, 'keydown', zoom.dragKeys);
+		addEvent(document, 'keypress', zoom.switchKeyEvents);
+		this.blur();
+		return false;
+	},
+
+	switchKeyEvents: function () {
+		// for Opera and Safari 1.3
+		removeEvent(document, 'keydown', zoom.dragKeys);
+		removeEvent(document, 'keypress', zoom.switchKeyEvents);
+		addEvent(document, 'keypress', zoom.dragKeys);
+	},
+
+	startDrag: function (obj) {
+		if (zoom.box) zoom.endDrag();
+		var thumbW = obj._thumb.offsetWidth - obj.offsetWidth;
+		var thumbH = obj._thumb.offsetHeight - obj.offsetHeight;
+		var imageW = obj._image.offsetWidth - obj.offsetWidth;
+		var imageH = obj._image.offsetHeight - obj.offsetHeight;
+		zoom.startElem = new Position(obj);
+		zoom.min = new Position(obj._thumb);
+		zoom.max = new Position(zoom.min);
+		zoom.max.x += thumbW;
+		zoom.max.y += thumbH;
+		zoom.ratioX = imageW / thumbW;
+		zoom.ratioY = imageH / thumbH;
+		zoom.box = obj;
+		obj.className += ' dragged';
+	},
+
+	endDrag: function() {
+		removeEvent(document, 'mousemove', zoom.dragMouse);
+		removeEvent(document, 'mouseup', zoom.endDrag);
+		removeEvent(document, 'keypress', zoom.dragKeys);
+		removeEvent(document, 'keypress', zoom.switchKeyEvents);
+		removeEvent(document, 'keydown', zoom.dragKeys);
+		zoom.box.className = zoom.box.className.replace(/dragged/,'');
+		zoom.box._link.style.display = 'block';
+		zoom.box._title.lastChild.data = zoom.defaultTitle;
+		zoom.saveTitle = undefined;
+		zoom.startMouse = undefined;
+		zoom.startElem = undefined;
+		zoom.min = undefined;
+		zoom.max = undefined;
+		zoom.ratioX = undefined;
+		zoom.ratioY = undefined;
+		zoom.box = undefined;
+	},
+
+	dragMouse: function (e) {
+		if (!e) var e = window.event;
+		var dX = e.clientX - zoom.startMouse.x;
+		var dY = e.clientY - zoom.startMouse.y;
+		zoom.setPosition(dX, dY);
+		return false;
+	},
+
+	dragKeys: function(e) {
+		if (!e) var e = window.event;
+		switch (e.keyCode) {
+			case 37:	// left
+			case 63234:
+				if (zoom.startElem.x + zoom.dXKeys > zoom.min.x)
+					zoom.dXKeys -= zoom.keySpeed;
+				break;
+			case 38:	// up
+			case 63232:
+				if (zoom.startElem.y + zoom.dYKeys > zoom.min.y)
+					zoom.dYKeys -= zoom.keySpeed;
+				break;
+			case 39:	// right
+			case 63235:
+				if (zoom.startElem.x + zoom.dXKeys < zoom.max.x)
+					zoom.dXKeys += zoom.keySpeed;
+				break;
+			case 40:	// down
+			case 63233:
+				if (zoom.startElem.y + zoom.dYKeys < zoom.max.y)
+					zoom.dYKeys += zoom.keySpeed;
+				break;
+			case 13:	// enter
+			case 27:	// escape
+				zoom.endDrag();
+				return false;
+			default:
+				return true;
+		}
+		zoom.setPosition(zoom.dXKeys, zoom.dYKeys);
+		if (e.preventDefault) e.preventDefault();
+		return false;
+	},
+
+	setPosition: function (dx, dy) {
+		var newBoxPos = new Position(
+			Math.min(Math.max(zoom.startElem.x + dx, zoom.min.x), zoom.max.x),
+			Math.min(Math.max(zoom.startElem.y + dy, zoom.min.y), zoom.max.y)
+		);
+		var newImagePos = new Position(
+			(newBoxPos.x - zoom.min.x) * zoom.ratioX,
+			(newBoxPos.y - zoom.min.y) * zoom.ratioY
+		);
+		zoom.box.style.left = newBoxPos.x + 'px';
+		zoom.box.style.top = newBoxPos.y + 'px';
+		zoom.box._image.style.left = -newImagePos.x + 'px';
+		zoom.box._image.style.top = -newImagePos.y + 'px';
+	}
+}
+
 """
 
 
@@ -643,22 +973,116 @@ class W3GraphDocument(GraphDocument):
 		self.dbobject = dbobject # must be set before calling the inherited method
 		super(W3GraphDocument, self).__init__(site, '%s.png' % dbobject.identifier)
 		self._dbobject_map = {}
+		self._written = False
+		if self._usemap:
+			s, ext = os.path.splitext(self.filename)
+			self.zoom_filename = s + os.path.extsep + 'zoom' + ext
+			s, ext = self.url.rsplit('.', 1)
+			self.zoom_url = s + '.zoom.' + ext
+			self.zoom_scale = None
 	
-	def _create_graph(self):
-		# Override in descendent classes to generate nodes, edges, etc. in the
-		# graph
-		pass
+	def write(self):
+		# Overridden to set the introduced "_written" flag (to ensure we don't
+		# attempt to write the graph more than once due to the induced write()
+		# call in the overridden _link() method), and to handle resizing the
+		# image if it's larger than the maximum size specified in the config
+		if not self._written:
+			super(W3GraphDocument, self).write()
+			self._written = True
+			if self._usemap:
+				im = Image.open(self.filename)
+				(maxw, maxh) = self.site.max_graph_size
+				(w, h) = im.size
+				if w > maxw or h > maxh:
+					# If the graph is larger than the maximum specified size,
+					# move the original to name.full.ext and create a smaller
+					# version using PIL. The scaling factor is stored so that
+					# the overridden _map() method can use it to adjust the
+					# client side image map
+					self.zoom_scale = min(float(maxw) / w, float(maxh) / h)
+					logging.debug('Writing %s' % self.zoom_filename)
+					im.save(self.zoom_filename)
+					neww = int(round(w * self.zoom_scale))
+					newh = int(round(h * self.zoom_scale))
+					if w * h * 3 / 1024**2 < 500:
+						# Use a high-quality anti-aliased resize if to do so
+						# would use <500Mb of RAM (which seems a reasonable
+						# cut-off point on modern machines) - the conversion
+						# to RGB is the really memory-heavy bit
+						im = im.convert('RGB').resize((neww, newh), Image.ANTIALIAS)
+					else:
+						im = im.resize((neww, newh), Image.NEAREST)
+					im.save(self.filename)
+	
+	def _map(self, zoom=False):
+		# Overridden to allow generating the client-side map for the "full
+		# size" graph, or the smaller version potentially produced by the
+		# write() method
+		if not self._written:
+			self.write()
+		result = super(W3GraphDocument, self)._map()
+		if self.zoom_scale is not None:
+			if zoom:
+				# Rewrite the id and name attributes
+				result.attrib['id'] = self.zoom_url.rsplit('.', 1)[0] + '.map'
+				result.attrib['name'] = result.attrib['id']
+			else:
+				for area in result:
+					# Convert coords string in a list of integer tuples
+					coords = [
+						tuple(int(i) for i in coord.split(','))
+						for coord in area.attrib['coords'].split(' ')
+					]
+					# Resize all the coordinates by the zoom_scale
+					coords = [
+						tuple(int(round(i * self.zoom_scale)) for i in coord)
+						for coord in coords
+					]
+					# Convert the scaled results back into a string
+					area.attrib['coords'] = ' '.join(
+						','.join(str(i) for i in coord)
+						for coord in coords
+					)
+		return result
+	
+	def _link(self, doc):
+		# Overridden to allow "zoome" graphs with some extra JavaScript. The
+		# write() method handles
+		# is done by checking if a graph is large (>self.max_graph_size) and
+		# creating a second scaled down version if it is. The scaled down
+		# version is then used as the image in the page, and a chunk of
+		# JavaScript (defined in W3JavaScriptDocument) uses the full size image
+		# in a "zoom box".
+		if self._usemap:
+			if not self._written:
+				self.write()
+			# If the graph uses a client side image map for links a bit
+			# more work is required. We need to get the graph to generate
+			# the <map> doc, then import all elements from that
+			# doc into the doc this instance contains...
+			map_small = self._map(zoom=False)
+			map_zoom = self._map(zoom=True)
+			image = doc._img(self.url, attrs={
+				'id': self.url,
+				'usemap': '#' + map_small.attrib['id'],
+			})
+			link = doc._p(doc._a('#', 'Zoom On/Off', attrs={
+				'class': 'zoom',
+				'onclick': 'javascript:return zoom.toggle("%s", "%s", "#%s");' % (
+					self.url,             # thumbnail element id
+					self.zoom_url,        # src of full image
+					map_zoom.attrib['id'] # full image map element id
+				)
+			}))
+			return [link, image, map_small, map_zoom]
+		else:
+			return doc._img(self.url)
 
 	def _create_content(self):
 		# Call the inherited method in case it does anything
 		super(W3GraphDocument, self)._create_content()
 		# Call _create_graph to create the content of the graph
 		self._create_graph()
-		# Tweak some of the graph attributes to make it scale a bit more nicely
-		self.graph.rankdir = 'LR'
-		self.graph.size = '10,20'
-		self.graph.dpi = '96'
-		self.graph.ratio = '1.5'
 		# Transform dbobject attributes on Node, Edge and Cluster objects into
 		# URL attributes 
 
@@ -671,13 +1095,24 @@ class W3GraphDocument(GraphDocument):
 		def rewrite_font(node):
 			if isinstance(node, (Node, Edge)):
 				node.fontname = 'Verdana'
-				node.fontsize = 9.0
+				node.fontsize = 8.0
 			elif isinstance(node, Cluster):
 				node.fontname = 'Verdana'
-				node.fontsize = 12.0
+				node.fontsize = 10.0
 
 		self.graph.touch(rewrite_url)
 		self.graph.touch(rewrite_font)
+		# Tweak some of the graph attributes to make it scale a bit more nicely
+		self.graph.rankdir = 'LR'
+		#self.graph.size = '10,20'
+		self.graph.dpi = '96'
+		(maxw, maxh) = self.site.max_graph_size
+		self.graph.ratio = str(float(maxh) / float(maxw))
+
+	def _create_graph(self):
+		# Override in descendent classes to generate nodes, edges, etc. in the
+		# graph
+		pass
 
 	def _add_dbobject(self, dbobject, selected=False):
 		"""Utility method to add a database object to the graph.
@@ -686,6 +1121,7 @@ class W3GraphDocument(GraphDocument):
 		standardized formatting depending on the type of the object.
 		"""
 		assert isinstance(dbobject, DatabaseObject)
+		assert not self._written
 		o = self._dbobject_map.get(dbobject, None)
 		if o is None:
 			if isinstance(dbobject, Schema):

@@ -122,15 +122,27 @@ class Plugin(object):
 		"""
 		return open(convert_path(value), mode)
 
-	def convert_int(self, value):
+	def convert_int(self, value, minvalue=None, maxvalue=None):
 		"""Conversion handler for configuration values containing an integer."""
-		return int(value)
+		result = int(value)
+		if minvalue is not None and result < minvalue:
+			raise Exception('%d is less than the minimum (%d)' % (result, minvalue))
+		if maxvalue is not None and result > maxvalue:
+			raise Exception('%d is greater than the maximum (%d)' % (result, maxvalue))
+		return result
 
-	def convert_float(self, value):
+	def convert_float(self, value, minvalue=None, maxvalue=None):
 		"""Conversion handler for configuration values containing a float."""
-		return float(value)
+		result = float(value)
+		if minvalue is not None and result < minvalue:
+			raise Exception('%f is less than the minimum (%f)' % (result, minvalue))
+		if maxvalue is not None and result > maxvalue:
+			raise Exception('%f is greater than the maximum (%f)' % (result, maxvalue))
+		return result
 
-	def convert_bool(self, value, false_values=['false', 'no', 'off', '0'], true_values=['true', 'yes', 'on', '1']):
+	def convert_bool(self, value,
+		false_values=['false', 'no', 'off', '0'],
+		true_values=['true', 'yes', 'on', '1']):
 		"""Conversion handler for configuration values containing a boolean."""
 		try:
 			return dict(
@@ -138,7 +150,7 @@ class Plugin(object):
 				[(key, True) for key in true_values]
 			)[value.lower()]
 		except KeyError:
-			raise Exception('Invalid boolean value "%s" (use true/false, yes/no, on/off, 1/0 instead)' % value)
+			raise Exception('Invalid boolean value "%s" (use one of %s instead)' % (value, ', '.join(false_values + true_values)))
 
 	convert_date_re = re.compile(r'(\d{4})[-/.](\d{2})[-/.](\d{2})([T -.](\d{2})[:.](\d{2})([:.](\d{2})(\.(\d{6})\d*)?)?)?')
 	def convert_date(self, value):
@@ -154,20 +166,8 @@ class Plugin(object):
 		(yr, mon, day, _, hr, min, _, sec, _, msec) = result
 		return datetime.datetime(*(int(i or '0') for i in (yr, mon, day, hr, min, sec, msec)))
 
-	def convert_list(self, value, separator=",", subconvert=None):
-		"""Conversion handler for configuration values containing a list.
-		
-		Use this method within a lambda function if you wish to specify values
-		for the optional separator or subconverter parameters. For example, if
-		you want to convert a comma separated list of integers:
-
-			lambda self, value: self.convert_list(value,
-		        subconverter=self.convert_int)
-		
-		The defaults for separator and subconverter handle converting a comma
-		separated list of strings. Note that no escaping mechanism is provided
-		for handling commas within elements of the list.
-		"""
+	def convert_list_sub(self, value, separator=',', subconvert=None):
+		"""Conversion subroutine for convert_list and other methods."""
 		if value.strip() == '':
 			return []
 		elif subconvert is None:
@@ -175,14 +175,43 @@ class Plugin(object):
 		else:
 			return [subconvert(item) for item in value.split(separator)]
 	
-	def convert_set(self, value, separator=",", subconvert=None):
+	def convert_list(self, value, separator=',', subconvert=None, minvalues=0,
+		maxvalues=None):
+		"""Conversion handler for configuration values containing a list.
+		
+		Use this method within a lambda function if you wish to specify values
+		for the optional separator or subconverter parameters. For example, if
+		you want to convert a comma separated list of integers:
+
+			lambda value: self.convert_list(value,
+		        subconvert=self.convert_int)
+		
+		The defaults for separator and subconverter handle converting a comma
+		separated list of strings. Note that no escaping mechanism is provided
+		for handling commas within elements of the list.
+		"""
+		result = self.convert_list_sub(value, separator, subconvert)
+		if len(result) < minvalues:
+			raise Exception('"%s" must contain at least %d elements' % (value, minvalues))
+		if maxvalues is not None and len(result) > maxvalues:
+			raise Exception('"%s" must contain less than %d elements' % (value, maxvalues))
+		return result 
+	
+	def convert_set(self, value, separator=",", subconvert=None, minvalues=0,
+		maxvalues=None):
 		"""Conversion handler for configuration values containing a set.
 
 		Use this method in the same way as convert_list() above.
 		"""
-		return set(self.convert_list(value, separator, subconvert))
+		result = set(self.convert_list_sub(value, separator, subconvert))
+		if len(result) < minvalues:
+			raise Exception('"%s" must contain at least %d unique elements' % (value, minvalues))
+		if maxvalues is not None and len(result) > maxvalues:
+			raise Exception('"%s" must contain less than %d unique elements' % (value, maxvalues))
+		return result 
 
-	def convert_dict(self, value, listsep=",", mapsep="=", subconvert=None):
+	def convert_dict(self, value, listsep=',', mapsep='=', subconvert=None,
+		minvalues=0, maxvalues=None):
 		"""Conversion handler for configuration values containing a set of mappings.
 
 		This method expects a comma-separated list of key=value items. Note
@@ -192,9 +221,10 @@ class Plugin(object):
 
 		Use this method in the same way as convert_list() above.
 		"""
-		return dict(self.convert_odict(value, listsep, mapsep, subconvert))
+		return dict(self.convert_odict(value, listsep, mapsep, subconvert, minvalues, maxvalues))
 
-	def convert_odict(self, value, listsep=",", mapsep="=", subconvert=None):
+	def convert_odict(self, value, listsep=',', mapsep='=', subconvert=None,
+		minvalues=0, maxvalues=None):
 		"""Conversion handler for configuration values containing a set of mappings.
 
 		This method is equivalent to convert_dict(), except it returns a list
@@ -206,7 +236,7 @@ class Plugin(object):
 		"""
 		result = [
 			tuple(item.split(mapsep, 1))
-			for item in self.convert_list(value, listsep)
+			for item in self.convert_list_sub(value, listsep)
 		]
 		if subconvert is not None:
 			result = [
@@ -304,6 +334,8 @@ class InputPlugin(Plugin):
 		self.__procedure_params = None
 		self.__triggers = None
 		self.__trigger_dependencies = None
+		self.__trigger_dependents = None
+		self.__trigger_relations = None
 		self.__relation_triggers = None
 		self.__tablespaces = None
 		self.__tablespace_tables = None
@@ -1175,15 +1207,29 @@ class InputPlugin(Plugin):
 
 	def _get_trigger_dependencies(self):
 		if self.__trigger_dependencies is None:
-			trigdeps = self._filter(self.get_trigger_dependencies(), 0, 2)
+			if self.__trigger_relations is None:
+				self.__trigger_relations = self._filter(self.get_trigger_dependencies(), 0, 2)
 			self.__trigger_dependencies = dict([
 				(trigger[:2], [trigdep[2:4]
-					for trigdep in trigdeps
+					for trigdep in self.__trigger_relations
 					if trigger[:2] == trigdep[:2]
 				])
 				for trigger in self.triggers
 			])
 		return self.__trigger_dependencies
+
+	def _get_trigger_dependents(self):
+		if self.__trigger_dependents is None:
+			if self.__trigger_relations is None:
+				self.__trigger_relations = self._filter(self.get_trigger_dependencies(), 0, 2)
+			self.__trigger_dependents = dict([
+				(relation[:2], [dep[:2]
+					for dep in self.__trigger_relations
+					if relation[:2] == dep[2:4]
+				])
+				for relation in self.relations
+			])
+		return self.__trigger_dependents
 
 	def _get_relation_triggers(self):
 		if self.__relation_triggers is None:
@@ -1251,6 +1297,7 @@ class InputPlugin(Plugin):
 	procedure_params = property(lambda self: self._get_procedure_params())
 	triggers = property(lambda self: self._get_triggers())
 	trigger_dependencies = property(lambda self: self._get_trigger_dependencies())
+	trigger_dependents = property(lambda self: self._get_trigger_dependents())
 	relation_triggers = property(lambda self: self._get_relation_triggers())
 	tablespaces = property(lambda self: self._get_tablespaces())
 	tablespace_tables = property(lambda self: self._get_tablespace_tables())

@@ -52,10 +52,11 @@ except ImportError:
 				raise ImportError('Unable to find an ElementTree implementation')
 
 # Import the CSSUtils API
-try:
-	import cssutils
-except ImportError:
-	raise ImportError('Unable to find a CSS Utils implementation')
+# XXX Unneeded until we actually start work on the CSSDocument class
+#try:
+#	import cssutils
+#except ImportError:
+#	raise ImportError('Unable to find a CSS Utils implementation')
 
 # Import the fastest StringIO implementation
 try:
@@ -738,18 +739,7 @@ class HTMLDocument(WebSiteDocument):
 			return self._p('Graph for %s is not available' % dbobject.qualified_name)
 		else:
 			assert isinstance(graph, GraphDocument)
-			if graph._usemap:
-				# If the graph uses a client side image map for links a bit
-				# more work is required. We need to get the graph to generate
-				# the <map> document, then import all elements from that
-				# document into the document this instance contains...
-				image = self._img(graph.url, attrs={'usemap': '#' + graph.url})
-				map = graph._map()
-				map.attrib['id'] = graph.url
-				map.attrib['name'] = graph.url
-				return [image, map]
-			else:
-				return self._img(graph.url)
+			return graph._link(self)
 
 	def _ins(self, content, attrs={}):
 		return self._element('ins', attrs, content)
@@ -996,6 +986,19 @@ class GraphDocument(WebSiteDocument):
 		finally:
 			f.close()
 
+	def _link(self, doc):
+		"""Returns the Element(s) required to link to the image."""
+		if self._usemap:
+			# If the graph uses a client side image map for links a bit
+			# more work is required. We need to get the graph to generate
+			# the <map> doc, then import all elements from that
+			# doc into the doc this instance contains...
+			map = self._map()
+			image = doc._img(self.url, attrs={'usemap': '#' + map.attrib['id']})
+			return [image, map]
+		else:
+			return doc._img(self.url)
+
 	def _map(self):
 		"""Returns an Element containing the client-side image map."""
 		assert self._usemap
@@ -1004,7 +1007,10 @@ class GraphDocument(WebSiteDocument):
 		f = StringIO()
 		try:
 			self.graph.to_map(f)
-			return fromstring(f.getvalue())
+			result = fromstring(f.getvalue())
+			result.attrib['id'] = self.url.rsplit('.', 1)[0] + '.map'
+			result.attrib['name'] = result.attrib['id']
+			return result
 		finally:
 			f.close()
 

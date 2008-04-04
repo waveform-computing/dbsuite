@@ -78,16 +78,6 @@ def main():
 	parser.add_option("", "--help-plugin", dest="plugin", help=HELP_PLUGIN_HELP)
 	parser.add_option("-D", "--debug", dest="debug", action="store_true", help=DEBUG_HELP)
 	(options, args) = parser.parse_args()
-	# Deal with one-shot actions (help, etc.)
-	if options.listplugins:
-		list_plugins()
-		return
-	elif options.plugin:
-		help_plugin(options.plugin)
-		return
-	# Check the options & args
-	if len(args) == 0:
-		parser.error(NO_FILES_ERR)
 	# Set up some logging stuff
 	console = logging.StreamHandler(sys.stderr)
 	console.setFormatter(logging.Formatter('%(message)s'))
@@ -108,6 +98,16 @@ def main():
 	else:
 		logging.getLogger().setLevel(logging.INFO)
 		sys.excepthook = production_excepthook
+	# Deal with one-shot actions (help, etc.)
+	if options.listplugins:
+		list_plugins()
+		return
+	elif options.plugin:
+		help_plugin(options.plugin)
+		return
+	# Check the options & args
+	if len(args) == 0:
+		parser.error(NO_FILES_ERR)
 	# Loop over each provided configuration file
 	for config_file in args:
 		# Read the configuration file
@@ -307,13 +307,15 @@ def get_plugins(root, name=None):
 		try:
 			(modfile, modpath, moddesc) = imp.find_module(f, root.__path__)
 			try:
+				logging.debug('Attempting to import file %s' % modpath)
 				m = imp.load_module(f, modfile, modpath, moddesc)
 			finally:
 				# Caller is responsible for closing the file object returned by
 				# find_module()
 				if isinstance(modfile, file) and not modfile.closed:
 					modfile.close()
-		except ImportError:
+		except ImportError, e:
+			logging.debug(str(e))
 			continue
 		if is_plugin(m):
 			yield ('%s.%s' % (name, f), m)
@@ -323,8 +325,10 @@ def get_plugins(root, name=None):
 			(modfile, modpath, moddesc) = imp.find_module(d, root.__path__)
 			# modfile will be None in the case of a directory module so there's
 			# no need to close() it
+			logging.debug('Attempting to import package %s' % modpath)
 			m = imp.load_module(d, modfile, modpath, moddesc)
-		except ImportError:
+		except ImportError, e:
+			logging.debug(str(e))
 			continue
 		if is_plugin(m):
 			yield ('%s.%s' % (name, d), m)

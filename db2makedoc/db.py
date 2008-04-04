@@ -1205,6 +1205,14 @@ class Table(Relation):
 			self.database,
 			input.relation_triggers[(schema.name, self.name)]
 		)
+		self.trigger_dependents = TriggersDict(
+			self.database,
+			input.trigger_dependents[(schema.name, self.name)]
+		)
+		self.trigger_dependent_list = TriggersList(
+			self.database,
+			input.trigger_dependents[(schema.name, self.name)]
+		)
 		self.unique_key_list = [
 			UniqueKey(self, input, *item)
 			for item in input.unique_keys[(schema.name, self.name)]

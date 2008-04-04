@@ -100,7 +100,7 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 		"""Configures the site instance.
 
 		This method simply exists to copy settings from the plugin's
-		configuraiton to the site object. Descendents should override this if
+		configuration to the site object. Descendents should override this if
 		they introduce new configuration options.
 
 		Note that plugin configuration validation should still be performed
