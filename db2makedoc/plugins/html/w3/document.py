@@ -1,4 +1,3 @@
-# $Header$
 # vim: set noet sw=4 ts=4:
 
 """w3 specific site and document classes.

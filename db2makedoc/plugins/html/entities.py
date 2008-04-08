@@ -1,4 +1,3 @@
-# $Header$
 # vim: set noet sw=4 ts=4:
 
 """HTML character entities from the HTML4.01 spec [1] (see HTMLDocument.write()

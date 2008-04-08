@@ -1,4 +1,3 @@
-# $Header$
 # vim: set noet sw=4 ts=4:
 
 """Defines the base classes for input and output plugins.

@@ -1,4 +1,3 @@
-# $Header$
 # vim: set noet sw=4 ts=4:
 
 """Provides a set of base classes for HTML based output plugins.

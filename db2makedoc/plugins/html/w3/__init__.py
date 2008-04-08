@@ -1,4 +1,3 @@
-# $Header$
 # vim: set noet sw=4 ts=4:
 
 """Output plugin for IBM Intranet w3v8 style web pages."""

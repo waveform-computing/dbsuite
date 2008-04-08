@@ -1,4 +1,3 @@
-# $Header$
 # vim: set noet sw=4 ts=4:
 
 """Defines all classes that represent the hierarchy of objects in a database.
