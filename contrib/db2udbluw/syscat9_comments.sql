@@ -684,23 +684,6 @@ COMMENT ON SYSCAT.PREDICATESPECS (
 	FILTERTEXT          IS 'Text of data filter expression.'
 );
 
-COMMENT ON TABLE SYSCAT.PROCOPTIONS IS 'Each row contains procedure specific option values.';
-COMMENT ON SYSCAT.PROCOPTIONS (
-	PROCSCHEMA          IS 'Qualifier for the stored procedure name or nickname.',
-	PROCNAME            IS 'Name or nickname of the stored procedure.',
-	OPTION              IS 'Name of the stored procedure option.',
-	SETTING             IS 'Value of the stored procedure option.'
-);
-
-COMMENT ON TABLE SYSCAT.PROCPARMOPTIONS IS 'Each row contains procedure parameter specific option values.';
-COMMENT ON SYSCAT.PROCPARMOPTIONS (
-	PROCSCHEMA          IS 'Qualified procedure name or nickname.',
-	PROCNAME            IS 'Qualified procedure name or nickname.',
-	ORDINAL             IS 'The parameter''s numerical position within the procedure signature.',
-	OPTION              IS 'Name of the stored procedure parameter option.',
-	SETTING             IS 'Value of the stored procedure parameter option.'
-);
-
 COMMENT ON TABLE SYSCAT.REFERENCES IS 'Contains a row for each defined referential constraint.';
 COMMENT ON SYSCAT.REFERENCES (
 	CONSTNAME           IS 'Name of the constraint.',
@@ -716,35 +699,6 @@ COMMENT ON SYSCAT.REFERENCES (
 	CREATE_TIME         IS 'The timestamp when the referential constraint was defined.',
 	FK_COLNAMES         IS 'List of foreign key column names. DEPRECATED: Use @SYSCAT.KEYCOLUSE for this information.',
 	PK_COLNAMES         IS 'List of parent key column names. DEPRECATED: Use @SYSCAT.KEYCOLUSE for this information.'
-);
-
-COMMENT ON TABLE SYSCAT.REVTYPEMAPPINGS IS 'Each row contains reverse data type mappings (mappings from data types defined locally to data source data types). No data in this version. Defined for possible future use with data type mappings.';
-COMMENT ON SYSCAT.REVTYPEMAPPINGS (
-	TYPE_MAPPING        IS 'Name of the reverse type mapping (may be system-generated).',
-	TYPESCHEMA          IS 'Schema name of the type. NULL for system built-in types.',
-	TYPENAME            IS 'Name of the local type in a reverse type mapping.',
-	TYPEID              IS 'Type identifier.',
-	SOURCETYPEID        IS 'Source type identifier.',
-	DEFINER             IS 'Authorization ID under which this type mapping was created.',
-	LOWER_LEN           IS 'Lower bound of the length/precision of the local type.',
-	UPPER_LEN           IS 'Upper bound of the length/precision of the local type. If NULL then the system determines the best length/precision attribute.',
-	LOWER_SCALE         IS 'Lower bound of the scale for local decimal data types.',
-	UPPER_SCALE         IS 'Upper bound of the scale for local decimal data types. If NULL, then the system determines the best scale attribute.',
-	S_OPR_P             IS 'Relationship between local scale and local precision. Basic comparison operators can be used. A NULL indicates that no specific relationship is required.',
-	BIT_DATA            IS 'Y = Type is for bit data; N = Type is not for bit data; NULL = This is not a character data type or that the system determines the bit data attribute.',
-	WRAPNAME            IS 'Mapping applies to this data access protocol.',
-	SERVERNAME          IS 'Name of the data source.',
-	SERVERTYPE          IS 'Mapping applies to this type of data source.',
-	SERVERVERSION       IS 'Mapping applies to this version of SERVERTYPE.',
-	REMOTE_TYPESCHEMA   IS 'Schema name of the remote type.',
-	REMOTE_TYPENAME     IS 'Name of the data type as defined on the data source(s).',
-	REMOTE_META_TYPE    IS 'S = Remote type is a system built-in type; T = Remote type is a distinct type.',
-	REMOTE_LENGTH       IS 'Maximum number of digits for remote decimal type, and maximum number of characters for remote character type. Otherwise NULL.',
-	REMOTE_SCALE        IS 'Maximum number of digits allowed to the right of the decimal point (for remote decimal types). Otherwise NULL.',
-	REMOTE_BIT_DATA     IS 'Y = Type is for bit data; N = Type is not for bit data; NULL = This is not a character data type or that the system determines the bit data attribute.',
-	USER_DEFINED        IS 'Defined by user.',
-	CREATE_TIME         IS 'Time when this mapping was created.',
-	REMARKS             IS 'User supplied comments, or NULL.'
 );
 
 COMMENT ON TABLE SYSCAT.ROUTINEAUTH IS 'Contains one or more rows for each user or group who is granted EXECUTE privilege on a particular routine in the database.';
@@ -769,6 +723,25 @@ COMMENT ON SYSCAT.ROUTINEDEP (
 	BSCHEMA             IS 'Qualified name of the object on which the function or method depends (if BTYPE = F, this is the specific name of a routine).',
 	BNAME               IS 'Qualified name of the object on which the function or method depends (if BTYPE = F, this is the specific name of a routine).',
 	TABAUTH             IS 'If BTYPE = O, S, T, U, V or W, it encodes the privileges on the table or view that are required by the dependent routine. Otherwise NULL.'
+);
+
+COMMENT ON TABLE SYSCAT.ROUTINEOPTIONS IS 'Each row contains procedure specific option values.';
+COMMENT ON SYSCAT.ROUTINEOPTIONS (
+	ROUTINESCHEMA       IS 'Schema name of the routine.',
+	ROUTINENAME         IS 'Unqualified name of the routine.',
+	SPECIFICNAME        IS 'Name of the routine instance (might be system-generated).',
+	OPTION              IS 'Name of the stored procedure option.',
+	SETTING             IS 'Value of the stored procedure option.'
+);
+
+COMMENT ON TABLE SYSCAT.ROUTINEPARMOPTIONS IS 'Each row contains procedure parameter specific option values.';
+COMMENT ON SYSCAT.ROUTINEPARMOPTIONS (
+	ROUTINESCHEMA       IS 'Schema name of the routine.',
+	ROUTINENAME         IS 'Unqualified name of the routine.',
+	SPECIFICNAME        IS 'Name of the routine instance (might be system-generated).',
+	ORDINAL             IS 'The parameter''s numerical position within the procedure signature.',
+	OPTION              IS 'Name of the stored procedure parameter option.',
+	SETTING             IS 'Value of the stored procedure parameter option.'
 );
 
 COMMENT ON TABLE SYSCAT.ROUTINEPARMS IS 'Contains a row for every parameter or result of a routine defined in @SYSCAT.ROUTINES.';
