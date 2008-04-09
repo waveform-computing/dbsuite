@@ -1019,6 +1019,8 @@ class SQLFormatter(BaseFormatter):
 			elif self._match((DATATYPE, 'DATALINK')):
 				typename = 'DATALINK'
 				size = self._parse_size(optional=True)
+			elif self._match((DATATYPE, 'XML')):
+				typename = 'XML'
 			else:
 				raise ParseBacktrack()
 		except ParseError:

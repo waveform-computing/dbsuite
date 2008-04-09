@@ -1801,7 +1801,7 @@ class Datatype(SchemaObject):
 		) = row
 		super(Datatype, self).__init__(schema, name, system, desc)
 		# XXX DB2 specific
-		self.variable_size = self._system and (self.size is None) and (self.name != "REFERENCE")
+		self.variable_size = self._system and (self.size is None) and (self.name not in ("XML", "REFERENCE"))
 		self.variable_scale = self._system and (self.name == "DECIMAL")
 
 	def _get_identifier(self):
