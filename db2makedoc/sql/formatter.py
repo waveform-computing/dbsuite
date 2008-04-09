@@ -66,25 +66,31 @@ def quote_str(s, qchar="'"):
 	else:
 		return '%s%s%s' % (qchar, s.replace(qchar, qchar*2), qchar)
 
-def format_ident(ident, identchars=set(ibmdb2udb_identchars), qchar='"'):
+def format_ident(name, namechars=set(ibmdb2udb_namechars), qchar='"'):
 	"""Format an SQL identifier with quotes if required.
 	
-	The ident parameter provides the identifier to format. The optional
-	identchars parameter provides the set of characters which are permitted in
-	unquoted identifers.  If the entire identifier consists of such characters
-	(excepting the initial character which is not permitted to be a numeral) it
-	will be returned unquoted, but folded to uppercase. Otherwise, quote_str()
-	will be called with the optional qchar parameter to quote the identifier.
+	The name parameter provides the object name to format. The optional
+	namechars parameter provides the set of characters which are permitted in
+	unquoted names. If the entire name consists of such characters (excepting
+	the initial character which is not permitted to be a numeral) it will be
+	returned unquoted. Otherwise, quote_str() will be called with the optional
+	qchar parameter to quote the name.
+
+	Note that the default for namechars is one of the namechars strings from
+	the sql.dialects module, NOT one of the identchars strings. While lowercase
+	characters are usually permitted in identifiers, they are folded to
+	uppercase by the database, and the tokenizer emulates this. This routine is
+	for output and therefore lowercase characters in name will trigger quoting.
 	"""
-	firstchars = identchars - set('0123456789')
-	if len(ident) == 0:
+	firstchars = namechars - set('0123456789')
+	if len(name) == 0:
 		raise ValueError('Blank identifier')
-	if not ident[0] in firstchars:
-		return quote_str(ident, qchar)
-	for c in ident[1:]:
-		if not c in identchars:
-			return quote_str(ident, qchar)
-	return ident.upper()
+	if not name[0] in firstchars:
+		return quote_str(name, qchar)
+	for c in name[1:]:
+		if not c in namechars:
+			return quote_str(name, qchar)
+	return name
 
 def format_param(param):
 	"""Format a parameter with quotes if required.

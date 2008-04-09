@@ -1514,7 +1514,7 @@ class Index(SchemaObject):
 			'index': format_ident(self.name),
 			'tbschema': format_ident(self.table.schema.name),
 			'tbname': format_ident(self.table.name),
-			'fields': ', '.join(['%s%s' % (field.name, {
+			'fields': ', '.join(['%s%s' % (format_ident(field.name), {
 				'A': '',
 				'D': ' DESC'
 			}[order]) for (field, order) in self.field_list if order != 'I'])
@@ -1527,93 +1527,7 @@ class Index(SchemaObject):
 			]
 			if len(incfields) > 0:
 				sql += '\nINCLUDE ($incfields)'
-				values['incfields'] = ', '.join([field.name for field in incfields])
-		sql += ';'
-		return Template(sql).substitute(values)
-
-	def _get_drop_sql(self):
-		sql = Template('DROP INDEX $schema.$index;')
-		return sql.substitute({
-			'schema': format_ident(self.schema.name),
-			'index': format_ident(self.name)
-		})
-
-	def _get_table(self):
-		"""Returns the table that index is defined against"""
-		return self.database.schemas[self._table_schema].tables[self._table_name]
-
-	def _get_tablespace(self):
-		"""Returns the tablespace that contains the index's data"""
-		return self.database.tablespaces[self._tablespace]
-
-	table = property(_get_table)
-	tablespace = property(_get_tablespace)
-
-
-class Index(SchemaObject):
-	"""Class representing an index"""
-
-	type_name = 'Index'
-
-	def __init__(self, schema, input, *row):
-		"""Initializes an instance of the class from a input row"""
-		(
-			_, # schema_name
-			name,
-			self._table_schema,
-			self._table_name,
-			self.owner,
-			system,
-			self.created,
-			self.last_stats,
-			self.cardinality,
-			self.size,
-			self.unique,
-			self._tablespace,
-			desc
-		) = row
-		super(Index, self).__init__(schema, name, system, desc)
-		self.fields = IndexFieldsDict(
-			self.database,
-			self._table_schema,
-			self._table_name,
-			input.index_cols[(schema.name, self.name)]
-		)
-		self.field_list = IndexFieldsList(
-			self.database,
-			self._table_schema,
-			self._table_name,
-			input.index_cols[(schema.name, self.name)]
-		)
-
-	def _get_identifier(self):
-		return "index_%s_%s" % (self.schema.name, self.name)
-
-	def _get_parent_list(self):
-		return self.schema.index_list
-
-	def _get_create_sql(self):
-		sql = 'CREATE $type $schema.$index ON $tbschema.$tbname ($fields)'
-		values = {
-			'type': {False: 'INDEX', True: 'UNIQUE INDEX'}[self.unique],
-			'schema': format_ident(self.schema.name),
-			'index': format_ident(self.name),
-			'tbschema': format_ident(self.table.schema.name),
-			'tbname': format_ident(self.table.name),
-			'fields': ', '.join(['%s%s' % (field.name, {
-				'A': '',
-				'D': ' DESC'
-			}[order]) for (field, order) in self.field_list if order != 'I'])
-		}
-		if self.unique:
-			incfields = [
-				field
-				for (field, order) in self.field_list
-				if order == 'I'
-			]
-			if len(incfields) > 0:
-				sql += '\nINCLUDE ($incfields)'
-				values['incfields'] = ', '.join([field.name for field in incfields])
+				values['incfields'] = ', '.join([format_ident(field.name) for field in incfields])
 		sql += ';'
 		return Template(sql).substitute(values)
 
@@ -1755,7 +1669,7 @@ class Function(Routine):
 	def _get_prototype(self):
 		
 		def format_params(params):
-			return ', '.join(['%s %s' % (param.name, param.datatype_str) for param in params])
+			return ', '.join(['%s %s' % (format_ident(param.name), param.datatype_str) for param in params])
 
 		def format_returns():
 			if len(self.return_list) == 0:
@@ -1767,11 +1681,13 @@ class Function(Routine):
 			else:
 				return ' RETURNS %s' % (self.return_list[0].datatype_str)
 
-		return "%s(%s)%s" % (
-			self.qualified_name,
-			format_params(self.param_list),
-			format_returns()
-		)
+		sql = Template('$schema.$function($params)$returns')
+		return sql.substitute({
+			'schema': format_ident(self.schema.name),
+			'function': format_ident(self.name),
+			'params': format_params(self.param_list),
+			'returns': format_returns()
+		})
 	
 	def _get_create_sql(self):
 		if self.sql:
@@ -1841,7 +1757,12 @@ class Procedure(Routine):
 				for param in params
 			])
 
-		return "%s(%s)" % (self.qualified_name, format_params(self.param_list))
+		sql = Template('$schema.$proc($params)')
+		return sql.substitute({
+			'schema': format_ident(self.schema.name),
+			'proc': format_ident(self.name),
+			'params': format_params(self.param_list)
+		})
 	
 	def _get_create_sql(self):
 		if self.sql:

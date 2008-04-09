@@ -1,9 +1,18 @@
 # vim: set noet sw=4 ts=4:
 
-# Set of characters valid in unquoted identifiers in ANSI SQL-92
+# Set of characters valid in unquoted identifiers in ANSI SQL-92. This is the
+# list of characters used by the tokenizer to recognize an identifier in input
+# text. Hence it should include lowercase characters.
 # XXX Is this correct?
 
 sql92_identchars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_0123456789'
+
+# Set of characters valid in unquoted names in ANSI SQL-92. This is the list of
+# characters used by the parser to determine when to quote an object's name in
+# output text. Hence it should NOT include lowercase characters.
+# XXX Is this correct?
+
+sql92_namechars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789'
 
 # Set of reserved keywords in ANSI SQL-92. Obtained from
 # <http://developer.mimer.com/validator/sql-reserved-words.tml>
@@ -48,10 +57,12 @@ sql92_keywords = [
 	'WHERE', 'WHILE', 'WITH', 'WORK', 'WRITE', 'YEAR', 'ZONE',
 ]
 
-# Set of characters valid in unquoted identifiers in ANSI SQL-99
+# Set of characters valid in unquoted identifiers and names in ANSI SQL-99 (see
+# above)
 # XXX Is this correct?
 
 sql99_identchars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_0123456789'
+sql99_namechars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789'
 
 # Set of reserved keywords in ANSI SQL-99. Obtained from
 # <http://developer.mimer.com/validator/sql-reserved-words.tml>
@@ -105,10 +116,12 @@ sql99_keywords = [
 	'WORK', 'WRITE', 'YEAR', 'ZONE',
 ]
 
-# Set of characters valid in unquoted identifiers in ANSI SQL-2003
+# Set of characters valid in unquoted identifiers and names in ANSI SQL-2003
+# (see above)
 # XXX Is this correct?
 
 sql2003_identchars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_0123456789'
+sql2003_namechars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789'
 
 # Set of reserved keywords in ANSI SQL-2003. Obtained from
 # <http://developer.mimer.com/validator/sql-reserved-words.tml>
@@ -153,11 +166,12 @@ sql2003_keywords = [
 	'WITHIN', 'WITHOUT', 'YEAR',
 ]
 
-# Set of valid characters for unquoted identifiers in IBM DB2 UDB. Obtained
-# from <http://publib.boulder.ibm.com/infocenter/db2luw/v8/index.jsp> (see
-# node Reference / SQL / Language Elements)
+# Set of valid characters for unquoted identifiers and names in IBM DB2 UDB
+# (see above). Obtained from [1] (see node Reference / SQL / Language Elements)
+# [1] http://publib.boulder.ibm.com/infocenter/db2luw/v8/index.jsp
 
 ibmdb2udb_identchars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_$#@0123456789'
+ibmdb2udb_namechars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ_$#@0123456789'
 
 # Set of reserved keywords in IBM DB2 UDB. Obtained from
 # <http://publib.boulder.ibm.com/infocenter/db2luw/v8/index.jsp> (see node
@@ -212,10 +226,11 @@ ibmdb2udb_keywords = [
 	'WRITE', 'YEAR', 'YEARS',
 ]
 
-# Set of valid characters for unquoted identifiers in IBM DB2 UDB for z/OS.
-# Equivalent to IBM DB2 UDB for Linux/Unix/Windows
+# Set of valid characters for unquoted identifiers and names in IBM DB2 UDB for
+# z/OS (see above). Equivalent to IBM DB2 UDB for Linux/Unix/Windows
 
 ibmdb2zos_identchars = ibmdb2udb_identchars
+ibmdb2zos_namechars = ibmdb2udb_namechars
 
 # Set of reserved keywords in IBM DB2 UDB for z/OS. Obtained from
 # <http://publib.boulder.ibm.com/infocenter/dzichelp/v2r2/topic/com.ibm.db2.doc/db2prodhome.htm>

@@ -1,16 +1,18 @@
 #!/usr/bin/env python
 # vim: set noet sw=4 ts=4:
-# $Header$
 
-try:
-	from db2makedoc.main import main
-except ImportError:
-	# If we're running an uninstalled copy we need to tweak the path a bit to
-	# find the main module
-	import sys
-	import os
-	sys.path.insert(0, os.path.realpath(os.path.join(os.path.dirname(sys.argv[0]), '..')))
-	from db2makedoc.main import main
+import sys
+import os
+
+# If we're running from an SVN checkout, tweak the path to find the main
+# module from the checkout in preference to any that may be installed in the
+# system's library
+mypath = os.path.dirname(sys.argv[0])
+if (os.path.exists(os.path.join(mypath, '.svn')) and
+		os.path.exists(os.path.join(mypath, '..', 'db2makedoc'))):
+	sys.path.insert(0, os.path.realpath(os.path.join(mypath, '..')))
+
+from db2makedoc.main import main
 
 if __name__ == '__main__':
 	main()
