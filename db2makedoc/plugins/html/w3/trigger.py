@@ -54,6 +54,6 @@ class W3TriggerDocument(W3MainDocument):
 				),
 			]))
 		self._section('sql', 'SQL Definition')
-		self._add(self._pre(self._format_sql(self.dbobject.create_sql,
-			terminator='!'), attrs={'class': 'sql'}))
+		self._add(self._pre(self._format_sql(self.dbobject.create_sql),
+			attrs={'class': 'sql'}))
 

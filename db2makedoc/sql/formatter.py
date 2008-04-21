@@ -767,7 +767,7 @@ class SQLFormatter(BaseFormatter):
 			elif t[0] == TERMINATOR:
 				return (t[0], None, ';')
 			elif t[0] == STATEMENT:
-				return (t[0], None, '!')
+				return (t[0], None, '')
 			elif t[0] == INDENT:
 				if self.line_split:
 					return [

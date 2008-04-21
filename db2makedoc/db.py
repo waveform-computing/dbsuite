@@ -815,7 +815,7 @@ class Constraint(RelationObject):
 		raise NotImplementedError
 	
 	def _get_create_sql(self):
-		sql = Template('ALTER TABLE $schema.$table ADD $constdef;')
+		sql = Template('ALTER TABLE $schema.$table ADD $constdef')
 		return sql.substitute({
 			'schema': format_ident(self.table.schema.name),
 			'table': format_ident(self.table.name),
@@ -823,7 +823,7 @@ class Constraint(RelationObject):
 		})
 	
 	def _get_drop_sql(self):
-		sql = Template('ALTER TABLE $schema.$table DROP CONSTRAINT $const;')
+		sql = Template('ALTER TABLE $schema.$table DROP CONSTRAINT $const')
 		return sql.substitute({
 			'schema': format_ident(self.table.schema.name),
 			'table': format_ident(self.table.name),
@@ -1281,7 +1281,7 @@ class Table(Relation):
 		return self._dependent_list
 
 	def _get_create_sql(self):
-		sql = Template('CREATE TABLE $schema.$table ($elements) IN $tbspace;')
+		sql = Template('CREATE TABLE $schema.$table ($elements) IN $tbspace')
 		return sql.substitute({
 			'schema': format_ident(self.schema.name),
 			'table': format_ident(self.name),	
@@ -1297,7 +1297,7 @@ class Table(Relation):
 		})
 	
 	def _get_drop_sql(self):
-		sql = Template('DROP TABLE $schema.$table;')
+		sql = Template('DROP TABLE $schema.$table')
 		return sql.substitute({
 			'schema': format_ident(self.schema.name),
 			'table': format_ident(self.name)
@@ -1375,10 +1375,10 @@ class View(Relation):
 		return self._field_list
 
 	def _get_create_sql(self):
-		return self.sql + ';'
+		return self.sql
 	
 	def _get_drop_sql(self):
-		sql = Template('DROP VIEW $schema.$view;')
+		sql = Template('DROP VIEW $schema.$view')
 		return sql.substitute({
 			'schema': format_ident(self.schema.name),
 			'view': format_ident(self.name),
@@ -1426,7 +1426,7 @@ class Alias(Relation):
 		return self._dependent_list
 
 	def _get_create_sql(self):
-		sql = Template('CREATE ALIAS $schema.$alias FOR $baseschema.$baserelation;')
+		sql = Template('CREATE ALIAS $schema.$alias FOR $baseschema.$baserelation')
 		return sql.substitute({
 			'schema': format_ident(self.schema.name),
 			'alias': format_ident(self.name),
@@ -1435,7 +1435,7 @@ class Alias(Relation):
 		})
 	
 	def _get_drop_sql(self):
-		sql = Template('DROP ALIAS $schema.$alias;')
+		sql = Template('DROP ALIAS $schema.$alias')
 		return sql.substitute({
 			'schema': format_ident(self.schema.name),
 			'alias': format_ident(self.name)
@@ -1528,11 +1528,10 @@ class Index(SchemaObject):
 			if len(incfields) > 0:
 				sql += '\nINCLUDE ($incfields)'
 				values['incfields'] = ', '.join([format_ident(field.name) for field in incfields])
-		sql += ';'
 		return Template(sql).substitute(values)
 
 	def _get_drop_sql(self):
-		sql = Template('DROP INDEX $schema.$index;')
+		sql = Template('DROP INDEX $schema.$index')
 		return sql.substitute({
 			'schema': format_ident(self.schema.name),
 			'index': format_ident(self.name)
@@ -1588,13 +1587,10 @@ class Trigger(SchemaObject):
 		return self.schema.trigger_list
 
 	def _get_create_sql(self):
-		if self.sql:
-			return self.sql + '!'
-		else:
-			return ''
+		return self.sql or ''
 
 	def _get_drop_sql(self):
-		sql = Template('DROP TRIGGER $schema.$trigger;')
+		sql = Template('DROP TRIGGER $schema.$trigger')
 		return sql.substitute({
 			'schema': format_ident(self.schema.name),
 			'trigger': format_ident(self.name),
@@ -1690,13 +1686,10 @@ class Function(Routine):
 		})
 	
 	def _get_create_sql(self):
-		if self.sql:
-			return self.sql + '!'
-		else:
-			return ''
+		return self.sql or ''
 	
 	def _get_drop_sql(self):
-		sql = Template('DROP SPECIFIC FUNCTION $schema.$specific;')
+		sql = Template('DROP SPECIFIC FUNCTION $schema.$specific')
 		return sql.substitute({
 			'schema': format_ident(self.schema.name),
 			'specific': format_ident(self.specific_name)
@@ -1765,13 +1758,10 @@ class Procedure(Routine):
 		})
 	
 	def _get_create_sql(self):
-		if self.sql:
-			return self.sql + '!'
-		else:
-			return ''
+		return self.sql or ''
 	
 	def _get_drop_sql(self):
-		sql = Template('DROP SPECIFIC PROCEDURE $schema.$specific;')
+		sql = Template('DROP SPECIFIC PROCEDURE $schema.$specific')
 		return sql.substitute({
 			'schema': format_ident(self.schema.name),
 			'specific': format_ident(self.specific_name)
@@ -1854,9 +1844,8 @@ class Field(RelationObject):
 		return self.relation.field_list
 
 	def _get_create_sql(self):
-		from doctable import Table
 		if isinstance(self.relation, Table):
-			sql = Template('ALTER TABLE $schema.$table ADD COLUMN $fielddef;')
+			sql = Template('ALTER TABLE $schema.$table ADD COLUMN $fielddef')
 			return sql.substitute({
 				'schema': format_ident(self.relation.schema.name),
 				'table': format_ident(self.relation.name),
@@ -1866,9 +1855,8 @@ class Field(RelationObject):
 			return ''
 	
 	def _get_drop_sql(self):
-		from doctable import Table
 		if isinstance(self.relation, Table):
-			sql = Template('ALTER TABLE $schema.$table DROP COLUMN $field;')
+			sql = Template('ALTER TABLE $schema.$table DROP COLUMN $field')
 			return sql.substitute({
 				'schema': format_ident(self.relation.schema.name),
 				'table': format_ident(self.relation.name),

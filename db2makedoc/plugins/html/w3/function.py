@@ -84,6 +84,6 @@ class W3FunctionDocument(W3MainDocument):
 			))
 		if self.dbobject.create_sql:
 			self._section('sql', 'SQL Definition')
-			self._add(self._pre(self._format_sql(self.dbobject.create_sql,
-				terminator='!'), attrs={'class': 'sql'}))
+			self._add(self._pre(self._format_sql(self.dbobject.create_sql),
+				attrs={'class': 'sql'}))
 

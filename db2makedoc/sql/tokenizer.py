@@ -514,7 +514,7 @@ class SQLTokenizerBase(object):
 		"""Parses statement terminator characters (variable) in the source."""
 		if self._source.startswith(self._terminator, self._index):
 			self._next(len(self._terminator))
-			self._add_token(TERMINATOR, None)
+			self._add_token(TERMINATOR, self._terminator)
 		elif self._savedhandler is not None:
 			self._savedhandler()
 

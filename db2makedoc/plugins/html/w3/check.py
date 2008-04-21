@@ -42,5 +42,6 @@ class W3CheckDocument(W3MainDocument):
 				) for field in fields]
 			))
 		self._section('sql', 'SQL Definition')
-		self._add(self._pre(self._format_sql(self.dbobject.create_sql), attrs={'class': 'sql'}))
+		self._add(self._pre(self._format_sql(self.dbobject.create_sql),
+			attrs={'class': 'sql'}))
 
