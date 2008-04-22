@@ -1880,7 +1880,7 @@ class Field(RelationObject):
 			if self.generated == 'N':
 				items.append('WITH DEFAULT %s' % (self.default))
 			else:
-				items.append('GENERATED %s AS (%s)' % (
+				items.append('GENERATED %s AS %s' % (
 					{'A': 'ALWAYS', 'D': 'BY DEFAULT'}[self.generated],
 					self.default
 				))

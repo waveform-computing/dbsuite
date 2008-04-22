@@ -760,9 +760,11 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 					WHEN 'A' THEN 'A'
 					WHEN 'D' THEN 'D'
 					ELSE 'N'
-				END                              AS GENERATED,
-				C.TEXT                             AS TEXT,
-				COALESCE(C.DEFAULT, '')            AS DEFAULT,
+				END                                AS GENERATED,
+				COALESCE(CASE C.GENERATED
+					WHEN 'N' THEN C.DEFAULT
+					ELSE C.TEXT
+				END, '')                           AS DEFAULT,
 				C.REMARKS                          AS DESCRIPTION
 			FROM
 				%(schema)s.COLUMNS C
@@ -792,11 +794,11 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				cardinality,
 				nullcard,
 				generated,
-				gendefault,
 				default,
 				desc
 			) in cursor.fetchall():
-			if generated != 'N': default = str(gendefault)
+			if generated != 'N':
+				default = re.sub(r'^\s*AS\s*', '', str(default))
 			result.append((
 				schema,
 				name,
