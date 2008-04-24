@@ -169,6 +169,25 @@ class InfoCenterRetriever(object):
 					# the docs include essentially erroneous whitespace to
 					# allow wrapping for really long column names
 					column = re.sub(r'\s', '', convert_name(column))
+					# Workaround: DB2 9.5 catalog spelling error: the
+					# documentation lists SYSCAT.INDEXES.COLLECTSTATISTICS but
+					# the column in the actual view in the database is called
+					# SYSCAT.INDEXES.COLLECTSTATISTCS
+					if (self.version == '95' and schema == 'SYSCAT' and
+						obj == 'INDEXES' and column == 'COLLECTSTATISTICS'):
+						column = 'COLLECTSTATISTCS'
+					# Workaround: DB2 9.5 catalog spelling error: the
+					# documentation lists SYSCAT.THRESHOLDS.QUEUEING, but the
+					# column in the database is SYSCAT.THRESHOLDS.QUEUING
+					if (self.version == '95' and schema == 'SYSCAT' and
+						obj == 'THRESHOLDS' and column == 'QUEUEING'):
+						column = 'QUEUING'
+					# Workaround: DB2 9.5 catalog error: the documentation
+					# lists SYSCAT.SECURITYPOLICIES.USERAUTHS but the column
+					# doesn't exist in the database
+					if (self.version == '95' and schema == 'SYSCAT' and
+						obj == 'SECURITYPOLICIES' and column == 'USERAUTHS'):
+						continue
 					logging.debug('Retrieving description for column %s' % column)
 					# For _really_ long descriptions, the docs sometimes use
 					# separate consecutive "COLUMN_NAME (cont'd)" entries, so
@@ -253,7 +272,7 @@ class CommentGenerator(object):
 	descriptions (e.g. routine parameters).
 	"""
 
-	def __init__(self, retriever, terminator=';', maxlen=254):
+	def __init__(self, retriever, terminator=';', maxlen=253):
 		super(CommentGenerator, self).__init__()
 		self.retriever = retriever
 		self.terminator = terminator
