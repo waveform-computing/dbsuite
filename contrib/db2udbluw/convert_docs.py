@@ -265,7 +265,7 @@ class CommentGenerator(object):
 			if len(desc) > self.maxlen:
 				logging.warning('Description for object %s.%s has been truncated' % (schema, obj))
 				desc = desc[:self.maxlen - 3] + '...'
-			yield encode('COMMENT ON %s.%s IS %s%s\n' % (
+			yield encode('COMMENT ON TABLE %s.%s IS %s%s\n' % (
 				quote_ident(schema),
 				quote_ident(obj),
 				quote_str(desc),
