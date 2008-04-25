@@ -7,7 +7,7 @@ PYFLAGS=
 #LYNXFLAGS=-nonumbers -justify
 #LYNX=links
 #LYNXFLAGS=
-LYNX=elinks
+LYNX=links
 LYNXFLAGS=-no-numbering -no-references
 
 # Calculate the base name of the distribution, the location of all source files
@@ -38,8 +38,11 @@ test:
 
 clean:
 	$(PYTHON) $(PYFLAGS) setup.py clean
-	rm -f $(WININST) $(RPMS) $(SRCTAR) $(SRCZIP) $(DOCS) MANIFEST
+	rm -f $(DOCS) MANIFEST
 	rm -fr build/
+
+cleanall: clean
+	rm -fr dist/
 
 dist: bdist sdist
 
@@ -66,7 +69,7 @@ README.txt: FORCE
 	echo "Generated from the db2makedoc wiki at:" > README.txt
 	echo "http://faust.hursley.uk.ibm.com/trac/db2makedoc/wiki/" >> README.txt
 	for page in Requirements InstallWindows InstallLinux Tutorial; do \
-		links -dump -no-numbering http://faust.hursley.uk.ibm.com/trac/db2makedoc/wiki/$$page | awk '\
+		$(LYNX) $(LYNXFLAGS) -dump http://faust.hursley.uk.ibm.com/trac/db2makedoc/wiki/$$page | awk '\
 			BEGIN {printing=0;} \
 			/^ *\* Last Change *$$/ {printing=1; next;} \
 			/^ *Terms of use *$$/ {printing=0;} \
@@ -75,7 +78,7 @@ README.txt: FORCE
 TODO.txt: FORCE
 	echo "Generated from the db2makedoc wiki at:" > TODO.txt
 	echo "http://faust.hursley.uk.ibm.com/trac/db2makedoc/wiki/" >> TODO.txt
-	links -dump -no-numbering http://faust.hursley.uk.ibm.com/trac/db2makedoc/wiki/KnownIssues | awk '\
+	$(LYNX) $(LYNXFLAGS) -dump http://faust.hursley.uk.ibm.com/trac/db2makedoc/wiki/KnownIssues | awk '\
 		BEGIN {printing=0;} \
 		/^ *\* Last Change *$$/ {printing=1; next;} \
 		/^ *Terms of use *$$/ {printing=0;} \
