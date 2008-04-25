@@ -455,7 +455,7 @@ class W3MainDocument(W3Document):
 			crumbs.insert(0, self._a_to(item, typename=True, qualifiedname=False))
 			crumbs.insert(0, u' \u00BB ') # \u00BB == &raquo;
 			item = item.parent
-		crumbs.insert(0, self._a('index.html', 'Home'))
+		crumbs.insert(0, self._a(self.site.home_url, self.site.home_title))
 		self._append_content(node, self._p(crumbs, attrs={'id': 'breadcrumbs'}))
 	
 	# CONTENT METHODS
