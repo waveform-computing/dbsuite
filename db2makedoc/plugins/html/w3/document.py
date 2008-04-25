@@ -1045,13 +1045,12 @@ class W3GraphDocument(GraphDocument):
 		return result
 	
 	def _link(self, doc):
-		# Overridden to allow "zoome" graphs with some extra JavaScript. The
-		# write() method handles
-		# is done by checking if a graph is large (>self.max_graph_size) and
-		# creating a second scaled down version if it is. The scaled down
-		# version is then used as the image in the page, and a chunk of
-		# JavaScript (defined in W3JavaScriptDocument) uses the full size image
-		# in a "zoom box".
+		# Overridden to allow "zoomed" graphs with some extra JavaScript. The
+		# write() method handles checking if a graph is large
+		# (>self.max_graph_size) and creating a second scaled down version if
+		# it is. The scaled down version is then used as the image in the page,
+		# and a chunk of JavaScript (defined in W3JavaScriptDocument) uses the
+		# full size image in a "zoom box".
 		if self._usemap:
 			if not self._written:
 				self.write()
@@ -1060,20 +1059,23 @@ class W3GraphDocument(GraphDocument):
 			# the <map> doc, then import all elements from that
 			# doc into the doc this instance contains...
 			map_small = self._map(zoom=False)
-			map_zoom = self._map(zoom=True)
 			image = doc._img(self.url, attrs={
 				'id': self.url,
 				'usemap': '#' + map_small.attrib['id'],
 			})
-			link = doc._p(doc._a('#', 'Zoom On/Off', attrs={
-				'class': 'zoom',
-				'onclick': 'javascript:return zoom.toggle("%s", "%s", "#%s");' % (
-					self.url,             # thumbnail element id
-					self.zoom_url,        # src of full image
-					map_zoom.attrib['id'] # full image map element id
-				)
-			}))
-			return [link, image, map_small, map_zoom]
+			if self.zoom_scale is None:
+				return [image, map_small]
+			else:
+				map_zoom = self._map(zoom=True)
+				link = doc._p(doc._a('#', 'Zoom On/Off', attrs={
+					'class': 'zoom',
+					'onclick': 'javascript:return zoom.toggle("%s", "%s", "#%s");' % (
+						self.url,             # thumbnail element id
+						self.zoom_url,        # src of full image
+						map_zoom.attrib['id'] # full image map element id
+					)
+				}))
+				return [link, image, map_small, map_zoom]
 		else:
 			return doc._img(self.url)
 
