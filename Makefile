@@ -1,4 +1,3 @@
-# $Header$
 # vim: set noet sw=4 ts=4:
 
 # External utilities
@@ -18,8 +17,7 @@ SRCS:=$(shell \
 	$(PYTHON) $(PYFLAGS) setup.py sdist --manifest-only >/dev/null 2>&1 && \
 	cat MANIFEST && \
 	rm MANIFEST)
-DOCS:=$(wildcard *.html)
-TXT:=$(DOCS:%.html=%.txt)
+DOCS:=README.txt TODO.txt
 
 # Calculate the name of all distribution archives / installers
 WININST=dist/$(BASE).win32.exe
@@ -49,20 +47,38 @@ bdist: $(WININST) $(RPMS)
 
 sdist: $(SRCTAR) $(SRCZIP)
 
-$(WININST): $(SRCS) $(TXT)
+$(WININST): $(SRCS) $(DOCS)
 	$(PYTHON) $(PYFLAGS) setup.py bdist --formats=wininst
 
-$(RPMS): $(SRCS) $(TXT)
+$(RPMS): $(SRCS) $(DOCS)
 	$(PYTHON) $(PYFLAGS) setup.py bdist --formats=rpm
 
-$(SRCTAR): $(SRCS) $(TXT)
+$(SRCTAR): $(SRCS) $(DOCS)
 	$(PYTHON) $(PYFLAGS) setup.py sdist --formats=gztar
 
-$(SRCZIP): $(SRCS) $(TXT)
+$(SRCZIP): $(SRCS) $(DOCS)
 	$(PYTHON) $(PYFLAGS) setup.py sdist --formats=zip
 
-MANIFEST: MANIFEST.in setup.py $(TXT)
+MANIFEST: MANIFEST.in setup.py $(DOCS)
 	$(PYTHON) $(PYFLAGS) setup.py sdist --manifest-only
 
-%.txt: %.html
-	links -dump $< > $@
+README.txt: FORCE
+	echo "Generated from the db2makedoc wiki at:" > README.txt
+	echo "http://faust.hursley.uk.ibm.com/trac/db2makedoc/wiki/" >> README.txt
+	for page in Requirements InstallWindows InstallLinux Tutorial; do \
+		links -dump -no-numbering http://faust.hursley.uk.ibm.com/trac/db2makedoc/wiki/$$page | awk '\
+			BEGIN {printing=0;} \
+			/^ *\* Last Change *$$/ {printing=1; next;} \
+			/^ *Terms of use *$$/ {printing=0;} \
+			{if (printing) print;}' >> README.txt; done
+
+TODO.txt: FORCE
+	echo "Generated from the db2makedoc wiki at:" > TODO.txt
+	echo "http://faust.hursley.uk.ibm.com/trac/db2makedoc/wiki/" >> TODO.txt
+	links -dump -no-numbering http://faust.hursley.uk.ibm.com/trac/db2makedoc/wiki/KnownIssues | awk '\
+		BEGIN {printing=0;} \
+		/^ *\* Last Change *$$/ {printing=1; next;} \
+		/^ *Terms of use *$$/ {printing=0;} \
+		{if (printing) print;}' >> TODO.txt; done
+
+FORCE:

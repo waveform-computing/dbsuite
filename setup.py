@@ -72,7 +72,7 @@ def main():
 			if subprocess.Popen([sys.executable, sys.argv[0], 'sdist', '--manifest-only']).wait() != 0:
 				raise Exception('Failed to generate MANIFEST')
 		# Read the MANIFEST
-		manifest = open('MANIFEST', 'r')
+		manifest = open('MANIFEST', 'rU')
 		try:
 			files = set([line.rstrip() for line in manifest])
 		finally:
@@ -106,7 +106,7 @@ def main():
 		description=description,
 		long_description=long_description,
 		author='Dave Hughes',
-		author_email='dave@waveform.plus.com',
+		author_email='dave_hughes@uk.ibm.com',
 		packages=packages,
 		scripts=scripts,
 		data_files=data_files,
