@@ -38,7 +38,7 @@ test:
 
 clean:
 	$(PYTHON) $(PYFLAGS) setup.py clean
-	rm -f $(WININST) $(RPMS) $(SRCTAR) $(SRCZIP) $(TXT) MANIFEST
+	rm -f $(WININST) $(RPMS) $(SRCTAR) $(SRCZIP) $(DOCS) MANIFEST
 	rm -fr build/
 
 dist: bdist sdist
