@@ -285,9 +285,9 @@ def get_plugins(root, name=None):
 
 	Given a root package (root), this generator function recursively searches
 	all paths in the package for modules which contain a callable (function or
-	class definition) named Input or Output. It yields a 2-tuple containing the
-	plugin's qualified module name (minues the plugin root's name) and the
-	module itself.
+	class definition) named InputPlugin or OutputPlugin. It yields a 2-tuple
+	containing the plugin's qualified module name (minus the plugin root's
+	name) and the module itself.
 	"""
 	if name is None:
 		name = root.__name__
