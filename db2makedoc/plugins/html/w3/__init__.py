@@ -111,8 +111,8 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 	def _create_document(self, dbobject, site):
 		# Overridden to generate documents and graphs for specific types of
 		# database objects. Document and graph classes are determined from a
-		# dictionary lookup (a perfect class match is check for first, followed
-		# by a subclass match).
+		# dictionary lookup (a perfect class match is tested for first,
+		# followed by a subclass match).
 		class_map = {
 			Database:   [W3DatabaseDocument],
 			Schema:     [W3SchemaGraph, W3SchemaDocument],

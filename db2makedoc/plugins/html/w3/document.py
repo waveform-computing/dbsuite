@@ -67,6 +67,28 @@ class W3Site(WebSite):
 		"""Returns the GraphDocument associated with a database object."""
 		return self._graph_map.get(dbobject)
 
+	def write(self):
+		"""Writes all documents in the site to disk."""
+		# Overridden to split writing graph documents before other documents
+		# when using multi-threaded writing. This avoids a race condition
+		# due to the fact that writing a table document (for example) may cause
+		# the associated table graph to be written if it hasn't already. If
+		# another thread starts writing the graph at the same time, we can
+		# wind up with two threads trying to write the graph simultaneously.
+		if self.threads > 1:
+			# Write graphs first
+			self.write_multi(
+				doc for doc in self._documents.itervalues()
+				if isinstance(doc, GraphDocument)
+			)
+			# Then write everything else
+			self.write_multi(
+				doc for doc in self._documents.itervalues()
+				if not isinstance(doc, GraphDocument)
+			)
+		else:
+			super(W3Site, self).write()
+
 
 class W3Document(HTMLDocument):
 	"""Document class for use with the w3v8 style."""

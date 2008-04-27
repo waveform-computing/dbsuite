@@ -20,6 +20,7 @@ AUTHOR_NAME_OPTION = 'author_name'
 AUTHOR_MAIL_OPTION = 'author_email'
 COPYRIGHT_OPTION = 'copyright'
 SITE_TITLE_OPTION = 'site_title'
+THREADS_OPTION = 'threads'
 
 PATH_DESC = """The folder into which all files (HTML, CSS, SVG, etc.) will
 	be written (optional)"""
@@ -39,6 +40,12 @@ COPYRIGHT_DESC = """The copyright message to embed in the generated
 SITE_TITLE_DESC="""The title of the site as a whole. Defaults to "dbname
 	Documentation" where dbname is the name of the database for which
 	documentation is being generated"""
+THREADS_DESC="""The number of threads to utilize when writing the output.
+	Defaults to 1. If you have more than 1 physical processor or core, setting
+	this to >1 may yield a performance benefit, however be warned that
+	significantly more memory may be required (if this leads to swapping, any
+	performance gain will likely be lost). Values above 4 usually yield no
+	extra benefit."""
 
 
 class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
@@ -63,6 +70,8 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 		self.add_option(AUTHOR_MAIL_OPTION, default=None, doc=AUTHOR_MAIL_DESC)
 		self.add_option(COPYRIGHT_OPTION, default=None, doc=COPYRIGHT_DESC)
 		self.add_option(SITE_TITLE_OPTION, default=None, doc=SITE_TITLE_DESC)
+		self.add_option(THREADS_OPTION, default=1, doc=THREADS_DESC,
+			convert=lambda value: self.convert_int(value, minvalue=1))
 	
 	def configure(self, config):
 		super(HTMLOutputPlugin, self).configure(config)
@@ -113,6 +122,7 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 		site.home_title = self.options[HOME_TITLE_OPTION]
 		site.home_url = self.options[HOME_URL_OPTION]
 		site.copyright = self.options[COPYRIGHT_OPTION]
+		site.threads = self.options[THREADS_OPTION]
 		if self.options[SITE_TITLE_OPTION]:
 			site.title = self.options[SITE_TITLE_OPTION]
 

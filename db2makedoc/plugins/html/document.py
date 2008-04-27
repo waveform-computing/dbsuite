@@ -13,6 +13,8 @@ import re
 import datetime
 import logging
 import urlparse
+import threading
+import time
 
 from db2makedoc.db import DatabaseObject, Database
 from db2makedoc.highlighters import CommentHighlighter, SQLHighlighter
@@ -263,6 +265,7 @@ class WebSite(object):
 		self.sublang = 'US'
 		self.copyright = None
 		self.encoding = 'ISO-8859-1'
+		self.threads = 1
 		self._documents = {}
 	
 	def add_document(self, document):
@@ -334,8 +337,51 @@ class WebSite(object):
 
 	def write(self):
 		"""Writes all documents in the site to disk."""
-		for doc in set(self._documents.itervalues()):
+		if self.threads == 1:
+			self.write_single(self._documents.itervalues())
+		else:
+			self.write_multi(self._documents.itervalues())
+	
+	def write_single(self, docs):
+		"""Single-threaded document writer method."""
+		logging.debug("Single-threaded writer")
+		for doc in set(docs):
 			doc.write()
+	
+	def write_multi(self, docs):
+		"""Multi-threaded document writer method.
+
+		This method sets up several parallel threads to handle writing
+		documents. The documents to be written are stored in a set (to ensure
+		that if documents are registered multiple times they are still only
+		written once). The method terminates when all documents have been
+		written. The number of parallel threads is controlled by the "threads"
+		configuration value.
+		"""
+		logging.debug("Multi-threaded writer with %d threads" % self.threads)
+		self._documents_set = set(docs)
+		# Create and start all the writing threads
+		threads = [
+			threading.Thread(target=self.__thread_write, args=())
+			for i in range(self.threads)
+		]
+		for thread in threads:
+			logging.debug("Starting writer thread")
+			thread.start()
+		# Join (wait on termination of) all writing threads
+		while threads:
+			threads.pop().join()
+			logging.debug("Writer thread finished")
+	
+	def __thread_write(self):
+		"""Sub-routine for writing documents.
+
+		This method runs in a separate thread and simply pops a document to
+		be written from the internal stack and writes it. The thread terminates
+		when no more documents remain in the stack.
+		"""
+		while self._documents_set:
+			self._documents_set.pop().write()
 	
 
 class WebSiteDocument(object):
