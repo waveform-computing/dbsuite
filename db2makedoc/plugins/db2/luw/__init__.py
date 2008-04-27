@@ -1,6 +1,6 @@
 # vim: set noet sw=4 ts=4:
 
-"""Input plugin for IBM DB2 UDB for Linux/UNIX/Windows."""
+"""Input plugin for IBM DB2 for Linux/UNIX/Windows."""
 
 import sys
 mswindows = sys.platform == 'win32'
@@ -24,8 +24,8 @@ MISSING_DEPENDENT = 'If the "%s" option is given, the "%s" option must also be p
 CONNECTING_MSG = 'Connecting to database "%s"'
 USING_DOCCAT = 'DOCCAT extension schema found, using DOCCAT instead of SYSCAT'
 USING_SYSCAT = 'DOCCAT extension schema not found, using SYSCAT'
-USING_V9 = 'Detected IBM DB2 UDB 9 catalog layout'
-USING_V8 = 'Did not detect IBM DB2 UDB 9 catalog layout, defaulting to IBM DB2 UDB 8 layout'
+USING_V9 = 'Detected IBM DB2 9 catalog layout'
+USING_V8 = 'Did not detect IBM DB2 9 catalog layout, defaulting to IBM DB2 8 layout'
 
 
 def _connect(dsn, username=None, password=None):
@@ -116,12 +116,12 @@ def _make_bool(value, true_value='Y', false_value='N', none_value=' ', unknown_e
 
 
 class InputPlugin(db2makedoc.plugins.InputPlugin):
-	"""Input plugin for IBM DB2 UDB for Linux/UNIX/Windows.
+	"""Input plugin for IBM DB2 for Linux/UNIX/Windows.
 
 	This input plugin supports extracting documentation information from IBM
-	DB2 UDB for Linux/UNIX/Windows version 8 or above. If the DOCCAT schema
-	(see the doccat_create.sql script in the contrib/db2udbluw directory) is
-	present, it will be used to source documentation data instead of SYSCAT.
+	DB2 for Linux/UNIX/Windows version 8 or above. If the DOCCAT schema (see
+	the doccat_create.sql script in the contrib/db2/luw directory) is present,
+	it will be used to source documentation data instead of SYSCAT.
 	"""
 
 	def __init__(self):
