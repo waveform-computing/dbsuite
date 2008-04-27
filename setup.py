@@ -26,9 +26,12 @@ packages=[
 	'db2makedoc',
 	'db2makedoc.sql',
 	'db2makedoc.plugins',
-	'db2makedoc.plugins.db2udbluw',
+	'db2makedoc.plugins.db2',
+	'db2makedoc.plugins.db2.luw',
 	'db2makedoc.plugins.html',
 	'db2makedoc.plugins.html.w3',
+	'db2makedoc.plugins.metadata',
+	'db2makedoc.plugins.metadata.out',
 	'db2makedoc.plugins.template',
 ]
 
@@ -107,6 +110,7 @@ def main():
 		long_description=long_description,
 		author='Dave Hughes',
 		author_email='dave_hughes@uk.ibm.com',
+		url='http://faust.hursley.uk.ibm.com/trac/db2makedoc/',
 		packages=packages,
 		scripts=scripts,
 		data_files=data_files,
