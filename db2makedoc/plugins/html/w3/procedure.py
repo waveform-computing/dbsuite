@@ -10,10 +10,11 @@ class W3ProcedureDocument(W3MainDocument):
 	
 	def _create_sections(self):
 		access = {
-			'N': 'No SQL',
-			'C': 'Contains SQL',
-			'R': 'Read-only SQL',
-			'M': 'Modifies SQL',
+			None: 'No SQL',
+			'N':  'No SQL',
+			'C':  'Contains SQL',
+			'R':  'Read-only SQL',
+			'M':  'Modifies SQL',
 		}
 		overloads = self.dbobject.schema.procedures[self.dbobject.name]
 		self._section('description', 'Description')

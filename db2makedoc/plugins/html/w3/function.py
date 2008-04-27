@@ -16,11 +16,11 @@ class W3FunctionDocument(W3MainDocument):
 			'S': 'Scalar',
 		}
 		access = {
-			' ': 'No SQL', # XXX Workaround for a bug in DB2 UDB LUW v8.2 (UCASE has SQL_DATA_ACCESS = ' ' when it should be 'N')
-			'N': 'No SQL',
-			'C': 'Contains SQL',
-			'R': 'Read-only SQL',
-			'M': 'Modifies SQL',
+			None: 'No SQL',
+			'N':  'No SQL',
+			'C':  'Contains SQL',
+			'R':  'Read-only SQL',
+			'M':  'Modifies SQL',
 		}
 		overloads = self.dbobject.schema.functions[self.dbobject.name]
 		params = list(self.dbobject.param_list) # Take a copy of the parameter list
