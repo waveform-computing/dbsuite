@@ -48,6 +48,7 @@ __all__ = [
 
 # PRIVATE PROXY CLASSES #######################################################
 
+# XXX Many of these could be made direct subclasses of list, tuple, etc.
 
 class RelationsDict(object, DictMixin):
 	"""Presents a dictionary of relations"""
@@ -459,6 +460,7 @@ class DatabaseObject(object):
 		if description:
 			self.description = description
 		else:
+			# XXX This should be None - the alternate text should be plugin specific
 			self.description = 'No description in the system catalog'
 		self._system = system
 		logging.debug("Building %s %s" % (self.type_name, self.qualified_name))
@@ -886,17 +888,18 @@ class Database(DatabaseObject):
 		
 		Schemas
 		Tablespaces
-			Tables,Views (one namespace)
+			Tables, Views, Aliases (one namespace)
 				Fields
 				Constraints
 			Indexes
-			Functions,Methods,Procedures (one namespace)
+			Functions, Methods, Procedures (one namespace)
 		
 		Hence, if a schema shares a name with a tablespace, the schema will
 		be returned in preference to the tablespace. Likewise, if an index
 		shares a name with a table, the table will be returned in preference
 		to the index.
 		"""
+		# XXX This is wrong: delimited names can contain the . separator
 		parts = qualified_name.split(".")
 		if len(parts) == 1:
 			return self.schemas.get(parts[0],
@@ -923,7 +926,12 @@ class Database(DatabaseObject):
 		or a sub-set of all objects in the database. It iterates over all
 		objects of the database, recursing into schemas, tables, etc. The
 		specified method is called for each object with a single parameter
-		(namely, the object).
+		(namely, the object). Note that certain objects in the tree are
+		excluded for not being "database objects". Specifically, function and
+		procedure parameters are not included, nor are index fields, or
+		constraint fields. This is because these are not "independent" objects,
+		i.e. while you can add and remove fields to/from a table, you cannot
+		add and remove parameters to/from a procedure (without redefining it).
 
 		Additional parameters can be passed which will be captured by args and
 		kwargs and passed verbatim to method on each invocation.
@@ -2122,6 +2130,7 @@ class Param(RoutineObject):
 			super(Param, self).__init__(routine, name, False, desc)
 		else:
 			super(Param, self).__init__(routine, 'P%d' % position, False, desc)
+		self.position = position
 
 	def _get_identifier(self):
 		return "param_%s_%s_%d" % (self.parent.parent.name, self.parent.specific_name, self.position)
