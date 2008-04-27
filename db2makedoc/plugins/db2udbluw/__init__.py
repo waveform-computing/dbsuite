@@ -1208,25 +1208,25 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(ROUTINESCHEMA)     AS FUNCSCHEMA,
-				RTRIM(SPECIFICNAME)      AS FUNCSPECNAME,
-				RTRIM(ROUTINENAME)       AS FUNCNAME,
-				RTRIM(%(owner)s)         AS OWNER,
+				RTRIM(ROUTINESCHEMA)         AS FUNCSCHEMA,
+				RTRIM(SPECIFICNAME)          AS FUNCSPECNAME,
+				RTRIM(ROUTINENAME)           AS FUNCNAME,
+				RTRIM(%(owner)s)             AS OWNER,
 				CASE
 					WHEN ROUTINESCHEMA LIKE 'SYS%%' THEN 'Y'
 					WHEN ROUTINESCHEMA = 'SQLJ' THEN 'Y'
 					WHEN ROUTINESCHEMA = 'NULLID' THEN 'Y'
 					WHEN ORIGIN IN ('B', 'S', 'T') THEN 'Y'
 					ELSE 'N'
-				END                      AS SYSTEM,
-				CHAR(CREATE_TIME)        AS CREATED,
-				FUNCTIONTYPE             AS FUNCTYPE,
-				DETERMINISTIC            AS DETERMINISTIC,
-				EXTERNAL_ACTION          AS EXTACTION,
-				NULLCALL                 AS NULLCALL,
-				SQL_DATA_ACCESS          AS ACCESS,
-				COALESCE(TEXT, '')       AS SQL,
-				REMARKS                  AS DESCRIPTION
+				END                          AS SYSTEM,
+				CHAR(CREATE_TIME)            AS CREATED,
+				FUNCTIONTYPE                 AS FUNCTYPE,
+				DETERMINISTIC                AS DETERMINISTIC,
+				EXTERNAL_ACTION              AS EXTACTION,
+				NULLCALL                     AS NULLCALL,
+				NULLIF(SQL_DATA_ACCESS, ' ') AS ACCESS,
+				COALESCE(TEXT, '')           AS SQL,
+				REMARKS                      AS DESCRIPTION
 			FROM
 				%(schema)s.ROUTINES
 			WHERE
@@ -1310,6 +1310,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				RTRIM(P.SPECIFICNAME)           AS FUNCSPECNAME,
 				RTRIM(COALESCE(P.PARMNAME, '')) AS PARMNAME,
 				CASE P.ROWTYPE
+					WHEN ' ' THEN 'I'
 					WHEN 'P' THEN 'I'
 					WHEN 'C' THEN 'R'
 					ELSE P.ROWTYPE
@@ -1389,24 +1390,24 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(ROUTINESCHEMA)     AS PROCSCHEMA,
-				RTRIM(SPECIFICNAME)      AS PROCSPECNAME,
-				RTRIM(ROUTINENAME)       AS PROCNAME,
-				RTRIM(%(owner)s)         AS OWNER,
+				RTRIM(ROUTINESCHEMA)         AS PROCSCHEMA,
+				RTRIM(SPECIFICNAME)          AS PROCSPECNAME,
+				RTRIM(ROUTINENAME)           AS PROCNAME,
+				RTRIM(%(owner)s)             AS OWNER,
 				CASE
 					WHEN ROUTINESCHEMA LIKE 'SYS%%' THEN 'Y'
 					WHEN ROUTINESCHEMA = 'SQLJ' THEN 'Y'
 					WHEN ROUTINESCHEMA = 'NULLID' THEN 'Y'
 					WHEN ORIGIN IN ('B', 'S', 'T') THEN 'Y'
 					ELSE 'N'
-				END                      AS SYSTEM,
-				CHAR(CREATE_TIME)        AS CREATED,
-				DETERMINISTIC            AS DETERMINISTIC,
-				EXTERNAL_ACTION          AS EXTACTION,
-				NULLCALL                 AS NULLCALL,
-				SQL_DATA_ACCESS          AS ACCESS,
-				COALESCE(TEXT, '')       AS SQL,
-				REMARKS                  AS DESCRIPTION
+				END                          AS SYSTEM,
+				CHAR(CREATE_TIME)            AS CREATED,
+				DETERMINISTIC                AS DETERMINISTIC,
+				EXTERNAL_ACTION              AS EXTACTION,
+				NULLCALL                     AS NULLCALL,
+				NULLIF(SQL_DATA_ACCESS, ' ') AS ACCESS,
+				COALESCE(TEXT, '')           AS SQL,
+				REMARKS                      AS DESCRIPTION
 			FROM
 				%(schema)s.ROUTINES
 			WHERE
