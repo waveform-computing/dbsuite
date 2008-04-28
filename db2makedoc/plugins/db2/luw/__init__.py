@@ -42,40 +42,62 @@ def _connect(dsn, username=None, password=None):
 	and TIMESTAMP fields are CAST to CHAR in the queries below).
 	"""
 	logging.info(CONNECTING_MSG % dsn)
+	# Try the PyDB2 framework
 	try:
-		# Try the PyDB2 framework
 		import DB2
+	except ImportError:
+		pass
+	else:
 		if username is not None:
 			return DB2.Connection(dsn, username, password)
 		else:
 			return DB2.Connection(dsn)
+	# Try the pyodbc framework
+	try:
+		import pyodbc
 	except ImportError:
-		try:
-			# Try the PythonWin ODBC framework
-			import dbi
-			import odbc
-			if username is not None:
-				# XXX Check whether escaping/quoting is required
-				return odbc.odbc("%s/%s/%s" % (dsn, username, password))
-			else:
-				return odbc.odbc(dsn)
-		except ImportError:
-			try:
-				# Try the mxODBC framework
-				import mx.ODBC
-				# XXX Check whether escaping/quoting is required
-				if username is not None:
-					connectstr = 'DSN=%s;UID=%s;PWD=%s' % (dsn, username, password)
-				else:
-					connectstr = 'DSN=%s' % dsn
-				if mswindows:
-					import mx.ODBC.Windows
-					return mx.ODBC.Windows.DriverConnect(connectstr)
-				else:
-					import mx.ODBC.iODBC
-					return mx.ODBC.iODBC.DriverConnect(connectstr)
-			except ImportError:
-				raise Exception('Unable to find a suitable connection framework')
+		pass
+	else:
+		# XXX Check whether escaping/quoting is required
+		# XXX Should there be a way to specify the driver name? Given that on
+		# unixODBC the driver alias is specified in odbcinst.ini, and on
+		# Windows with DB2 9+ one can have multiple DB2 ODBC drivers installed
+		# with differentiating suffixes
+		if username is not None:
+			return pyodbc.connect('driver=IBM DB2 ODBC DRIVER;dsn=%s;uid=%s;pwd=%s' % (dsn, username, password))
+		else:
+			return pyodbc.connect('driver=IBM DB2 ODBC DRIVER;dsn=%s' % dsn)
+	# Try the mxODBC framework
+	try:
+		import mx.ODBC
+	except ImportError:
+		pass
+	else:
+		# XXX Check whether escaping/quoting is required
+		# XXX See discussion about driver names above
+		if username is not None:
+			connectstr = 'driver=IBM DB2 ODBC DRIVER;dsn=%s;uid=%s;pwd=%s' % (dsn, username, password)
+		else:
+			connectstr = 'driver=IBM DB2 ODBC DRIVER;dsn=%s' % dsn
+		if mswindows:
+			import mx.ODBC.Windows
+			return mx.ODBC.Windows.DriverConnect(connectstr)
+		else:
+			import mx.ODBC.iODBC
+			return mx.ODBC.iODBC.DriverConnect(connectstr)
+	# Try the PythonWin ODBC framework
+	try:
+		import dbi
+		import odbc
+	except ImportError:
+		pass
+	else:
+		if username is not None:
+			# XXX Check whether escaping/quoting is required
+			return odbc.odbc("%s/%s/%s" % (dsn, username, password))
+		else:
+			return odbc.odbc(dsn)
+	raise Exception('Unable to find a suitable connection framework; please install PyDB2, pyodbc, PythonWin, or mxODBC')
 
 def _make_datetime(value):
 	"""Converts a date-time value from a database query to a datetime object.
@@ -89,7 +111,11 @@ def _make_datetime(value):
 	Basically this routine exists to convert a database framework-specific
 	representation of a datetime value into a standard Python datetime value.
 	"""
-	if (value is None) or (value == ''):
+	if isinstance(value, datetime.datetime):
+		return value
+	elif isinstance(value, datetime.date):
+		return datetime.datetime.combine(value, datetime.time.min)
+	elif (value is None) or (value == ''):
 		return None
 	elif isinstance(value, basestring):
 		return datetime.datetime(*([int(x) for x in re.match(r'(\d{4})-(\d{2})-(\d{2})[T -](\d{2})[:.](\d{2})[:.](\d{2})\.(\d{6})\d*', value).groups()]))
