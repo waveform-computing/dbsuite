@@ -20,6 +20,12 @@ PLUGIN_OPTION = 'plugin'
 # Localizable strings
 USAGE_TEMPLATE = '%prog [options] configs...'
 VERSION_TEMPLATE = '%%prog %s Database Documentation Generator' % __version__
+DESCRIPTION = """\
+This utility generates documentation (in a variety of formats) from the system
+catalog in IBM DB2 databases. At least one configuration file (an INI-style
+file) must be specified. See the documentation for more information on the
+required syntax and content of this file. The available command line options
+are listed below."""
 
 CONFIG_HELP = 'specify the configuration file from which to read settings'
 QUIET_HELP = 'produce less console output'
@@ -30,6 +36,7 @@ HELP_PLUGIN_HELP = 'display information about the specified plugin'
 DEBUG_HELP = 'enables debug mode'
 
 NO_FILES_ERR = 'you did not specify any filenames'
+READ_CONFIG_ERR = 'failed to read configuration file "%s"'
 MISSING_VALUE_ERR = '%s: [%s]: missing a "%s" value'
 INVALID_PLUGIN_ERR = '%s: [%s]: invalid plugin name "%s" (plugin names must be fully qualified; must begin with "input." or "output.")'
 PLUGIN_IMPORT_ERR = '%s: [%s]: plugin "%s" not found or failed to load (error: %s)'
@@ -57,15 +64,18 @@ else:
 	GREEN = ''
 	BLUE = ''
 
-def main():
+def main(args=None):
+	if args is None:
+		args = sys.argv[1:]
 	# Parse the command line arguments
-	usage = USAGE_TEMPLATE
-	version = VERSION_TEMPLATE
-	parser = optparse.OptionParser(usage=usage, version=version)
+	parser = optparse.OptionParser(
+		usage=USAGE_TEMPLATE,
+		version=VERSION_TEMPLATE,
+		description=DESCRIPTION)
 	parser.set_defaults(
 		debug=False,
 		config=None,
-		listplugins=None,
+		listplugins=False,
 		plugin=None,
 		logfile="",
 		loglevel=logging.WARNING
@@ -76,7 +86,7 @@ def main():
 	parser.add_option("", "--help-plugins", dest="listplugins", action="store_true", help=HELP_PLUGINS_HELP)
 	parser.add_option("", "--help-plugin", dest="plugin", help=HELP_PLUGIN_HELP)
 	parser.add_option("-D", "--debug", dest="debug", action="store_true", help=DEBUG_HELP)
-	(options, args) = parser.parse_args()
+	(options, args) = parser.parse_args(args)
 	# Set up some logging stuff
 	console = logging.StreamHandler(sys.stderr)
 	console.setFormatter(logging.Formatter('%(message)s'))
@@ -85,33 +95,67 @@ def main():
 	if options.logfile:
 		logfile = logging.FileHandler(options.logfile)
 		logfile.setFormatter(logging.Formatter('%(asctime)s, %(levelname)s, %(message)s'))
-		logfile.setLevel(logging.INFO) # Log file always logs at INFO level
+		logfile.setLevel(logging.DEBUG)
 		logging.getLogger().addHandler(logfile)
 	# Set up the exceptions hook for uncaught exceptions and the logging
 	# levels if --debug was given
 	if options.debug:
 		console.setLevel(logging.DEBUG)
-		if options.logfile:
-			logfile.setLevel(logging.DEBUG)
 		logging.getLogger().setLevel(logging.DEBUG)
 	else:
 		logging.getLogger().setLevel(logging.INFO)
 		sys.excepthook = production_excepthook
-	# Deal with one-shot actions (help, etc.)
+	# Call one of the action routines depending on the options
 	if options.listplugins:
 		list_plugins()
-		return
 	elif options.plugin:
 		help_plugin(options.plugin)
-		return
-	# Check the options & args
-	if len(args) == 0:
+	elif len(args) == 0:
 		parser.error(NO_FILES_ERR)
+	else:
+		make_docs(args)
+
+def production_excepthook(type, value, tb):
+	"""Exception hook for non-debug mode."""
+	# I/O errors should be simple to solve - no need to bother the user with a
+	# full stack trace, just the error message will suffice
+	if issubclass(type, IOError):
+		logging.critical(str(value))
+	else:
+		# Otherwise, log the stack trace and the exception into the log file
+		# for debugging purposes
+		for line in traceback.format_exception(type, value, tb):
+			for s in line.rstrip().split('\n'):
+				logging.critical(s)
+	# Pass a failure exit code to the calling shell
+	sys.exit(1)
+
+def make_docs(config_files):
+	"""Main routine for documentation creation.
+
+	The config_files parameter specifies a list of configuration file names, or
+	file-like objects to process. This routine opens each configuration file in
+	turn, analyzes the content (in terms of input and output sections) then
+	runs each output section for each input section.
+
+	If you wish to call db2makedoc as part of another Python script, this is
+	the routine to call (ignore parse_cmdline which does other stuff like
+	fiddling around with logging and exception hooks, which you probably don't
+	want).
+	"""
 	# Loop over each provided configuration file
-	for config_file in args:
+	for config_file in config_files:
 		# Read the configuration file
 		parser = ConfigParser.SafeConfigParser()
-		parser.read(config_file)
+		if isinstance(config_file, basestring):
+			if not parser.read(config_file):
+				raise IOError(READ_CONFIG_ERR % config_file)
+		elif hasattr(config_file, 'read'):
+			parser.readfp(config_file)
+			if hasattr(config_file, 'name'):
+				config_file = config_file.name
+			else:
+				config_file = '???'
 		# Sort sections into input and output sections
 		input_sections = []
 		output_sections = []
@@ -170,21 +214,6 @@ def main():
 					logging.error(PLUGIN_EXEC_ERR % (config_file, output_section, s, str(e)))
 					if options.debug:
 						raise
-
-def production_excepthook(type, value, tb):
-	"""Exception hook for non-debug mode."""
-	# I/O errors should be simple to solve - no need to bother the user with a
-	# full stack trace, just the error message will suffice
-	if issubclass(type, IOError):
-		logging.critical(str(value))
-	else:
-		# Otherwise, log the stack trace and the exception into the log file
-		# for debugging purposes
-		for line in traceback.format_exception(type, value, tb):
-			for s in line.rstrip().split('\n'):
-				logging.critical(s)
-	# Pass a failure exit code to the calling shell
-	sys.exit(1)
 
 def list_plugins():
 	"""Pretty-print a list of the available input and output plugins."""
@@ -291,11 +320,12 @@ def get_plugins(root, name=None):
 	"""
 	if name is None:
 		name = root.__name__
+	logging.debug('Retrieving all plugins in %s' % name)
 	path = os.path.sep.join(root.__path__)
 	files = os.listdir(path)
 	dirs = [
 		i for i in files
-		if os.path.isdir(os.path.join(path, i)) and i != 'CVS'
+		if os.path.isdir(os.path.join(path, i)) and i != 'CVS' and i != '.svn'
 	]
 	files = [
 		i[:-3] for i in fnmatch.filter(files, '*.py')
@@ -337,6 +367,7 @@ def get_plugins(root, name=None):
 
 def load_plugin(name):
 	"""Given a name relative to the plugin root, load an input or output plugin."""
+	logging.debug('Loading plugin %s' % name)
 	root = None
 	parts = db2makedoc.plugins.__name__.split('.') + name.split('.')
 	for p in parts:
@@ -369,10 +400,4 @@ def get_plugin_desc(plugin, summary=False):
 		return '\n'.join(s)
 
 if __name__ == '__main__':
-	try:
-		# Use Psyco, if available
-		import psyco
-		psyco.full()
-	except ImportError:
-		pass
 	main()
