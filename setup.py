@@ -17,10 +17,7 @@ long_description = \
 db2makedoc is a command line application for generating documentation
 from IBM DB2 databases (although theoretically it could be extended to
 support other databases) in a variety of formats. The application is
-modular including a plugin framework for input and output. Currently
-output plugins are provided for several HTML styles and 'kid' XML
-templates, and a single input plugin is provided for IBM DB2 UDB v8+
-for Linux/UNIX/Windows"""
+modular including a plugin framework for input and output."""
 
 packages=[
 	'db2makedoc',
