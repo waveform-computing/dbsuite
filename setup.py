@@ -27,6 +27,7 @@ packages=[
 	'db2makedoc.plugins.db2.luw',
 	'db2makedoc.plugins.html',
 	'db2makedoc.plugins.html.w3',
+	'db2makedoc.plugins.html.plain',
 	'db2makedoc.plugins.metadata',
 	'db2makedoc.plugins.metadata.out',
 	'db2makedoc.plugins.template',
