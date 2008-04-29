@@ -558,7 +558,7 @@ class HTMLDocument(WebSiteDocument):
 			content.append(self._meta('Feedback', self.author_email))
 			content.append(self._link('author', 'mailto:%s' % self.author_email, self.author_name))
 		# Add some navigation <link> elements
-		content.append(self._link('home', 'index.html'))
+		content.append(self._link('home', self.site.home_url))
 		if isinstance(self.link_first, HTMLDocument):
 			content.append(self._link('first', self.link_first.url))
 		if isinstance(self.link_prior, HTMLDocument):
