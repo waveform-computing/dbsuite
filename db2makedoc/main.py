@@ -190,11 +190,8 @@ def make_docs(config_files):
 				finally:
 					ip.close()
 			except Exception, e:
-				# Unless we're in debug mode, just log errors and continue on
-				# to the next ip section
+				# Just log errors and continue on to the next ip section
 				logging.error(PLUGIN_EXEC_ERR % (config_file, input_section, s, str(e)))
-				if options.debug:
-					raise
 				continue
 			for output_section in output_sections:
 				s = parser.get(output_section, PLUGIN_OPTION)
@@ -210,10 +207,8 @@ def make_docs(config_files):
 					op.execute(db)
 				except Exception, e:
 					# Again, just log errors and continue onto the next output
-					# section unless in debug mode
+					# section
 					logging.error(PLUGIN_EXEC_ERR % (config_file, output_section, s, str(e)))
-					if options.debug:
-						raise
 
 def list_plugins():
 	"""Pretty-print a list of the available input and output plugins."""
