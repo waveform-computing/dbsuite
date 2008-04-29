@@ -13,23 +13,15 @@ import codecs
 import logging
 from PIL import Image
 from db2makedoc.graph import Graph, Node, Edge, Cluster
-from db2makedoc.db import DatabaseObject, Database, Schema, Relation, Table, View, Alias, Trigger
-from db2makedoc.plugins.html.document import AttrDict, WebSite, HTMLDocument, CSSDocument, JavaScriptDocument, GraphDocument
-
-# Import the ElementTree API, favouring the faster cElementTree implementation
-try:
-	from xml.etree.cElementTree import fromstring
-except ImportError:
-	try:
-		from cElementTree import fromstring
-	except ImportError:
-		try:
-			from xml.etree.ElementTree import fromstring
-		except ImportError:
-			try:
-				from elementtree.ElementTree import fromstring
-			except ImportError:
-				raise ImportError('Unable to find an ElementTree implementation')
+from db2makedoc.etree import fromstring
+from db2makedoc.db import (
+	DatabaseObject, Database, Schema, Relation,
+	Table, View, Alias, Trigger
+)
+from db2makedoc.plugins.html.document import (
+	AttrDict, WebSite, HTMLDocument, CSSDocument,
+	JavaScriptDocument, GraphDocument
+)
 
 
 class W3Site(WebSite):

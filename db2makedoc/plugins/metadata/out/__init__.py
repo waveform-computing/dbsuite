@@ -5,26 +5,12 @@
 import codecs
 import logging
 import db2makedoc.plugins
+from db2makedoc.etree import fromstring, tostring, Element, SubElement
 from db2makedoc.db import (
 	Database, Schema, Datatype, Table, View, Alias, Field, UniqueKey,
 	PrimaryKey, ForeignKey, Check, Index, Trigger, Function, Procedure,
 	Param, Tablespace
 )
-
-# Import the ElementTree API, favouring the faster cElementTree implementation
-try:
-	from xml.etree.cElementTree import fromstring, tostring, Element, SubElement
-except ImportError:
-	try:
-		from cElementTree import fromstring, tostring, Element, SubElement
-	except ImportError:
-		try:
-			from xml.etree.ElementTree import fromstring, tostring, Element, SubElement
-		except ImportError:
-			try:
-				from elementtree.ElementTree import fromstring, tostring, Element, SubElement
-			except ImportError:
-				raise ImportError('Unable to find an ElementTree implementation')
 
 
 FILENAME_OPTION = 'filename'

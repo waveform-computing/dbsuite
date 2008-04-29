@@ -19,38 +19,12 @@ import time
 from db2makedoc.db import DatabaseObject, Database
 from db2makedoc.highlighters import CommentHighlighter, SQLHighlighter
 from db2makedoc.plugins.html.entities import HTML_ENTITIES
-from db2makedoc.sql.formatter import (
-	ERROR,
-	COMMENT,
-	KEYWORD,
-	IDENTIFIER,
-	DATATYPE,
-	REGISTER,
-	NUMBER,
-	STRING,
-	OPERATOR,
-	PARAMETER,
-	TERMINATOR,
-	STATEMENT
-)
-
-# Import the GraphViz API
 from db2makedoc.graph import Graph, Node, Edge, Cluster
-
-# Import the ElementTree API, favouring the faster cElementTree implementation
-try:
-	from xml.etree.cElementTree import fromstring, tostring, iselement, Element, Comment
-except ImportError:
-	try:
-		from cElementTree import fromstring, tostring, iselement, Element, Comment
-	except ImportError:
-		try:
-			from xml.etree.ElementTree import fromstring, tostring, iselement, Element, Comment
-		except ImportError:
-			try:
-				from elementtree.ElementTree import fromstring, tostring, iselement, Element, Comment
-			except ImportError:
-				raise ImportError('Unable to find an ElementTree implementation')
+from db2makedoc.etree import fromstring, tostring, iselement, Element, Comment
+from db2makedoc.sql.formatter import (
+	ERROR, COMMENT, KEYWORD, IDENTIFIER, DATATYPE, REGISTER,
+	NUMBER, STRING, OPERATOR, PARAMETER, TERMINATOR, STATEMENT
+)
 
 # Import the CSSUtils API
 # XXX Unneeded until we actually start work on the CSSDocument class
