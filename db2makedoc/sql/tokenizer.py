@@ -352,6 +352,7 @@ class SQLTokenizerBase(object):
 
 	def _handle_colon(self):
 		"""Parses a colon character (":") in the source."""
+		# XXX Need to handle a colon followed by white-space as an OPERATOR here (for compound labels)
 		self._next()
 		if self.char in ['"', "'"]:
 			try:

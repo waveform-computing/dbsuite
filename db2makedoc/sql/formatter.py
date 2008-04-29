@@ -4580,6 +4580,7 @@ class SQLFormatter(BaseFormatter):
 	
 	def _parse_procedure_statement(self):
 		"""Parses a procedure statement within a procedure body"""
+		# XXX Add match for BEGIN, pointing to procedure_compound_statement
 		# Procedure specific statements
 		if self._match('REPEAT'):
 			self._parse_repeat_statement(inproc=True)
