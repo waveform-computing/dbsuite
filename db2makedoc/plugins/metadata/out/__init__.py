@@ -5,7 +5,7 @@
 import codecs
 import logging
 import db2makedoc.plugins
-from db2makedoc.etree import fromstring, tostring, Element, SubElement
+from db2makedoc.etree import fromstring, tostring, indent, Element, SubElement
 from db2makedoc.db import (
 	Database, Schema, Datatype, Table, View, Alias, Field, UniqueKey,
 	PrimaryKey, ForeignKey, Check, Index, Trigger, Function, Procedure,
@@ -20,27 +20,6 @@ INDENT_OPTION = 'indent'
 FILENAME_DESC = """The filename for the XML output file (mandatory)"""
 ENCODING_DESC = """The character encoding to use for the XML output file (optional)"""
 INDENT_DESC = """If true (the default), the XML will be indented for human readability"""
-
-
-def indent(elem, level=0):
-	"""Pretty prints XML with indentation.
-
-	This is a small utility routine adapted from the ElementTree website which
-	indents XML (in-place) to enable easier reading by humans.
-	"""
-	i = '\n' + '\t' * level
-	if len(elem):
-		if not elem.text or not elem.text.strip():
-			elem.text = i + '\t'
-		for child in elem:
-			indent(child, level + 1)
-		if not child.tail or not child.tail.strip():
-			child.tail = i
-		if not elem.tail or not elem.tail.strip():
-			elem.tail = i
-	else:
-		if level and (not elem.tail or not elem.tail.strip()):
-			elem.tail = i
 
 
 class OutputPlugin(db2makedoc.plugins.OutputPlugin):
