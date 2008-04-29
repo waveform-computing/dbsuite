@@ -29,19 +29,19 @@ MAX_GRAPH_SIZE_OPTION = 'max_graph_size'
 # Localizable strings
 LAST_UPDATED_DESC = """If true, the generated date of each page will be added
 	to the footer (optional)"""
-STYLESHEETS_DESC = """A comma separated list of additional stylesheets
-	which each generated HTML page will link to (optional)"""
+STYLESHEETS_DESC = """A comma separated list of additional stylesheet
+	URLs which each generated HTML page will link to (optional)"""
 MAX_GRAPH_SIZE_DESC="""The maximum size that diagrams are allowed to be on
-	the page. If diagrams are larger, they will be resized and a zoom function
-	will permit viewing the full size image. Values must be specified as
-	"widthxheight", e.g. "640x480". Defaults to "600x800"."""
+	the page. If diagrams are larger, they will be resized to fit within the
+	specified size. Values must be specified as "widthxheight", e.g.
+	"640x480". Defaults to "600x800"."""
 
 
 class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 	"""Output plugin for plain HTML web pages.
 
 	This output plugin supports generating XHTML documentation with a fairly
-	plain style.  It includes syntax highlighted SQL information on various
+	plain style. It includes syntax highlighted SQL information on various
 	objects in the database (views, tables, etc.) and diagrams of the schema.
 	"""
 
