@@ -11,183 +11,344 @@ import codecs
 import logging
 from PIL import Image
 from db2makedoc.graph import Graph, Node, Edge, Cluster
-from db2makedoc.etree import fromstring
+from db2makedoc.etree import ProcessingInstruction, fromstring
 from db2makedoc.db import (
 	DatabaseObject, Database, Schema, Relation,
 	Table, View, Alias, Trigger
 )
 from db2makedoc.plugins.html.document import (
-	AttrDict, WebSite, HTMLDocument, CSSDocument,
-	GraphDocument
+	Attrs, ElementFactory, WebSite, HTMLDocument, HTMLObjectDocument,
+	CSSDocument, GraphDocument, GraphObjectDocument
 )
+
+
+class PlainElementFactory(ElementFactory):
+	# Overridden to apply plain styles to certain elements
+
+	def _add_class(self, node, cls):
+		classes = set(node.attrib.get('class', '').split(' '))
+		classes.add(cls)
+		node.attrib['class'] = ' '.join(classes)
+
+	def table(self, *content, **attrs):
+		table = self._element('table', *content, **attrs)
+		# If there's a tbody element, apply 'even' and 'odd' CSS classes to
+		# rows in the body.
+		try:
+			tbody = self._find(table, 'tbody')
+		except:
+			pass
+		else:
+			for index, tr in enumerate(tbody.findall('tr')):
+				self._add_class(tr, ['odd', 'even'][index % 2])
+		return table
+
+tag = PlainElementFactory()
 
 
 class PlainSite(WebSite):
 	"""Site class representing a collection of PlainDocument instances."""
 
-	def __init__(self, database):
+	def __init__(self, database, options):
 		"""Initializes an instance of the class."""
-		super(PlainSite, self).__init__(database)
-		self.last_updated = True
-		self.max_graph_size = (600, 800)
-		self.stylesheets = []
-		self._document_map = {}
-		self._graph_map = {}
-
-	def add_document(self, document):
-		"""Adds a document to the website.
-
-		This method overrides the base implementation to map database objects
-		to documents and graphs according to the site structure.
-		"""
-		super(PlainSite, self).add_document(document)
-		if isinstance(document, PlainMainDocument):
-			self._document_map[document.dbobject] = document
-		elif isinstance(document, PlainGraphDocument):
-			self._graph_map[document.dbobject] = document
-	
-	def object_document(self, dbobject):
-		"""Returns the HTMLDocument associated with a database object."""
-		return self._document_map.get(dbobject)
-
-	def object_graph(self, dbobject):
-		"""Returns the GraphDocument associated with a database object."""
-		return self._graph_map.get(dbobject)
-
-	def write(self):
-		"""Writes all documents in the site to disk."""
-		# Overridden to split writing graph documents before other documents
-		# when using multi-threaded writing. This avoids a race condition
-		# due to the fact that writing a table document (for example) may cause
-		# the associated table graph to be written if it hasn't already. If
-		# another thread starts writing the graph at the same time, we can
-		# wind up with two threads trying to write the graph simultaneously.
-		if self.threads > 1:
-			# Write graphs first
-			self.write_multi(
-				doc for doc in self._documents.itervalues()
-				if isinstance(doc, GraphDocument)
-			)
-			# Then write everything else
-			self.write_multi(
-				doc for doc in self._documents.itervalues()
-				if not isinstance(doc, GraphDocument)
-			)
-		else:
-			super(PlainSite, self).write()
+		super(PlainSite, self).__init__(database, options)
+		self.last_updated = options['last_updated']
+		self.max_graph_size = options['max_graph_size']
+		self.stylesheets = options['stylesheets']
 
 
 class PlainDocument(HTMLDocument):
 	"""Document class for use with the plain style."""
 
-	# HTML CONSTRUCTION METHODS
-	# Overridden versions specific to plain formatting
+	def generate(self):
+		# Overridden to add basic styling
+		doc = super(PlainDocument, self).generate()
+		# Add styles
+		headnode = tag._find(doc, 'head')
+		headnode.append(tag.style(src=PlainCSSDocument._url, media='all'))
+		if self.site.stylesheets:
+			for url in self.site.stylesheets:
+				headnode.append(tag.style(src=url, media='all'))
+		headnode.append(tag.script("""
+function popup(url, type, height, width) {
+	newWin = window.open(url, 'popupWindow', 'height=' + height + ',width=' + width +
+		',resizable=yes,menubar=no,status=no,toolbar=no,scrollbars=yes');
+	newWin.focus();
+	return false;
+}"""))
+		# Add common header elements to the body
+		bodynode = tag._find(doc, 'body')
+		bodynode.append(tag.h1(self.site.title, id='top'))
+		if self.site.search:
+			bodynode.append(tag.form(
+				'Search: ',
+				tag.input(type='text', name='q', size=20),
+				' ',
+				tag.input(type='submit', value='Go'),
+				method='GET', action=PlainSearchDocument._url
+			))
+		return doc
+
+
+class PlainSearchDocument(PlainDocument):
+	"""Document class containing the PHP search script"""
+
+	_url = 'search.php'
+
+	def __init__(self, site):
+		super(PlainSearchDocument, self).__init__(site, self._url)
+		self.title = '%s - Search Results' % site.title
+		self.description = 'Search Results'
+		self.search = False
+		self.last_updated = site.last_updated
 	
-	def _table(self, data, head=[], foot=[], caption='', attrs={}):
-		# Overridden to color alternate rows white & gray
-		tablenode = super(PlainDocument, self)._table(data, head, foot, caption, attrs)
-		colors = ['even', 'odd']
-		tbodynode = tablenode.find('tbody')
-		for (index, rownode) in enumerate(tbodynode.findall('tr')):
-			classes = rownode.attrib.get('class', '').split()
-			classes.append(colors[(index + 1) % 2])
-			rownode.attrib['class'] = ' '.join(classes)
-		return tablenode
+	def generate(self):
+		doc = super(PlainSearchDocument, self).generate()
+		bodynode = tag._find(doc, 'body')
+		bodynode.append(tag.p(
+			tag.a(self.site.home_title, href=self.site.home_url),
+			' > ',
+			'Search Results',
+			id='breadcrumbs'
+		))
+		bodynode.append(tag.h2('Search Results'))
+		# XXX Dirty hack to work around a bug in ElementTree: if we use an ET
+		# ProcessingInstruction here, ET converts XML special chars (<, >,
+		# etc.) into XML entities, which is unnecessary and completely breaks
+		# the PHP code. Instead we insert a place-holder and replace it with
+		# PHP in an overridden serialize() method. This will break horribly if
+		# the PHP code contains any non-ASCII characters and/or the target
+		# encoding is not ASCII-based (e.g. EBCDIC).
+		bodynode.append(ProcessingInstruction('php', '__PHP__'))
+		if self.copyright:
+			bodynode.append(tag.p(self.copyright, id='footer'))
+		if self.last_updated:
+			bodynode.append(tag.p('Indexed on %s' % self.date.strftime('%a, %d %b %Y'), id='timestamp'))
+		return doc
+	
+	def serialize(self, content):
+		# XXX See generate()
+		php = r"""
+require '__XAPIAN__';
+
+# Defaults and limits
+$PAGE_DEFAULT = 1;
+$PAGE_MIN = 1;
+$PAGE_MAX = 0; # Calculated by run_query()
+$COUNT_DEFAULT = 20;
+$COUNT_MIN = 10;
+$COUNT_MAX = 100;
+
+# Globals derived from GET values
+$Q = array_key_exists('q', $_GET) ? strval($_GET['q']) : '';
+$PAGE = array_key_exists('page', $_GET) ? intval($_GET['page']) : $PAGE_DEFAULT;
+$PAGE = max($PAGE_MIN, $PAGE);
+$COUNT = array_key_exists('count', $_GET) ? intval($_GET['count']) : $COUNT_DEFAULT;
+$COUNT = max($COUNT_MIN, min($COUNT_MAX, $COUNT));
+
+function run_query() {
+	global $Q, $PAGE, $COUNT, $PAGE_MAX;
+
+	$db = new XapianDatabase('search');
+	$enquire = new XapianEnquire($db);
+	$parser = new XapianQueryParser();
+	$parser->set_stemmer(new XapianStem('__LANG__'));
+	$parser->set_stemming_strategy(XapianQueryParser::STEM_SOME);
+	$parser->set_database($db);
+	$query = $parser->parse_query($Q,
+		XapianQueryParser::FLAG_BOOLEAN_ANY_CASE |  # Enable boolean operators (with any case)
+		XapianQueryParser::FLAG_PHRASE |            # Enable quoted phrases 
+		XapianQueryParser::FLAG_LOVEHATE |          # Enable + and -
+		XapianQueryParser::FLAG_SPELLING_CORRECTION # Enable suggested corrections
+	);
+	$enquire->set_query($query);
+	$result = $enquire->get_mset((($PAGE - 1) * $COUNT) + 1, $COUNT);
+	$PAGE_MAX = ceil($result->get_matches_estimated() / floatval($COUNT));
+	return $result;
+}
+
+function result_header($doc, $matches) {
+	global $Q, $PAGE, $COUNT;
+
+	$page_from = (($PAGE - 1) * $COUNT) + 1;
+	$page_to = $page_from + $matches->size() - 1;
+	$label = sprintf('Showing results %d to %d of about %d for "%s"',
+		$page_from, $page_to, $matches->get_matches_estimated(), $Q);
+	$result = $doc->createElement('p');
+	$result->appendChild(new DOMText($label));
+	return $result;
+}
+
+function result_table($doc, $matches) {
+	$result = $doc->createElement('table');
+	$result->appendChild(new DOMAttr('class', 'searchresults'));
+	# Write the header row
+	$row = $doc->createElement('tr');
+	foreach (array('Relevance', 'Link') as $content) {
+		$cell = $doc->createElement('th');
+		$cell->appendChild(new DOMText($content));
+		$row->appendChild($cell);
+	}
+	$result->appendChild($row);
+	# Write the result rows
+	$i = $matches->begin();
+	while (! $i->equals($matches->end())) {
+		list($url, $data) = explode("\n", $i->get_document()->get_data(), 2);
+		$relevance = new DOMText(sprintf('%d%%', $i->get_percent()));
+		$link = $doc->createElement('a');
+		$link->appendChild(new DOMAttr('href', $url));
+		$link->appendChild(new DOMText($data));
+		$row = $doc->createElement('tr');
+		foreach (array($relevance, $link) as $content) {
+			$cell = $doc->createElement('td');
+			$cell->appendChild($content);
+			$row->appendChild($cell);
+		}
+		$result->appendChild($row);
+		$i->next();
+	}
+	return $result;
+}
+
+function result_page_link($doc, $page, $label='') {
+	global $Q, $PAGE, $PAGE_MIN, $PAGE_MAX, $COUNT;
+
+	if ($label == '') $label = strval($page);
+	if (($page == $PAGE) || ($page < $PAGE_MIN) || ($page > $PAGE_MAX)) {
+		$result = $doc->createTextNode($label);
+	}
+	else {
+		$result = $doc->createElement('a');
+		$result->appendChild(new DOMAttr('href',
+			sprintf('?q=%s&page=%d&count=%d', $Q, $page, $COUNT)));
+		$result->appendChild(new DOMText($label));
+	}
+	return $result;
+}
+
+function result_pages($doc) {
+	global $PAGE, $PAGE_MIN, $PAGE_MAX;
+
+	$result = $doc->createElement('p');
+	$result->appendChild(new DOMAttr('class', 'search-pages'));
+	$result->appendChild(result_page_link($doc, $PAGE - 1, '< Previous'));
+	$result->appendChild(new DOMText(' '));
+	for ($i = $PAGE_MIN; $i <= $PAGE_MAX; $i++) {
+		$result->appendChild(result_page_link($doc, $i));
+		$result->appendChild(new DOMText(' '));
+	}
+	$result->appendChild(result_page_link($doc, $PAGE + 1, 'Next >'));
+	return $result;
+}
+
+try {
+	$doc = new DOMDocument('1.0', '__ENCODING__');
+	$root = $doc->createElement('div');
+	$doc->appendChild($root);
+	$matches = run_query();
+	$root->appendChild(result_header($doc, $matches));
+	$root->appendChild(result_pages($doc));
+	$root->appendChild(result_table($doc, $matches));
+	print($doc->saveXML($doc->documentElement));
+}
+catch (Exception $e) {
+	print(htmlspecialchars($e->getMessage() . "\n"));
+}
+"""
+		php = php.replace('__XAPIAN__', 'xapian.php')
+		php = php.replace('__LANG__', self.site.lang)
+		php = php.replace('__ENCODING__', self.site.encoding)
+		result = super(PlainSearchDocument, self).serialize(content)
+		return result.replace('__PHP__', php)
 
 
-class PlainMainDocument(PlainDocument):
+class PlainMainDocument(HTMLObjectDocument, PlainDocument):
 	"""Document class representing a database object (table, view, index, etc.)"""
 
 	def __init__(self, site, dbobject):
 		"""Initializes an instance of the class."""
-		self.dbobject = dbobject # must be set before calling the inherited method
-		super(PlainMainDocument, self).__init__(site, '%s.html' % dbobject.identifier)
-		self.title = '%s - %s %s' % (self.site.title, self.dbobject.type_name, self.dbobject.qualified_name)
-		self.description = '%s %s' % (self.dbobject.type_name, self.dbobject.qualified_name)
-		self.keywords = [self.site.database.name, self.dbobject.type_name, self.dbobject.name, self.dbobject.qualified_name]
-		# Add the extra inheritable properties to the site attributes list
-		self.last_updated = None
-		self._site_attributes.append('last_updated')
+		super(PlainMainDocument, self).__init__(site, dbobject)
+		self.last_updated = site.last_updated
 	
-	def _create_content(self):
-		# Overridden to automatically set the link objects and generate the
-		# content from the sections filled in by descendent classes in
-		# _create_sections()
-		if not self.link_first and self.dbobject.first:
-			self.link_first = self.site.object_document(self.dbobject.first)
-		if not self.link_prior and self.dbobject.prior:
-			self.link_prior = self.site.object_document(self.dbobject.prior)
-		if not self.link_next and self.dbobject.next:
-			self.link_next = self.site.object_document(self.dbobject.next)
-		if not self.link_last and self.dbobject.last:
-			self.link_last = self.site.object_document(self.dbobject.last)
-		if not self.link_up and self.dbobject.parent:
-			self.link_up = self.site.object_document(self.dbobject.parent)
+	def generate(self):
 		# Call the inherited method to create the skeleton document
-		super(PlainMainDocument, self)._create_content()
-		# Add styles
-		headnode = self.doc.find('head')
-		headnode.append(self._style(src=PlainCSSDocument._url, media='all'))
-		if self.site.stylesheets:
-			for url in self.site.stylesheets:
-				headnode.append(self._style(src=url, media='all'))
+		doc = super(PlainMainDocument, self).generate()
 		# Add body content
-		bodynode = self.doc.find('body')
-		bodynode.append(self._h(self.site.title, level=1, attrs={'id': 'top'}))
-		self._create_crumbs(bodynode)
-		bodynode.append(self._h('%s %s' % (self.dbobject.type_name, self.dbobject.qualified_name), level=2))
-		self.sections = []
-		self._create_sections()
-		bodynode.append(self._ul([
-			self._a('#%s' % section['id'], section['title'], 'Jump to section')
-			for section in self.sections
-		], attrs={'id': 'toc'}))
-		for section in self.sections:
-			bodynode.append(self._h(section['title'], level=3, attrs={'id': section['id']}))
-			self._append_content(bodynode, section['content'])
-			bodynode.append(self._p(self._a('#top', 'Back to top', 'Jump to top')))
-		if self.site.copyright:
-			bodynode.append(self._p(self.site.copyright, attrs={'id': 'footer'}))
+		bodynode = tag._find(doc, 'body')
+		bodynode.append(self.generate_crumbs())
+		bodynode.append(tag.h2('%s %s' % (self.dbobject.type_name, self.dbobject.qualified_name)))
+		sections = self.generate_sections()
+		if sections:
+			bodynode.append(tag.ul((
+				tag.li(tag.a(title, href='#' + id, title='Jump to section'))
+				for (id, title, content) in sections
+			), id='toc'))
+			tag._append(bodynode, (
+				(tag.h3(title, id=id), content, tag.p(tag.a('Back to top', href='#top')))
+				for (id, title, content) in sections
+			))
+		if self.copyright:
+			bodynode.append(tag.p(self.copyright, id='footer'))
 		if self.last_updated:
-			bodynode.append(self._p('Updated on %s' % self.date.strftime('%a, %d %b %Y'), attrs={'id': 'timestamp'}))
+			bodynode.append(tag.p('Updated on %s' % self.date.strftime('%a, %d %b %Y'), id='timestamp'))
+		return doc
 
-	def _create_crumbs(self, node):
+	def generate_crumbs(self):
 		"""Creates the breadcrumb links at the top of the page."""
 		crumbs = []
 		item = self.dbobject
 		while item is not None:
-			crumbs.insert(0, self._a_to(item, typename=True, qualifiedname=False))
+			crumbs.insert(0, self.site.link_to(item, typename=True, qualifiedname=False))
 			crumbs.insert(0, ' > ')
 			item = item.parent
-		crumbs.insert(0, self._a(self.site.home_url, self.site.home_title))
-		self._append_content(node, self._p(crumbs, attrs={'id': 'breadcrumbs'}))
+		crumbs.insert(0, tag.a(self.site.home_title, href=self.site.home_title))
+		return tag.p(crumbs, id='breadcrumbs')
 	
-	# CONTENT METHODS
-	# The following methods are for use in descendent classes to fill the
-	# sections list with content. Basically, all descendent classes need to do
-	# is override the _create_sections() method, calling section() and add() in
-	# their implementation
+	def generate_sections(self):
+		"""Creates the actual body content."""
+		# Override in descendents to return a list of tuples with the following
+		# structure: (id, title, [content]). "content" is a list of Elements.
+		return []
 
-	def _create_sections(self):
-		# Override in descendent classes
-		pass
 
-	def _section(self, id, title):
-		"""Starts a new section in the body of the current document.
+class PlainPopupDocument(PlainDocument):
+	"""Document class representing a popup help window."""
 
-		Parameters:
-		id -- The id of the anchor at the start of the section
-		title -- The title text of the section
-		"""
-		self.sections.append({'id': id, 'title': title, 'content': []})
+	def __init__(self, site, url, title, body, width=400, height=300):
+		"""Initializes an instance of the class."""
+		super(PlainPopupDocument, self).__init__(site, url)
+		self.title = title
+		self.body = body
+		self.width = width
+		self.height = height
 	
-	def _add(self, content):
-		"""Add HTML content or elements to the end of the current section.
+	def generate(self):
+		# Call the inherited method to create the skeleton document
+		doc = super(PlainPopupDocument, self).generate()
+		# Add styles specific to w3v8 popup documents
+		headnode = tag._find(doc, 'head')
+		# Generate the popup content
+		bodynode = tag._find(doc, 'body')
+		del bodynode[:] # Clear the existing body content
+		bodynode.append(tag.div(
+			tag.h2(self.title),
+			self.body,
+			tag.div(
+				tag.hr(),
+				tag.div(
+					tag.a('Close Window', href='javascript:close();'),
+					tag.a('Print', href='javascript:window.print();'),
+					class_='content'
+				),
+				id='footer'
+			)
+		))
+		return doc
 
-		Parameters:
-		content -- A string, Node, NodeList, or tuple/list of Nodes
-		"""
-		self.sections[-1]['content'].append(content)
+	def link(self):
+		# Modify the link to use the JS popup() routine
+		return tag.a(self.title, href=self.url, title=self.title,
+			onclick='javascript:return popup("%s","internal",%d,%d);' % (self.url, self.height, self.width))
 
 
 class PlainCSSDocument(CSSDocument):
@@ -198,8 +359,9 @@ class PlainCSSDocument(CSSDocument):
 	def __init__(self, site):
 		super(PlainCSSDocument, self).__init__(site, self._url)
 
-	def _create_content(self):
-		self.doc = u"""\
+	def generate(self):
+		doc = super(PlainCSSDocument, self).generate()
+		return doc + u"""\
 /* General styles */
 
 body {
@@ -253,6 +415,10 @@ p#timestamp {
     margin: 0;
 }
 
+p.search-pages {
+	font-weight: bold;
+}
+
 /* SQL syntax highlighting */
 .sql {
 	font-size: 9pt;
@@ -270,47 +436,47 @@ pre.sql {
 	/* No way to do this in IE... */
 }
 
-.sql span.sql_error      { background-color: red; }
-.sql span.sql_comment    { color: green; }
-.sql span.sql_keyword    { font-weight: bold; color: blue; }
-.sql span.sql_datatype   { font-weight: bold; color: green; }
-.sql span.sql_register   { font-weight: bold; color: purple; }
-.sql span.sql_identifier { }
-.sql span.sql_number     { color: maroon; }
-.sql span.sql_string     { color: maroon; }
-.sql span.sql_operator   { }
-.sql span.sql_parameter  { font-style: italic; }
-.sql span.sql_terminator { }
+.sql span.sql-error      { background-color: red; }
+.sql span.sql-comment    { color: green; }
+.sql span.sql-keyword    { font-weight: bold; color: blue; }
+.sql span.sql-datatype   { font-weight: bold; color: green; }
+.sql span.sql-register   { font-weight: bold; color: purple; }
+.sql span.sql-identifier { }
+.sql span.sql-number     { color: maroon; }
+.sql span.sql-string     { color: maroon; }
+.sql span.sql-operator   { }
+.sql span.sql-parameter  { font-style: italic; }
+.sql span.sql-terminator { }
 
 /* Cell formats for line-numbered SQL */
-td.num_cell { background-color: silver; }
-td.sql_cell { background-color: gray; }
+td.num-cell { background-color: silver; }
+td.sql-cell { background-color: gray; }
 
 /* Fix display of border around diagrams in Firefox */
 img { border: 0 none; }
 """
 
 
-class PlainGraphDocument(GraphDocument):
+class PlainGraphDocument(GraphObjectDocument):
 	"""Graph class representing a database object or collection of objects."""
 
 	def __init__(self, site, dbobject):
 		"""Initializes an instance of the class."""
-		self.dbobject = dbobject # must be set before calling the inherited method
-		super(PlainGraphDocument, self).__init__(site, '%s.png' % dbobject.identifier)
-		self._dbobject_map = {}
-		self._written = False
-		self._scale = None
+		super(PlainGraphDocument, self).__init__(site, dbobject)
+		(maxw, maxh) = site.max_graph_size
+		self.graph.ratio = str(float(maxh) / float(maxw))
+		self.written = False
+		self.scale = None
 	
 	def write(self):
-		# Overridden to set the introduced "_written" flag (to ensure we don't
+		# Overridden to set the introduced "written" flag (to ensure we don't
 		# attempt to write the graph more than once due to the induced write()
 		# call in the overridden _link() method), and to handle resizing the
 		# image if it's larger than the maximum size specified in the config
-		if not self._written:
+		if not self.written:
 			super(PlainGraphDocument, self).write()
-			self._written = True
-			if self._usemap:
+			self.written = True
+			if self.usemap:
 				im = Image.open(self.filename)
 				(maxw, maxh) = self.site.max_graph_size
 				(w, h) = im.size
@@ -318,11 +484,11 @@ class PlainGraphDocument(GraphDocument):
 					# If the graph is larger than the maximum specified size,
 					# move the original to name.full.ext and create a smaller
 					# version using PIL. The scaling factor is stored so that
-					# the overridden _map() method can use it to adjust the
+					# the overridden map() method can use it to adjust the
 					# client side image map
-					self._scale = min(float(maxw) / w, float(maxh) / h)
-					neww = int(round(w * self._scale))
-					newh = int(round(h * self._scale))
+					self.scale = min(float(maxw) / w, float(maxh) / h)
+					neww = int(round(w * self.scale))
+					newh = int(round(h * self.scale))
 					if w * h * 3 / 1024**2 < 500:
 						# Use a high-quality anti-aliased resize if to do so
 						# would use <500Mb of RAM (which seems a reasonable
@@ -333,14 +499,14 @@ class PlainGraphDocument(GraphDocument):
 						im = im.resize((neww, newh), Image.NEAREST)
 					im.save(self.filename)
 	
-	def _map(self):
+	def map(self):
 		# Overridden to allow generating the client-side map for the "full
 		# size" graph, or the smaller version potentially produced by the
 		# write() method
-		if not self._written:
+		if not self.written:
 			self.write()
-		result = super(PlainGraphDocument, self)._map()
-		if self._scale is not None:
+		result = super(PlainGraphDocument, self).map()
+		if self.scale is not None:
 			for area in result:
 				# Convert coords string into a list of integer tuples
 				coords = [
@@ -349,7 +515,7 @@ class PlainGraphDocument(GraphDocument):
 				]
 				# Resize all the coordinates by the scale
 				coords = [
-					tuple(int(round(i * self._scale)) for i in coord)
+					tuple(int(round(i * self.scale)) for i in coord)
 					for coord in coords
 				]
 				# Convert the scaled results back into a string
@@ -358,84 +524,4 @@ class PlainGraphDocument(GraphDocument):
 					for coord in coords
 				)
 		return result
-	
-	def _create_content(self):
-		# Call the inherited method in case it does anything
-		super(PlainGraphDocument, self)._create_content()
-		# Call _create_graph to create the content of the graph
-		self._create_graph()
-		# Transform dbobject attributes on Node, Edge and Cluster objects into
-		# URL attributes 
 
-		def rewrite_url(node):
-			if isinstance(node, (Node, Edge, Cluster)) and hasattr(node, 'dbobject'):
-				doc = self.site.object_document(node.dbobject)
-				if doc:
-					node.URL = doc.url
-
-		def rewrite_font(node):
-			if isinstance(node, (Node, Edge)):
-				node.fontname = 'Verdana'
-				node.fontsize = 8.0
-			elif isinstance(node, Cluster):
-				node.fontname = 'Verdana'
-				node.fontsize = 10.0
-
-		self.graph.touch(rewrite_url)
-		self.graph.touch(rewrite_font)
-		# Tweak some of the graph attributes to make it scale a bit more nicely
-		self.graph.rankdir = 'LR'
-		#self.graph.size = '10,20'
-		self.graph.dpi = '96'
-		(maxw, maxh) = self.site.max_graph_size
-		self.graph.ratio = str(float(maxh) / float(maxw))
-
-	def _create_graph(self):
-		# Override in descendent classes to generate nodes, edges, etc. in the
-		# graph
-		pass
-
-	def _add_dbobject(self, dbobject, selected=False):
-		"""Utility method to add a database object to the graph.
-
-		This utility method adds the specified database object along with
-		standardized formatting depending on the type of the object.
-		"""
-		assert isinstance(dbobject, DatabaseObject)
-		assert not self._written
-		o = self._dbobject_map.get(dbobject, None)
-		if o is None:
-			if isinstance(dbobject, Schema):
-				o = Cluster(self.graph, dbobject.qualified_name)
-				o.label = dbobject.name
-				o.style = 'filled'
-				o.fillcolor = '#ece6d7'
-				o.color = '#ece6d7'
-			elif isinstance(dbobject, Relation):
-				cluster = self._add_dbobject(dbobject.schema)
-				o = Node(cluster, dbobject.qualified_name)
-				o.shape = 'rectangle'
-				o.style = 'filled'
-				o.label = dbobject.name
-				if isinstance(dbobject, Table):
-					o.fillcolor = '#bbbbff'
-				elif isinstance(dbobject, View):
-					o.style = 'filled,rounded'
-					o.fillcolor = '#bbffbb'
-				elif isinstance(dbobject, Alias):
-					if isinstance(dbobject.final_relation, View):
-						o.style = 'filled,rounded'
-					o.fillcolor = '#ffffbb'
-				o.color = '#000000'
-			elif isinstance(dbobject, Trigger):
-				cluster = self._add_dbobject(dbobject.schema)
-				o = Node(cluster, dbobject.qualified_name)
-				o.shape = 'hexagon'
-				o.style = 'filled'
-				o.fillcolor = '#ffbbbb'
-				o.label = dbobject.name
-			if selected:
-				o.style += ',setlinewidth(3)'
-			o.dbobject = dbobject
-			self._dbobject_map[dbobject] = o
-		return o

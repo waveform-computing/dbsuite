@@ -1,89 +1,106 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import Function
-from db2makedoc.plugins.html.w3.document import W3MainDocument
+from db2makedoc.plugins.html.w3.document import W3MainDocument, tag
+
+functype = {
+	'C': 'Column/Aggregate',
+	'R': 'Row',
+	'T': 'Table',
+	'S': 'Scalar',
+}
+access = {
+	None: 'No SQL',
+	'N':  'No SQL',
+	'C':  'Contains SQL',
+	'R':  'Read-only SQL',
+	'M':  'Modifies SQL',
+}
 
 class W3FunctionDocument(W3MainDocument):
 	def __init__(self, site, function):
 		assert isinstance(function, Function)
 		super(W3FunctionDocument, self).__init__(site, function)
 	
-	def _create_sections(self):
-		functype = {
-			'C': 'Column/Aggregate',
-			'R': 'Row',
-			'T': 'Table',
-			'S': 'Scalar',
-		}
-		access = {
-			None: 'No SQL',
-			'N':  'No SQL',
-			'C':  'Contains SQL',
-			'R':  'Read-only SQL',
-			'M':  'Modifies SQL',
-		}
+	def generate_sections(self):
+		result = super(W3FunctionDocument, self).generate_sections()
 		overloads = self.dbobject.schema.functions[self.dbobject.name]
 		params = list(self.dbobject.param_list) # Take a copy of the parameter list
 		if self.dbobject.type in ['R', 'T']:
 			# Extend the list with return parameters if the function is a ROW
-			# or TABLE function (and hence, returns multiple named parms)
+			# or TABLE function (and hence, returns multiple named params)
 			params.extend(self.dbobject.return_list)
-		self._section('description', 'Description')
-		self._add(self._p(self._format_prototype(self.dbobject.prototype)))
-		self._add(self._p(self._format_comment(self.dbobject.description)))
-		self._add(self._dl([
-			(param.name, self._format_comment(param.description))
-			for param in params
-		]))
-		self._section('attributes', 'Attributes')
-		self._add(self._table(
-			head=[(
-				"Attribute",
-				"Value",
-				"Attribute",
-				"Value"
-			)],
-			data=[
-				(
-					self._a(self.site.url_document('created.html')),
-					self.dbobject.created,
-					self._a(self.site.url_document('createdby.html')),
-					self.dbobject.owner,
-				),
-				(
-					self._a(self.site.url_document('functype.html')),
-					functype[self.dbobject.type],
-					self._a(self.site.url_document('sqlaccess.html')),
-					access[self.dbobject.sql_access],
-				),
-				(
-					self._a(self.site.url_document('externalaction.html')),
-					self.dbobject.external_action,
-					self._a(self.site.url_document('deterministic.html')),
-					self.dbobject.deterministic,
-				),
-				(
-					self._a(self.site.url_document('nullcall.html')),
-					self.dbobject.null_call,
-					self._a(self.site.url_document('specificname.html')),
-					self.dbobject.specific_name,
-				),
+		result.append((
+			'description', 'Description', [
+				tag.p(self.format_prototype(self.dbobject.prototype)),
+				tag.p(self.format_comment(self.dbobject.description)),
+				tag.dl((
+					(tag.dt(param.name), tag.dd(self.format_comment(param.description)))
+					for param in params
+				))
 			]
 		))
+		result.append((
+			'attributes', 'Attributes',
+			tag.table(
+				tag.thead(
+					tag.tr(
+						tag.th('Attribute'),
+						tag.th('Value'),
+						tag.th('Attribute'),
+						tag.th('Value')
+					)
+				),
+				tag.tbody(
+					tag.tr(
+						tag.td(self.site.url_document('created.html').link()),
+						tag.td(self.dbobject.created),
+						tag.td(self.site.url_document('createdby.html').link()),
+						tag.td(self.dbobject.owner)
+					),
+					tag.tr(
+						tag.td(self.site.url_document('functype.html').link()),
+						tag.td(functype[self.dbobject.type]),
+						tag.td(self.site.url_document('sqlaccess.html').link()),
+						tag.td(access[self.dbobject.sql_access])
+					),
+					tag.tr(
+						tag.td(self.site.url_document('externalaction.html').link()),
+						tag.td(self.dbobject.external_action),
+						tag.td(self.site.url_document('deterministic.html').link()),
+						tag.td(self.dbobject.deterministic)
+					),
+					tag.tr(
+						tag.td(self.site.url_document('nullcall.html').link()),
+						tag.td(self.dbobject.null_call),
+						tag.td(self.site.url_document('specificname.html').link()),
+						tag.td(self.dbobject.specific_name)
+					)
+				)
+			)
+		))
 		if len(overloads) > 1:
-			self._section('overloads', 'Overloaded Versions')
-			self._add(self._table(
-				head=[(
-					'Prototype',
-					'Specific Name',
-				)],
-				data=[(
-					self._format_prototype(overload.prototype),
-					self._a(self.site.object_document(overload), overload.specific_name)
-				) for overload in overloads if overload != self.dbobject]
+			result.append((
+				'overloads', 'Overloaded Versions',
+				tag.table(
+					tag.thead(
+						tag.tr(
+							tag.th('Prototype'),
+							tag.th('Specific Name')
+						)
+					),
+					tag.tbody((
+						tag.tr(
+							tag.td(self.format_prototype(overload.prototype)),
+							tag.td(tag.a(overload.specific_name, href=self.site.object_document(overload).url))
+						) for overload in overloads if overload != self.dbobject
+					))
+				)
 			))
 		if self.dbobject.create_sql:
-			self._section('sql', 'SQL Definition')
-			self._add(self._pre(self._format_sql(self.dbobject.create_sql),
-				attrs={'class': 'sql'}))
+			result.append((
+				'sql', 'SQL Definition',
+				tag.pre(self.format_sql(self.dbobject.create_sql), class_='sql')
+			))
+		return result
 

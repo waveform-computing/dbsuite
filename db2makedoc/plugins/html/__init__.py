@@ -12,42 +12,6 @@ import codecs
 import db2makedoc.plugins
 from db2makedoc.plugins.html.document import WebSite
 
-PATH_OPTION = 'path'
-ENCODING_OPTION = 'encoding'
-HOME_TITLE_OPTION = 'home_title'
-HOME_URL_OPTION = 'home_url'
-AUTHOR_NAME_OPTION = 'author_name'
-AUTHOR_MAIL_OPTION = 'author_email'
-COPYRIGHT_OPTION = 'copyright'
-SITE_TITLE_OPTION = 'site_title'
-THREADS_OPTION = 'threads'
-
-PATH_DESC = """The folder into which all files (HTML, CSS, SVG, etc.) will
-	be written (optional)"""
-ENCODING_DESC = """The character encoding to use for all text-based files
-	(HTML, JavaScript, CSS, SVG, etc.) (optional)"""
-HOME_TITLE_DESC = """The title of the homepage link included in all
-	documents"""
-HOME_URL_DESC = """The URL of the homepage link included in all documents.
-	This can point anywhere; it does not have to be a link to one of the
-	documents output by the plugin"""
-AUTHOR_NAME_DESC = """The name of the author of the generated
-	documentation (optional)"""
-AUTHOR_MAIL_DESC = """The e-mail address of the author of the generated
-	documentation (optional)"""
-COPYRIGHT_DESC = """The copyright message to embed in the generated
-	documentation (optional)"""
-SITE_TITLE_DESC="""The title of the site as a whole. Defaults to "dbname
-	Documentation" where dbname is the name of the database for which
-	documentation is being generated"""
-THREADS_DESC="""The number of threads to utilize when writing the output.
-	Defaults to 1. If you have more than 1 physical processor or core, setting
-	this to >1 may yield a performance benefit, however be warned that
-	significantly more memory may be required (if this leads to swapping, any
-	performance gain will likely be lost). Values above 4 usually yield no
-	extra benefit."""
-
-
 class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 	"""Abstract base class for HTML output plugins.
 
@@ -62,92 +26,92 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 
 	def __init__(self):
 		super(HTMLOutputPlugin, self).__init__()
-		self.add_option(PATH_OPTION, default='.', doc=PATH_DESC, convert=self.convert_path)
-		self.add_option(ENCODING_OPTION, default='UTF-8', doc=ENCODING_DESC)
-		self.add_option(HOME_TITLE_OPTION, default='Home', doc=HOME_TITLE_DESC)
-		self.add_option(HOME_URL_OPTION, default='/', doc=HOME_URL_DESC)
-		self.add_option(AUTHOR_NAME_OPTION, default=None, doc=AUTHOR_NAME_DESC)
-		self.add_option(AUTHOR_MAIL_OPTION, default=None, doc=AUTHOR_MAIL_DESC)
-		self.add_option(COPYRIGHT_OPTION, default=None, doc=COPYRIGHT_DESC)
-		self.add_option(SITE_TITLE_OPTION, default=None, doc=SITE_TITLE_DESC)
-		self.add_option(THREADS_OPTION, default=1, doc=THREADS_DESC,
-			convert=lambda value: self.convert_int(value, minvalue=1))
+		self.site_class = WebSite
+		self.add_option('path', default='.', convert=self.convert_path, 
+			doc="""The folder into which all files (HTML, CSS, SVG, etc.) will
+			be written (optional)""")
+		self.add_option('encoding', default='UTF-8',
+			doc="""The character encoding to use for all text-based files
+			(HTML, JavaScript, CSS, SVG, etc.) (optional)""")
+		self.add_option('home_title', default='Home',
+			doc="""The title of the homepage link included in all documents""")
+		self.add_option('home_url', default='/',
+			doc="""The URL of the homepage link included in all documents.
+			This can point anywhere; it does not have to be a link to one of
+			the documents output by the plugin""")
+		self.add_option('author_name', default=None,
+			doc="""The name of the author of the generated documents
+			(optional)""")
+		self.add_option('author_email', default=None,
+			doc="""The e-mail address of the author of the generated documents
+			(optional)""")
+		self.add_option('copyright', default=None,
+			doc="""The copyright message to embed in the generated documents
+			(optional)""")
+		self.add_option('site_title', default=None,
+			doc="""The title of the site as a whole. Defaults to "dbname
+			Documentation" where dbname is the name of the database for which
+			documentation is being generated""")
+		self.add_option('search', default='false', convert=self.convert_bool,
+			doc="""If True, a full-text-search database will be generated and
+			a small PHP script will be included with the output for searching
+			purposes""")
+		self.add_option('lang', default='en-US', convert=lambda value: self.convert_list(value, separator='-', minvalues=2, maxvalues=2),
+			doc="""The ISO639 language code indicating the language that the
+			site uses. Defaults to en-US. Note that this is used both for the
+			XML language, and for the language-specific stemming algorithm
+			(if search is true)""")
+		self.add_option('threads', default='1', convert=lambda value: self.convert_int(value, minvalue=1),
+			doc="""The number of threads to utilize when writing the output.
+			Defaults to 1. If you have more than 1 processor or core, setting
+			this to 2 or more may yield better performance (although values
+			above 4 usually make no difference)""")
 	
 	def configure(self, config):
 		super(HTMLOutputPlugin, self).configure(config)
 		# check that the specified encoding exists (the following lookup()
 		# method will raise a LookupError if it can't find the encoding)
-		codecs.lookup(self.options[ENCODING_OPTION])
+		codecs.lookup(self.options['encoding'])
+		# if SEARCH_OPTION is True, check that the Xapian bindings are
+		# available
+		if self.options['search']:
+			try:
+				import xapian
+			except ImportError:
+				raise Exception('The Python Xapian bindings must be installed when search is true')
 
 	def execute(self, database):
 		"""Invokes the plugin to produce documentation.
 		
 		Descendent classes should NOT override this method, but instead
-		override the _init_site(), _config_site(), _create_documents(), and/or
-		_create_document() methods below which are called directly or
-		indirectly from this one.
+		override the methods of the website class. To customize the class,
+		set self.site_class to a different class in descendent constructors.
 		"""
 		super(HTMLOutputPlugin, self).execute(database)
-		site = self._init_site(database)
-		assert isinstance(site, WebSite)
-		self._config_site(site)
-		self._create_documents(site)
+		site = self.site_class(database, self.options)
+		self.create_documents(site)
 		site.write()
 	
-	def _init_site(self, database):
-		"""Instantiates an object to represent the collection of documents.
-		
-		Descendents should override this method if they wish to use a more
-		specialized class than the generic WebSite class implemented in this
-		plugin. Naturally, in such cases this inherited method should NOT be
-		called.
-		"""
-		return WebSite(database)
-
-	def _config_site(self, site):
-		"""Configures the site instance.
-
-		This method simply exists to copy settings from the plugin's
-		configuration to the site object. Descendents should override this if
-		they introduce new configuration options.
-
-		Note that plugin configuration validation should still be performed
-		by overriding the inherited configure() method.
-		"""
-		site.base_url = ''
-		site.base_path = self.options[PATH_OPTION]
-		site.encoding = self.options[ENCODING_OPTION]
-		site.author_name = self.options[AUTHOR_NAME_OPTION]
-		site.author_email = self.options[AUTHOR_MAIL_OPTION]
-		site.home_title = self.options[HOME_TITLE_OPTION]
-		site.home_url = self.options[HOME_URL_OPTION]
-		site.copyright = self.options[COPYRIGHT_OPTION]
-		site.threads = self.options[THREADS_OPTION]
-		if self.options[SITE_TITLE_OPTION]:
-			site.title = self.options[SITE_TITLE_OPTION]
-
-	def _create_documents(self, site):
+	def create_documents(self, site):
 		"""Creates the documents in the web-site.
 
-		The basic implementation in this class simply calls _create_document
-		for each object in the database hierarchy, along with the site object
-		which will own the document. The _create_document method should be
-		overridden in descendents to create a document of the appropriate
-		class.
+		The basic implementation in this class simply calls create_document for
+		each object in the database hierarchy.  The create_document method
+		should be overridden in descendents to create a document of the
+		appropriate class.
 
 		This method should be overridden in descendents if they wish to add
 		extra (non database object) documents to the site. For example, style
 		sheets, JavaScript libraries, or static HTML documents.
 		"""
-		site.database.touch(self._create_document, site)
+		site.database.touch(self.create_document, site)
 	
-	def _create_document(self, dbobject, site):
+	def create_document(self, dbobject, site):
 		"""Creates a document for a specific database object.
 
 		This a stub method to be overridden in descendents. The concrete
 		implementation should create a document instance (or instances)
-		appropriate to the type of database object passed to the method. The
-		site parameter provides the site object to be passed to the constructor
-		of the document(s) class(es).
+		appropriate to the type of database object passed to the method.
 		"""
 		pass
+	

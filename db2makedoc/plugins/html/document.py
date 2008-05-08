@@ -16,11 +16,16 @@ import urlparse
 import threading
 import time
 
-from db2makedoc.db import DatabaseObject, Database
 from db2makedoc.highlighters import CommentHighlighter, SQLHighlighter
 from db2makedoc.plugins.html.entities import HTML_ENTITIES
 from db2makedoc.graph import Graph, Node, Edge, Cluster
-from db2makedoc.etree import fromstring, tostring, iselement, Element, Comment
+from db2makedoc.db import (
+	DatabaseObject, Database, Schema, Relation, Table, View,
+	Alias, Trigger
+)
+from db2makedoc.etree import (
+	fromstring, tostring, iselement, Element, Comment, flatten_html
+)
 from db2makedoc.sql.formatter import (
 	ERROR, COMMENT, KEYWORD, IDENTIFIER, DATATYPE, REGISTER,
 	NUMBER, STRING, OPERATOR, PARAMETER, TERMINATOR, STATEMENT
@@ -33,6 +38,14 @@ from db2makedoc.sql.formatter import (
 #except ImportError:
 #	raise ImportError('Unable to find a CSS Utils implementation')
 
+# Import the xapian bindings
+try:
+	import xapian
+except ImportError:
+	# Ignore any import errors - the main plugin takes care of raising an
+	# error if xapian is required but not present
+	pass
+
 # Import the fastest StringIO implementation
 try:
 	from cStringIO import StringIO
@@ -42,6 +55,8 @@ except ImportError:
 	except ImportError:
 		raise ImportError('Unable to find a StringIO implementation')
 
+utf8encode = codecs.getencoder('UTF-8')
+utf8decode = codecs.getdecoder('UTF-8')
 
 # Constants for HTML versions
 (
@@ -58,25 +73,42 @@ except ImportError:
 ) = range(3)
 
 
-class AttrDict(dict):
-	"""A dictionary which supports the + operator for combining two dictionaries.
-	
-	The + operator is non-commutative with dictionaries in that, if a key
-	exists in both dictionaries on either side of the operator, the value of
-	the key in the dictionary on the right "wins". The augmented assignment
+class Attrs(dict):
+	"""A dictionary with special behaviours for HTML attributes.
+
+	Changes from the default dict type are as follows:
+
+	The + operator can be used to combine an Attrs instance with another dict
+	instance. The + operator is non-commutative with dictionaries in that, if a
+	key exists in both dictionaries on either side of the operator, the value
+	of the key in the dictionary on the right "wins". The augmented assignment
 	operation += is also supported.
 
 	In the operation a + b, the result (a new dictionary) contains the keys and
 	values of a, updated with the keys and values of b. Neither a nor b is
-	actually updated.
-	
-	If a is an instance of AttrDict, the result of a + b is an instance of
-	AttrDict.  If a is an instance of dict, while b is an instance of AttrDict,
-	the result of a + b is an instance of dict.
+	actually updated. If a is an instance of Attrs, the result of a + b is an
+	instance of Attrs.  If a is an instance of dict, while b is an instance of
+	Attrs, the result of a + b is an instance of dict.
+
+	Certain values are treated specially. Setting a key to None removes the key
+	from the dictionary. Setting a key to a boolean False value does likewise,
+	while boolean True results in the key being associated with its name (as in
+	checked='checked'). All values are converted to strings (for compatibility
+	with ElementTree).
+
+	Finally, underscore suffixes are automatically stripped from key names.
+	This is to enable easy declaration of attribute names which conflict with
+	Python keywords using the factory facilities of the HTMLDocument class
+	below.
 	"""
+
+	def __init__(self, source=None, **kwargs):
+		if source is not None and isinstance(source, dict):
+			self.update(source)
+		self.update(kwargs)
 	
 	def __add__(self, other):
-		result = AttrDict(self)
+		result = Attrs(self)
 		result.update(other)
 		return result
 
@@ -87,6 +119,167 @@ class AttrDict(dict):
 
 	def __iadd__(self, other):
 		self.update(other)
+	
+	def __setitem__(self, key, value):
+		if value is None:
+			if key in self:
+				del self[key]
+		elif isinstance(value, bool):
+			if value:
+				super(Attrs, self).__setitem__(key, key)
+			elif key in self:
+				del self[key]
+		else:
+			super(Attrs, self).__setitem__(key.rstrip('_'), str(value))
+	
+	def update(self, source):
+		for key, value in source.iteritems():
+			self[key] = value
+
+
+class ElementFactory(object):
+	"""A class inspired by Genshi for easy creation of ElementTree Elements.
+
+	The ElementFactory class should rarely be used directly. Instead, use the
+	"tag" object which is an instance of ElementFactory. The ElementFactory
+	class was inspired by the genshi builder unit in that it permits simple
+	creation of Elements by calling methods on the tag object named after the
+	element you wish to create. Positional arguments become content within the
+	element, and keyword arguments become attributes.
+
+	If you need an attribute or element tag that conflicts with a Python
+	keyword, simply append an underscore to the name (which will be
+	automatically stripped off).
+
+	Content can be just about anything, including booleans, integers, longs,
+	dates, times, etc. These types are all converted to strings in a manner
+	suitable for use in generating human-readable documentation (though not
+	necessarily machine-reading friendly), e.g. datetime values are
+	automatically converted to an ISO8601 string representation, which integers
+	are converted to strings containing thousand separators.
+
+	For example:
+
+	>>> tostring(tag.a('A link'))
+	'<a>A link</a>'
+	>>> tostring(tag.a('A link', class_='menuitem'))
+	'<a class="menuitem">A link</a>'
+	>>> tostring(tag.p('A ', tag.a('link', class_='menuitem')))
+	'<p>A <a class="menuitem">link</a></p>'
+	"""
+
+	def _find(self, root, tagname, id=None):
+		"""Returns the first element with the specified tagname and id"""
+		if id is None:
+			result = root.find('.//%s' % tagname)
+			if result is None:
+				raise Exception('Cannot find any %s elements' % tagname)
+			else:
+				return result
+		else:
+			result = [
+				elem for elem in root.findall('.//%s' % tagname)
+				if elem.attrib.get('id', '') == id
+			]
+			if len(result) == 0:
+				raise Exception('Cannot find a %s element with id %s' % (tagname, id))
+			elif len(result) > 1:
+				raise Exception('Found multiple %s elements with id %s' % (tagname, id))
+			else:
+				return result[0]
+
+	def _format(self, content):
+		"""Reformats content into a human-readable string"""
+		if content is None:
+			# Format None as 'n/a'
+			return 'n/a'
+		elif isinstance(content, datetime.time):
+			# Format times as ISO8601
+			return content.strftime('%H:%M:%S')
+		elif isinstance(content, datetime.date):
+			# Format dates as ISO8601
+			return content.strftime('%Y-%m-%d')
+		elif isinstance(content, datetime.datetime):
+			# Format timestamps as ISO8601
+			return content.strftime('%Y-%m-%d %H:%M:%S')
+		elif isinstance(content, bool):
+			# Format booleans as Yes/No
+			return ['No', 'Yes'][content]
+		elif isinstance(content, (int, long)):
+			# Format integer number with , as a thousand separator
+			s = str(content)
+			for i in xrange(len(s) - 3, 0, -3): s = '%s,%s' % (s[:i], s[i:])
+			return s
+		elif isinstance(content, basestring):
+			# Strings are returned verbatim
+			return content
+		else:
+			# Everything else is converted to an ASCII string
+			return str(content)
+	
+	def _append(self, node, content):
+		"""Adds content (string, node, node-list, etc.) to a node"""
+		if isinstance(content, basestring):
+			if content != '':
+				if isinstance(content, str):
+					content = utf8decode(content)[0]
+				if len(node) == 0:
+					if node.text is None:
+						node.text = content
+					else:
+						node.text += content
+				else:
+					if node[-1].tail is None:
+						node[-1].tail = content
+					else:
+						node[-1].tail += content
+		elif iselement(content):
+			node.append(content)
+		else:
+			try:
+				for n in iter(content):
+					self._append(node, n)
+			except TypeError:
+				self._append(node, self._format(content))
+	
+	def _element(self, _name, *content, **attrs):
+		if attrs:
+			attrs = Attrs(attrs)
+		e = Element(_name, attrs)
+		self._append(e, content)
+		return e
+
+	def __getattr__(self, name):
+		def generator(*content, **attrs):
+			return self._element(name.rstrip('_'), *content, **attrs)
+		return generator
+
+	def script(self, *content, **attrs):
+		# XXX Workaround: the script element cannot be "empty" (IE fucks up)
+		if not content: content = (' ',)
+		# If type isn't specified, default to 'text/javascript'
+		attrs = Attrs(attrs)
+		if not 'type' in attrs:
+			attrs['type'] = 'text/javascript'
+		return self._element('script', *content, **attrs)
+
+	def style(self, *content, **attrs):
+		# Default type is 'text/css', and media is 'screen'
+		attrs = Attrs(attrs)
+		if not 'type' in attrs:
+			attrs['type'] = 'text/css'
+		if not 'media' in attrs:
+			attrs['media'] = 'screen'
+		# If there's no content, and src is set, return a <link> element instead
+		if not content and 'src' in attrs:
+			attrs['rel'] = 'stylesheet'
+			attrs['href'] = attrs['src']
+			del attrs['src']
+			return self._element('link', *content, **attrs)
+		else:
+			return self._element('style', *content, **attrs)
+
+tag = ElementFactory()
 
 
 class HTMLCommentHighlighter(CommentHighlighter):
@@ -98,23 +291,23 @@ class HTMLCommentHighlighter(CommentHighlighter):
 	passed to the constructor as opposed to the methods in this class.
 	"""
 
-	def __init__(self, document):
+	def __init__(self, site):
 		"""Initializes an instance of the class."""
-		assert isinstance(document, HTMLDocument)
 		super(HTMLCommentHighlighter, self).__init__()
-		self.document = document
+		assert isinstance(site, WebSite)
+		self.site = site
 
 	def handle_strong(self, text):
 		"""Highlights strong text with HTML <strong> elements."""
-		return self.document._strong(text)
+		return tag.strong(text)
 
 	def handle_emphasize(self, text):
 		"""Highlights emphasized text with HTML <em> elements."""
-		return self.document._em(text)
+		return tag.em(text)
 
 	def handle_underline(self, text):
 		"""Highlights underlined text with HTML <u> elements."""
-		return self.document._u(text)
+		return tag.u(text)
 
 	def start_para(self, summary):
 		"""Emits an empty string for the start of a paragraph."""
@@ -122,7 +315,7 @@ class HTMLCommentHighlighter(CommentHighlighter):
 
 	def end_para(self, summary):
 		"""Emits an HTML <br>eak element for the end of a paragraph."""
-		return self.document._br()
+		return tag.br()
 
 	def handle_link(self, target):
 		"""Emits an HTML <a>nchor element linking to the object's documentation."""
@@ -131,19 +324,19 @@ class HTMLCommentHighlighter(CommentHighlighter):
 		# and return a link to that document with the in between objects added
 		# as normal text suffixes
 		suffixes = []
-		while self.document.site.object_document(target) is None:
+		while self.site.object_document(target) is None:
 			suffixes.insert(0, target.name)
 			target = target.parent
 			if isinstance(target, Database):
 				return '.'.join(suffixes)
 		return [
-			self.document._a_to(target, qualifiedname=True),
+			self.site.link_to(target, qualifiedname=True),
 			''.join(['.' + s for s in suffixes]),
 		]
 
 	def find_target(self, name):
 		"""Searches the site's associated database for the named object."""
-		return self.document.site.database.find(name)
+		return self.site.database.find(name)
 
 
 class HTMLSQLHighlighter(SQLHighlighter):
@@ -164,28 +357,26 @@ class HTMLSQLHighlighter(SQLHighlighter):
 	the HTMLDocument object passed to the constructor.
 	"""
 
-	def __init__(self, document):
+	def __init__(self):
 		"""Initializes an instance of the class."""
-		assert isinstance(document, HTMLDocument)
 		super(HTMLSQLHighlighter, self).__init__()
-		self.document = document
 		self.css_classes = {
-			ERROR:      'sql_error',
-			COMMENT:    'sql_comment',
-			KEYWORD:    'sql_keyword',
-			IDENTIFIER: 'sql_identifier',
-			DATATYPE:   'sql_datatype',
-			REGISTER:   'sql_register',
-			NUMBER:     'sql_number',
-			STRING:     'sql_string',
-			OPERATOR:   'sql_operator',
-			PARAMETER:  'sql_parameter',
-			TERMINATOR: 'sql_terminator',
-			STATEMENT:  'sql_terminator',
+			ERROR:      'sql-error',
+			COMMENT:    'sql-comment',
+			KEYWORD:    'sql-keyword',
+			IDENTIFIER: 'sql-identifier',
+			DATATYPE:   'sql-datatype',
+			REGISTER:   'sql-register',
+			NUMBER:     'sql-number',
+			STRING:     'sql-string',
+			OPERATOR:   'sql-operator',
+			PARAMETER:  'sql-parameter',
+			TERMINATOR: 'sql-terminator',
+			STATEMENT:  'sql-terminator',
 		}
 		self.number_lines = False
-		self.number_class = 'num_cell'
-		self.sql_class = 'sql_cell'
+		self.number_class = 'num-cell'
+		self.sql_class = 'sql-cell'
 
 	def format_token(self, token):
 		(token_type, token_value, source, _, _) = token
@@ -194,16 +385,16 @@ class HTMLSQLHighlighter(SQLHighlighter):
 		except KeyError:
 			css_class = self.css_classes.get(token_type, None)
 		if css_class is not None:
-			return self.document._span(source, {'class': css_class})
+			return tag.span(source, class_=css_class)
 		else:
 			return source
 
 	def format_line(self, index, line):
 		if self.number_lines:
-			return self.document._tr([
-				(index, {'class': self.number_class}),
-				([self.format_token(token) for token in line], {'class': self.sql_class})
-			])
+			return tag.tr(
+				tag.td(index, class_=self.number_class),
+				tag.td([self.format_token(token) for token in line], class_=self.sql_class)
+			)
 		else:
 			return [self.format_token(token) for token in line]
 
@@ -217,104 +408,193 @@ class WebSite(object):
 	like).
 	"""
 
-	def __init__(self, database):
+	def __init__(self, database, options):
 		"""Initializes an instance of the class."""
 		assert isinstance(database, Database)
 		super(WebSite, self).__init__()
 		self.database = database
-		# Set various defaults
 		self.htmlver = XHTML10
 		self.htmlstyle = STRICT
 		self.base_url = ''
-		self.base_path = '.'
-		self.home_url = '/'
-		self.home_title = 'Home'
-		self.title = '%s Documentation' % self.database.name
-		self.description = None
+		self.base_path = options['path']
+		self.home_url = options['home_url']
+		self.home_title = options['home_title']
 		self.keywords = [self.database.name]
-		self.author_name = None
-		self.author_email = None
+		self.author_name = options['author_name']
+		self.author_email = options['author_email']
 		self.date = datetime.datetime.today()
-		self.lang = 'en'
-		self.sublang = 'US'
-		self.copyright = None
-		self.encoding = 'ISO-8859-1'
-		self.threads = 1
-		self._documents = {}
+		self.lang, self.sublang = options['lang']
+		self.copyright = options['copyright']
+		self.encoding = options['encoding']
+		self.search = options['search']
+		self.threads = options['threads']
+		self.title = options['site_title']
+		if not self.title:
+			self.title = '%s Documentation' % self.database.name
+		self.urls = {}
+		self.object_docs = {}
+		self.object_graphs = {}
 	
 	def add_document(self, document):
 		"""Adds a document to the website.
 		
-		This is a stub method to be overridden in descendent classes. It has a
-		very basic implementation that suffices for the url_document() method
-		below but should be overridden in descendents to provide for efficient
-		implementations of object_document() and object_graph() (which cannot
-		be provided in this class as their implementation implies knowledge of
-		the layout of documents in the site).
-
-		See the concrete output plugins for example implementations.
+		This method adds a document to the website, and updates several data
+		structures which track the associations between database objects and
+		documents / graphs. The base implementation here permits a database
+		object to be associated with a single document and a single graph.
+		Descendents may override this method (and the object_document() and
+		object_graph() methods) if more complex associations are desired (e.g.
+		framed and non-framed versions of documents).
 		"""
 		assert isinstance(document, WebSiteDocument)
-		self._documents[document.url] = document
-		self._documents[document.absolute_url] = document
+		self.urls[document.url] = document
+		self.urls[document.absolute_url] = document
+		if isinstance(document, HTMLObjectDocument):
+			self.object_docs[document.dbobject] = document
+		elif isinstance(document, GraphObjectDocument):
+			self.object_graphs[document.dbobject] = document
 	
 	def url_document(self, url):
 		"""Returns the WebSiteDocument associated with a given URL.
 
-		This is a stub method to be overridden in descendent classes. It is
-		used to allow weak references between documents by URL (as opposed to
-		an object reference), or to obtain references for documents with
-		static URLs that do not represent objects.
-
-		If the specified URL cannot be found, the method must return None.
+		This method returns the document with the specified URL (or None if no
+		such URL exists in the site).
 		"""
-		return self._documents.get(url)
+		return self.urls.get(url)
 
 	def object_document(self, dbobject, *args, **kwargs):
 		"""Returns the HTMLDocument associated with a database object.
 		
-		This is a stub method to be overridden in descendent classes. It is
-		used by the _a_to() method of the HTMLDocument class to generate a URL
-		for an <a> element pointing to the documentation for a database object.
+		This method returns a single HTMLDocument which is associated with the
+		specified database object (dbobject). If the specified object has no
+		associated HTMLDocument object, the method returns None.
 
-		If the specified object has no associated HTMLDocument object, the
-		method must return None.
+		Descendents may override this method to alter the way database objects
+		are associated with GraphDocuments.
 
 		The args and kwargs parameters capture any extra criteria that should
 		be used to select between documents in the case that a database object
 		is represented by multiple documents (e.g. framed and unframed
 		versions).  They correspond to the args and kwargs parameters of the
-		_a_to() method.
+		link_to() method.
 		"""
 		assert isinstance(dbobject, DatabaseObject)
-		return None
+		return self.object_docs.get(dbobject)
 
 	def object_graph(self, dbobject, *args, **kwargs):
 		"""Returns the GraphDocument associated with a database object.
-		
-		This is a stub method to be overridden in descendent classes. It is
-		used by the _img_of() method of the HTMLDocument class to generate an
-		<img> element (and possibly an associated <map> element) in a document
-		for a database object.
 
-		If the specified has no associated GraphDocument object, the method
-		must return None.
+		This method returns a single GraphDocument which is associated with the
+		specified database object (dbobject). If the specified objcet has no
+		associated GraphDocument object, the method returns None.
+
+		Descendents may override this method to alter the way database objects
+		are associated with GraphDocuments.
 
 		The args and kwargs parameters capture any extra criteria that should
 		be used to select between graphs in the case that a database object is
 		represented by multiple graphs (e.g. relational integrity versus
 		functional dependencies).  They correspond to the args and kwargs
-		parameters of the _img_of() method.
+		parameters of the img_of() method.
 		"""
 		assert isinstance(dbobject, DatabaseObject)
-		return None
+		return self.object_graphs.get(dbobject)
+
+	def link_to(self, dbobject, typename=False, qualifiedname=False, *args, **kwargs):
+		"""Returns a link to a document representing the specified database object.
+
+		Given a database object, this method returns the Element(s) required to
+		link to an HTMLDocument representing that object. The typename and
+		qualifiedname parameters affect the text that the link will display. If
+		typename is True, the link will include a type prefix (e.g. 'Table' or
+		'View'). If qualifiedname is True, the link will include the object's
+		fully qualified name. Both parameters are False by default.
+
+		The args and kwargs parameters permit additional arguments to be
+		relayed to the object_document() method in case the site implements
+		multiple documents per object (e.g. framed and non-framed versions).
+
+		If the specified object is not associated with any HTMLDocument, the
+		method returns the text that the link would have contained (according
+		to the typename and qualifiedname parameters).
+		"""
+		assert isinstance(dbobject, DatabaseObject)
+		if qualifiedname:
+			content = dbobject.qualified_name
+		else:
+			content = dbobject.name
+		if typename:
+			content = '%s %s' % (dbobject.type_name, content)
+		doc = self.object_document(dbobject, *args, **kwargs)
+		if doc is None:
+			return content
+		else:
+			assert isinstance(doc, HTMLDocument)
+			return tag.a(content, href=doc.url, title=doc.title)
+
+	def img_of(self, dbobject, *args, **kwargs):
+		"""Returns a link to a graph representing the specified database object.
+
+		Given a database object, this method returns the Element(s) required to
+		link to a GraphDocument representing that object.
+
+		The args and kwargs parameters permit additional arguments to be
+		relayed to the object_document() method in case the site implements
+		multiple graphs per object.
+
+		If the specified object is not associated with any GraphDocument, the
+		method returns some text indicating that no graph is available.
+		"""
+		# Special version of "img" to create diagrams of a database object. The
+		# args and kwargs parameters capture extra information to be used to
+		# distinguish between multiple documents
+		assert isinstance(dbobject, DatabaseObject)
+		graph = self.object_graph(dbobject, *args, **kwargs)
+		if graph is None:
+			return tag.p('Graph for %s is not available' % dbobject.qualified_name)
+		else:
+			assert isinstance(graph, GraphDocument)
+			return graph.link()
 
 	def write(self):
 		"""Writes all documents in the site to disk."""
 		if self.threads == 1:
-			self.write_single(self._documents.itervalues())
+			logging.info('Writing documents and graphs')
+			self.write_single(self.urls.itervalues())
 		else:
-			self.write_multi(self._documents.itervalues())
+			# Writing documents with multiple threads is split into two phases:
+			# writing graphs, and writing non-graphs. This avoids a race
+			# condition; in plugins which automatically resize large diagrams,
+			# writing an HTMLDocument that references a GraphDocument can cause
+			# the GraphDocument to be written in order to determine its size.
+			# If another thread starts writing the same GraphDocument
+			# simultaneously two threads wind up trying to write to the same
+			# file
+			logging.info('Writing graphs')
+			self.write_multi(
+				doc for doc in self.urls.itervalues()
+				if isinstance(doc, GraphDocument)
+			)
+			logging.info('Writing documents')
+			self.write_multi(
+				doc for doc in self.urls.itervalues()
+				if not isinstance(doc, GraphDocument)
+			)
+		if self.search:
+			# Write all full-text-search documents to a new xapian database
+			# in a single transaction
+			logging.info('Writing search database')
+			db = xapian.WritableDatabase(os.path.join(self.base_path, 'search'),
+				xapian.DB_CREATE_OR_OVERWRITE)
+			db.begin_transaction()
+			try:
+				for doc in self.urls.itervalues():
+					if isinstance(doc, HTMLDocument) and doc.ftsdoc:
+						db.add_document(doc.ftsdoc)
+				db.commit_transaction()
+			except:
+				db.cancel_transaction()
+				raise
 	
 	def write_single(self, docs):
 		"""Single-threaded document writer method."""
@@ -336,16 +616,17 @@ class WebSite(object):
 		self._documents_set = set(docs)
 		# Create and start all the writing threads
 		threads = [
-			threading.Thread(target=self.__thread_write, args=())
+			(i, threading.Thread(target=self.__thread_write, args=()))
 			for i in range(self.threads)
 		]
-		for thread in threads:
-			logging.debug("Starting writer thread")
+		for (i, thread) in threads:
+			logging.debug("Starting writer thread #%d" % i)
 			thread.start()
 		# Join (wait on termination of) all writing threads
 		while threads:
-			threads.pop().join()
-			logging.debug("Writer thread finished")
+			(i, thread) = threads.pop()
+			thread.join()
+			logging.debug("Writer thread #%d finished" % i)
 	
 	def __thread_write(self):
 		"""Sub-routine for writing documents.
@@ -398,59 +679,28 @@ class HTMLDocument(WebSiteDocument):
 
 	def __init__(self, site, url, filename=None):
 		"""Initializes an instance of the class."""
-		self._site_attributes = []
 		super(HTMLDocument, self).__init__(site, url, filename)
-		self.doc = self._html()
-		self.comment_highlighter = self._init_comment_highlighter()
-		assert isinstance(self.comment_highlighter, HTMLCommentHighlighter)
-		self.sql_highlighter = self._init_sql_highlighter()
-		assert isinstance(self.sql_highlighter, HTMLSQLHighlighter)
+		self.ftsdoc = None
+		self.title = ''
+		self.description = ''
+		self.keywords = []
+		self.author_name = site.author_name
+		self.author_email = site.author_email
+		self.date = site.date
+		self.lang = site.lang
+		self.sublang = site.sublang
+		self.copyright = site.copyright
+		self.search = site.search
+		self.robots_index = True
+		self.robots_follow = True
 		self.link_first = None
 		self.link_prior = None
 		self.link_next = None
 		self.link_last = None
 		self.link_up = None
-		self.robots_index = True
-		self.robots_follow = True
-		# The following attributes mirror those in the WebSite class. If any
-		# are set to something other than None, their value will override the
-		# corresponding value in the owning WebSite instance (see the
-		# overridden __getattribute__ implementation for more details).
-		self.title = None
-		self.description = None
-		self.keywords = None
-		self.author_name = None
-		self.author_email = None
-		self.date = None
-		self.lang = None
-		self.sublang = None
-		self.copyright = None
-		self._site_attributes += [
-			'title',
-			'description',
-			'keywords',
-			'author_name',
-			'author_email',
-			'date',
-			'lang',
-			'sublang',
-			'copyright',
-		]
+		self.comment_highlighter = HTMLCommentHighlighter(self.site)
+		self.sql_highlighter = HTMLSQLHighlighter()
 	
-	def _init_comment_highlighter(self):
-		"""Instantiates an object for highlighting comment markup."""
-		return HTMLCommentHighlighter(self)
-
-	def _init_sql_highlighter(self):
-		"""Instantiates an object for highlighting SQL."""
-		return HTMLSQLHighlighter(self)
-
-	def __getattribute__(self, name):
-		if name in super(HTMLDocument, self).__getattribute__('_site_attributes'):
-			return super(HTMLDocument, self).__getattribute__(name) or self.site.__getattribute__(name)
-		else:
-			return super(HTMLDocument, self).__getattribute__(name)
-
 	# Regex which finds characters within the range of characters capable of
 	# being encoded as HTML entities
 	entitiesre = re.compile(u'[%s-%s]' % (
@@ -461,13 +711,40 @@ class HTMLDocument(WebSiteDocument):
 	def write(self):
 		"""Writes this document to a file in the site's path"""
 		super(HTMLDocument, self).write()
-		self._create_content()
+		doc = self.generate()
+		# If full-text-searching is enabled, set up a Xapian indexer and
+		# stemmer and fill out the ftsdoc. The site class handles writing all
+		# the ftsdoc's to the xapian database once all writing is finished
+		if self.search:
+			logging.debug('Indexing %s' % self.filename)
+			indexer = xapian.TermGenerator()
+			# XXX Seems to be a bug in xapian 1.0.2 which causes a segfault
+			# with this enabled
+			#indexer.set_flags(xapian.TermGenerator.FLAG_SPELLING)
+			indexer.set_stemmer(xapian.Stem(self.lang))
+			self.ftsdoc = xapian.Document()
+			self.ftsdoc.set_data('\n'.join([
+				self.url,
+				self.title or self.url,
+				self.description or self.title or self.url,
+			]))
+			indexer.set_document(self.ftsdoc)
+			indexer.index_text(self.flatten(doc))
+		# Finally, write the output to the destination file
+		f = open(self.filename, 'w')
+		try:
+			f.write(self.serialize(doc))
+		finally:
+			f.close()
+	
+	def serialize(self, content):
+		"""Converts the document into a string for writing."""
 		# "Pure" XML won't handle HTML character entities. So we do it
 		# manually. First, get the XML as a Unicode string (without any XML
 		# PI or DOCTYPE)
 		if self.site.htmlver >= XHTML10:
-			self.doc.attrib['xmlns'] = 'http://www.w3.org/1999/xhtml'
-		s = unicode(tostring(self.doc))
+			content.attrib['xmlns'] = 'http://www.w3.org/1999/xhtml'
+		s = unicode(tostring(content))
 		# Convert any characters into HTML entities that can be
 		def subfunc(match):
 			if ord(match.group()) in HTML_ENTITIES:
@@ -489,476 +766,175 @@ class HTMLDocument(WebSiteDocument):
 			}[(self.site.htmlver, self.site.htmlstyle)]
 		except KeyError:
 			raise KeyError('Invalid HTML version and style (XHTML11 only supports the STRICT style)')
-		s = u'''\
+		s = u"""\
 <?xml version="1.0" encoding="%(encoding)s"?>
 <!DOCTYPE html
   PUBLIC "%(publicid)s"
   "%(systemid)s">
-%(content)s''' % {
+%(content)s""" % {
 			'encoding': self.site.encoding,
 			'publicid': public_id,
 			'systemid': system_id,
 			'content': s,
 		}
 		# Transcode the document into the target encoding
-		s = codecs.getencoder(self.site.encoding)(s)[0]
-		# Finally, write the output to the destination file
-		f = open(self.filename, 'w')
-		try:
-			f.write(s)
-		finally:
-			f.close()
+		return codecs.getencoder(self.site.encoding)(s)[0]
 
-	def _create_content(self):
+	def flatten(self, content):
+		"""Converts the document into pure text for full-text indexing."""
+		# This base implementation simply flattens the content of the HTML body
+		# node. Descendents may override this to refine the output (e.g. to exclude
+		# common headings and other items essentially useless for searching)
+		return flatten_html(content.find('body'))
+
+	def generate(self):
 		"""Constructs the content of the document."""
+		# Override this in descendent classes to include additional content
 		# Add some standard <meta> elements (encoding, keywords, author, robots
 		# info, Dublin Core stuff, etc.)
 		content = [
-			self._meta('Robots', ','.join([
+			tag.meta(name='Robots', content=','.join([
 				'%sindex'  % ['no', ''][bool(self.robots_index)],
-				'%sfollow' % ['no', ''][bool(self.robots_follow)]
+				'%sfollow' % ['no', ''][bool(self.robots_follow)],
 			])),
-			self._meta('DC.Date', self.date.strftime('%Y-%m-%d'), 'iso8601'),
-			self._meta('DC.Language', '%s-%s' % (self.lang, self.sublang), 'rfc1766'),
+			tag.meta(name='DC.Date', content=self.date, scheme='iso8601'),
+			tag.meta(name='DC.Language', content='%s-%s' % (self.lang, self.sublang), scheme='rfc1766'),
 		]
 		if self.copyright is not None:
-			content.append(self._meta('DC.Rights', self.copyright))
+			content.append(tag.meta(name='DC.Rights', content=self.copyright))
 		if self.description is not None:
-			content.append(self._meta('Description', self.description))
+			content.append(tag.meta(name='Description', content=self.description))
 		if len(self.keywords) > 0:
-			content.append(self._meta('Keywords', ', '.join(self.keywords), 'iso8601'))
+			content.append(tag.meta(name='Keywords', content=', '.join(self.keywords)))
 		if self.author_email is not None:
-			content.append(self._meta('Owner', self.author_email))
-			content.append(self._meta('Feedback', self.author_email))
-			content.append(self._link('author', 'mailto:%s' % self.author_email, self.author_name))
+			content.append(tag.meta(name='Owner', content=self.author_email))
+			content.append(tag.meta(name='Feedback', content=self.author_email))
+			content.append(tag.link(rel='author', href='mailto:%s' % self.author_email, title=self.author_name))
 		# Add some navigation <link> elements
-		content.append(self._link('home', self.site.home_url))
+		content.append(tag.link(rel='home', href=self.site.home_url))
 		if isinstance(self.link_first, HTMLDocument):
-			content.append(self._link('first', self.link_first.url))
+			content.append(tag.link(rel='first', href=self.link_first.url))
 		if isinstance(self.link_prior, HTMLDocument):
-			content.append(self._link('prev', self.link_prior.url))
+			content.append(tag.link(rel='prev', href=self.link_prior.url))
 		if isinstance(self.link_next, HTMLDocument):
-			content.append(self._link('next', self.link_next.url))
+			content.append(tag.link(rel='next', href=self.link_next.url))
 		if isinstance(self.link_last, HTMLDocument):
-			content.append(self._link('last', self.link_last.url))
+			content.append(tag.link(rel='last', href=self.link_last.url))
 		if isinstance(self.link_up, HTMLDocument):
-			content.append(self._link('up', self.link_up.url))
+			content.append(tag.link(rel='up', href=self.link_up.url))
 		# Add the title
 		if self.title is not None:
-			content.append(self._title(self.title))
+			content.append(tag.title('%s - %s' % (self.site.title, self.title)))
 		# Create the <head> element with the above content, and an empty <body>
 		# element
-		self.doc.append(self._head(content))
-		self.doc.append(self._body(''))
-		# Override this in descendent classes to include additional content
-
-	def _format_comment(self, comment, summary=False):
+		return tag.html(tag.head(content), tag.body())
+	
+	def format_comment(self, comment, summary=False):
 		return self.comment_highlighter.parse(comment, summary)
 
-	def _format_sql(self, sql, terminator=';', splitlines=False):
+	def format_sql(self, sql, terminator=';', splitlines=False):
 		return self.sql_highlighter.parse(sql, terminator, splitlines)
 
-	def _format_prototype(self, sql):
+	def format_prototype(self, sql):
 		return self.sql_highlighter.parse_prototype(sql)
+
+	def link(self):
+		"""Returns the Element(s) required to link to the document."""
+		return tag.a(self.title, href=self.url, title=self.title)
 	
-	def _format_content(self, content):
-		if content is None:
-			# Format None as 'n/a'
-			return 'n/a'
-		elif isinstance(content, datetime.datetime):
-			# Format timestamps as ISO8601
-			return content.strftime('%Y-%m-%d %H:%M:%S')
-		elif isinstance(content, bool):
-			# Format booleans as Yes/No
-			return ['No', 'Yes'][content]
-		elif isinstance(content, (int, long)):
-			# Format integer number with , as a thousand separator
-			s = str(content)
-			for i in xrange(len(s) - 3, 0, -3): s = '%s,%s' % (s[:i], s[i:])
-			return s
-		elif isinstance(content, basestring):
-			# Strings are returned verbatim
-			return content
-		else:
-			# Everything else is converted to an ASCII string
-			return str(content)
-	
-	def _append_content(self, node, content):
-		"""Adds content (string, node, node-list, etc.) to a node"""
-		if isinstance(content, basestring):
-			if content != '':
-				if len(node) == 0:
-					if node.text is None:
-						node.text = content
-					else:
-						node.text += content
-				else:
-					if node[-1].tail is None:
-						node[-1].tail = content
-					else:
-						node[-1].tail += content
-		elif iselement(content):
-			node.append(content)
-		else:
-			try:
-				for n in iter(content):
-					self._append_content(node, n)
-			except TypeError:
-				self._append_content(node, self._format_content(content))
-	
-	def _find_element(self, tagname, id=None):
-		"""Returns the first element with the specified tagname and id"""
-		if id is None:
-			result = self.doc.find('.//%s' % tagname)
-			if result is None:
-				raise Exception('Cannot find any %s elements' % tagname)
-			else:
-				return result
-		else:
-			result = [
-				elem for elem in self.doc.findall('.//%s' % tagname)
-				if elem.attrib.get('id', '') == id
-			]
-			if len(result) == 0:
-				raise Exception('Cannot find a %s element with id %s' % (tagname, id))
-			elif len(result) > 1:
-				raise Exception('Found multiple %s elements with id %s' % (tagname, id))
-			else:
-				return result[0]
-	
-	def _element(self, name, attrs={}, content=''):
-		"""Returns an element with the specified name, attributes and content."""
-		attrs = dict([
-			(n, str(v)) for (n, v) in attrs.iteritems() if v is not None
-		])
-		e = Element(name, attrs)
-		self._append_content(e, content)
-		return e
 
-	# HTML CONSTRUCTION METHODS
-	# These methods are named after the HTML element they return. The
-	# implementation is not intended to be comprehensive, only to cover those
-	# elements likely to be used by descendent classes. That said, it is
-	# reasonably generic and would likely fit most applications that need to
-	# generate HTML.
+class HTMLObjectDocument(HTMLDocument):
+	"""Document class representing a database object (schema, table, etc.)"""
 
-	def _a(self, href, content=None, title=None, attrs={}):
-		if isinstance(href, HTMLDocument):
-			if content is None:
-				content = href.title
-			if title is None:
-				title = href.title
-			href = href.url
-		return self._element('a', AttrDict(href=href, title=title) + attrs, content)
+	def __init__(self, site, dbobject):
+		"""Initializes an instance of the class."""
+		# Set dbobject before calling the inherited method to ensure that
+		# site.add_document knows what object we represent
+		self.dbobject = dbobject
+		super(HTMLObjectDocument, self).__init__(site, '%s.html' % dbobject.identifier)
+		self.title = '%s %s' % (
+			self.dbobject.type_name,
+			self.dbobject.qualified_name
+		)
+		# XXX Default to 'No description in system catalog' ?
+		self.description = self.dbobject.description or self.title
+		self.keywords = [
+			self.site.database.name,
+			self.dbobject.type_name,
+			self.dbobject.name,
+			self.dbobject.qualified_name
+		]
 
-	def _a_to(self, dbobject, typename=False, qualifiedname=False, *args, **kwargs):
-		# Special version of "_a" to create a link to a database object. The
-		# args and kwargs parameters capture extra information to be used to
-		# distinguish between multiple documents
-		assert isinstance(dbobject, DatabaseObject)
-		if qualifiedname:
-			content = dbobject.qualified_name
-		else:
-			content = dbobject.name
-		if typename:
-			content = '%s %s' % (dbobject.type_name, content)
-		doc = self.site.object_document(dbobject, *args, **kwargs)
-		if doc is None:
-			return content
-		else:
-			assert isinstance(doc, HTMLDocument)
-			return self._a(doc.url, content)
-
-	def _abbr(self, content, title, attrs={}):
-		return self._element('abbr', AttrDict(title=title) + attrs, content)
-
-	def _acronym(self, content, title, attrs={}):
-		return self._element('acronym', AttrDict(title=title) + attrs, content)
-
-	def _b(self, content, attrs={}):
-		return self._element('b', attrs, content)
-
-	def _big(self, content, attrs={}):
-		return self._element('big', attrs, content)
-
-	def _blockquote(self, content, attrs={}):
-		return self._element('blockquote', attrs, content)
-
-	def _body(self, content, attrs={}):
-		return self._element('body', attrs, content)
-
-	def _br(self):
-		return self._element('br')
-
-	def _caption(self, content, attrs={}):
-		return self._element('caption', attrs, content)
-
-	def _cite(self, content, attrs={}):
-		return self._element('cite', attrs, content)
-
-	def _code(self, content, attrs={}):
-		return self._element('code', attrs, content)
-
-	def _dd(self, content, attrs={}):
-		return self._element('dd', attrs, content)
-
-	def _del(self, content, attrs={}):
-		return self._element('del', attrs, content)
-
-	def _dfn(self, content, attrs={}):
-		return self._element('dfn', attrs, content)
-
-	def _div(self, content, attrs={}):
-		return self._element('div', attrs, content)
-
-	def _dl(self, items, attrs={}):
-		return self._element('dl', attrs, [
-			(self._dt(term), self._dd(defn))
-			for (term, defn) in items
-		])
-
-	def _dt(self, content, attrs={}):
-		return self._element('dt', attrs, content)
-
-	def _em(self, content, attrs={}):
-		return self._element('em', attrs, content)
-
-	def _h(self, content, level=1, attrs={}):
-		return self._element('h%d' % level, attrs, content)
-
-	def _head(self, content, attrs={}):
-		return self._element('head', attrs, content)
-	
-	def _hr(self, attrs={}):
-		return self._element('hr', attrs)
-
-	def _html(self, head=None, body=None, attrs={}):
-		elem = self._element('html', attrs)
-		if head is not None:
-			elem.append(head)
-		if body is not None:
-			elem.append(body)
-		return elem
-
-	def _i(self, content, attrs={}):
-		return self._element('i', attrs, content)
-
-	def _img(self, src, alt=None, width=None, height=None, attrs={}):
-		if isinstance(src, GraphDocument):
-			src = src.url
-		return self._element('img', AttrDict(src=src, alt=alt, width=width, height=height) + attrs)
-
-	def _img_of(self, dbobject, *args, **kwargs):
-		# Special version of "img" to create diagrams of a database object. The
-		# args and kwargs parameters capture extra information to be used to
-		# distinguish between multiple documents
-		assert isinstance(dbobject, DatabaseObject)
-		graph = self.site.object_graph(dbobject, *args, **kwargs)
-		if graph is None:
-			return self._p('Graph for %s is not available' % dbobject.qualified_name)
-		else:
-			assert isinstance(graph, GraphDocument)
-			return graph._link(self)
-
-	def _ins(self, content, attrs={}):
-		return self._element('ins', attrs, content)
-
-	def _kbd(self, content, attrs={}):
-		return self._element('kbd', attrs, content)
-
-	def _li(self, content, attrs={}):
-		return self._element('li', attrs, content)
-
-	def _link(self, rel, href, title=None, attrs={}):
-		return self._element('link', AttrDict(rel=rel, href=href, title=title) + attrs)
-
-	def _meta(self, name, content, scheme=None, attrs={}):
-		return self._element('meta', AttrDict(name=name, content=content, scheme=scheme) + attrs)
-
-	def _ol(self, items, attrs={}):
-		return self._element('ol', attrs, [
-			self._li(item)
-			for item in items
-		])
-
-	def _pre(self, content, attrs={}):
-		return self._element('pre', attrs, content)
-
-	def _p(self, content, attrs={}):
-		return self._element('p', attrs, content)
-
-	def _q(self, content, attrs={}):
-		return self._element('q', attrs, content)
-
-	def _samp(self, content, attrs={}):
-		return self._element('samp', attrs, content)
-
-	def _script(self, content='', src=None):
-		# Either content or src must be specified, but not both
-		assert content or src
-		# XXX Workaround: the script element cannot be "empty" (IE fucks up)
-		if not content: content = ' '
-		n = self._element('script', AttrDict(type='text/javascript', src=src), content)
-		return n
-
-	def _small(self, content, attrs={}):
-		return self._element('small', attrs, content)
-
-	def _span(self, content, attrs={}):
-		return self._element('span', attrs, content)
-
-	def _strong(self, content, attrs={}):
-		return self._element('strong', attrs, content)
-
-	def _style(self, content='', src=None, media='screen'):
-		# Either content or src must be specified, but not both
-		assert content or src
-		# If content is specified, output a <style> element, otherwise output a
-		# <link> element
-		if content:
-			return self._element('style', AttrDict(type='text/css', media=media), Comment(content))
-		else:
-			return self._element('link', AttrDict(type='text/css', media=media, rel='stylesheet', href=src))
-
-	def _sub(self, content, attrs={}):
-		return self._element('sub', attrs, content)
-
-	def _sup(self, content, attrs={}):
-		return self._element('sup', attrs, content)
-
-	def _table(self, data, head=[], foot=[], caption='', attrs={}):
-		tablenode = self._element('table', attrs)
-		tablenode.append(self._caption(caption))
-		if len(head) > 0:
-			theadnode = self._element('thead')
-			for row in head:
-				if isinstance(row, tuple) and len(row) == 2 and isinstance(row[1], dict):
-					# If the row is a two-element tuple, where the second
-					# element is a dictionary then the first element contains
-					# the content of the row and the second the attributes of
-					# the row.
-					theadnode.append(self._tr(row[0], head=True, attrs=row[1]))
-				else:
-					theadnode.append(self._tr(row, head=True))
-			tablenode.append(theadnode)
-		if len(foot) > 0:
-			tfootnode = self._element('tfoot')
-			for row in foot:
-				if isinstance(row, tuple) and len(row) == 2 and isinstance(row[1], dict):
-					# See comments above
-					tfootnode.append(self._tr(row[0], head=True, attrs=row[1]))
-				else:
-					tfootnode.append(self._tr(row, head=True))
-			tablenode.append(tfootnode)
-		# The <tbody> element is mandatory, even if no rows are present
-		tbodynode = self._element('tbody')
-		for row in data:
-			if isinstance(row, tuple) and len(row) == 2 and isinstance(row[1], dict):
-				# See comments above
-				tbodynode.append(self._tr(row[0], head=False, attrs=row[1]))
-			else:
-				tbodynode.append(self._tr(row, head=False))
-		tablenode.append(tbodynode)
-		return tablenode
-	
-	def _td(self, content, head=False, attrs={}):
-		if content == '':
-			content = u'\u00A0' # \u00A0 = &nbsp;
-		if head:
-			return self._element('th', attrs, content)
-		else:
-			return self._element('td', attrs, content)
-	
-	def _title(self, content, attrs={}):
-		return self._element('title', attrs, content)
-	
-	def _tr(self, cells, head=False, attrs={}):
-		rownode = self._element('tr', attrs)
-		for cell in cells:
-			if isinstance(cell, tuple) and len(cell) == 2 and isinstance(cell[1], dict):
-				# If the cell is a two-element tuple, where the second cell is
-				# a dictionary, then the first element contains the cell's
-				# content and the second the cell's attributes.
-				rownode.append(self._td(cell[0], head, cell[1]))
-			else:
-				rownode.append(self._td(cell, head))
-		return rownode
-	
-	def _tt(self, content, attrs={}):
-		return self._element('tt', attrs, content)
-
-	def _u(self, content, attrs={}):
-		return self._element('u', attrs, content)
-
-	def _ul(self, items, attrs={}):
-		return self._element('ul', attrs, [
-			self._li(item)
-			for item in items
-		])
-
-	def _var(self, content, attrs={}):
-		return self._element('var', attrs, content)
+	def generate(self):
+		# Overridden to automatically set the header links from the represented
+		# database object
+		if not self.link_first and self.dbobject.first:
+			self.link_first = self.site.object_document(self.dbobject.first)
+		if not self.link_prior and self.dbobject.prior:
+			self.link_prior = self.site.object_document(self.dbobject.prior)
+		if not self.link_next and self.dbobject.next:
+			self.link_next = self.site.object_document(self.dbobject.next)
+		if not self.link_last and self.dbobject.last:
+			self.link_last = self.site.object_document(self.dbobject.last)
+		if not self.link_up and self.dbobject.parent:
+			self.link_up = self.site.object_document(self.dbobject.parent)
+		# Call the inherited method to create the skeleton document
+		return super(HTMLObjectDocument, self).generate()
 
 
 class CSSDocument(WebSiteDocument):
 	"""Represents a simple CSS document.
 
 	This is the base class for CSS stylesheets. It provides no methods for
-	constructing or editing CSS; it simply contains a "doc" property which
-	stores the CSS to write to the file when write() is called.
+	constructing or editing CSS; simply override the generate() method to
+	return the CSS to write to the file.
 	"""
 
-	def __init__(self, site, url):
-		"""Initializes an instance of the class."""
-		super(CSSDocument, self).__init__(site, url)
-		self.doc = ''
-
-	def _create_content(self):
-		"""Constructs the content of the stylesheet."""
-		# Child classes can override this to build the stylesheet
-		pass
-	
 	def write(self):
 		"""Writes this document to a file in the site's path"""
 		super(CSSDocument, self).write()
-		self._create_content()
 		f = open(self.filename, 'w')
 		try:
-			# Transcode the CSS into the target encoding and write to the file
-			f.write(codecs.getencoder(self.site.encoding)(self.doc)[0])
+			f.write(self.serialize(self.generate()))
 		finally:
 			f.close()
+	
+	def serialize(self, content):
+		"""Converts the document into a string for writing."""
+		return codecs.getencoder(self.site.encoding)(content)[0]
 
+	def generate(self):
+		"""Constructs the content of the stylesheet."""
+		# Child classes can override this to build the stylesheet
+		return u''
+	
 
 class JavaScriptDocument(WebSiteDocument):
 	"""Represents a simple JavaScript document.
 
 	This is the base class for JavaScript libraries. It provides no methods for
-	constructing or editing JavaScript; it simply contains a "doc" property
-	which stores the JavaScript to write to the file when write() is called.
+	constructing or editing JavaScript; simply override the generate() method
+	to return the JavaScript to write to the file.
 	"""
 
-	def __init__(self, site, url):
-		"""Initializes an instance of the class."""
-		super(JavaScriptDocument, self).__init__(site, url)
-		self.doc = ''
-
-	def _create_content(self):
-		"""Constructs the content of the stylesheet."""
-		# Child classes can override this to build the library
-		pass
-	
 	def write(self):
 		"""Writes this document to a file in the site's path"""
 		super(JavaScriptDocument, self).write()
-		self._create_content()
 		f = open(self.filename, 'w')
 		try:
-			# Transcode the JavaScript into the target encoding and write to the file
-			f.write(codecs.getencoder(self.site.encoding)(self.doc)[0])
+			f.write(self.serialize(self.generate()))
 		finally:
 			f.close()
 
+	def serialize(self, content):
+		"""Converts the document into a string for writing."""
+		return codecs.getencoder(self.site.encoding)(content)[0]
+
+	def generate(self):
+		"""Constructs the content of the JavaScript library."""
+		# Child classes can override this to build the stylesheet
+		return u''
+	
 
 class GraphDocument(WebSiteDocument):
 	"""Represents a graph in GraphViz dot language.
@@ -972,60 +948,83 @@ class GraphDocument(WebSiteDocument):
 	def __init__(self, site, url):
 		super(GraphDocument, self).__init__(site, url)
 		self.graph = Graph('G')
+		self.graph.rankdir = 'LR'
+		self.graph.dpi = '96'
 		# PNGs and GIFs use a client-side image-map to define link locations
 		# (SVGs just use embedded links)
-		self._usemap = os.path.splitext(self.filename)[1].lower() in ('.png', '.gif')
-		# _content_done is simply used to ensure that we don't generate the
-		# graph content more than once when dealing with image maps (which have
-		# to run through graphviz twice, once for the image, once for the map)
-		self._content_done = False
+		self.usemap = os.path.splitext(self.filename)[1].lower() in ('.png', '.gif')
+		# generated is a latch to ensure generate() isn't performed
+		# more than once when dealing with image maps (which have to run
+		# through graphviz twice, once for the image, once for the map)
+		self.generated = False
 
 	def write(self):
 		"""Writes this document to a file in the site's path"""
 		super(GraphDocument, self).write()
+		# Generate the graph if it hasn't been already
+		if not self.generated:
+			g = self.generate()
+			g.touch(self.style)
+		else:
+			g = self.graph
 		# The following lookup tables are used to decide on the method used to
 		# write output based on the extension of the image filename
 		method_lookup = {
-			'.png': self.graph.to_png,
-			'.gif': self.graph.to_gif,
-			'.svg': self.graph.to_svg,
-			'.ps': self.graph.to_ps,
-			'.eps': self.graph.to_ps,
+			'.png': g.to_png,
+			'.gif': g.to_gif,
+			'.svg': g.to_svg,
+			'.ps':  g.to_ps,
+			'.eps': g.to_ps,
 		}
+		ext = os.path.splitext(self.filename)[1].lower()
 		try:
-			method = method_lookup[os.path.splitext(self.filename)[1].lower()]
+			method = method_lookup[ext]
 		except KeyError:
 			raise Exception('Unknown image extension "%s"' % ext)
-		# Generate the graph and write it out to the specified file
-		if not self._content_done:
-			self._create_content()
 		f = open(self.filename, 'wb')
 		try:
 			method(f)
 		finally:
 			f.close()
 
-	def _link(self, doc):
+	def generate(self):
+		"""Constructs the content of the graph."""
+		self.generated = True
+		return self.graph
+	
+	def style(self, node):
+		"""Applies common styles to graph objects."""
+		# Override this in descendents to change common graph styles
+		if isinstance(node, (Node, Edge)):
+			node.fontname = 'Verdana'
+			node.fontsize = 8.0
+		elif isinstance(node, Cluster):
+			node.fontname = 'Verdana'
+			node.fontsize = 10.0
+
+	def link(self):
 		"""Returns the Element(s) required to link to the image."""
-		if self._usemap:
+		if self.usemap:
 			# If the graph uses a client side image map for links a bit
 			# more work is required. We need to get the graph to generate
 			# the <map> doc, then import all elements from that
-			# doc into the doc this instance contains...
-			map = self._map()
-			image = doc._img(self.url, attrs={'usemap': '#' + map.attrib['id']})
-			return [image, map]
+			map = self.map()
+			img = tag.img(src=self.url, usemap='#' + map.attrib['id'])
+			return [img, map]
 		else:
-			return doc._img(self.url)
+			return tag.img(src=self.url)
 
-	def _map(self):
+	def map(self):
 		"""Returns an Element containing the client-side image map."""
-		assert self._usemap
-		if not self._content_done:
-			self._create_content()
+		assert self.usemap
+		if not self.generated:
+			g = self.generate()
+			g.touch(self.style)
+		else:
+			g = self.graph
 		f = StringIO()
 		try:
-			self.graph.to_map(f)
+			g.to_map(f)
 			result = fromstring(f.getvalue())
 			result.attrib['id'] = self.url.rsplit('.', 1)[0] + '.map'
 			result.attrib['name'] = result.attrib['id']
@@ -1033,8 +1032,70 @@ class GraphDocument(WebSiteDocument):
 		finally:
 			f.close()
 
-	def _create_content(self):
-		"""Constructs the content of the graph."""
-		# Child classes can override this to build the graph before writing
-		self._content_done = True
+
+class GraphObjectDocument(GraphDocument):
+	"""Graph class representing a database object (schema, table, etc.)"""
+
+	def __init__(self, site, dbobject):
+		"""Initializes an instance of the class."""
+		self.dbobject = dbobject # must be set before calling the inherited method
+		super(GraphObjectDocument, self).__init__(site, '%s.png' % dbobject.identifier)
+		self.dbobjects = {}
+	
+	def style(self, node):
+		# Overridden to add URLs to graph items representing database objects,
+		# and to apply common styles for database objects
+		super(GraphObjectDocument, self).style(node)
+		if hasattr(node, 'dbobject'):
+			doc = self.site.object_document(node.dbobject)
+			if isinstance(node, (Node, Edge, Cluster)) and doc:
+				node.URL = doc.url
+			if isinstance(node.dbobject, Schema):
+				node.style = 'filled'
+				node.fillcolor = '#ece6d7'
+				node.color = '#ece6d7'
+			elif isinstance(node.dbobject, Relation):
+				node.shape = 'rectangle'
+				node.style = 'filled'
+				if isinstance(node.dbobject, Table):
+					node.fillcolor = '#bbbbff'
+				elif isinstance(node.dbobject, View):
+					node.style = 'filled,rounded'
+					node.fillcolor = '#bbffbb'
+				elif isinstance(node.dbobject, Alias):
+					if isinstance(node.dbobject.final_relation, View):
+						node.style = 'filled,rounded'
+					node.fillcolor = '#ffffbb'
+				node.color = '#000000'
+			elif isinstance(node.dbobject, Trigger):
+				node.shape = 'hexagon'
+				node.style = 'filled'
+				node.fillcolor = '#ffbbbb'
+		if hasattr(node, 'selected') and node.selected:
+			styles = node.style.split(',')
+			styles.append('setlinewidth(3)')
+			node.style = ','.join(styles)
+
+	def add(self, dbobject, selected=False):
+		"""Utility method to add a database object to the graph.
+
+		This utility method adds the specified database object along with
+		standardized formatting depending on the type of the object.
+		Descendents should override this method if they wish to tweak the
+		styling or add support for additional object types.
+		"""
+		assert isinstance(dbobject, DatabaseObject)
+		o = self.dbobjects.get(dbobject)
+		if o is None:
+			if isinstance(dbobject, Schema):
+				o = Cluster(self.graph, dbobject.qualified_name)
+				o.label = dbobject.name
+			elif isinstance(dbobject, (Relation, Trigger)):
+				cluster = self.add(dbobject.schema)
+				o = Node(cluster, dbobject.qualified_name)
+				o.label = dbobject.name
+			o.selected = selected
+			o.dbobject = dbobject
+			self.dbobjects[dbobject] = o
+		return o
 

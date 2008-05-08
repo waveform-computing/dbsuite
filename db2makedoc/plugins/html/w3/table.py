@@ -1,7 +1,7 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import Table, ForeignKey, PrimaryKey, UniqueKey, Check
-from db2makedoc.plugins.html.w3.document import W3MainDocument, W3GraphDocument
+from db2makedoc.plugins.html.w3.document import W3MainDocument, W3GraphDocument, tag
 
 orders = {
 	'A': 'Ascending',
@@ -30,7 +30,8 @@ class W3TableDocument(W3MainDocument):
 		assert isinstance(table, Table)
 		super(W3TableDocument, self).__init__(site, table)
 
-	def _create_sections(self):
+	def generate_sections(self):
+		result = super(W3TableDocument, self).generate_sections()
 		fields = [obj for (name, obj) in sorted(self.dbobject.fields.items(), key=lambda (name, obj): name)]
 		indexes = [obj for (name, obj) in sorted(self.dbobject.indexes.items(), key=lambda (name, obj): name)]
 		constraints = [obj for (name, obj) in sorted(self.dbobject.constraints.items(), key=lambda (name, obj): name)]
@@ -43,208 +44,236 @@ class W3TableDocument(W3MainDocument):
 				if len(ukey.dependent_list) > 0
 			], []
 		)
-		olstyle = {'style': 'list-style-type: none; padding: 0; margin: 0;'}
-		self._section('description', 'Description')
-		self._add(self._p(self._format_comment(self.dbobject.description)))
-		self._section('attributes', 'Attributes')
 		if self.dbobject.primary_key is None:
 			key_count = 0
 		else:
 			key_count = len(self.dbobject.primary_key.fields)
-		self._add(self._table(
-			head=[(
-				"Attribute",
-				"Value",
-				"Attribute",
-				"Value"
-			)],
-			data=[
-				(
-					self._a(self.site.url_document('created.html')),
-					self.dbobject.created,
-					self._a(self.site.url_document('laststats.html')),
-					self.dbobject.last_stats,
+		olstyle = 'list-style-type: none; padding: 0; margin: 0;'
+		result.append((
+			'description', 'Description',
+			tag.p(self.format_comment(self.dbobject.description))
+		))
+		result.append((
+			'attributes', 'Attributes',
+			tag.table(
+				tag.thead(
+					tag.tr(
+						tag.th('Attribute'),
+						tag.th('Value'),
+						tag.th('Attribute'),
+						tag.th('Value')
+					)
 				),
-				(
-					self._a(self.site.url_document('createdby.html')),
-					self.dbobject.owner,
-					self._a(self.site.url_document('cardinality.html')),
-					self.dbobject.cardinality,
-				),
-				(
-					self._a(self.site.url_document('keycolcount.html')),
-					key_count,
-					self._a(self.site.url_document('colcount.html')),
-					len(self.dbobject.fields),
-				),
-				(
-					self._a(self.site.url_document('dependentrel.html')),
-					len(dependents),
-					self._a(self.site.url_document('size.html')),
-					self.dbobject.size_str,
-				),
-				# XXX Include system?
-			]
+				tag.tbody(
+					tag.tr(
+						tag.td(self.site.url_document('created.html').link()),
+						tag.td(self.dbobject.created),
+						tag.td(self.site.url_document('laststats.html').link()),
+						tag.td(self.dbobject.last_stats)
+					),
+					tag.tr(
+						tag.td(self.site.url_document('createdby.html').link()),
+						tag.td(self.dbobject.owner),
+						tag.td(self.site.url_document('cardinality.html').link()),
+						tag.td(self.dbobject.cardinality)
+					),
+					tag.tr(
+						tag.td(self.site.url_document('keycolcount.html').link()),
+						tag.td(key_count),
+						tag.td(self.site.url_document('colcount.html').link()),
+						tag.td(len(fields))
+					),
+					tag.tr(
+						tag.td(self.site.url_document('dependentrel.html').link()),
+						tag.td(len(dependents)),
+						tag.td(self.site.url_document('size.html').link()),
+						tag.td(self.dbobject.size_str)
+					)
+					# XXX Include system?
+				)
+			)
 		))
 		if len(fields) > 0:
-			self._section('field_desc', 'Field Descriptions')
-			self._add(self._table(
-				head=[(
-					"Name",
-					"Description"
-				)],
-				data=[(
-					field.name,
-					self._format_comment(field.description, summary=True)
-				) for field in fields]
-			))
-			self._section('field_schema', 'Field Schema')
-			self._add(self._table(
-				head=[(
-					"#",
-					"Name",
-					"Type",
-					"Nulls",
-					"Key Pos",
-					"Cardinality"
-				)],
-				data=[(
-					_inc_index(field.position),
-					field.name,
-					field.datatype_str,
-					field.nullable,
-					_inc_index(field.key_index),
-					# XXX For Py2.5: field.key_index + 1 if field.key_index is not None else None,
-					field.cardinality
-				) for field in fields]
+			result.append((
+				'fields', 'Fields',
+				tag.table(
+					tag.thead(
+						tag.tr(
+							tag.th('#'),
+							tag.th('Name'),
+							tag.th('Type'),
+							tag.th('Nulls'),
+							tag.th('Key Pos'),
+							tag.th('Cardinality'),
+							tag.th('Description')
+						)
+					),
+					tag.tbody((
+						tag.tr(
+							tag.td(field.position + 1),
+							tag.td(field.name),
+							tag.td(field.datatype_str),
+							tag.td(field.nullable),
+							tag.td(_inc_index(field.key_index)), # XXX For Py2.5: field.key_index + 1 if field.key_index is not None else None,
+							tag.td(field.cardinality),
+							tag.td(self.format_comment(field.description, summary=True))
+						) for field in fields
+					))
+				)
 			))
 		if len(indexes) > 0:
-			self._section('indexes', 'Indexes')
-			self._add(self._table(
-				head=[(
-					"Name",
-					"Unique",
-					"Fields",
-					"Sort Order",
-					"Description"
-				)],
-				data=[(
-					self._a_to(index, qualifiedname=True),
-					index.unique,
-					self._ol([ixfield.name for (ixfield, _) in index.field_list], attrs=olstyle),
-					self._ol([orders[ixorder] for (_, ixorder) in index.field_list], attrs=olstyle),
-					self._format_comment(index.description, summary=True)
-				) for index in indexes]
+			result.append((
+				'indexes', 'Indexes',
+				tag.table(
+					tag.thead(
+						tag.tr(
+							tag.th('Name'),
+							tag.th('Unique'),
+							tag.th('Fields'),
+							tag.th('Sort Order'),
+							tag.th('Description')
+						)
+					),
+					tag.tbody((
+						tag.tr(
+							tag.td(self.site.link_to(index, qualifiedname=True)),
+							tag.td(index.unique),
+							tag.td(tag.ol((tag.li(ixfield.name) for (ixfield, _) in index.field_list), style=olstyle)),
+							tag.td(tag.ol((tag.li(orders[ixorder]) for (_, ixorder) in index.field_list), style=olstyle)),
+							tag.td(self.format_comment(index.description, summary=True))
+						) for index in indexes
+					))
+				)
 			))
 		if len(constraints) > 0:
-			self._section('constraints', 'Constraints')
-			rows = []
-			for constraint in constraints:
+			def fields(constraint):
 				if isinstance(constraint, ForeignKey):
-					expression = [
+					return [
 						'References ',
-						self._a_to(constraint.ref_table),
-						self._ol(['%s -> %s' % (cfield.name, pfield.name)
-							for (cfield, pfield) in constraint.fields], attrs=olstyle)
+						self.site.link_to(constraint.ref_table),
+						tag.ol((tag.li('%s -> %s' % (cfield.name, pfield.name)) for (cfield, pfield) in constraint.fields), style=olstyle)
 					]
 				elif isinstance(constraint, PrimaryKey) or isinstance(constraint, UniqueKey) or isinstance(constraint, Check):
-					expression = self._ol([cfield.name for cfield in constraint.fields], attrs=olstyle)
+					return tag.ol((tag.li(cfield.name) for cfield in constraint.fields), style=olstyle)
 				else:
-					expression = ''
-				rows.append((
-					self._a_to(constraint),
-					constraint.type_name,
-					expression,
-					self._format_comment(constraint.description, summary=True)
-				))
-			self._add(self._table(
-				head=[(
-					"Name",
-					"Type",
-					"Fields",
-					"Description"
-				)],
-				data=rows
+					return ''
+			result.append((
+				'constraints', 'Constraints',
+				tag.table(
+					tag.thead(
+						tag.tr(
+							tag.th('Name'),
+							tag.th('Type'),
+							tag.th('Fields'),
+							tag.th('Description')
+						)
+					),
+					tag.tbody((
+						tag.tr(
+							tag.td(self.site.link_to(constraint)),
+							tag.td(constraint.type_name),
+							tag.td(fields(constraint)),
+							tag.td(self.format_comment(constraint.description, summary=True))
+						) for constraint in constraints
+					))
+				)
 			))
 		if len(triggers) > 0:
-			self._section('triggers', 'Triggers')
-			self._add(self._table(
-				head=[(
-					"Name",
-					"Timing",
-					"Event",
-					"Description"
-				)],
-				data=[(
-					self._a_to(trigger, qualifiedname=True),
-					times[trigger.trigger_time],
-					events[trigger.trigger_event],
-					self._format_comment(trigger.description, summary=True)
-				) for trigger in triggers]
+			result.append((
+				'triggers', 'Triggers',
+				tag.table(
+					tag.thead(
+						tag.tr(
+							tag.th('Name'),
+							tag.th('Timing'),
+							tag.th('Event'),
+							tag.th('Description')
+						)
+					),
+					tag.tbody((
+						tag.tr(
+							tag.td(self.site.link_to(trigger, qualifiedname=True)),
+							tag.td(times[trigger.trigger_time]),
+							tag.td(events[trigger.trigger_event]),
+							tag.td(self.format_comment(trigger.description, summary=True))
+						) for trigger in triggers
+					))
+				)
 			))
 		if len(dependents) > 0:
-			self._section('dependents', 'Dependent Relations')
-			self._add(self._table(
-				head=[(
-					"Name",
-					"Type",
-					"Description"
-				)],
-				data=[(
-					self._a_to(dep, qualifiedname=True),
-					dep.type_name,
-					self._format_comment(dep.description, summary=True)
-				) for dep in dependents]
+			result.append((
+				'dependents', 'Dependent Relations',
+				tag.table(
+					tag.thead(
+						tag.tr(
+							tag.th('Name'),
+							tag.th('Type'),
+							tag.th('Description')
+						)
+					),
+					tag.tbody((
+						tag.tr(
+							tag.td(self.site.link_to(dep, qualifiedname=True)),
+							tag.td(dep.type_name),
+							tag.td(self.format_comment(dep.description, summary=True))
+						) for dep in dependents
+					))
+				)
 			))
-		self._section('diagram', 'Diagram')
-		self._add(self._img_of(self.dbobject))
-		self._section('sql', 'SQL Definition')
-		self._add(self._pre(self._format_sql(self.dbobject.create_sql),
-			attrs={'class': 'sql'}))
+		result.append((
+			'diagram', 'Diagram',
+			self.site.img_of(self.dbobject)
+		))
+		result.append((
+			'sql', 'SQL Definition',
+			tag.pre(self.format_sql(self.dbobject.create_sql), class_='sql')
+		))
+		return result
 
 class W3TableGraph(W3GraphDocument):
 	def __init__(self, site, table):
 		assert isinstance(table, Table)
 		super(W3TableGraph, self).__init__(site, table)
 	
-	def _create_graph(self):
-		super(W3TableGraph, self)._create_graph()
+	def generate(self):
+		super(W3TableGraph, self).generate()
 		table = self.dbobject
-		table_node = self._add_dbobject(table, selected=True)
+		table_node = self.add(table, selected=True)
 		for dependent in table.dependent_list:
-			dep_node = self._add_dbobject(dependent)
+			dep_node = self.add(dependent)
 			dep_edge = dep_node.connect_to(table_node)
 			dep_edge.label = '<uses>'
 			dep_edge.arrowhead = 'onormal'
 		for key in table.foreign_key_list:
-			key_node = self._add_dbobject(key.ref_table)
+			key_node = self.add(key.ref_table)
 			key_edge = table_node.connect_to(key_node)
 			key_edge.dbobject = key
 			key_edge.label = key.name
 			key_edge.arrowhead = 'normal'
 		for key in table.unique_key_list:
 			for dependent in key.dependent_list:
-				dep_node = self._add_dbobject(dependent.relation)
+				dep_node = self.add(dependent.relation)
 				dep_edge = dep_node.connect_to(table_node)
 				dep_edge.dbobject = dependent
 				dep_edge.label = dependent.name
 				dep_edge.arrowhead = 'normal'
 		for trigger in table.trigger_list:
-			trig_node = self._add_dbobject(trigger)
+			trig_node = self.add(trigger)
 			trig_edge = table_node.connect_to(trig_node)
 			trig_edge.label = ('<%s %s>' % (times[trigger.trigger_time], events[trigger.trigger_event])).lower()
 			trig_edge.arrowhead = 'vee'
 			for dependency in trigger.dependency_list:
-				dep_node = self._add_dbobject(dependency)
+				dep_node = self.add(dependency)
 				dep_edge = trig_node.connect_to(dep_node)
 				dep_edge.label = '<uses>'
 				dep_edge.arrowhead = 'onormal'
 		for trigger in table.trigger_dependent_list:
-			trig_node = self._add_dbobject(trigger)
-			rel_node = self._add_dbobject(trigger.relation)
+			trig_node = self.add(trigger)
+			rel_node = self.add(trigger.relation)
 			trig_edge = rel_node.connect_to(trig_node)
 			trig_edge.label = ('<%s %s>' % (times[trigger.trigger_time], events[trigger.trigger_event])).lower()
 			trig_edge.arrowhead = 'vee'
 			dep_edge = trig_node.connect_to(table_node)
 			dep_edge.label = '<uses>'
 			dep_edge.arrowhead = 'onormal'
+		return self.graph

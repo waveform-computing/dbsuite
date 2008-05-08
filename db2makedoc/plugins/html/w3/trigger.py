@@ -1,59 +1,70 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import Trigger
-from db2makedoc.plugins.html.w3.document import W3MainDocument
+from db2makedoc.plugins.html.w3.document import W3MainDocument, tag
+
+trigtime = {
+	'A': 'After',
+	'B': 'Before',
+	'I': 'Instead of',
+}
+trigevent = {
+	'I': 'Insert',
+	'U': 'Update',
+	'D': 'Delete',
+}
+granularity = {
+	'R': 'Row',
+	'S': 'Statement',
+}
 
 class W3TriggerDocument(W3MainDocument):
 	def __init__(self, site, trigger):
 		assert isinstance(trigger, Trigger)
 		super(W3TriggerDocument, self).__init__(site, trigger)
 
-	def _create_sections(self):
-		trigtime = {
-			'A': 'After',
-			'B': 'Before',
-			'I': 'Instead of',
-		}
-		trigevent = {
-			'I': 'Insert',
-			'U': 'Update',
-			'D': 'Delete',
-		}
-		granularity = {
-			'R': 'Row',
-			'S': 'Statement',
-		}
-		self._section('description', 'Description')
-		self._add(self._p(self._format_comment(self.dbobject.description)))
-		self._section('attributes', 'Attributes')
-		self._add(self._table(
-			head=[(
-				'Attribute',
-				'Value',
-				'Attribute',
-				'Value'
-			)],
-			data=[
-				(
-					self._a(self.site.url_document('created.html')),
-					self.dbobject.created,
-					self._a(self.site.url_document('createdby.html')),
-					self.dbobject.owner,
+	def generate_sections(self):
+		result = super(W3TriggerDocument, self).generate_sections()
+		result.append((
+			'description', 'Description',
+			tag.p(self.format_comment(self.dbobject.description))
+		))
+		result.append((
+			'attributes', 'Attributes',
+			tag.table(
+				tag.thead(
+					tag.tr(
+						tag.th('Attribute'),
+						tag.th('Value'),
+						tag.th('Attribute'),
+						tag.th('Value')
+					)
 				),
-				(
-					self._a(self.site.url_document('triggertiming.html')),
-					trigtime[self.dbobject.trigger_time],
-					self._a(self.site.url_document('triggerevent.html')),
-					trigevent[self.dbobject.trigger_event],
-				),
-				(
-					self._a(self.site.url_document('granularity.html')),
-					granularity[self.dbobject.granularity],
-					'Relation',
-					self._a_to(self.dbobject.relation, qualifiedname=True),
-				),
-			]))
-		self._section('sql', 'SQL Definition')
-		self._add(self._pre(self._format_sql(self.dbobject.create_sql),
-			attrs={'class': 'sql'}))
+				tag.tbody(
+					tag.tr(
+						tag.td(self.site.url_document('created.html').link()),
+						tag.td(self.dbobject.created),
+						tag.td(self.site.url_document('createdby.html').link()),
+						tag.td(self.dbobject.owner)
+					),
+					tag.tr(
+						tag.td(self.site.url_document('triggertiming.html').link()),
+						tag.td(trigtime[self.dbobject.trigger_time]),
+						tag.td(self.site.url_document('triggerevent.html').link()),
+						tag.td(trigevent[self.dbobject.trigger_event])
+					),
+					tag.tr(
+						tag.td(self.site.url_document('granularity.html').link()),
+						tag.td(granularity[self.dbobject.granularity]),
+						tag.td('Relation'),
+						tag.td(self.site.link_to(self.dbobject.relation, qualifiedname=True))
+					)
+				)
+			)
+		))
+		result.append((
+			'sql', 'SQL Definition',
+			tag.pre(self.format_sql(self.dbobject.create_sql), class_='sql')
+		))
+		return result
 

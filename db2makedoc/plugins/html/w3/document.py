@@ -13,292 +13,392 @@ import codecs
 import logging
 from PIL import Image
 from db2makedoc.graph import Graph, Node, Edge, Cluster
-from db2makedoc.etree import fromstring
+from db2makedoc.etree import ProcessingInstruction, fromstring, flatten_html
 from db2makedoc.db import (
 	DatabaseObject, Database, Schema, Relation,
 	Table, View, Alias, Trigger
 )
 from db2makedoc.plugins.html.document import (
-	AttrDict, WebSite, HTMLDocument, CSSDocument,
-	JavaScriptDocument, GraphDocument
+	Attrs, ElementFactory, WebSite, HTMLDocument, HTMLObjectDocument,
+	CSSDocument, JavaScriptDocument, GraphDocument, GraphObjectDocument
 )
+
+
+class W3ElementFactory(ElementFactory):
+	# Overridden to apply w3 styles to certain elements
+
+	def _add_class(self, node, cls):
+		classes = set(node.attrib.get('class', '').split(' '))
+		classes.add(cls)
+		node.attrib['class'] = ' '.join(classes)
+
+	def hr(self, *content, **attrs):
+		# Horizontal rules are implemented as a div with class 'hrule-dots'
+		if not content:
+			content = (u'\u00A0',) # &nbsp;
+		result = self._element('div', *content, **attrs)
+		self._add_class(result, 'hrule-dots')
+		return result
+
+	def table(self, *content, **attrs):
+		table = self._element('table', *content, **attrs)
+		# If there are thead and tfoot elements in content, apply the
+		# 'blue-dark' CSS class to them
+		try:
+			thead = self._find(table, 'thead')
+		except:
+			pass
+		else:
+			for tr in thead.findall('tr'):
+				self._add_class(tr, 'blue-dark')
+		try:
+			tfoot = self._find(table, 'tfoot')
+		except:
+			pass
+		else:
+			for tr in tfoot.findall('tr'):
+				self._add_class(tr, 'blue-dark')
+		# If there's a tbody element, apply 'even' and 'odd' CSS classes to
+		# rows in the body, and add 'basic-table' to the table's CSS classes.
+		# We don't do this for tables without an explicit tbody as they are
+		# very likely to be pure layout tables (e.g. the search table in the
+		# masthead)
+		try:
+			tbody = self._find(table, 'tbody')
+		except:
+			pass
+		else:
+			for index, tr in enumerate(tbody.findall('tr')):
+				self._add_class(tr, ['odd', 'even'][index % 2])
+			self._add_class(table, 'basic-table')
+		return table
+
+tag = W3ElementFactory()
 
 
 class W3Site(WebSite):
 	"""Site class representing a collection of W3Document instances."""
 
-	def __init__(self, database):
+	def __init__(self, database, options):
 		"""Initializes an instance of the class."""
-		super(W3Site, self).__init__(database)
-		self.breadcrumbs = True
-		self.last_updated = True
-		self.max_graph_size = (600, 800)
-		self.feedback_url = 'http://w3.ibm.com/feedback/'
-		self.menu_items = []
-		self.related_items = []
-		self._document_map = {}
-		self._graph_map = {}
-
-	def add_document(self, document):
-		"""Adds a document to the website.
-
-		This method overrides the base implementation to map database objects
-		to documents and graphs according to the w3 structure.
-		"""
-		super(W3Site, self).add_document(document)
-		if isinstance(document, W3MainDocument):
-			self._document_map[document.dbobject] = document
-		elif isinstance(document, W3GraphDocument):
-			self._graph_map[document.dbobject] = document
-	
-	def object_document(self, dbobject):
-		"""Returns the HTMLDocument associated with a database object."""
-		return self._document_map.get(dbobject)
-
-	def object_graph(self, dbobject):
-		"""Returns the GraphDocument associated with a database object."""
-		return self._graph_map.get(dbobject)
-
-	def write(self):
-		"""Writes all documents in the site to disk."""
-		# Overridden to split writing graph documents before other documents
-		# when using multi-threaded writing. This avoids a race condition
-		# due to the fact that writing a table document (for example) may cause
-		# the associated table graph to be written if it hasn't already. If
-		# another thread starts writing the graph at the same time, we can
-		# wind up with two threads trying to write the graph simultaneously.
-		if self.threads > 1:
-			# Write graphs first
-			self.write_multi(
-				doc for doc in self._documents.itervalues()
-				if isinstance(doc, GraphDocument)
-			)
-			# Then write everything else
-			self.write_multi(
-				doc for doc in self._documents.itervalues()
-				if not isinstance(doc, GraphDocument)
-			)
-		else:
-			super(W3Site, self).write()
+		super(W3Site, self).__init__(database, options)
+		self.breadcrumbs = options['breadcrumbs']
+		self.last_updated = options['last_updated']
+		self.max_graph_size = options['max_graph_size']
+		self.feedback_url = options['feedback_url']
+		self.menu_items = options['menu_items']
+		self.related_items = options['related_items']
 
 
 class W3Document(HTMLDocument):
 	"""Document class for use with the w3v8 style."""
 
-	def _create_content(self):
-		# Call the inherited method to create the skeleton document
-		super(W3Document, self)._create_content()
+	def generate(self):
+		doc = super(W3Document, self).generate()
 		# Add stylesheets and scripts specific to the w3v8 style
-		headnode = self._find_element('head')
-		headnode.append(self._meta('IBM.Country', 'US'))
-		headnode.append(self._meta('IBM.Effective', self.date.strftime('%Y-%m-%d'), 'iso8601'))
-		headnode.append(self._script(src='//w3.ibm.com/ui/v8/scripts/scripts.js'))
-		headnode.append(self._style(src='//w3.ibm.com/ui/v8/css/v4-screen.css'))
-	
-	# HTML CONSTRUCTION METHODS
-	# Overridden versions specific to w3 formatting
-	
-	def _hr(self, attrs={}):
-		# Overridden to use the w3 dotted line style (uses <div> instead of <hr>)
-		return self._element('div', AttrDict({'class': 'hrule-dots'}) + attrs, u'\u00A0') # \u00A0 == &nbsp;
-	
-	def _table(self, data, head=[], foot=[], caption='', attrs={}):
-		# Overridden to color alternate rows white & gray and to apply the
-		# 'blue-dark' class to all header rows
-		tablenode = super(W3Document, self)._table(data, head, foot, caption, attrs)
-		tablenode.attrib['class'] = 'basic-table'
-		try:
-			theadnode = tablenode.find('thead')
-		except:
-			theadnode = None
-		if theadnode:
-			for rownode in theadnode.findall('tr'):
-				classes = rownode.attrib.get('class', '').split()
-				classes.append('blue-dark')
-				rownode.attrib['class'] = ' '.join(classes)
-		try:
-			tfootnode = tablenode.find('tfoot')
-		except:
-			tfootnode = None
-		if tfootnode:
-			for rownode in tfootnode.findall('tr'):
-				classes = rownode.attrib.get('class', '').split()
-				classes.append('blue-dark')
-				rownode.attrib['class'] = ' '.join(classes)
-		# The <tbody> element is mandatory, no try..except necessary
-		colors = ['even', 'odd']
-		tbodynode = tablenode.find('tbody')
-		for (index, rownode) in enumerate(tbodynode.findall('tr')):
-			classes = rownode.attrib.get('class', '').split()
-			classes.append(colors[(index + 1) % 2])
-			rownode.attrib['class'] = ' '.join(classes)
-		return tablenode
+		headnode = tag._find(doc, 'head')
+		headnode.append(tag.meta(name='IBM.Country', content=self.site.sublang)) # XXX Add a country config item?
+		headnode.append(tag.meta(name='IBM.Effective', content=self.date, scheme='iso8601'))
+		headnode.append(tag.script(src='//w3.ibm.com/ui/v8/scripts/scripts.js'))
+		headnode.append(tag.style(src='//w3.ibm.com/ui/v8/css/v4-screen.css'))
+		# Tag the body as a w3 document
+		bodynode = tag._find(doc, 'body')
+		bodynode.attrib['id'] = 'w3-ibm-com'
+		return doc
 
 
-class W3MainDocument(W3Document):
-	"""Document class representing a database object (table, view, index, etc.)"""
+class W3PopupDocument(W3Document):
+	"""Document class representing a popup help window."""
 
-	# Template of the <body> element of a w3v8 document. This is parsed into an
-	# element tree, grafted onto the generated document and then filled in by
-	# searching for elements by id in the _create_content() method below.
-	template = codecs.getencoder('UTF-8')(u"""\
-<?xml version="1.0" encoding="UTF-8"?>
-<html>
-<head>
-</head>
-<body id="w3-ibm-com" class="article">
-
-<div class="skip"><a href="#content-main" accesskey="2">Skip to main content</a></div>
-<div class="skip"><a href="#left-nav" accesskey="n">Skip to navigation</a></div>
-<div id="access-info">
-	<p class="access">The access keys for this page are:</p>
-	<ul class="access">
-		<li>ALT plus 0 links to this site's <a href="http://w3.ibm.com/w3/access-stmt.html" accesskey="0">Accessibility Statement.</a></li>
-		<li>ALT plus 1 links to the w3.ibm.com home page.</li>
-		<li>ALT plus 2 skips to main content.</li>
-		<li>ALT plus 4 skips to the search form.</li>
-		<li>ALT plus 9 links to the feedback page.</li>
-		<li>ALT plus N skips to navigation.</li>
-	</ul>
-	<p class="access">Additional accessibility information for w3.ibm.com can be found <a href="http://w3.ibm.com/w3/access-stmt.html">on the w3 Accessibility Statement page.</a></p>
-</div>
-
-<div id="masthead">
-	<h2 class="access">Start of masthead</h2>
-	<div id="prt-w3-sitemark"><img src="//w3.ibm.com/ui/v8/images/id-w3-sitemark-simple.gif" alt="" width="54" height="33" /></div>
-	<div id="prt-ibm-logo"><img src="//w3.ibm.com/ui/v8/images/id-ibm-logo-black.gif" alt="" width="44" height="15" /></div>
-	<div id="w3-sitemark"><img src="//w3.ibm.com/ui/v8/images/id-w3-sitemark-large.gif" alt="IBM Logo" width="266" height="70" usemap="#sitemark_map" /><map id="sitemark_map" name="sitemark_map"><area shape="rect" alt="Link to W3 Home Page" coords="0,0,130,70" href="http://w3.ibm.com/"  accesskey="1" /></map></div>
-	<div id="site-title-only" />
-	<div id="ibm-logo"><img src="//w3.ibm.com/ui/v8/images/id-ibm-logo.gif" alt="" width="44" height="15" /></div>
-	<div id="persistent-nav"><a id="w3home" href="http://w3.ibm.com/"> w3 Home </a><a id="bluepages" href="http://w3.ibm.com/bluepages/"> BluePages </a><a id="helpnow" href="http://w3.ibm.com/help/"> HelpNow </a><a id="feedback" href="http://w3.ibm.com/feedback/" accesskey="9"> Feedback </a></div>
-	<div id="header-search">
-		<form action="http://w3.ibm.com/search/w3results.jsp" method="get" id="search">
-		<table cellspacing="0" cellpadding="0" class="header-search">
-		<tr><td class="label"><label for="header-search-field">Search w3</label></td><td class="field"><input id="header-search-field" name="qt" type="text" accesskey="4" /></td><td class="submit"><label class="access" for="header-search-btn">go button</label><input id="header-search-btn" type="image" alt="Go" src="//w3.ibm.com/ui/v8/images/btn-go-dark.gif" /></td></tr>
-		</table>
-		</form>
-	</div>
-	<div id="browser-warning"><img src="//w3.ibm.com/ui/v8/images/icon-system-status-alert.gif" alt="" width="12" height="10" /> This Web page is best used in a modern browser. Since your browser is no longer supported by IBM, please upgrade your web browser at the <a href="http://w3.ibm.com/download/standardsoftware/">ISSI site</a>.</div>
-</div>
-
-<div id="content">
-	<h1 class="access">Start of main content</h1>
-
-	<div id="content-head" />
-	<div id="content-main" />
-</div>
-
-<div id="navigation">
-	<h2 class="access">Start of left navigation</h2>
-	<div id="left-nav" />
-</div>
-
-</body>
-</html>
-""")[0]
-
-	def __init__(self, site, dbobject):
+	def __init__(self, site, url, title, body, width=400, height=300):
 		"""Initializes an instance of the class."""
-		self.dbobject = dbobject # must be set before calling the inherited method
-		super(W3MainDocument, self).__init__(site, '%s.html' % dbobject.identifier)
-		self.title = '%s - %s %s' % (self.site.title, self.dbobject.type_name, self.dbobject.qualified_name)
-		self.description = '%s %s' % (self.dbobject.type_name, self.dbobject.qualified_name)
-		self.keywords = [self.site.database.name, self.dbobject.type_name, self.dbobject.name, self.dbobject.qualified_name]
-		# Add the extra inheritable properties to the site attributes list
-		self.breadcrumbs = None
-		self.last_updated = None
-		self.feedback_url = None
-		self.menu_items = None
-		self.related_items = None
-		self._site_attributes += [
-			'breadcrumbs',
-			'last_updated',
-			'feedback_url',
-			'menu_items',
-			'related_items',
-		]
+		super(W3PopupDocument, self).__init__(site, url)
+		self.search = False
+		self.title = title
+		self.body = body
+		self.width = width
+		self.height = height
 	
-	def _create_content(self):
-		# Overridden to automatically set the link objects and generate the
-		# content from the sections filled in by descendent classes in
-		# _create_sections()
-		if not self.link_first and self.dbobject.first:
-			self.link_first = self.site.object_document(self.dbobject.first)
-		if not self.link_prior and self.dbobject.prior:
-			self.link_prior = self.site.object_document(self.dbobject.prior)
-		if not self.link_next and self.dbobject.next:
-			self.link_next = self.site.object_document(self.dbobject.next)
-		if not self.link_last and self.dbobject.last:
-			self.link_last = self.site.object_document(self.dbobject.last)
-		if not self.link_up and self.dbobject.parent:
-			self.link_up = self.site.object_document(self.dbobject.parent)
+	def generate(self):
 		# Call the inherited method to create the skeleton document
-		super(W3MainDocument, self)._create_content()
-		# Add styles and scripts specific to w3v8 main documents
-		headnode = self.doc.find('head')
-		headnode.append(self._style(content="""
+		doc = super(W3PopupDocument, self).generate()
+		# Add styles specific to w3v8 popup documents
+		headnode = tag._find(doc, 'head')
+		headnode.append(tag.style(src='//w3.ibm.com/ui/v8/css/v4-interior.css'))
+		headnode.append(tag.style("""
+			@import url("//w3.ibm.com/ui/v8/css/screen.css");
+			@import url("//w3.ibm.com/ui/v8/css/interior.css");
+			@import url("//w3.ibm.com/ui/v8/css/popup-window.css");
+		""", media='all'))
+		headnode.append(tag.style(src=W3CSSDocument._url, media='all'))
+		headnode.append(tag.style(src='//w3.ibm.com/ui/v8/css/print.css', media='print'))
+		# Generate the popup content
+		bodynode = tag._find(doc, 'body')
+		bodynode.append(tag.div(
+			tag.img(src='//w3.ibm.com/ui/v8/images/id-w3-sitemark-small.gif', width=182, height=26,
+				alt='', id='popup-w3-sitemark'),
+			id='popup-masthead'
+		))
+		bodynode.append(tag.div(
+			tag.div(
+				tag.h1(self.title),
+				self.body,
+				tag.div(
+					tag.hr(),
+					tag.div(
+						tag.a('Close Window', href='javascript:close();', class_='float-right'),
+						tag.a('Print', href='javascript:window.print();', class_='popup-print-link'),
+						class_='content'
+					),
+					tag.div(u'\u00A0', style='clear:both;'),
+					id='popup-footer'
+				),
+				tag.p(tag.a('Terms of use', href='http://w3.ibm.com/w3/info_terms_of_use.html'), class_='terms'),
+				id='content-main'
+			),
+			id='content'
+		))
+		return doc
+
+	def link(self):
+		# Modify the link to use the JS popup() routine
+		return tag.a(self.title, href=self.url, title=self.title,
+			onclick='javascript:popup("%s","internal",%d,%d);return false;' % (self.url, self.height, self.width))
+
+
+class W3ArticleDocument(W3Document):
+	"""Article class (full web page) for use with the w3v8 style."""
+
+	def __init__(self, site, url, filename=None):
+		"""Initializes an instance of the class."""
+		super(W3ArticleDocument, self).__init__(site, url, filename)
+		self.breadcrumbs = site.breadcrumbs
+		self.last_updated = site.last_updated
+		self.feedback_url = site.feedback_url
+		self.menu_items = site.menu_items
+		self.related_items = site.related_items
+	
+	def generate(self):
+		doc = super(W3ArticleDocument, self).generate()
+		# Add the w3v8 1-column article styles
+		headnode = tag._find(doc, 'head')
+		headnode.append(tag.style("""
 			@import url("//w3.ibm.com/ui/v8/css/screen.css");
 			@import url("//w3.ibm.com/ui/v8/css/icons.css");
 			@import url("//w3.ibm.com/ui/v8/css/tables.css");
 			@import url("//w3.ibm.com/ui/v8/css/interior.css");
 			@import url("//w3.ibm.com/ui/v8/css/interior-1-col.css");
 		""", media='all'))
-		headnode.append(self._script(src=W3JavaScriptDocument._url))
-		headnode.append(self._style(src=W3CSSDocument._url, media='all'))
-		headnode.append(self._style(src='//w3.ibm.com/ui/v8/css/print.css', media='print'))
-		# Parse the HTML in template and graft the <body> element onto the
-		# <body> element in self.doc
-		self.doc.remove(self.doc.find('body'))
-		self.doc.append(fromstring(self.template).find('body'))
-		# Fill in the template
-		self.sections = []
-		self._append_content(self._find_element('div', 'site-title-only'), self.site.title)
-		e = self._find_element('a', 'feedback')
-		e.attrib['href'] = self.feedback_url
-		e = self._find_element('div', 'content-head')
+		headnode.append(tag.style(src=W3CSSDocument._url, media='all'))
+		headnode.append(tag.style(src='//w3.ibm.com/ui/v8/css/print.css', media='print'))
+		headnode.append(tag.script(src=W3JavaScriptDocument._url))
+		# Generate the masthead and accessibility sections
+		bodynode = tag._find(doc, 'body')
+		bodynode.attrib['class'] = 'article'
+		bodynode.append(tag.div(tag.a('Skip to main content', href='#content-main', accesskey='2'), class_='skip'))
+		bodynode.append(tag.div(tag.a('Skip to navigation', href='#left-nav', accesskey='n'), class_='skip'))
+		bodynode.append(tag.div(
+			tag.p('The access keys for this page are:', class_='access'),
+			tag.ul(
+				tag.li('ALT plus 0 links to this site\'s ',
+					tag.a('Accessibility Statement', href='http://w3.ibm.com/w3/access-stmt.html', accesskey='0')
+				),
+				tag.li('ALT plus 1 links to the w3.ibm.com home page.'),
+				tag.li('ALT plus 2 skips to the main content.'),
+				tag.li('ALT plus 4 skips to the search form.'),
+				tag.li('ALT plus 9 links to the feedback page.'),
+				tag.li('ALT plus N skips to navigation.'),
+				class_='access'
+			),
+			tag.p('Additional accessibility information for w3.ibm.com can be found ',
+				tag.a('on the w3 Accessibility Statement page', href='http://w3.ibm.com/w3/access-stmt.html'),
+				class_='access'
+			),
+			id='access-info'
+		))
+		bodynode.append(tag.div(
+			tag.h2('Start of masthead', class_='access'),
+			tag.div(
+				tag.img(src='//w3.ibm.com/ui/v8/images/id-w3-sitemark-simple.gif', width=54, height=33),
+				id='prt-w3-sitemark'
+			),
+			tag.div(
+				tag.img(src='//w3.ibm.com/ui/v8/images/id-ibm-logo-black.gif', width=44, height=15),
+				id='prt-ibm-logo'
+			),
+			tag.div(
+				tag.img(src='//w3.ibm.com/ui/v8/images/id-w3-sitemark-large.gif', width=266, height=70,
+					alt='IBM Logo', usemap='#sitemark_map'),
+				tag.map(
+					tag.area(shape='rect', alt='Link to W3 Home Page', coords='0,0,130,70', href='http://w3.ibm.com/', accesskey='1'),
+					id='sitemark_map', name='sitemark_map'
+				),
+				id='w3-sitemark'
+			),
+			tag.div(self.site.title, id='site-title-only'),
+			tag.div(
+				tag.img(src='//w3.ibm.com/ui/v8/images/id-ibm-logo.gif', width=44, height=15, alt=''),
+				id='ibm-logo'
+			),
+			tag.div(
+				tag.a(' w3 Home ', id='w3home', href='http://w3.ibm.com/'),
+				tag.a(' BluePages ', id='bluepages', href='http://w3.ibm.com/bluepages/'),
+				tag.a(' HelpNow ', id='helpnow', href='http://w3.ibm.com/help/'),
+				tag.a(' Feedback ', id='feedback', href=self.feedback_url, accesskey='9'),
+				id='persistent-nav'
+			),
+			tag.div(
+				tag.form(
+					tag.table(
+						tag.tr(
+							tag.td(
+								tag.label('Search w3', for_='header-search-field'),
+								class_='label'
+							),
+							tag.td(
+								tag.input(id='header-search-field', name='qt', type='text', accesskey='4'),
+								class_='field'
+							),
+							tag.td(
+								tag.label('go button', class_='access', for_='header-search-btn'),
+								tag.input(id='header-search-btn', type='image', alt='Go', src='//w3.ibm.com/ui/v8/images/btn-go-dark.gif'),
+								class_='submit'
+							)
+						),
+						# XXX Should be conditional on self.site.search
+						tag.tr(
+							tag.td(),
+							tag.td(
+								tag.input(
+									tag.label(' Search %s' % self.site.title, for_='header-search-this'), id='header-search-this',
+									name='header-search-this', type='checkbox', value='doc', onclick='javascript:toggleSearch();'
+								),
+								colspan=2, class_='limiter'
+							)
+						),
+						cellspacing=0, cellpadding=0, class_='header-search'
+					),
+					action='http://w3.ibm.com/search/do/search', method='get', id='search'
+				),
+				id='header-search'
+			),
+			tag.div(
+				tag.img(src='//w3.ibm.com/ui/v8/images/icon-system-status-alert.gif', width=12, height=10, alt=''),
+				' This Web page is best used in a modern browser. Since your browser is no longer supported by IBM,',
+				' please upgrade your web browser at the ',
+				tag.a('ISSI site', href='http://w3.ibm.com/download/standardsoftware/'),
+				'.',
+				id='browser-warning'
+			),
+			id='masthead'
+		))
+		bodynode.append(tag.div(
+			tag.h1('Start of main content', class_='access'),
+			tag.div(
+				# XXX Should be conditional on self.last_updated
+				self.generate_head(),
+				# XXX Should be conditional on self.breadcrumbs
+				self.generate_crumbs(),
+				id='content-head'
+			),
+			tag.div(
+				tag.h1(self.title),
+				self.generate_main(),
+				tag.p(
+					tag.a('Terms of use', href='http://w3.ibm.com/w3/info_terms_of_use.html'),
+					class_='terms'
+				),
+				id='content-main'
+			),
+			id='content'
+		))
+		bodynode.append(tag.div(
+			tag.h2('Start of left navigation', class_='access'),
+			tag.div(
+				self.generate_menu(),
+				id='left-nav'
+			),
+			self.generate_related(),
+			id='navigation'
+		))
+		return doc
+
+	def generate_head(self):
+		"""Creates the header text above the article body."""
 		if self.last_updated:
-			self._append_content(e, self._p('Updated on %s' % self.date.strftime('%a, %d %b %Y'), attrs={'id': 'date-stamp'}))
-			self._append_content(e, self._hr())
+			return (
+				tag.p('Updated on ', self.date.strftime('%a, %d %b %Y'), id='date-stamp'),
+				tag.hr()
+			)
+		else:
+			return ''
+	
+	def generate_crumbs(self):
+		"""Creates the breadcrumb links above the article body."""
+		return ''
+
+	def generate_main(self):
+		"""Creates the article body."""
+		return ''
+	
+	def generate_menu(self):
+		"""Creates the links for the left-hand navigation menu."""
+		return ''
+
+	def generate_related(self):
+		"""Creates the related links below the left-hand navigation menu."""
+		if len(self.related_items):
+			return (
+				tag.p('Related links:'),
+				tag.ul(tag.li(tag.a(title, href=url)) for (title, url) in self.related_items)
+			)
+		else:
+			return ''
+	
+
+class W3MainDocument(HTMLObjectDocument, W3ArticleDocument):
+	"""Document class representing a database object (table, view, index, etc.)"""
+
+	def flatten(self, content):
+		# This overridden implementation returns flattened text from the
+		# content-main <div> only, so that things like the links in the left
+		# navigation menu don't corrupt the search results
+		return flatten_html(tag._find(content, 'div', id='content-main'))
+
+	def generate_crumbs(self):
 		if self.breadcrumbs:
-			self._create_crumbs(e)
-		e = self._find_element('div', 'left-nav')
-		self._create_menu(e)
-		e = self._find_element('div', 'navigation')
-		self._create_related(e)
-		e = self._find_element('div', 'content-main')
-		self._create_sections()
-		e.append(self._h('%s %s' % (self.dbobject.type_name, self.dbobject.qualified_name), level=1))
-		e.append(self._ul([self._a('#%s' % section['id'], section['title'], 'Jump to section') for section in self.sections]))
-		for section in self.sections:
-			e.append(self._hr())
-			e.append(self._h(section['title'], level=2, attrs={'id': section['id']}))
-			self._append_content(e, section['content'])
-			e.append(self._p(self._a('#masthead', 'Back to top', 'Jump to top')))
-		e.append(self._p(self._a('http://w3.ibm.com/w3/info_terms_of_use.html', 'Terms of use'), attrs={'class': 'terms'}))
+			crumbs = []
+			item = self.dbobject
+			while item is not None:
+				crumbs.insert(0, self.site.link_to(item, typename=True, qualifiedname=False))
+				crumbs.insert(0, ' > ')
+				item = item.parent
+			crumbs.insert(0, tag.a(self.site.home_title, href=self.site.home_url))
+			return tag.p(crumbs, id='breadcrumbs')
+		else:
+			return ''
+	
+	def generate_main(self):
+		sections = self.generate_sections()
+		return (
+			tag.ul((
+				tag.li(tag.a(title, href='#' + id, title='Jump to section'))
+				for (id, title, content) in sections
+			), id='content-toc'),
+			(
+				(tag.hr(), tag.h2(title, id=id), content, tag.p(tag.a('Back to top', href='#masthead')))
+				for (id, title, content) in sections
+			)
+		)
+	
+	def generate_sections(self):
+		"""Creates the actual body content."""
+		# Override in descendents to return a list of tuples with the following
+		# structure: (id, title, [content]). "content" is a list of Elements.
+		return []
 
-	def _create_menu(self, node):
-		"""Creates the content of left-hand navigation menu."""
-		
+	def generate_menu(self):
 		def make_menu_level(selitem, active, subitems):
-			"""Builds a list of menu items for a database object and its siblings.
-
-			The make_menu_level() subroutine is called with a database object
-			(e.g. a field, table, schema, etc) and returns a list of tuples
-			consisting of (url, content, title, active, [children]).
-			
-			This tuple will eventually be converted into an anchor link, hence
-			url will become the href of the link, content will become the text
-			content of the link, title will be the value of the title
-			attribute, and the boolean active value will indicate whether the
-			class "active" is applied to the link. Finally [children] is a list
-			of similarly structured tuples giving the entries below the
-			corresponding entry.
-
-			Parameters:
-			selitem -- The database object to generate menu items around
-			active -- True if the database object is the focus of the document (and hence, selected)
-			subitems -- The child entries of selitem (if any)
-			"""
 			# Get the list of siblings and figure out the range of visible items
 			if selitem.parent_list is None:
 				siblings = [selitem]
@@ -374,21 +474,6 @@ class W3MainDocument(W3Document):
 			return items
 
 		def make_menu_tree(item, active=True):
-			"""Builds a tree of menu items for a given database object.
-
-			The make_menu_tree() sub-routine, given a database object, builds a
-			tree of tuples (structured as a list of tuples of lists of tuples,
-			etc). The tuples are structured as in the make_menu_level
-			sub-routine above.
-
-			The tree is built "bottom-up" starting with the selected item (the
-			focus of the document being produced) then moving to the parent of
-			that item and so on, until the top level is reached.
-
-			Parameters:
-			item -- The item to construct a menu tree for
-			active -- (optional) If True, item is the focus of the document (and hence, selected)
-			"""
 			items = []
 			while item is not None:
 				items = make_menu_level(item, active, items)
@@ -396,10 +481,10 @@ class W3MainDocument(W3Document):
 				item = item.parent
 			# Build a list of the top-level menu items
 			site_items = [(self.site.home_title, self.site.home_url)] + self.site.menu_items
-			# Combine the site_items array with the items tree. The special
-			# URL "#" in site_items indicates where the items tree should be
-			# positioned in the final menu. If not present, the items tree
-			# will wind up as the last item
+			# Combine the site_items array with the items tree. The special URL
+			# "#" in site_items indicates where the items tree should be
+			# positioned in the final menu. If not present, the items tree will
+			# wind up as the last item
 			index = 0
 			for (title, url) in site_items:
 				if url == '#':
@@ -419,153 +504,413 @@ class W3MainDocument(W3Document):
 				index += 1
 			return items
 
-		def make_menu_elements(parent, items, level=0):
-			"""Builds the actual link elements for the menu.
-
-			The make_menu_dom() sub-routine takes the output of the
-			make_menu_tree() subroutine and converts it into actual DOM
-			elements. This is done in a "top-down" manner (the reverse of
-			make_menu_tree()) in order to easily calculate the current nesting
-			level (this also explains the separation of make_menu_tree() and
-			make_menu_dom()).
-
-			Parameters:
-			parent -- The element which will be the parent of the menu elements
-			items -- The output of the make_menu_tree() subroutine
-			level -- (optional) The current nesting level
-			"""
+		def make_menu_elements(items, parent=None, level=0):
+			# Recursively build divs containing links
 			classes = ['top-level', 'second-level', 'third-level']
-			e = self._div('', attrs={'class': classes[level]})
-			parent.append(e)
-			parent = e
+			root = tag.div(class_=classes[level])
+			if parent:
+				parent.append(root)
 			for (url, content, title, visible, active, onclick, children) in items:
-				link = self._a(url, content, title)
+				link = tag.a(content, href=url, title=title)
 				if active:
-					link.attrib['class'] = ' '.join(link.attrib.get('class', '').split(' ') + ['active'])
+					link.attrib['class'] = 'active'
 				if not visible:
 					link.attrib['style'] = 'display: none;'
 				if onclick:
 					link.attrib['onclick'] = onclick
-				parent.append(link)
+				root.append(link)
 				if len(children) > 0 and level + 1 < len(classes):
-					make_menu_elements(parent, children, level + 1)
+					make_menu_elements(children, root, level + 1)
+			return root
 
-		make_menu_elements(node, make_menu_tree(self.dbobject))
+		return make_menu_elements(make_menu_tree(self.dbobject))
 	
-	def _create_related(self, node):
-		"""Creates the related links after the left-hand navigation menu."""
-		if len(self.related_items):
-			self._append_content(node, self._p('Related links:'))
-			self._append_content(node, self._ul([
-				self._a(url, title)
-				for (title, url) in self.related_items
-			]))
 
-	def _create_crumbs(self, node):
-		"""Creates the breadcrumb links at the top of the page."""
-		crumbs = []
-		item = self.dbobject
-		while item is not None:
-			crumbs.insert(0, self._a_to(item, typename=True, qualifiedname=False))
-			crumbs.insert(0, u' \u00BB ') # \u00BB == &raquo;
-			item = item.parent
-		crumbs.insert(0, self._a(self.site.home_url, self.site.home_title))
-		self._append_content(node, self._p(crumbs, attrs={'id': 'breadcrumbs'}))
+class W3SearchDocument(W3ArticleDocument):
+	"""Document class containing the PHP search script"""
+
+	_url = 'search.php'
+
+	def __init__(self, site):
+		super(W3SearchDocument, self).__init__(site, self._url)
+		self.title = 'Search results'
+		self.description = self.title
+		self.search = False
+		self.last_updated = site.last_updated
 	
-	# CONTENT METHODS
-	# The following methods are for use in descendent classes to fill the
-	# sections list with content. Basically, all descendent classes need to do
-	# is override the _create_sections() method, calling section() and add() in
-	# their implementation
-
-	def _create_sections(self):
-		# Override in descendent classes
-		pass
-
-	def _section(self, id, title):
-		"""Starts a new section in the body of the current document.
-
-		Parameters:
-		id -- The id of the anchor at the start of the section
-		title -- The title text of the section
-		"""
-		self.sections.append({'id': id, 'title': title, 'content': []})
+	def generate_crumbs(self):
+		if self.breadcrumbs:
+			return tag.p(
+				tag.a(self.site.home_title, href=self.site.home_url),
+				' > ',
+				tag.a(self.site.title, href=self.site.object_document(self.site.database).url),
+				' > ',
+				self.title,
+				id='breadcrumbs'
+			)
+		else:
+			return ''
 	
-	def _add(self, content):
-		"""Add HTML content or elements to the end of the current section.
+	def generate_main(self):
+		# XXX Dirty hack to work around a bug in ElementTree: if we use an ET
+		# ProcessingInstruction here, ET converts XML special chars (<, >,
+		# etc.) into XML entities, which is unnecessary and completely breaks
+		# the PHP code. Instead we insert a place-holder and replace it with
+		# PHP in an overridden serialize() method. This will break horribly if
+		# the PHP code contains any non-ASCII characters and/or the target
+		# encoding is not ASCII-based (e.g. EBCDIC).
+		return ProcessingInstruction('php', '__PHP__')
 
-		Parameters:
-		content -- A string, Node, NodeList, or tuple/list of Nodes
-		"""
-		self.sections[-1]['content'].append(content)
+	def generate_menu(self):
+		def make_menu_tree():
+			# Create a list of (title, url, active, [children]) items
+			# representing top level menu items
+			items = [
+				(title, url, False, [])
+				for (title, url) in
+				[(self.site.home_title, self.site.home_url)] + self.site.menu_items
+			]
+			# Find the "special" item in the site_items array which represents
+			# where we should position our own menu items, and add a "Search
+			# Results" dead link
+			new_items = []
+			for (title, url, active, children) in items:
+				if url == '#':
+					new_items.append((title, self.site.object_document(self.site.database).url, False, [
+						(self.title, '#', True, [])
+					]))
+				else:
+					new_items.append((title, url, active, children))
+			return new_items
 
+		def make_menu_elements(items, parent=None, level=0):
+			# Recursively generate divs containing anchors
+			classes = ['top-level', 'second-level', 'third-level']
+			root = tag.div(class_=classes[level])
+			if parent:
+				parent.append(root)
+			for (title, url, active, children) in items:
+				link = tag.a(title, href=url, title=title)
+				if active:
+					link.attrib['class'] = 'active'
+				root.append(link)
+				if len(children) > 0 and level + 1 < len(classes):
+					make_menu_elements(children, root, level + 1)
+			return root
 
-class W3PopupDocument(W3Document):
-	"""Document class representing a popup help window."""
+		return make_menu_elements(make_menu_tree())
 
-	# Template of the <body> element of a popup document. This is parsed into
-	# an element tree, grafted onto the generated document and then filled in
-	# by searching for elements by id in the _create_content() method below.
-	template = codecs.getencoder('UTF-8')(u"""\
-<?xml version="1.0" encoding="UTF-8"?>
-<html>
-<head>
-</head>
-<body id="w3-ibm-com">
+	def serialize(self, content):
+		# XXX See generate_main()
+		php = r"""
+require '__XAPIAN__';
 
-<div id="popup-masthead">
-	<img id="popup-w3-sitemark" src="//w3.ibm.com/ui/v8/images/id-w3-sitemark-small.gif" alt="" width="182" height="26" />
-</div>
+# Defaults and limits
+$PAGE_DEFAULT = 1;
+$PAGE_MIN = 1;
+$PAGE_MAX = 0; # Calculated by run_query()
+$COUNT_DEFAULT = 10;
+$COUNT_MIN = 10;
+$COUNT_MAX = 100;
 
-<div id="content">
-	<div id="content-main">
-		<h1>%s</h1>
-		%s
-		<div id="popup-footer">
-			<div class="hrule-dots">\u00A0</div>
-			<div class="content">
-				<a class="float-right" href="javascript:close();">Close Window</a>
-				<a class="popup-print-link" href="javascript:window.print();">Print</a>
-			</div>
-			<div style="clear:both;">\u00A0</div>
-		</div>
+# Globals derived from GET values
+$Q = array_key_exists('q', $_GET) ? strval($_GET['q']) : '';
+$REFINE = array_key_exists('refine', $_GET) ? intval($_GET['refine']) : 0;
+$PAGE = array_key_exists('page', $_GET) ? intval($_GET['page']) : $PAGE_DEFAULT;
+$PAGE = max($PAGE_MIN, $PAGE);
+$COUNT = array_key_exists('count', $_GET) ? intval($_GET['count']) : $COUNT_DEFAULT;
+$COUNT = max($COUNT_MIN, min($COUNT_MAX, $COUNT));
 
-		<p class="terms"><a href="http://w3.ibm.com/w3/info_terms_of_use.html">Terms of use</a></p>
-	</div>
-</div>
+# Extract additional queries when refine is set
+$QUERIES[] = $Q;
+if ($REFINE) {
+	$i = 0;
+	while (array_key_exists('q' . strval($i), $_GET)) {
+		$QUERIES[] = strval($_GET['q' . strval($i)]);
+		$i++;
+	}
+}
 
-</body>
-</html>
-""")[0]
+function run_query() {
+	global $QUERIES, $PAGE, $COUNT, $PAGE_MAX;
 
-	def __init__(self, site, url, title, body, width=400, height=300):
-		"""Initializes an instance of the class."""
-		super(W3PopupDocument, self).__init__(site, url)
-		# Modify the url to use the JS popup() routine. Note that this won't
-		# affect the filename property (used by write()) as the super-class'
-		# constructor will already have set that
-		self.url = 'javascript:popup("%s","internal",%d,%d)' % (url, height, width)
-		self.title = title
-		self.body = body
+	$db = new XapianDatabase('search');
+	$enquire = new XapianEnquire($db);
+	$parser = new XapianQueryParser();
+	$parser->set_stemmer(new XapianStem('__LANG__'));
+	$parser->set_stemming_strategy(XapianQueryParser::STEM_SOME);
+	$parser->set_database($db);
+	$query = NULL;
+	foreach ($QUERIES as $q) {
+		$left = $parser->parse_query($q,
+			XapianQueryParser::FLAG_BOOLEAN_ANY_CASE |  # Enable boolean operators (with any case)
+			XapianQueryParser::FLAG_PHRASE |            # Enable quoted phrases 
+			XapianQueryParser::FLAG_LOVEHATE |          # Enable + and -
+			XapianQueryParser::FLAG_SPELLING_CORRECTION # Enable suggested corrections
+		);
+		if ($query)
+			$query = new XapianQuery(XapianQuery::OP_AND, $left, $query);
+		else
+			$query = $left;
+	}
+	$enquire->set_query($query);
+	$result = $enquire->get_mset((($PAGE - 1) * $COUNT) + 1, $COUNT);
+	$PAGE_MAX = ceil($result->get_matches_estimated() / floatval($COUNT));
+	return $result;
+}
+
+function limit_search($doc) {
+	global $Q, $QUERIES, $COUNT, $REFINE;
+
+	# Generate the first row
+	$tr1 = $doc->createElement('tr');
+	$td = $doc->createElement('td');
+	$td->appendChild(new DOMAttr('class', 'col1'));
+	$td->appendChild(new DOMText('Search for'));
+	$tr1->appendChild($td);
+	$input = $doc->createElement('input');
+	$input->appendChild(new DOMAttr('type', 'text'));
+	$input->appendChild(new DOMAttr('name', 'q'));
+	$input->appendChild(new DOMAttr('value', $Q));
+	$td = $doc->createElement('td');
+	$td->appendChild(new DOMAttr('class', 'col2'));
+	$td->appendChild($input);
+	$td->appendChild(new DOMText(' '));
+	$input = $doc->createElement('input');
+	$input->appendChild(new DOMAttr('type', 'submit'));
+	$input->appendChild(new DOMAttr('value', 'Go'));
+	$span = $doc->createElement('span');
+	$span->appendChild(new DOMAttr('class', 'button-blue'));
+	$span->appendChild($input);
+	$td->appendChild($span);
+	$td->appendChild(new DOMText(' '));
+	$a = $doc->createElement('a');
+	$a->appendChild(new DOMAttr('href', 'search.html'));
+	$a->appendChild(new DOMAttr('onclick', 'javascript:popup("search.html","internal",300,400);return false;'));
+	$a->appendChild(new DOMText('Help'));
+	$td->appendChild($a);
+	$tr1->appendChild($td);
+	# Generate the second row
+	$tr2 = $doc->createElement('tr');
+	$td = $doc->createElement('td');
+	$td->appendChild(new DOMAttr('class', 'col1'));
+	$td->appendChild(new DOMText(' '));
+	$tr2->appendChild($td);
+	$input = $doc->createElement('input');
+	$input->appendChild(new DOMAttr('type', 'checkbox'));
+	$input->appendChild(new DOMAttr('name', 'refine'));
+	$input->appendChild(new DOMAttr('value', '1'));
+	if ($REFINE) $input->appendChild(new DOMAttr('checked', 'checked'));
+	$label = $doc->createElement('label');
+	$label->appendChild($input);
+	$label->appendChild(new DOMText(' Search within results'));
+	$td = $doc->createElement('td');
+	$td->appendChild(new DOMAttr('class', 'col2'));
+	$td->appendChild($label);
+	$tr2->appendChild($td);
+	# Stick it all in a table in a form
+	$tbody = $doc->createElement('tbody');
+	$tbody->appendChild($tr1);
+	$tbody->appendChild($tr2);
+	$table = $doc->createElement('table');
+	$table->appendChild(new DOMAttr('class', 'limit-search'));
+	$table->appendChild($tbody);
+	$count = $doc->createElement('input');
+	$count->appendChild(new DOMAttr('type', 'hidden'));
+	$count->appendChild(new DOMAttr('name', 'count'));
+	$count->appendChild(new DOMAttr('value', strval($COUNT)));
+	$form = $doc->createElement('form');
+	$form->appendChild(new DOMAttr('method', 'GET'));
+	$form->appendChild($count);
+	foreach ($QUERIES as $i => $q) {
+		$query = $doc->createElement('input');
+		$query->appendChild(new DOMAttr('type', 'hidden'));
+		$query->appendChild(new DOMAttr('name', 'q' . strval($i)));
+		$query->appendChild(new DOMAttr('value', $q));
+		$form->appendChild($query);
+	}
+	$form->appendChild($table);
+	return $form;
+}
+
+function results_count($doc, $matches) {
+	global $Q, $PAGE, $COUNT;
+
+	$found = $matches->get_matches_estimated();
+	$page_from = (($PAGE - 1) * $COUNT) + 1;
+	$page_to = $page_from + $matches->size() - 1;
+
+	$td = $doc->createElement('td');
+	$td->appendChild(new DOMAttr('class', 'results-count'));
+	$strong = $doc->createElement('strong');
+	$strong->appendChild(new DOMText(strval($found)));
+	$td->appendChild($strong);
+	$td->appendChild(new DOMText(' results found'));
+	$td->appendChild($doc->createElement('br'));
+	$td->appendChild(new DOMText('Results '));
+	$strong = $doc->createElement('strong');
+	$strong->appendChild(new DOMText(strval($page_from)));
+	$td->appendChild($strong);
+	$td->appendChild(new DOMText(' to '));
+	$strong = $doc->createElement('strong');
+	$strong->appendChild(new DOMText(strval($page_to)));
+	$td->appendChild($strong);
+	$td->appendChild(new DOMText(' shown by relevance'));
+	return $td;
+}
+
+function results_page($doc, $page, $label='') {
+	global $Q, $PAGE, $PAGE_MIN, $PAGE_MAX, $COUNT;
+
+	if ($label == '') $label = strval($page);
+	if (($page < $PAGE_MIN) || ($page > $PAGE_MAX)) {
+		return $doc->createTextNode($label);
+	}
+	elseif ($page == $PAGE) {
+		$strong = $doc->createElement('strong');
+		$strong->appendChild(new DOMText($label));
+		return $strong;
+	}
+	else {
+		$url = sprintf('?q=%s&page=%d&count=%d', $Q, $page, $COUNT);
+		if ($REFINE) {
+			$url .= '&refine=1';
+			foreach (array_slice($QUERIES, 1) as $i => $q)
+				$url .= sprintf('&q%d=%s', $i, $q);
+		}
+		$a = $doc->createElement('a');
+		$a->appendChild(new DOMAttr('href', $url));
+		$a->appendChild(new DOMText($label));
+		return $a;
+	}
+}
+
+function results_sequence($doc) {
+	global $PAGE, $PAGE_MIN, $PAGE_MAX;
+
+	$from = max($PAGE_MIN + 1, $PAGE - 5);
+	$to = min($PAGE_MAX - 1, $from + 8);
+
+	$td = $doc->createElement('td');
+	$td->appendChild(new DOMAttr('class', 'results-sequence'));
+	$td->appendChild(results_page($doc, $PAGE - 1, '< Previous'));
+	$td->appendChild(new DOMText(' | '));
+	$td->appendChild(results_page($doc, $PAGE_MIN));
+	if ($from > $PAGE_MIN + 1) $td->appendChild(new DOMText(' ...'));
+	$td->appendChild(new DOMText(' '));
+	for ($i = $from; $i <= $to; ++$i) {
+		$td->appendChild(results_page($doc, $i));
+		$td->appendChild(new DOMText(' '));
+	}
+	if ($to < $PAGE_MAX - 1) $td->appendChild(new DOMText('... '));
+	$td->appendChild(results_page($doc, $PAGE_MAX));
+	$td->appendChild(new DOMText(' | '));
+	$td->appendChild(results_page($doc, $PAGE + 1, 'Next >'));
+	return $td;
+}
+
+function results_header($doc, $matches, $header=True) {
+	global $Q, $QUERIES;
+
+	$strong = $doc->createElement('strong');
+	$strong->appendChild(new DOMText($Q));
+	foreach (array_slice($QUERIES, 1) as $q)
+		$strong->appendChild(new DOMText(sprintf(' AND %s', $q)));
+	$td = $doc->createElement('td');
+	$td->appendChild(new DOMAttr('colspan', '2'));
+	$td->appendChild(new DOMText('Results for : '));
+	$td->appendChild($strong);
+	$tr = $doc->createElement('tr');
+	$tr->appendChild($td);
+	$tbody = $doc->createElement('tbody');
+	$tbody->appendChild($tr);
+	$tr = $doc->createElement('tr');
+	$tr->appendChild(new DOMAttr('class', 'summary-options'));
+	$tr->appendChild(results_count($doc, $matches));
+	$tr->appendChild(results_sequence($doc));
+	$tbody->appendChild($tr);
+	$table = $doc->createElement('table');
+	if ($header)
+		$table->appendChild(new DOMAttr('class', 'results-header'));
+	else
+		$table->appendChild(new DOMAttr('class', 'results-footer'));
+	$table->appendChild($tbody);
+	return $table;
+}
+
+function results_table($doc, $matches) {
+	$table = $doc->createElement('table');
+	$table->appendChild(new DOMAttr('class', 'basic-table search-results'));
+	$thead = $doc->createElement('thead');
+	$table->appendChild($thead);
+	# Generate the header row
+	$tr = $doc->createElement('tr');
+	$tr->appendChild(new DOMAttr('class', 'blue-dark'));
+	foreach (array('Document', 'Relevance') as $content) {
+		$th = $doc->createElement('th');
+		$th->appendChild(new DOMText($content));
+		$tr->appendChild($th);
+	}
+	$thead->appendChild($tr);
+	$tbody = $doc->createElement('tbody');
+	$table->appendChild($tbody);
+	# Generate the result rows
+	$match = $matches->begin();
+	while (! $match->equals($matches->end())) {
+		list($url, $title, $desc) = explode("\n",
+			$match->get_document()->get_data(), 3);
+		$relevance = $match->get_percent();
+		# Generate the link & relevance row
+		$a = $doc->createElement('a');
+		$a->appendChild(new DOMAttr('href', $url));
+		$a->appendChild(new DOMText($title));
+		$td1 = $doc->createElement('td');
+		$td1->appendChild($a);
+		$td2 = $doc->createElement('td');
+		$td2->appendChild(new DOMAttr('class', 'relevance'));
+		$td2->appendChild(new DOMText(sprintf('%d%%', $relevance)));
+		$tr = $doc->createElement('tr');
+		$tr->appendChild(new DOMAttr('class', 'result row1'));
+		$tr->appendChild($td1);
+		$tr->appendChild($td2);
+		$tbody->appendChild($tr);
+		# Generate the description row
+		$div = $doc->createElement('div');
+		$div->appendChild(new DOMAttr('class', 'url'));
+		$div->appendChild(new DOMText($url));
+		$hr = $doc->createElement('div');
+		$hr->appendChild(new DOMAttr('class', 'hrule-dots'));
+		$td = $doc->createElement('td');
+		$td->appendChild(new DOMAttr('colspan', '2'));
+		$td->appendChild(new DOMText($desc));
+		$td->appendChild($doc->createElement('br'));
+		$td->appendChild($div);
+		$td->appendChild($hr);
+		$tr = $doc->createElement('tr');
+		$tr->appendChild(new DOMAttr('class', 'result row2'));
+		$tr->appendChild($td);
+		$tbody->appendChild($tr);
+		# Next!
+		$match->next();
+	}
+	return $table;
+}
+
+$doc = new DOMDocument('1.0', '__ENCODING__');
+$matches = run_query();
+
+print($doc->saveXML(limit_search($doc)));
+print($doc->saveXML(results_header($doc, $matches, True)));
+print($doc->saveXML(results_table($doc, $matches)));
+print($doc->saveXML(results_header($doc, $matches, False)));
+print($doc->saveXML(limit_search($doc)));
+"""
+		php = php.replace('__XAPIAN__', 'xapian.php')
+		php = php.replace('__LANG__', self.site.lang)
+		php = php.replace('__ENCODING__', self.site.encoding)
+		result = super(W3SearchDocument, self).serialize(content)
+		return result.replace('__PHP__', php)
 	
-	def _create_content(self):
-		# Call the inherited method to create the skeleton document
-		super(W3PopupDocument, self)._create_content()
-		# Add styles specific to w3v8 popup documents
-		headnode = self.doc.find('head')
-		headnode.append(self._style(src='//w3.ibm.com/ui/v8/css/v4-interior.css'))
-		headnode.append(self._style(content="""
-			@import url("//w3.ibm.com/ui/v8/css/screen.css");
-			@import url("//w3.ibm.com/ui/v8/css/interior.css");
-			@import url("//w3.ibm.com/ui/v8/css/popup-window.css");
-		""", media='all'))
-		headnode.append(self._style(src=W3CSSDocument._url, media='all'))
-		headnode.append(self._style(src='//w3.ibm.com/ui/v8/css/print.css', media='print'))
-		# Graft the <body> element from self.content onto the <body> element in
-		# self.doc
-		self.doc.remove(self.doc.find('body'))
-		self.doc.append(fromstring(self.template % (self.title, self.body)).find('body'))
-
 
 class W3CSSDocument(CSSDocument):
 	"""Stylesheet class to supplement the w3v8 style with SQL syntax highlighting."""
@@ -575,10 +920,11 @@ class W3CSSDocument(CSSDocument):
 	def __init__(self, site):
 		super(W3CSSDocument, self).__init__(site, self._url)
 
-	def _create_content(self):
+	def generate(self):
 		# We only need one supplemental CSS stylesheet (the default w3v8 styles
 		# are reasonably comprehensive). So this method is brutally simple...
-		self.doc = u"""\
+		doc = super(W3CSSDocument, self).generate()
+		return doc + u"""
 /* SQL syntax highlighting */
 .sql {
 	font-size: 8pt;
@@ -596,21 +942,67 @@ pre.sql {
 	/* No way to do this in IE... */
 }
 
-.sql span.sql_error      { background-color: red; }
-.sql span.sql_comment    { color: green; }
-.sql span.sql_keyword    { font-weight: bold; color: blue; }
-.sql span.sql_datatype   { font-weight: bold; color: green; }
-.sql span.sql_register   { font-weight: bold; color: purple; }
-.sql span.sql_identifier { }
-.sql span.sql_number     { color: maroon; }
-.sql span.sql_string     { color: maroon; }
-.sql span.sql_operator   { }
-.sql span.sql_parameter  { font-style: italic; }
-.sql span.sql_terminator { }
+.sql span.sql-error      { background-color: red; }
+.sql span.sql-comment    { color: green; }
+.sql span.sql-keyword    { font-weight: bold; color: blue; }
+.sql span.sql-datatype   { font-weight: bold; color: green; }
+.sql span.sql-register   { font-weight: bold; color: purple; }
+.sql span.sql-identifier { }
+.sql span.sql-number     { color: maroon; }
+.sql span.sql-string     { color: maroon; }
+.sql span.sql-operator   { }
+.sql span.sql-parameter  { font-style: italic; }
+.sql span.sql-terminator { }
 
 /* Cell formats for line-numbered SQL */
-td.num_cell { background-color: silver; }
-td.sql_cell { background-color: gray; }
+td.num-cell { background-color: silver; }
+td.sql-cell { background-color: gray; }
+
+/* Styles for search results (the w3v8 search.css is unusable) */
+.limit-search {
+	background-color: #eee;
+	border-bottom: 1px solid #ccc;
+	margin: 1em 0;
+	padding: 1em 3em;
+	width: 100%;
+}
+.limit-search td { vertical-align: middle; }
+.limit-search td.col1 {
+	font-weight: bold;
+	text-align: right;
+	padding: 0 .5em 0 0;
+}
+.limit-search td.col2 { }
+.limit-search input[type="text"] { width: 280px; }
+
+.results-header,
+.results-footer {
+	border-collapse: collapse;
+	width: 100%;
+}
+.results-header { border-bottom: 1px solid #ccc; margin-bottom: 1em; }
+.results-footer { border-top: 1px solid #ccc; margin-top: 1em; }
+.results-header td,
+.results-footer td { padding: .4em 0; vertical-align: bottom; }
+tr.summary-options { background: url(//w3.ibm.com/ui/v8/images/rule-h-blue-dots.gif) left top repeat-x; }
+tr.summary-options td.results-count { text-align: left; width: 33%; }
+tr.summary-options td.options { text-align: center; }
+tr.summary-options td.results-sequence { text-align: right; }
+
+.search-results { width: 100%; }
+.search-results tr.result a { display: block; font-weight: bold; }
+.search-results tr.result.row1 td { padding: 0.5em 0 0 0; }
+.search-results tr.result.row2 td { padding: 0; }
+
+.search-results tr.result .relevance {
+	font-weight: bold;
+	text-align: right;
+}
+.search-results tr.result .url {
+	font-size: small;
+	font-style: italic;
+	color: #999;
+}
 
 /* Styles for draggable zoom box */
 div.zoom {
@@ -684,8 +1076,9 @@ class W3JavaScriptDocument(JavaScriptDocument):
 	def __init__(self, site):
 		super(W3JavaScriptDocument, self).__init__(site, self._url)
 
-	def _create_content(self):
-		self.doc = u"""\
+	def generate(self):
+		doc = super(W3JavaScriptDocument, self).generate()
+		return doc + u"""
 // IE doesn't have a clue (no Node built-in) so we'll define one just for it...
 var ELEMENT_NODE = 1;
 
@@ -709,7 +1102,24 @@ function showItems(e) {
 	e.style.display = 'none';
 }
 
-// Simple utility routine for adding a handler to an event
+var W3_SEARCH = 'http://w3.ibm.com/search/do/search';
+var DOC_SEARCH = '__SEARCH__';
+
+// Toggles the target of the masthead search box
+function toggleSearch() {
+	var searchForm = document.getElementById("search");
+	var searchField = document.getElementById("header-search-field");
+	if (searchForm.action == W3_SEARCH) {
+		searchForm.action = DOC_SEARCH;
+		searchField.name = "q";
+	}
+	else {
+		searchForm.action = W3_SEARCH;
+		searchField.name = "qt";
+	}
+}
+
+// Adds a handler to an event
 function addEvent(obj, evt, fn) {
 	if (obj.addEventListener)
 		obj.addEventListener(evt, fn, false);
@@ -717,7 +1127,7 @@ function addEvent(obj, evt, fn) {
 		obj.attachEvent('on' + evt, fn);
 }
 
-// Simple utility routine for removing a handler from an event
+// Removes a handler from an event
 function removeEvent(obj, evt, fn) {
 	if (obj.removeEventListener)
 		obj.removeEventListener(evt, fn, false);
@@ -974,35 +1384,34 @@ zoom = {
 		zoom.box._image.style.top = -newImagePos.y + 'px';
 	}
 }
+""".replace('__SEARCH__', W3SearchDocument._url)
 
-"""
 
-
-class W3GraphDocument(GraphDocument):
+class W3GraphDocument(GraphObjectDocument):
 	"""Graph class representing a database object or collection of objects."""
 
 	def __init__(self, site, dbobject):
 		"""Initializes an instance of the class."""
-		self.dbobject = dbobject # must be set before calling the inherited method
-		super(W3GraphDocument, self).__init__(site, '%s.png' % dbobject.identifier)
-		self._dbobject_map = {}
-		self._written = False
-		if self._usemap:
+		super(W3GraphDocument, self).__init__(site, dbobject)
+		(maxw, maxh) = self.site.max_graph_size
+		self.graph.ratio = str(float(maxh) / float(maxw))
+		self.written = False
+		if self.usemap:
 			s, ext = os.path.splitext(self.filename)
 			self.zoom_filename = s + os.path.extsep + 'zoom' + ext
 			s, ext = self.url.rsplit('.', 1)
 			self.zoom_url = s + '.zoom.' + ext
-			self.zoom_scale = None
+			self.scale = None
 	
 	def write(self):
-		# Overridden to set the introduced "_written" flag (to ensure we don't
+		# Overridden to set the introduced "written" flag (to ensure we don't
 		# attempt to write the graph more than once due to the induced write()
 		# call in the overridden _link() method), and to handle resizing the
 		# image if it's larger than the maximum size specified in the config
-		if not self._written:
+		if not self.written:
 			super(W3GraphDocument, self).write()
-			self._written = True
-			if self._usemap:
+			self.written = True
+			if self.usemap:
 				im = Image.open(self.filename)
 				(maxw, maxh) = self.site.max_graph_size
 				(w, h) = im.size
@@ -1012,11 +1421,11 @@ class W3GraphDocument(GraphDocument):
 					# version using PIL. The scaling factor is stored so that
 					# the overridden _map() method can use it to adjust the
 					# client side image map
-					self.zoom_scale = min(float(maxw) / w, float(maxh) / h)
+					self.scale = min(float(maxw) / w, float(maxh) / h)
 					logging.debug('Writing %s' % self.zoom_filename)
 					im.save(self.zoom_filename)
-					neww = int(round(w * self.zoom_scale))
-					newh = int(round(h * self.zoom_scale))
+					neww = int(round(w * self.scale))
+					newh = int(round(h * self.scale))
 					if w * h * 3 / 1024**2 < 500:
 						# Use a high-quality anti-aliased resize if to do so
 						# would use <500Mb of RAM (which seems a reasonable
@@ -1027,14 +1436,14 @@ class W3GraphDocument(GraphDocument):
 						im = im.resize((neww, newh), Image.NEAREST)
 					im.save(self.filename)
 	
-	def _map(self, zoom=False):
+	def map(self, zoom=False):
 		# Overridden to allow generating the client-side map for the "full
 		# size" graph, or the smaller version potentially produced by the
 		# write() method
-		if not self._written:
+		if not self.written:
 			self.write()
-		result = super(W3GraphDocument, self)._map()
-		if self.zoom_scale is not None:
+		result = super(W3GraphDocument, self).map()
+		if self.scale is not None:
 			if zoom:
 				# Rewrite the id and name attributes
 				result.attrib['id'] = self.zoom_url.rsplit('.', 1)[0] + '.map'
@@ -1046,9 +1455,9 @@ class W3GraphDocument(GraphDocument):
 						tuple(int(i) for i in coord.split(','))
 						for coord in area.attrib['coords'].split(' ')
 					]
-					# Resize all the coordinates by the zoom_scale
+					# Resize all the coordinates by the scale
 					coords = [
-						tuple(int(round(i * self.zoom_scale)) for i in coord)
+						tuple(int(round(i * self.scale)) for i in coord)
 						for coord in coords
 					]
 					# Convert the scaled results back into a string
@@ -1058,118 +1467,34 @@ class W3GraphDocument(GraphDocument):
 					)
 		return result
 	
-	def _link(self, doc):
+	def link(self):
 		# Overridden to allow "zoomed" graphs with some extra JavaScript. The
 		# write() method handles checking if a graph is large
 		# (>self.max_graph_size) and creating a second scaled down version if
 		# it is. The scaled down version is then used as the image in the page,
 		# and a chunk of JavaScript (defined in W3JavaScriptDocument) uses the
 		# full size image in a "zoom box".
-		if self._usemap:
-			if not self._written:
+		if self.usemap:
+			if not self.written:
 				self.write()
 			# If the graph uses a client side image map for links a bit
 			# more work is required. We need to get the graph to generate
 			# the <map> doc, then import all elements from that
 			# doc into the doc this instance contains...
-			map_small = self._map(zoom=False)
-			image = doc._img(self.url, attrs={
-				'id': self.url,
-				'usemap': '#' + map_small.attrib['id'],
-			})
-			if self.zoom_scale is None:
+			map_small = self.map(zoom=False)
+			image = tag.img(src=self.url, id=self.url, usemap='#' + map_small.attrib['id'])
+			if self.scale is None:
 				return [image, map_small]
 			else:
-				map_zoom = self._map(zoom=True)
-				link = doc._p(doc._a('#', 'Zoom On/Off', attrs={
-					'class': 'zoom',
-					'onclick': 'javascript:return zoom.toggle("%s", "%s", "#%s");' % (
+				map_zoom = self.map(zoom=True)
+				link = tag.p(tag.a('Zoom On/Off', href='#', class_='zoom',
+					onclick='javascript:return zoom.toggle("%s", "%s", "#%s");' % (
 						self.url,             # thumbnail element id
 						self.zoom_url,        # src of full image
 						map_zoom.attrib['id'] # full image map element id
 					)
-				}))
+				))
 				return [link, image, map_small, map_zoom]
 		else:
-			return doc._img(self.url)
+			return super(W3GraphDocument, self).link()
 
-	def _create_content(self):
-		# Call the inherited method in case it does anything
-		super(W3GraphDocument, self)._create_content()
-		# Call _create_graph to create the content of the graph
-		self._create_graph()
-		# Transform dbobject attributes on Node, Edge and Cluster objects into
-		# URL attributes 
-
-		def rewrite_url(node):
-			if isinstance(node, (Node, Edge, Cluster)) and hasattr(node, 'dbobject'):
-				doc = self.site.object_document(node.dbobject)
-				if doc:
-					node.URL = doc.url
-
-		def rewrite_font(node):
-			if isinstance(node, (Node, Edge)):
-				node.fontname = 'Verdana'
-				node.fontsize = 8.0
-			elif isinstance(node, Cluster):
-				node.fontname = 'Verdana'
-				node.fontsize = 10.0
-
-		self.graph.touch(rewrite_url)
-		self.graph.touch(rewrite_font)
-		# Tweak some of the graph attributes to make it scale a bit more nicely
-		self.graph.rankdir = 'LR'
-		#self.graph.size = '10,20'
-		self.graph.dpi = '96'
-		(maxw, maxh) = self.site.max_graph_size
-		self.graph.ratio = str(float(maxh) / float(maxw))
-
-	def _create_graph(self):
-		# Override in descendent classes to generate nodes, edges, etc. in the
-		# graph
-		pass
-
-	def _add_dbobject(self, dbobject, selected=False):
-		"""Utility method to add a database object to the graph.
-
-		This utility method adds the specified database object along with
-		standardized formatting depending on the type of the object.
-		"""
-		assert isinstance(dbobject, DatabaseObject)
-		assert not self._written
-		o = self._dbobject_map.get(dbobject, None)
-		if o is None:
-			if isinstance(dbobject, Schema):
-				o = Cluster(self.graph, dbobject.qualified_name)
-				o.label = dbobject.name
-				o.style = 'filled'
-				o.fillcolor = '#ece6d7'
-				o.color = '#ece6d7'
-			elif isinstance(dbobject, Relation):
-				cluster = self._add_dbobject(dbobject.schema)
-				o = Node(cluster, dbobject.qualified_name)
-				o.shape = 'rectangle'
-				o.style = 'filled'
-				o.label = dbobject.name
-				if isinstance(dbobject, Table):
-					o.fillcolor = '#bbbbff'
-				elif isinstance(dbobject, View):
-					o.style = 'filled,rounded'
-					o.fillcolor = '#bbffbb'
-				elif isinstance(dbobject, Alias):
-					if isinstance(dbobject.final_relation, View):
-						o.style = 'filled,rounded'
-					o.fillcolor = '#ffffbb'
-				o.color = '#000000'
-			elif isinstance(dbobject, Trigger):
-				cluster = self._add_dbobject(dbobject.schema)
-				o = Node(cluster, dbobject.qualified_name)
-				o.shape = 'hexagon'
-				o.style = 'filled'
-				o.fillcolor = '#ffbbbb'
-				o.label = dbobject.name
-			if selected:
-				o.style += ',setlinewidth(3)'
-			o.dbobject = dbobject
-			self._dbobject_map[dbobject] = o
-		return o

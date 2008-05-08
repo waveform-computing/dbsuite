@@ -182,7 +182,10 @@ def make_docs(config_files):
 			logging.info(READING_INPUT_MSG % (config_file, input_section, s))
 			try:
 				ip = input_plugin.InputPlugin()
-				ip.configure(dict(parser.items(input_section)))
+				ip.configure(dict(
+					(name, value.replace('\n', ''))
+					for (name, value) in parser.items(input_section)
+				))
 				ip.open()
 				try:
 					# Construct the internal representation of the metadata
@@ -191,6 +194,7 @@ def make_docs(config_files):
 					ip.close()
 			except Exception, e:
 				# Just log errors and continue on to the next ip section
+				raise
 				logging.error(PLUGIN_EXEC_ERR % (config_file, input_section, s, str(e)))
 				continue
 			for output_section in output_sections:
@@ -203,11 +207,15 @@ def make_docs(config_files):
 				logging.info(WRITING_OUTPUT_MSG % (config_file, output_section, s))
 				try:
 					op = output_plugin.OutputPlugin()
-					op.configure(dict(parser.items(output_section)))
+					op.configure(dict(
+						(name, value.replace('\n', ''))
+						for (name, value) in parser.items(output_section)
+					))
 					op.execute(db)
 				except Exception, e:
 					# Again, just log errors and continue onto the next output
 					# section
+					raise
 					logging.error(PLUGIN_EXEC_ERR % (config_file, output_section, s, str(e)))
 
 def list_plugins():
