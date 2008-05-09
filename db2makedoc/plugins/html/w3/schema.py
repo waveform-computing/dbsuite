@@ -117,7 +117,7 @@ class W3SchemaDocument(W3MainDocument):
 					))
 				)
 			))
-		if len(relations) > 0:
+		if len(relations) > 0 and self.site.object_graph(self.dbobject):
 			result.append((
 				'diagram', 'Diagram',
 				self.site.img_of(self.dbobject)

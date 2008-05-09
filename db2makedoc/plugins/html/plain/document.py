@@ -9,7 +9,6 @@ certain methods to provide formatting specific to the plain style.
 import os
 import codecs
 import logging
-from PIL import Image
 from db2makedoc.graph import Graph, Node, Edge, Cluster
 from db2makedoc.etree import ProcessingInstruction, fromstring
 from db2makedoc.db import (
@@ -20,6 +19,14 @@ from db2makedoc.plugins.html.document import (
 	Attrs, ElementFactory, WebSite, HTMLDocument, HTMLObjectDocument,
 	CSSDocument, GraphDocument, GraphObjectDocument
 )
+
+# Import the imaging library
+try:
+	from PIL import Image
+except ImportError:
+	# Ignore any import errors - the main plugin takes care of warning the
+	# user if PIL is required but not present
+	pass
 
 
 class PlainElementFactory(ElementFactory):

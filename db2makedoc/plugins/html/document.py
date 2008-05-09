@@ -42,8 +42,8 @@ from db2makedoc.sql.formatter import (
 try:
 	import xapian
 except ImportError:
-	# Ignore any import errors - the main plugin takes care of raising an
-	# error if xapian is required but not present
+	# Ignore any import errors - the main plugin takes care of warning the user
+	# if xapian is required but not present
 	pass
 
 # Import the fastest StringIO implementation

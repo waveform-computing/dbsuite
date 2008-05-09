@@ -37,10 +37,10 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 		self.site_class = PlainSite
 		self.add_option('last_updated', default='true', convert=self.convert_bool,
 			doc="""If true, the generated date of each page will be added to
-			the footer (optional)""")
+			the footer""")
 		self.add_option('stylesheets', default=None, convert=self.convert_list,
 			doc="""A comma separated list of additional stylesheet URLs which
-			each generated HTML page will link to (optional)""")
+			each generated HTML page will link to""")
 		self.add_option('max_graph_size', default='600x800',
 			convert=lambda value: self.convert_list(value, separator='x',
 			subconvert=lambda value: self.convert_int(value, minvalue=100),
@@ -50,6 +50,59 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 			the specified size. Values must be specified as "widthxheight",
 			e.g.  "640x480". Defaults to "600x800".""")
 	
+	def configure(self, config):
+		super(OutputPlugin, self).configure(config)
+		# If diagrams are requested, check we can find GraphViz in the PATH
+		# and import PIL
+		if self.options['diagrams']:
+			try:
+				import PIL
+			except ImportError:
+				logging.warning('Diagrams are requested, but the Python Imaging Library (PIL) was not found - proceeding without diagrams')
+				self.options['diagrams'] = []
+			else:
+				gvexe = DEFAULT_CONVERTER
+				if mswindows:
+					gvexe = os.extsep.join([gvexe, 'exe'])
+				found = reduce(lambda x,y: x or y, [
+					os.path.exists(os.path.join(path, gvexe))
+					for path in os.environ.get('PATH', os.defpath).split(os.pathsep)
+				], False)
+				if not found:
+					logging.warning('Diagrams are requested, but the GraphViz utility (%s) was not found in the PATH - proceeding without diagrams' % gvexe)
+					self.options['diagrams'] = []
+		# Build the map of document classes
+		self.class_map = {
+			Database:   set([PlainDatabaseDocument]),
+			Schema:     set([PlainSchemaDocument]),
+			Table:      set([PlainTableDocument]),
+			View:       set([PlainViewDocument]),
+			Alias:      set([PlainAliasDocument]),
+			UniqueKey:  set([PlainUniqueKeyDocument]),
+			ForeignKey: set([PlainForeignKeyDocument]),
+			Check:      set([PlainCheckDocument]),
+			Index:      set([PlainIndexDocument]),
+			Trigger:    set([PlainTriggerDocument]),
+			Function:   set([PlainFunctionDocument]),
+			Procedure:  set([PlainProcedureDocument]),
+			Tablespace: set([PlainTablespaceDocument]),
+		}
+		for item in self.options['diagrams']:
+			if item == 'schema':
+				self.class_map[Schema].add(PlainSchemaGraph)
+			elif item == 'relation':
+				self.class_map[Alias].add(PlainAliasGraph)
+				self.class_map[Table].add(PlainTableGraph)
+				self.class_map[View].add(PlainViewGraph)
+			elif item == 'alias':
+				self.class_map[Alias].add(PlainAliasGraph)
+			elif item == 'table':
+				self.class_map[Table].add(PlainTableGraph)
+			elif item == 'view':
+				self.class_map[View].add(PlainViewGraph)
+			else:
+				raise Exception('Invalid type "%s" specified in diagram' % item)
+
 	def create_documents(self, site):
 		# Overridden to add static CSS and JavaScript documents
 		PlainCSSDocument(site)
@@ -64,26 +117,11 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 		# database objects. Document and graph classes are determined from a
 		# dictionary lookup (a perfect class match is tested for first,
 		# followed by a subclass match).
-		class_map = {
-			Database:   [PlainDatabaseDocument],
-			Schema:     [PlainSchemaGraph, PlainSchemaDocument],
-			Table:      [PlainTableGraph, PlainTableDocument],
-			View:       [PlainViewGraph, PlainViewDocument],
-			Alias:      [PlainAliasGraph, PlainAliasDocument],
-			UniqueKey:  [PlainUniqueKeyDocument],
-			ForeignKey: [PlainForeignKeyDocument],
-			Check:      [PlainCheckDocument],
-			Index:      [PlainIndexDocument],
-			Trigger:    [PlainTriggerDocument],
-			Function:   [PlainFunctionDocument],
-			Procedure:  [PlainProcedureDocument],
-			Tablespace: [PlainTablespaceDocument],
-		}
-		classes = class_map.get(type(dbobject))
+		classes = self.class_map.get(type(dbobject))
 		if classes is None:
-			for dbclass in class_map:
+			for dbclass in self.class_map:
 				if isinstance(dbobject, dbclass):
-					classes = class_map[dbclass]
+					classes = self.class_map[dbclass]
 		if classes is not None:
 			for docclass in classes:
 				docclass(site, dbobject)

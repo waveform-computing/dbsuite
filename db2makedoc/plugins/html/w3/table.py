@@ -220,10 +220,11 @@ class W3TableDocument(W3MainDocument):
 					))
 				)
 			))
-		result.append((
-			'diagram', 'Diagram',
-			self.site.img_of(self.dbobject)
-		))
+		if self.site.object_graph(self.dbobject):
+			result.append((
+				'diagram', 'Diagram',
+				self.site.img_of(self.dbobject)
+			))
 		result.append((
 			'sql', 'SQL Definition',
 			tag.pre(self.format_sql(self.dbobject.create_sql), class_='sql')

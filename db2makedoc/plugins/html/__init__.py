@@ -29,10 +29,10 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 		self.site_class = WebSite
 		self.add_option('path', default='.', convert=self.convert_path, 
 			doc="""The folder into which all files (HTML, CSS, SVG, etc.) will
-			be written (optional)""")
+			be written""")
 		self.add_option('encoding', default='UTF-8',
 			doc="""The character encoding to use for all text-based files
-			(HTML, JavaScript, CSS, SVG, etc.) (optional)""")
+			(HTML, JavaScript, CSS, SVG, etc.)""")
 		self.add_option('home_title', default='Home',
 			doc="""The title of the homepage link included in all documents""")
 		self.add_option('home_url', default='/',
@@ -40,14 +40,11 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 			This can point anywhere; it does not have to be a link to one of
 			the documents output by the plugin""")
 		self.add_option('author_name', default=None,
-			doc="""The name of the author of the generated documents
-			(optional)""")
+			doc="""The name of the author of the generated documents""")
 		self.add_option('author_email', default=None,
-			doc="""The e-mail address of the author of the generated documents
-			(optional)""")
+			doc="""The e-mail address of the author of the generated documents""")
 		self.add_option('copyright', default=None,
-			doc="""The copyright message to embed in the generated documents
-			(optional)""")
+			doc="""The copyright message to embed in the generated documents""")
 		self.add_option('site_title', default=None,
 			doc="""The title of the site as a whole. Defaults to "dbname
 			Documentation" where dbname is the name of the database for which
@@ -56,6 +53,14 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 			doc="""If True, a full-text-search database will be generated and
 			a small PHP script will be included with the output for searching
 			purposes""")
+		self.add_option('diagrams', default='relation',
+			convert=lambda value: self.convert_list(value,
+			subconvert=lambda value: value.lower()),
+			doc="""A comma separated list of the object types for which
+			diagrams should be generated. Supported values are currently:
+			alias, schema, table, view, relation (equivalent to
+			"alias,table,view"). Defaults to "relation" as schema diagrams can
+			require an extremely large amount of RAM to process """)
 		self.add_option('lang', default='en-US', convert=lambda value: self.convert_list(value, separator='-', minvalues=2, maxvalues=2),
 			doc="""The ISO639 language code indicating the language that the
 			site uses. Defaults to en-US. Note that this is used both for the
@@ -69,16 +74,17 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 	
 	def configure(self, config):
 		super(HTMLOutputPlugin, self).configure(config)
-		# check that the specified encoding exists (the following lookup()
+		# Check that the specified encoding exists (the following lookup()
 		# method will raise a LookupError if it can't find the encoding)
 		codecs.lookup(self.options['encoding'])
-		# if SEARCH_OPTION is True, check that the Xapian bindings are
+		# If search is True, check that the Xapian bindings are
 		# available
 		if self.options['search']:
 			try:
 				import xapian
 			except ImportError:
-				raise Exception('The Python Xapian bindings must be installed when search is true')
+				logging.warning('Search is enabled, but the Python Xapian bindings were not found - proceeding without search')
+				self.options['search'] = False
 
 	def execute(self, database):
 		"""Invokes the plugin to produce documentation.
