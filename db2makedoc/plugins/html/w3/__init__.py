@@ -57,7 +57,7 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 		self.add_option('feedback_url', default='http://w3.ibm.com/feedback/',
 			doc="""The URL which the feedback link at the top right of each
 			page points to (defaults to the standard w3 feedback page)""")
-		self.add_option('menu_items', default=None, convert=self.convert_odict,
+		self.add_option('menu_items', default='', convert=self.convert_odict,
 			doc="""A comma-separated list of name=url values to appear in the
 			left-hand menu. The special URL # denotes the position of of the
 			database document, e.g.  My App=/myapp,Data
@@ -65,7 +65,7 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 			the list, the database document will be the last menu entry. Note
 			that the "home_title" and "home_url" values are implicitly included
 			at the top of this list""")
-		self.add_option('related_items', default=None, convert=self.convert_odict,
+		self.add_option('related_items', default='', convert=self.convert_odict,
 			doc="""A comma-separated list of links to add after the left-hand
 			menu. Links are name=url values, see the "menu_items" description
 			for an example""")
