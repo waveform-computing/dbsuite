@@ -5,6 +5,7 @@
 import os
 import sys
 mswindows = sys.platform[:5] == 'win32'
+import logging
 import db2makedoc.plugins.html
 
 from db2makedoc.db import (

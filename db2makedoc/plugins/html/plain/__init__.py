@@ -3,6 +3,7 @@
 """Output plugin for plain HTML web pages."""
 
 import os
+import logging
 import db2makedoc.plugins.html
 
 from db2makedoc.db import Database, Schema, Table, View, Alias, UniqueKey, ForeignKey, Check, Index, Trigger, Function, Procedure, Tablespace
