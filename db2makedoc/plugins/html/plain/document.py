@@ -444,10 +444,11 @@ pre.sql {
 }
 
 .sql span.sql-error      { background-color: red; }
-.sql span.sql-comment    { color: green; }
+.sql span.sql-comment    { font-style: italic; color: green; }
 .sql span.sql-keyword    { font-weight: bold; color: blue; }
 .sql span.sql-datatype   { font-weight: bold; color: green; }
 .sql span.sql-register   { font-weight: bold; color: purple; }
+.sql span.sql-label      { font-weight: bold; font-style: italic; color: teal; }
 .sql span.sql-identifier { }
 .sql span.sql-number     { color: maroon; }
 .sql span.sql-string     { color: maroon; }

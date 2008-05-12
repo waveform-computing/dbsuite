@@ -33,6 +33,7 @@ TOKEN_LABELS = {
 	EOF:        '<eof>',
 	WHITESPACE: '<space>',
 	KEYWORD:    'keyword',
+	LABEL:      'label',
 	OPERATOR:   'operator',
 	IDENTIFIER: 'identifier',
 	REGISTER:   'register',
@@ -746,6 +747,8 @@ class SQLFormatter(BaseFormatter):
 		if self.reformat:
 			if t[0] == IDENTIFIER:
 				return (t[0], t[1], format_ident(t[1]))
+			elif t[0] == LABEL:
+				return (t[0], t[1], format_ident(t[1]) + ':')
 			elif t[0] == REGISTER:
 				return (t[0], t[1], format_ident(t[1]))
 			elif t[0] == DATATYPE:
@@ -2855,7 +2858,6 @@ class SQLFormatter(BaseFormatter):
 	
 	def _parse_case_statement(self, inproc):
 		"""Parses a CASE-conditional in a procedure"""
-		# XXX Implement support for labels
 		# CASE already matched
 		if self._match('WHEN'):
 			# Parse searched-case-statement
@@ -3619,15 +3621,18 @@ class SQLFormatter(BaseFormatter):
 			self._parse_search_condition()
 			self._outdent()
 			self._expect(')')
-		if self._match('BEGIN'):
+		try:
+			label = self._expect(LABEL)[1]
 			self._outdent(-1)
-			self._parse_dynamic_compound_statement()
+			self._newline()
+		except ParseError:
+			label = None
+		if self._match('BEGIN'):
+			if not label: self._outdent(-1)
+			self._parse_dynamic_compound_statement(label=label)
 		else:
-			# XXX Add support for label
-			self._indent()
 			self._parse_routine_statement()
-			self._outdent()
-			self._outdent()
+			if not label: self._outdent()
 
 	def _parse_create_view_statement(self):
 		"""Parses a CREATE VIEW statement"""
@@ -3772,10 +3777,22 @@ class SQLFormatter(BaseFormatter):
 		"""Parses an EXECUTE IMMEDIATE statement in a procedure"""
 		# EXECUTE IMMEDIATE already matched
 		self._parse_expression()
+	
+	def _parse_fetch_statement(self):
+		"""Parses a FETCH FROM statement in a procedure"""
+		# FETCH already matched
+		self._match('FROM')
+		self._expect(IDENTIFIER)
+		if self._match('INTO'):
+			self._parse_ident_list()
+		elif self._match('USING'):
+			self._expect('DESCRIPTOR')
+			self._expect(IDENTIFIER)
+		else:
+			self._expected_one_of(['INTO', 'USING'])
 			
-	def _parse_for_statement(self, inproc):
+	def _parse_for_statement(self, inproc, label=None):
 		"""Parses a FOR-loop in a dynamic compound statement"""
-		# XXX Implement support for labels
 		# FOR already matched
 		self._expect_sequence([IDENTIFIER, 'AS'])
 		if inproc:
@@ -3811,6 +3828,8 @@ class SQLFormatter(BaseFormatter):
 				break
 		self._outdent(-1)
 		self._expect('FOR')
+		if label:
+			self._match((IDENTIFIER, label))
 	
 	def _parse_get_diagnostics_statement(self):
 		"""Parses a GET DIAGNOSTICS statement in a dynamic compound statement"""
@@ -3839,7 +3858,6 @@ class SQLFormatter(BaseFormatter):
 
 	def _parse_if_statement(self, inproc):
 		"""Parses an IF-conditional in a dynamic compound statement"""
-		# XXX Implement support for labels
 		# IF already matched
 		t = 'IF'
 		while True:
@@ -3927,9 +3945,8 @@ class SQLFormatter(BaseFormatter):
 		self._expect_one_of(['SHARE', 'EXCLUSIVE'])
 		self._expect('MODE')
 
-	def _parse_loop_statement(self, inproc):
+	def _parse_loop_statement(self, inproc, label=None):
 		"""Parses a LOOP-loop in a procedure"""
-		# XXX Implement support for labels
 		# LOOP already matched
 		self._indent()
 		while True:
@@ -3944,6 +3961,8 @@ class SQLFormatter(BaseFormatter):
 			else:
 				self._newline()
 		self._expect('LOOP')
+		if label:
+			self._match((IDENTIFIER, label))
 	
 	def _parse_merge_statement(self):
 		# MERGE already matched
@@ -4013,9 +4032,8 @@ class SQLFormatter(BaseFormatter):
 		# RELEASE [TO] SAVEPOINT already matched
 		self._expect(IDENTIFIER)
 	
-	def _parse_repeat_statement(self, inproc):
+	def _parse_repeat_statement(self, inproc, label=None):
 		"""Parses a REPEAT-loop in a procedure"""
-		# XXX Implement support for labels
 		# REPEAT already matched
 		self._indent()
 		while True:
@@ -4032,6 +4050,8 @@ class SQLFormatter(BaseFormatter):
 		self._outdent(-1)
 		self._parse_search_condition()
 		self._expect_sequence(['END', 'REPEAT'])
+		if label:
+			self._match((IDENTIFIER, label))
 	
 	def _parse_resignal_statement(self):
 		"""Parses a RESIGNAL statement in a dynamic compound statement"""
@@ -4069,6 +4089,9 @@ class SQLFormatter(BaseFormatter):
 		"""Parses a ROLLBACK statement"""
 		# ROLLBACK already matched
 		self._match('WORK')
+		if self._match('TO'):
+			self._expect('SAVEPOINT')
+			self._match(IDENTIFIER)
 	
 	def _parse_savepoint_statement(self):
 		"""Parses a SAVEPOINT statement"""
@@ -4486,9 +4509,8 @@ class SQLFormatter(BaseFormatter):
 		if self._match('WITH'):
 			self._expect_one_of(['RR', 'RS', 'CS', 'UR'])
 
-	def _parse_while_statement(self, inproc):
+	def _parse_while_statement(self, inproc, label=None):
 		"""Parses a WHILE-loop in a dynamic compound statement"""
-		# XXX Implement support for labels
 		# WHILE already matched
 		self._parse_search_condition(linebreaks=False)
 		self._newline()
@@ -4506,13 +4528,15 @@ class SQLFormatter(BaseFormatter):
 			else:
 				self._newline()
 		self._expect('WHILE')
+		if label:
+			self._match((IDENTIFIER, label))
 	
 	# COMPOUND STATEMENTS ####################################################
 
 	def _parse_routine_statement(self):
 		"""Parses a statement in a routine/trigger/compound statement"""
 		# XXX Only permit RETURN when part of a function/method/trigger
-		# XXX Only permit ITERATE & LEAVE when part of a loop
+		# XXX Only permit ITERATE when part of a loop
 		if self._match('CALL'):
 			self._parse_call_statement()
 		elif self._match('GET'):
@@ -4542,12 +4566,20 @@ class SQLFormatter(BaseFormatter):
 		elif self._match('MERGE'):
 			self._parse_merge_statement()
 		else:
-			self._parse_select_statement()
+			try:
+				label = self._expect(LABEL)[1]
+			except ParseError:
+				self._parse_select_statement()
+			else:
+				if self._match('FOR'):
+					self._parse_for_statement(inproc=False, label=label)
+				elif self._match('WHILE'):
+					self._parse_while_statement(inproc=False, label=label)
+				else:
+					self._expected_one_of(['FOR', 'WHILE'])
 	
-	def _parse_dynamic_compound_statement(self):
+	def _parse_dynamic_compound_statement(self, label=None):
 		"""Parses a dynamic compound statement"""
-		# XXX Implement support for labelled blocks
-		# XXX Only permit labels when part of a function/method/trigger
 		# BEGIN already matched
 		self._expect('ATOMIC')
 		self._indent()
@@ -4577,15 +4609,22 @@ class SQLFormatter(BaseFormatter):
 			else:
 				self._newline()
 		self._outdent(-1)
+		if label:
+			self._match((IDENTIFIER, label))
 	
 	def _parse_procedure_statement(self):
 		"""Parses a procedure statement within a procedure body"""
-		# XXX Add match for BEGIN, pointing to procedure_compound_statement
+		try:
+			label = self._expect(LABEL)[1]
+		except ParseError:
+			label = None
 		# Procedure specific statements
-		if self._match('REPEAT'):
-			self._parse_repeat_statement(inproc=True)
+		if self._match('BEGIN'):
+			self._parse_procedure_compound_statement(label=label)
+		elif self._match('REPEAT'):
+			self._parse_repeat_statement(inproc=True, label=label)
 		elif self._match('LOOP'):
-			self._parse_loop_statement(inproc=True)
+			self._parse_loop_statement(inproc=True, label=label)
 		elif self._match('CASE'):
 			self._parse_case_statement(inproc=True)
 		elif self._match('GOTO'):
@@ -4596,6 +4635,8 @@ class SQLFormatter(BaseFormatter):
 			self._parse_associate_locators_statement()
 		elif self._match('OPEN'):
 			self._parse_open_statement()
+		elif self._match('FETCH'):
+			self._parse_fetch_statement()
 		elif self._match('CLOSE'):
 			self._parse_close_statement()
 		elif self._match('EXECUTE'):
@@ -4607,9 +4648,9 @@ class SQLFormatter(BaseFormatter):
 		elif self._match('SET'):
 			self._parse_set_statement(inproc=True)
 		elif self._match('FOR'):
-			self._parse_for_statement(inproc=True)
+			self._parse_for_statement(inproc=True, label=label)
 		elif self._match('WHILE'):
-			self._parse_while_statement(inproc=True)
+			self._parse_while_statement(inproc=True, label=label)
 		elif self._match('IF'):
 			self._parse_if_statement(inproc=True)
 		elif self._match('SIGNAL'):
@@ -4669,10 +4710,9 @@ class SQLFormatter(BaseFormatter):
 		else:
 			self._parse_select_statement()
 	
-	def _parse_procedure_compound_statement(self):
+	def _parse_procedure_compound_statement(self, label=None):
 		"""Parses a procedure compound statement (body)"""
 		# BEGIN already matched
-		# XXX Implement support for labelled blocks
 		if self._match('NOT'):
 			self._expect('ATOMIC')
 		else:
@@ -4811,6 +4851,8 @@ class SQLFormatter(BaseFormatter):
 			else:
 				self._newline()
 		self._outdent(-1)
+		if label:
+			self._match((IDENTIFIER, label))
 	
 	def _parse_statement(self):
 		"""Parses a top-level statement in an SQL script"""

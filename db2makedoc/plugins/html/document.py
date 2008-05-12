@@ -27,7 +27,7 @@ from db2makedoc.etree import (
 	fromstring, tostring, iselement, Element, Comment, flatten_html
 )
 from db2makedoc.sql.formatter import (
-	ERROR, COMMENT, KEYWORD, IDENTIFIER, DATATYPE, REGISTER,
+	ERROR, COMMENT, KEYWORD, IDENTIFIER, LABEL, DATATYPE, REGISTER,
 	NUMBER, STRING, OPERATOR, PARAMETER, TERMINATOR, STATEMENT
 )
 
@@ -365,6 +365,7 @@ class HTMLSQLHighlighter(SQLHighlighter):
 			COMMENT:    'sql-comment',
 			KEYWORD:    'sql-keyword',
 			IDENTIFIER: 'sql-identifier',
+			LABEL:      'sql-label',
 			DATATYPE:   'sql-datatype',
 			REGISTER:   'sql-register',
 			NUMBER:     'sql-number',
@@ -429,6 +430,7 @@ class WebSite(object):
 		self.search = options['search']
 		self.threads = options['threads']
 		self.title = options['site_title']
+		self.diagrams = bool(options['diagrams'])
 		if self.title is None:
 			self.title = '%s Documentation' % self.database.name
 		self.urls = {}
@@ -559,7 +561,10 @@ class WebSite(object):
 	def write(self):
 		"""Writes all documents in the site to disk."""
 		if self.threads == 1:
-			logging.info('Writing documents and graphs')
+			if self.diagrams:
+				logging.info('Writing documents and graphs')
+			else:
+				logging.info('Writing documents')
 			self.write_single(self.urls.itervalues())
 		else:
 			# Writing documents with multiple threads is split into two phases:
@@ -570,11 +575,12 @@ class WebSite(object):
 			# If another thread starts writing the same GraphDocument
 			# simultaneously two threads wind up trying to write to the same
 			# file
-			logging.info('Writing graphs')
-			self.write_multi(
-				doc for doc in self.urls.itervalues()
-				if isinstance(doc, GraphDocument)
-			)
+			if self.diagrams:
+				logging.info('Writing graphs')
+				self.write_multi(
+					doc for doc in self.urls.itervalues()
+					if isinstance(doc, GraphDocument)
+				)
 			logging.info('Writing documents')
 			self.write_multi(
 				doc for doc in self.urls.itervalues()

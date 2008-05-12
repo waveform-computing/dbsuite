@@ -32,6 +32,7 @@ Depending on token_type, token_value has different values:
     IDENTIFIER     The identifier folded into uppercase if it was
                    unquoted in the source, or in original case if
                    it was quoted in some fashion in the source
+	LABEL          Same as IDENTIFIER
     NUMBER         The value of the number. In all cases the number
                    is returned as a Decimal to avoid range and
                    rounding problems
@@ -111,9 +112,10 @@ def new_tokens(count):
 	NUMBER,        # A numeric literal
 	STRING,        # A string literal
 	OPERATOR,      # An operator
+	LABEL,         # A procedural label
 	PARAMETER,     # A colon-prefixed or simple qmark parameter
 	TERMINATOR,    # A statement terminator
-) = new_tokens(11)
+) = new_tokens(12)
 
 class SQLTokenizerBase(object):
 	"""Base SQL tokenizer class."""
@@ -412,7 +414,10 @@ class SQLTokenizerBase(object):
 		self._next()
 		while self.char in self.identchars: self._next()
 		ident = self.markedchars.upper()
-		if ident in self.keywords:
+		if self.char == ':':
+			self._next()
+			self._add_token(LABEL, ident)
+		elif ident in self.keywords:
 			self._add_token(KEYWORD, ident)
 		else:
 			self._add_token(IDENTIFIER, ident)
@@ -469,7 +474,12 @@ class SQLTokenizerBase(object):
 	def _handle_quote(self):
 		"""Parses double quote characters (") in the source."""
 		try:
-			self._add_token(IDENTIFIER, self._extract_string())
+			ident = self._extract_string()
+			if self.char == ':':
+				self._next()
+				self._add_token(LABEL, ident)
+			else:
+				self._add_token(IDENTIFIER, ident)
 		except ValueError, e:
 			self._add_token(ERROR, str(e))
 
