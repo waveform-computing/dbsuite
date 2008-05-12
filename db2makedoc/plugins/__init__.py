@@ -32,29 +32,28 @@ if sys.hexversion < 0x02050000:
 				return True
 		return False
 
-# Constants
-EXCLUDE_OPTION = 'exclude'
-INCLUDE_OPTION = 'include'
+class PluginError(Exception):
+	"""Base exception class for plugin related errors."""
+	pass
 
-# Localizable strings
-EXCLUDE_DESC = """A comma-separated list of schema name patterns to
-	exclude from the documentation. If nothing is specified, no
-	objects are excluded. See the "%(include)s" definition for more
-	information""" % {
-		'include': INCLUDE_OPTION,
-	}
-INCLUDE_DESC = """A comma-separated list of schema name patterns to
-	include in the documentation. If nothing is specified, all
-	objects are included. Patterns may include * and ? as traditional
-	wildcard characters. If both "%(include)s" and "%(exclude)s"
-	are specified, include filtering occurs first. Note that the
-	filtering does not apply to schemas themselves, just to objects
-	within schemas excluding datatypes.  This ensures that, if system
-	schemas are excluded, all objects with built-in datatypes do
-	not also disappear""" % {
-		'include': INCLUDE_OPTION,
-		'exclude': EXCLUDE_OPTION,
-	}
+
+class PluginLoadError(PluginError):
+	"""Exception class for plugin loading errors.
+	
+	The main program converts any ImportError exceptions raised by a plugin
+	into this exception. Generally, plugins should not use this error directly
+	(unless they have a non-import related loading error, which is likely to be
+	rare).
+	"""
+	pass
+
+
+class PluginConfigurationError(PluginError):
+	"""Exception class for plugin configuration errors.
+	
+	This exception should only be raised during the configure() method of a
+	plugin."""
+	pass
 
 
 class Plugin(object):
@@ -101,8 +100,7 @@ class Plugin(object):
 		           convert_X methods below
 		"""
 		self.options[name] = (default, doc, convert)
-	
-	
+
 	def convert_path(self, value):
 		"""Conversion handler for configuration values containing paths."""
 		return os.path.expanduser(os.path.expandvars(value))
@@ -125,18 +123,18 @@ class Plugin(object):
 		"""Conversion handler for configuration values containing an integer."""
 		result = int(value)
 		if minvalue is not None and result < minvalue:
-			raise Exception('%d is less than the minimum (%d)' % (result, minvalue))
+			raise PluginConfigurationError('%d is less than the minimum (%d)' % (result, minvalue))
 		if maxvalue is not None and result > maxvalue:
-			raise Exception('%d is greater than the maximum (%d)' % (result, maxvalue))
+			raise PluginConfigurationError('%d is greater than the maximum (%d)' % (result, maxvalue))
 		return result
 
 	def convert_float(self, value, minvalue=None, maxvalue=None):
 		"""Conversion handler for configuration values containing a float."""
 		result = float(value)
 		if minvalue is not None and result < minvalue:
-			raise Exception('%f is less than the minimum (%f)' % (result, minvalue))
+			raise PluginConfigurationError('%f is less than the minimum (%f)' % (result, minvalue))
 		if maxvalue is not None and result > maxvalue:
-			raise Exception('%f is greater than the maximum (%f)' % (result, maxvalue))
+			raise PluginConfigurationError('%f is greater than the maximum (%f)' % (result, maxvalue))
 		return result
 
 	def convert_bool(self, value,
@@ -149,7 +147,7 @@ class Plugin(object):
 				[(key, True) for key in true_values]
 			)[value.lower()]
 		except KeyError:
-			raise Exception('Invalid boolean value "%s" (use one of %s instead)' % (value, ', '.join(false_values + true_values)))
+			raise PluginConfigurationError('Invalid boolean value "%s" (use one of %s instead)' % (value, ', '.join(false_values + true_values)))
 
 	convert_date_re = re.compile(r'(\d{4})[-/.](\d{2})[-/.](\d{2})([T -.](\d{2})[:.](\d{2})([:.](\d{2})(\.(\d{6})\d*)?)?)?')
 	def convert_date(self, value):
@@ -161,7 +159,7 @@ class Plugin(object):
 		"""
 		result = convert_date_re.match(value).groups()
 		if result is None:
-			raise Exception('Invalid date value "%s" (use ISO8601 format, YYYY-MM-DD HH:MM:SS)' % value)
+			raise PluginConfigurationError('Invalid date value "%s" (use ISO8601 format, YYYY-MM-DD HH:MM:SS)' % value)
 		(yr, mon, day, _, hr, min, _, sec, _, msec) = result
 		return datetime.datetime(*(int(i or '0') for i in (yr, mon, day, hr, min, sec, msec)))
 
@@ -191,9 +189,9 @@ class Plugin(object):
 		"""
 		result = self.convert_list_sub(value, separator, subconvert)
 		if len(result) < minvalues:
-			raise Exception('"%s" must contain at least %d elements' % (value, minvalues))
+			raise PluginConfigurationError('"%s" must contain at least %d elements' % (value, minvalues))
 		if maxvalues is not None and len(result) > maxvalues:
-			raise Exception('"%s" must contain less than %d elements' % (value, maxvalues))
+			raise PluginConfigurationError('"%s" must contain less than %d elements' % (value, maxvalues))
 		return result 
 	
 	def convert_set(self, value, separator=",", subconvert=None, minvalues=0,
@@ -204,9 +202,9 @@ class Plugin(object):
 		"""
 		result = set(self.convert_list_sub(value, separator, subconvert))
 		if len(result) < minvalues:
-			raise Exception('"%s" must contain at least %d unique elements' % (value, minvalues))
+			raise PluginConfigurationError('"%s" must contain at least %d unique elements' % (value, minvalues))
 		if maxvalues is not None and len(result) > maxvalues:
-			raise Exception('"%s" must contain less than %d unique elements' % (value, maxvalues))
+			raise PluginConfigurationError('"%s" must contain less than %d unique elements' % (value, maxvalues))
 		return result 
 
 	def convert_dict(self, value, listsep=',', mapsep='=', subconvert=None,
@@ -253,15 +251,15 @@ class Plugin(object):
 		test that the configuration is valid.
 		"""
 		for (name, (default, doc, convert)) in self.options.iteritems():
-			if name in config:
-				value = config[name]
-			else:
-				value = default
+			value = config.get(name, default)
 			# Note: Conversion is applied to defaults as well as explicitly
 			# specified values (unless the default is None, which is passed
 			# thru verbatim)
 			if convert is not None and value is not None:
-				value = convert(value)
+				try:
+					value = convert(value)
+				except Exception, e:
+					raise PluginConfigurationError('Error reading value for "%s": %s' % (name, str(e)))
 			self.options[name] = value
 	
 
@@ -303,8 +301,19 @@ class InputPlugin(Plugin):
 	def __init__(self):
 		"""Initializes an instance of the class."""
 		super(InputPlugin, self).__init__()
-		self.add_option(EXCLUDE_OPTION, default=None, doc=EXCLUDE_DESC, convert=self.convert_list)
-		self.add_option(INCLUDE_OPTION, default=None, doc=INCLUDE_DESC, convert=self.convert_list)
+		self.add_option('exclude', default=None, convert=self.convert_list,
+			doc="""A comma-separated list of schema name patterns to exclude
+			from the documentation. If ommitted, no objects are excluded. See
+			the "include" definition for more information""")
+		self.add_option('include', default=None, convert=self.convert_list,
+			doc="""A comma-separated list of schema name patterns to include in
+			the documentation. If ommitted, all objects are included.  Patterns
+			may include * and ? as traditional wildcard characters.  If both
+			"include" and "exclude" are specified, include filtering occurs
+			first. Note that the filtering does not apply to schemas
+			themselves, just to objects within schemas excluding datatypes.
+			This ensures that, if system schemas are excluded, all objects with
+			built-in datatypes do not also disappear""")
 		self.__schemas = None
 		self.__datatypes = None
 		self.__tables = None
@@ -343,8 +352,8 @@ class InputPlugin(Plugin):
 	def configure(self, config):
 		"""Loads the plugin configuration."""
 		super(InputPlugin, self).configure(config)
-		self.include = self.options[INCLUDE_OPTION] or []
-		self.exclude = self.options[EXCLUDE_OPTION] or []
+		self.include = self.options['include'] or []
+		self.exclude = self.options['exclude'] or []
 
 	def open(self):
 		"""Opens the database connection for data retrieval.

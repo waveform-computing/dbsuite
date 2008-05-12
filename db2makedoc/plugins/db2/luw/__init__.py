@@ -9,26 +9,8 @@ import datetime
 import re
 import db2makedoc.plugins
 
-# Constants
-DATABASE_OPTION = 'database'
-USERNAME_OPTION = 'username'
-PASSWORD_OPTION = 'password'
 
-# Localizable strings
-DATABASE_DESC = 'The locally cataloged name of the database to connect to'
-USERNAME_DESC = 'The username to connect with (optional: if ommitted an implicit connection will be made)'
-PASSWORD_DESC = 'The password associated with the user given by the username option (mandatory if "%s" is supplied)' % USERNAME_OPTION
-MISSING_OPTION = 'The "%s" option must be specified'
-MISSING_DEPENDENT = 'If the "%s" option is given, the "%s" option must also be provided'
-
-CONNECTING_MSG = 'Connecting to database "%s"'
-USING_DOCCAT = 'DOCCAT extension schema found, using DOCCAT instead of SYSCAT'
-USING_SYSCAT = 'DOCCAT extension schema not found, using SYSCAT'
-USING_V9 = 'Detected IBM DB2 9 catalog layout'
-USING_V8 = 'Did not detect IBM DB2 9 catalog layout, defaulting to IBM DB2 8 layout'
-
-
-def _connect(dsn, username=None, password=None):
+def connect(dsn, username=None, password=None):
 	"""Create a connection to the specified database.
 
 	This utility method attempts to connect to the database named by dsn
@@ -41,7 +23,7 @@ def _connect(dsn, username=None, password=None):
 	ODBC module doesn't correctly handle certain dates hence why all DATE
 	and TIMESTAMP fields are CAST to CHAR in the queries below).
 	"""
-	logging.info(CONNECTING_MSG % dsn)
+	logging.info('Connecting to database "%s"' % dsn)
 	# Try the PyDB2 framework
 	try:
 		import DB2
@@ -97,9 +79,9 @@ def _connect(dsn, username=None, password=None):
 			return odbc.odbc("%s/%s/%s" % (dsn, username, password))
 		else:
 			return odbc.odbc(dsn)
-	raise Exception('Unable to find a suitable connection framework; please install PyDB2, pyodbc, PythonWin, or mxODBC')
+	raise ImportError('Unable to find a suitable connection framework; please install PyDB2, pyodbc, PythonWin, or mxODBC')
 
-def _make_datetime(value):
+def make_datetime(value):
 	"""Converts a date-time value from a database query to a datetime object.
 
 	If value is None or a blank string, returns None. If value is a string
@@ -124,7 +106,7 @@ def _make_datetime(value):
 	else:
 		raise ValueError('Unable to convert date-time value "%s"' % str(value))
 
-def _make_bool(value, true_value='Y', false_value='N', none_value=' ', unknown_error=False, unknown_result=None):
+def make_bool(value, true_value='Y', false_value='N', none_value=' ', unknown_error=False, unknown_result=None):
 	"""Converts a character-based value into a boolean value.
 
 	If value equals true_value, false_value, or none_value return true, false,
@@ -136,7 +118,7 @@ def _make_bool(value, true_value='Y', false_value='N', none_value=' ', unknown_e
 		return {true_value: True, false_value: False, none_value: None}[value]
 	except KeyError:
 		if unknown_error:
-			raise
+			raise ValueError('Invalid boolean value "%s"' % str(value))
 		else:
 			return unknown_result
 
@@ -153,28 +135,33 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 	def __init__(self):
 		"""Initializes an instance of the class."""
 		super(InputPlugin, self).__init__()
-		self.add_option(DATABASE_OPTION, default=None, doc=DATABASE_DESC)
-		self.add_option(USERNAME_OPTION, default=None, doc=USERNAME_DESC)
-		self.add_option(PASSWORD_OPTION, default=None, doc=PASSWORD_DESC)
+		self.add_option('database', default='',
+			doc="""The locally cataloged name of the database to connect to""")
+		self.add_option('username', default=None,
+			doc="""The username to connect with (if ommitted, an implicit
+			connection will be made as the current user)""")
+		self.add_option('password', default=None,
+			doc="""The password associated with the user given by the username
+			option (mandatory if username is supplied)""")
 	
 	def configure(self, config):
 		"""Loads the plugin configuration."""
 		super(InputPlugin, self).configure(config)
 		# Check for missing stuff
-		if not self.options[DATABASE_OPTION]:
-			raise Exception(MISSING_OPTION % DATABASE_OPTION)
-		if self.options[USERNAME_OPTION] and not self.options[PASSWORD_OPTION]:
-			raise Exception(MISSING_DEPENDENT % (USERNAME_OPTION, PASSWORD_OPTION))
+		if not self.options['database']:
+			raise db2makedoc.plugins.PluginConfigurationError('The database option must be specified')
+		if self.options['username'] is not None and self.options['password'] is None:
+			raise db2makedoc.plugins.PluginConfigurationError('If the username option is specified, the password option must also be specified')
 
 	def open(self):
 		"""Opens the database connection for data retrieval."""
 		super(InputPlugin, self).open()
-		self.connection = _connect(
-			self.options[DATABASE_OPTION],
-			self.options[USERNAME_OPTION],
-			self.options[PASSWORD_OPTION]
+		self.connection = connect(
+			self.options['database'],
+			self.options['username'],
+			self.options['password']
 		)
-		self.name = self.options[DATABASE_OPTION]
+		self.name = self.options['database']
 		# Test whether the DOCCAT extension is installed
 		cursor = self.connection.cursor()
 		cursor.execute("""
@@ -183,7 +170,10 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			WHERE SCHEMANAME = 'DOCCAT'
 			WITH UR""")
 		self.doccat = bool(cursor.fetchall()[0][0])
-		logging.info([USING_SYSCAT, USING_DOCCAT][self.doccat])
+		logging.info([
+			'DOCCAT extension schema not found, using SYSCAT',
+			'DOCCAT extension schema found, using DOCCAT instead of SYSCAT'
+		][self.doccat])
 		# Test which version of the system catalog is installed
 		cursor = self.connection.cursor()
 		cursor.execute("""
@@ -196,7 +186,10 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			'schema': ['SYSCAT', 'DOCCAT'][self.doccat]
 		})
 		self.v9 = bool(cursor.fetchall()[0][0])
-		logging.info([USING_V8, USING_V9][self.v9])
+		logging.info([
+			'Did not detect IBM DB2 9 catalog layout, defaulting to IBM DB2 8 layout',
+			'Detected IBM DB2 9 catalog layout'
+		][self.v9])
 		# Set up a generic query substitution dictionary
 		self.query_subst = {
 			'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
@@ -251,8 +244,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			result.append((
 				name,
 				owner,
-				_make_bool(system),
-				_make_datetime(created),
+				make_bool(system),
+				make_datetime(created),
 				desc
 			))
 		return result
@@ -321,8 +314,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				schema,
 				name,
 				owner,
-				_make_bool(system),
-				_make_datetime(created),
+				make_bool(system),
+				make_datetime(created),
 				source_schema,
 				source_name,
 				size or None,
@@ -397,9 +390,9 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				schema,
 				name,
 				owner,
-				_make_bool(system),
-				_make_datetime(created),
-				_make_datetime(laststats),
+				make_bool(system),
+				make_datetime(created),
+				make_datetime(laststats),
 				cardinality,
 				size,
 				tbspace,
@@ -465,8 +458,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				schema,
 				name,
 				owner,
-				_make_bool(system),
-				_make_datetime(created),
+				make_bool(system),
+				make_datetime(created),
 				readonly,
 				str(sql),
 				desc
@@ -528,8 +521,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				schema,
 				name,
 				owner,
-				_make_bool(system),
-				_make_datetime(created),
+				make_bool(system),
+				make_datetime(created),
 				base_schema,
 				base_table,
 				desc
@@ -660,12 +653,12 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				tabschema,
 				tabname,
 				owner,
-				_make_bool(system),
-				_make_datetime(created),
-				_make_datetime(laststats),
+				make_bool(system),
+				make_datetime(created),
+				make_datetime(laststats),
 				card,
 				size,
-				_make_bool(unique),
+				make_bool(unique),
 				tbspace,
 				desc
 			))
@@ -831,11 +824,11 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				colname,
 				typeschema,
 				typename,
-				_make_bool(identity),
+				make_bool(identity),
 				size,
 				scale,
 				codepage or None,
-				_make_bool(nullable),
+				make_bool(nullable),
 				cardinality,
 				nullcard,
 				generated,
@@ -902,9 +895,9 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				name,
 				keyname,
 				owner,
-				_make_bool(system),
-				_make_datetime(created),
-				_make_bool(primary),
+				make_bool(system),
+				make_datetime(created),
+				make_bool(primary),
 				desc
 			))
 		return result
@@ -1029,8 +1022,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				name,
 				keyname,
 				owner,
-				_make_bool(system),
-				_make_datetime(created),
+				make_bool(system),
+				make_datetime(created),
 				refschema,
 				refname,
 				refkeyname,
@@ -1156,8 +1149,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				name,
 				checkname,
 				owner,
-				_make_bool(system),
-				_make_datetime(created),
+				make_bool(system),
+				make_datetime(created),
 				str(sql),
 				desc
 			))
@@ -1279,12 +1272,12 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				specname,
 				name,
 				owner,
-				_make_bool(system),
-				_make_datetime(created),
+				make_bool(system),
+				make_datetime(created),
 				functype,
-				_make_bool(deterministic),
-				_make_bool(extaction, true_value='E'),
-				_make_bool(nullcall),
+				make_bool(deterministic),
+				make_bool(extaction, true_value='E'),
+				make_bool(nullcall),
 				access,
 				str(sql),
 				desc
@@ -1459,11 +1452,11 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				specname,
 				name,
 				owner,
-				_make_bool(system),
-				_make_datetime(created),
-				_make_bool(deterministic),
-				_make_bool(extaction, true_value='E'),
-				_make_bool(nullcall),
+				make_bool(system),
+				make_datetime(created),
+				make_bool(deterministic),
+				make_bool(extaction, true_value='E'),
+				make_bool(nullcall),
 				access,
 				str(sql),
 				desc
@@ -1638,8 +1631,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				schema,
 				name,
 				owner,
-				_make_bool(system),
-				_make_datetime(created),
+				make_bool(system),
+				make_datetime(created),
 				tabschema,
 				tabname,
 				trigtime,
@@ -1777,8 +1770,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			result.append((
 				tbspace,
 				owner,
-				_make_bool(system),
-				_make_datetime(created),
+				make_bool(system),
+				make_datetime(created),
 				tstype,
 				desc
 			))

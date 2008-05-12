@@ -13,42 +13,7 @@ import traceback
 import db2makedoc.db
 import db2makedoc.plugins
 
-# Constants
 __version__ = "1.0.0"
-PLUGIN_OPTION = 'plugin'
-
-# Localizable strings
-USAGE_TEMPLATE = '%prog [options] configs...'
-VERSION_TEMPLATE = '%%prog %s Database Documentation Generator' % __version__
-DESCRIPTION = """\
-This utility generates documentation (in a variety of formats) from the system
-catalog in IBM DB2 databases. At least one configuration file (an INI-style
-file) must be specified. See the documentation for more information on the
-required syntax and content of this file. The available command line options
-are listed below."""
-
-CONFIG_HELP = 'specify the configuration file from which to read settings'
-QUIET_HELP = 'produce less console output'
-VERBOSE_HELP = 'produce more console output'
-LOG_FILE_HELP = 'log messages to the specified file'
-HELP_PLUGINS_HELP = 'list the available input and output plugins'
-HELP_PLUGIN_HELP = 'display information about the specified plugin'
-DEBUG_HELP = 'enables debug mode'
-
-NO_FILES_ERR = 'you did not specify any filenames'
-READ_CONFIG_ERR = 'failed to read configuration file "%s"'
-MISSING_VALUE_ERR = '%s: [%s]: missing a "%s" value'
-INVALID_PLUGIN_ERR = '%s: [%s]: invalid plugin name "%s" (plugin names must be fully qualified; must begin with "input." or "output.")'
-PLUGIN_IMPORT_ERR = '%s: [%s]: plugin "%s" not found or failed to load (error: %s)'
-PLUGIN_EXEC_ERR = '%s: [%s]: plugin "%s" failed (error: %s)'
-
-READING_INPUT_MSG = '%s: [%s]: Reading input (%s)'
-WRITING_OUTPUT_MSG = '%s: [%s]: Generating output (%s)'
-INPUT_PLUGINS_MSG = 'Available input plugins:'
-OUTPUT_PLUGINS_MSG = 'Available output plugins:'
-PLUGIN_NAME_MSG = 'Name:'
-PLUGIN_DESC_MSG = 'Description:'
-PLUGIN_OPTIONS_MSG = 'Options:'
 
 # Formatting strings
 if not mswindows and hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
@@ -69,23 +34,37 @@ def main(args=None):
 		args = sys.argv[1:]
 	# Parse the command line arguments
 	parser = optparse.OptionParser(
-		usage=USAGE_TEMPLATE,
-		version=VERSION_TEMPLATE,
-		description=DESCRIPTION)
+		usage='%prog [options] configs...',
+		version='%%prog %s Database Documentation Generator' % __version__,
+		description="""\
+This utility generates documentation (in a variety of formats) from the system
+catalog in IBM DB2 databases. At least one configuration file (an INI-style
+file) must be specified. See the documentation for more information on the
+required syntax and content of this file. The available command line options
+are listed below.""")
 	parser.set_defaults(
 		debug=False,
+		test=False,
 		config=None,
 		listplugins=False,
 		plugin=None,
-		logfile="",
+		logfile='',
 		loglevel=logging.WARNING
 	)
-	parser.add_option("-q", "--quiet", dest="loglevel", action="store_const", const=logging.ERROR, help=QUIET_HELP)
-	parser.add_option("-v", "--verbose", dest="loglevel", action="store_const", const=logging.DEBUG, help=VERBOSE_HELP)
-	parser.add_option("-l", "--log-file", dest="logfile", help=LOG_FILE_HELP)
-	parser.add_option("", "--help-plugins", dest="listplugins", action="store_true", help=HELP_PLUGINS_HELP)
-	parser.add_option("", "--help-plugin", dest="plugin", help=HELP_PLUGIN_HELP)
-	parser.add_option("-D", "--debug", dest="debug", action="store_true", help=DEBUG_HELP)
+	parser.add_option('-q', '--quiet', dest='loglevel', action='store_const', const=logging.ERROR,
+		help="""produce less console output""")
+	parser.add_option('-v', '--verbose', dest='loglevel', action='store_const', const=logging.DEBUG,
+		help="""produce more console output""")
+	parser.add_option('-l', '--log-file', dest='logfile',
+		help="""log messages to the specified file""")
+	parser.add_option('', '--help-plugins', dest='listplugins', action='store_true',
+		help="""list the available input and output plugins""")
+	parser.add_option('', '--help-plugin', dest='plugin',
+		help="""display information about the the specified plugin""")
+	parser.add_option('-n', '--dry-run', dest='test', action='store_true',
+		help="""test a configuration without actually executing anything""")
+	parser.add_option('-D', '--debug', dest='debug', action='store_true',
+		help="""enables debug mode (lots more output and always prints stack trace in case of failure)""")
 	(options, args) = parser.parse_args(args)
 	# Set up some logging stuff
 	console = logging.StreamHandler(sys.stderr)
@@ -112,14 +91,17 @@ def main(args=None):
 		help_plugin(options.plugin)
 	elif len(args) == 0:
 		parser.error(NO_FILES_ERR)
+	elif options.test:
+		test_config(args)
 	else:
 		make_docs(args)
 
 def production_excepthook(type, value, tb):
 	"""Exception hook for non-debug mode."""
-	# I/O errors should be simple to solve - no need to bother the user with a
-	# full stack trace, just the error message will suffice
-	if issubclass(type, IOError):
+	# I/O errors and plugin errors should be simple to solve - no need to
+	# bother the user with a full stack trace, just the error message will
+	# suffice
+	if issubclass(type, (IOError, db2makedoc.plugins.PluginError)):
 		logging.critical(str(value))
 	else:
 		# Otherwise, log the stack trace and the exception into the log file
@@ -129,6 +111,71 @@ def production_excepthook(type, value, tb):
 				logging.critical(s)
 	# Pass a failure exit code to the calling shell
 	sys.exit(1)
+
+def process_config(config_file):
+	"""Parses and prepares plugins from a configuration file.
+
+	The config_file parameter specifies a configuration filename, or file-like
+	object to process. The routine parses each section in the configuration,
+	constructing and configuring the plugin specified by each. The routine
+	returns a 2-tuple of (inputs, outputs). "inputs" and "outputs" are lists of
+	2-tuples of (section-name, plugin) where "section-name" is the name of a
+	section, and "plugin" is the constructed and configured plugin object.
+	"""
+	parser = ConfigParser.SafeConfigParser()
+	if isinstance(config_file, basestring):
+		if not parser.read(config_file):
+			raise IOError('Failed to read configuration file "%s"' % config_file)
+	elif hasattr(config_file, 'read'):
+		parser.readfp(config_file)
+		if hasattr(config_file, 'name'):
+			config_file = config_file.name
+		else:
+			config_file = '<unknown>'
+	logging.info('Processing configuration file "%s"' % config_file)
+	# Sort sections into inputs and outputs, which are lists containing
+	# (section, module) tuples, where module is the module containing the
+	# plugin specified by the section.
+	inputs = []
+	outputs = []
+	for section in parser.sections():
+		logging.info('Processing section [%s]' % section)
+		if not parser.has_option(section, 'plugin'):
+			raise db2makedoc.plugins.PluginConfigurationError('No "plugin" value found')
+		plugin_name = parser.get(section, 'plugin')
+		try:
+			plugin_module = load_plugin(plugin_name)
+		except ImportError, e:
+			raise db2makedoc.plugins.PluginLoadError('Plugin "%s" failed to load: %s' % (plugin_name, str(e)))
+		if is_input_plugin(plugin_module):
+			plugin = plugin_module.InputPlugin()
+			inputs.append((section, plugin))
+		elif is_output_plugin(plugin_module):
+			plugin = plugin_module.OutputPlugin()
+			outputs.append((section, plugin))
+		else:
+			raise db2makedoc.plugins.PluginConfigurationError('Plugin "%s" is not a valid input or output plugin' % plugin_name)
+		logging.info('Configuring plugin "%s"' % plugin_name)
+		plugin.configure(dict(
+			(name, value.replace('\n', ''))
+			for (name, value) in parser.items(section)
+		))
+	return (inputs, outputs)
+
+def test_config(config_files):
+	"""Main routine for configuration testing.
+
+	The config_files parameter specifies a list of configuration file names, or
+	file-like objects to test. This routine opens each configuration file in 
+	turn, loads the specified plugins and applies their configuration. It
+	then outputs the configuration for each plugin.
+	"""
+	for config_file in config_files:
+		(inputs, outputs) = process_config(config_file)
+		for (section, plugin) in inputs + outputs:
+			logging.debug('Active configuration for section [%s]:' % section)
+			for name, value in plugin.options.iteritems():
+				logging.debug('%s=%s' % (name, repr(value)))
 
 def make_docs(config_files):
 	"""Main routine for documentation creation.
@@ -143,80 +190,18 @@ def make_docs(config_files):
 	fiddling around with logging and exception hooks, which you probably don't
 	want).
 	"""
-	# Loop over each provided configuration file
 	for config_file in config_files:
-		# Read the configuration file
-		parser = ConfigParser.SafeConfigParser()
-		if isinstance(config_file, basestring):
-			if not parser.read(config_file):
-				raise IOError(READ_CONFIG_ERR % config_file)
-		elif hasattr(config_file, 'read'):
-			parser.readfp(config_file)
-			if hasattr(config_file, 'name'):
-				config_file = config_file.name
-			else:
-				config_file = '???'
-		# Sort sections into input and output sections
-		input_sections = []
-		output_sections = []
-		for section in parser.sections():
-			if not parser.has_option(section, PLUGIN_OPTION):
-				raise Exception(MISSING_VALUE_ERR % (config_file, section, PLUGIN_OPTION))
-			s = parser.get(section, PLUGIN_OPTION)
-			p = load_plugin(parser.get(section, PLUGIN_OPTION))
-			if is_input_plugin(p):
-				input_sections.append(section)
-			elif is_output_plugin(p):
-				output_sections.append(section)
-			else:
-				raise Exception(INVALID_PLUGIN_ERR % (config_file, section, s))
-		# Run each output section for each input section
-		for input_section in input_sections:
-			s = parser.get(input_section, PLUGIN_OPTION)
+		(inputs, outputs) = process_config(config_file)
+		for (section, input) in inputs:
+			logging.info('Executing input section [%s]' % section)
+			input.open()
 			try:
-				input_plugin = load_plugin(s)
-			except ImportError, e:
-				raise Exception(PLUGIN_IMPORT_ERR % (config_file, input_section, s, str(e)))
-			# Get input_plugin to read data from the source specified by the
-			# configuration values from input_section
-			logging.info(READING_INPUT_MSG % (config_file, input_section, s))
-			try:
-				ip = input_plugin.InputPlugin()
-				ip.configure(dict(
-					(name, value.replace('\n', ''))
-					for (name, value) in parser.items(input_section)
-				))
-				ip.open()
-				try:
-					# Construct the internal representation of the metadata
-					db = db2makedoc.db.Database(ip)
-				finally:
-					ip.close()
-			except Exception, e:
-				# Just log errors and continue on to the next ip section
-				raise
-				logging.error(PLUGIN_EXEC_ERR % (config_file, input_section, s, str(e)))
-				continue
-			for output_section in output_sections:
-				s = parser.get(output_section, PLUGIN_OPTION)
-				try:
-					output_plugin = load_plugin(s)
-				except ImportError, e:
-					raise Exception(PLUGIN_IMPORT_ERR % (config_file, output_section, s, str(e)))
-				# Get the output_plugin to generate output from db
-				logging.info(WRITING_OUTPUT_MSG % (config_file, output_section, s))
-				try:
-					op = output_plugin.OutputPlugin()
-					op.configure(dict(
-						(name, value.replace('\n', ''))
-						for (name, value) in parser.items(output_section)
-					))
-					op.execute(db)
-				except Exception, e:
-					# Again, just log errors and continue onto the next output
-					# section
-					raise
-					logging.error(PLUGIN_EXEC_ERR % (config_file, output_section, s, str(e)))
+				db = db2makedoc.db.Database(input)
+			finally:
+				input.close()
+			for (section, output) in outputs:
+				logging.info('Executing output section [%s]' % section)
+				output.execute(db)
 
 def list_plugins():
 	"""Pretty-print a list of the available input and output plugins."""
@@ -244,13 +229,13 @@ def list_plugins():
 	tw.initial_indent = ' '*8
 	tw.subsequent_indent = tw.initial_indent
 	if len(input_plugins) > 0:
-		print BOLD + BLUE + INPUT_PLUGINS_MSG + NORMAL
+		print BOLD + BLUE + 'Available input plugins:' + NORMAL
 		for (name, plugin) in input_plugins:
 			print ' '*4 + BOLD + name + NORMAL
 			print tw.fill(get_plugin_desc(plugin, summary=True))
 			print
 	if len(output_plugins) > 0:
-		print BOLD + BLUE + OUTPUT_PLUGINS_MSG + NORMAL
+		print BOLD + BLUE + 'Available output plugins:' + NORMAL
 		for (name, plugin) in output_plugins:
 			print ' '*4 + BOLD + name + NORMAL
 			print tw.fill(get_plugin_desc(plugin, summary=True))
@@ -265,7 +250,7 @@ def help_plugin(plugin_name):
 		plugin = plugin.OutputPlugin()
 	else:
 		assert False
-	print BOLD + BLUE + PLUGIN_NAME_MSG + NORMAL
+	print BOLD + BLUE + 'Name:' + NORMAL
 	print ' '*4 + BOLD + plugin_name + NORMAL
 	print
 	tw = textwrap.TextWrapper()
@@ -275,16 +260,16 @@ def help_plugin(plugin_name):
 		tw.fill(para)
 		for para in get_plugin_desc(plugin).split('\n\n')
 	)
-	print BOLD + BLUE + PLUGIN_DESC_MSG + NORMAL
+	print BOLD + BLUE + 'Description:' + NORMAL
 	print plugin_desc
 	print
 	if hasattr(plugin, 'options'):
-		print BOLD + BLUE + PLUGIN_OPTIONS_MSG + NORMAL
+		print BOLD + BLUE + 'Options:' + NORMAL
 		tw.initial_indent = ' '*8
 		tw.subsequent_indent = tw.initial_indent
 		for (name, (default, desc, _)) in sorted(plugin.options.iteritems(), key=lambda(name, desc): name):
 			print ' '*4 + BOLD + name + NORMAL,
-			if default is not None:
+			if default:
 				print '(default: "%s")' % default
 			else:
 				print
@@ -370,7 +355,7 @@ def get_plugins(root, name=None):
 
 def load_plugin(name):
 	"""Given a name relative to the plugin root, load an input or output plugin."""
-	logging.debug('Loading plugin %s' % name)
+	logging.info('Loading plugin "%s"' % name)
 	root = None
 	parts = db2makedoc.plugins.__name__.split('.') + name.split('.')
 	for p in parts:

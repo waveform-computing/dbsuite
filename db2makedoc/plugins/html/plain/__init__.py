@@ -4,6 +4,7 @@
 
 import os
 import logging
+import db2makedoc.plugins
 import db2makedoc.plugins.html
 
 from db2makedoc.db import Database, Schema, Table, View, Alias, UniqueKey, ForeignKey, Check, Index, Trigger, Function, Procedure, Tablespace
@@ -39,7 +40,7 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 		self.add_option('last_updated', default='true', convert=self.convert_bool,
 			doc="""If true, the generated date of each page will be added to
 			the footer""")
-		self.add_option('stylesheets', default=None, convert=self.convert_list,
+		self.add_option('stylesheets', default='', convert=self.convert_list,
 			doc="""A comma separated list of additional stylesheet URLs which
 			each generated HTML page will link to""")
 		self.add_option('max_graph_size', default='600x800',
@@ -59,19 +60,7 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 			try:
 				import PIL
 			except ImportError:
-				logging.warning('Diagrams are requested, but the Python Imaging Library (PIL) was not found - proceeding without diagrams')
-				self.options['diagrams'] = []
-			else:
-				gvexe = DEFAULT_CONVERTER
-				if mswindows:
-					gvexe = os.extsep.join([gvexe, 'exe'])
-				found = reduce(lambda x,y: x or y, [
-					os.path.exists(os.path.join(path, gvexe))
-					for path in os.environ.get('PATH', os.defpath).split(os.pathsep)
-				], False)
-				if not found:
-					logging.warning('Diagrams are requested, but the GraphViz utility (%s) was not found in the PATH - proceeding without diagrams' % gvexe)
-					self.options['diagrams'] = []
+				raise db2makedoc.plugins.PluginConfigurationError('Diagrams requested, but the Python Imaging Library (PIL) was not found')
 		# Build the map of document classes
 		self.class_map = {
 			Database:   set([PlainDatabaseDocument]),
@@ -102,7 +91,7 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 			elif item == 'view':
 				self.class_map[View].add(PlainViewGraph)
 			else:
-				raise Exception('Invalid type "%s" specified in diagram' % item)
+				raise db2makedoc.plugins.PluginConfigurationError('Invalid type "%s" specified for diagram option' % item)
 
 	def create_documents(self, site):
 		# Overridden to add static CSS and JavaScript documents

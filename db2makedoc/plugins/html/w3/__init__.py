@@ -3,9 +3,8 @@
 """Output plugin for IBM Intranet w3v8 style web pages."""
 
 import os
-import sys
-mswindows = sys.platform[:5] == 'win32'
 import logging
+import db2makedoc.plugins
 import db2makedoc.plugins.html
 
 from db2makedoc.db import (
@@ -30,7 +29,6 @@ from db2makedoc.plugins.html.w3.function import W3FunctionDocument
 from db2makedoc.plugins.html.w3.procedure import W3ProcedureDocument
 from db2makedoc.plugins.html.w3.tablespace import W3TablespaceDocument
 from db2makedoc.plugins.html.w3.popups import POPUPS
-from db2makedoc.graph import DEFAULT_CONVERTER
 
 
 class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
@@ -81,25 +79,12 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 	
 	def configure(self, config):
 		super(OutputPlugin, self).configure(config)
-		# If diagrams are requested, check we can find GraphViz in the PATH
-		# and import PIL
+		# If diagrams are requested, check we can import PIL
 		if self.options['diagrams']:
 			try:
 				import PIL
 			except ImportError:
-				logging.warning('Diagrams are requested, but the Python Imaging Library (PIL) was not found - proceeding without diagrams')
-				self.options['diagrams'] = []
-			else:
-				gvexe = DEFAULT_CONVERTER
-				if mswindows:
-					gvexe = os.extsep.join([gvexe, 'exe'])
-				found = reduce(lambda x,y: x or y, [
-					os.path.exists(os.path.join(path, gvexe))
-					for path in os.environ.get('PATH', os.defpath).split(os.pathsep)
-				], False)
-				if not found:
-					logging.warning('Diagrams are requested, but the GraphViz utility (%s) was not found in the PATH - proceeding without diagrams' % gvexe)
-					self.options['diagrams'] = []
+				raise db2makedoc.plugins.PluginConfigurationError('Diagrams requested, but the Python Imaging Library (PIL) was not found')
 		# Build the map of document classes
 		self.class_map = {
 			Database:   set([W3DatabaseDocument]),
@@ -130,7 +115,7 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 			elif item == 'view':
 				self.class_map[View].add(W3ViewGraph)
 			else:
-				raise Exception('Invalid type "%s" specified in diagram' % item)
+				raise db2makedoc.plugins.PluginConfigurationError('Invalid type "%s" specified for diagram option' % item)
 
 	def create_documents(self, site):
 		# Overridden to add static CSS, JavaScript, and HTML documents

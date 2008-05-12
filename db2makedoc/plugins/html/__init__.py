@@ -8,9 +8,12 @@ website containing HTML documents amongst other things).
 """
 
 import os
+import sys
+mswindows = sys.platform[:5] == 'win32'
 import codecs
 import db2makedoc.plugins
 from db2makedoc.plugins.html.document import WebSite
+from db2makedoc.graph import DEFAULT_CONVERTER
 
 class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 	"""Abstract base class for HTML output plugins.
@@ -39,11 +42,11 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 			doc="""The URL of the homepage link included in all documents.
 			This can point anywhere; it does not have to be a link to one of
 			the documents output by the plugin""")
-		self.add_option('author_name', default=None,
+		self.add_option('author_name', default='',
 			doc="""The name of the author of the generated documents""")
-		self.add_option('author_email', default=None,
+		self.add_option('author_email', default='',
 			doc="""The e-mail address of the author of the generated documents""")
-		self.add_option('copyright', default=None,
+		self.add_option('copyright', default='',
 			doc="""The copyright message to embed in the generated documents""")
 		self.add_option('site_title', default=None,
 			doc="""The title of the site as a whole. Defaults to "dbname
@@ -53,14 +56,14 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 			doc="""If True, a full-text-search database will be generated and
 			a small PHP script will be included with the output for searching
 			purposes""")
-		self.add_option('diagrams', default='relation',
-			convert=lambda value: self.convert_list(value,
+		self.add_option('diagrams', default='',
+			convert=lambda value: self.convert_set(value,
 			subconvert=lambda value: value.lower()),
 			doc="""A comma separated list of the object types for which
 			diagrams should be generated. Supported values are currently:
 			alias, schema, table, view, relation (equivalent to
-			"alias,table,view"). Defaults to "relation" as schema diagrams can
-			require an extremely large amount of RAM to process """)
+			"alias,table,view"). Node that schema diagrams may require an
+			extremely large amount of RAM to process """)
 		self.add_option('lang', default='en-US', convert=lambda value: self.convert_list(value, separator='-', minvalues=2, maxvalues=2),
 			doc="""The ISO639 language code indicating the language that the
 			site uses. Defaults to en-US. Note that this is used both for the
@@ -76,15 +79,28 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 		super(HTMLOutputPlugin, self).configure(config)
 		# Check that the specified encoding exists (the following lookup()
 		# method will raise a LookupError if it can't find the encoding)
-		codecs.lookup(self.options['encoding'])
+		try:
+			codecs.lookup(self.options['encoding'])
+		except:
+			raise db2makedoc.plugins.PluginConfigurationError('Unknown character encoding "%s"' % self.options['encoding'])
 		# If search is True, check that the Xapian bindings are
 		# available
 		if self.options['search']:
 			try:
 				import xapian
 			except ImportError:
-				logging.warning('Search is enabled, but the Python Xapian bindings were not found - proceeding without search')
-				self.options['search'] = False
+				raise db2makedoc.plugins.PluginConfigurationError('Search is enabled, but the Python Xapian bindings were not found')
+		# If diagrams are requested, check we can find GraphViz in the PATH
+		if self.options['diagrams']:
+			gvexe = DEFAULT_CONVERTER
+			if mswindows:
+				gvexe = os.extsep.join([gvexe, 'exe'])
+			found = reduce(lambda x,y: x or y, [
+				os.path.exists(os.path.join(path, gvexe))
+				for path in os.environ.get('PATH', os.defpath).split(os.pathsep)
+			], False)
+			if not found:
+				raise db2makedoc.plugins.PluginConfigurationError('Diagrams requested, but the GraphViz utility (%s) was not found in the PATH' % gvexe)
 
 	def execute(self, database):
 		"""Invokes the plugin to produce documentation.

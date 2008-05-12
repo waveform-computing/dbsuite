@@ -429,7 +429,7 @@ class WebSite(object):
 		self.search = options['search']
 		self.threads = options['threads']
 		self.title = options['site_title']
-		if not self.title:
+		if self.title is None:
 			self.title = '%s Documentation' % self.database.name
 		self.urls = {}
 		self.object_docs = {}
