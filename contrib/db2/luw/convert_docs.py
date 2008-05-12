@@ -9,7 +9,16 @@ import optparse
 import traceback
 from urllib2 import urlopen
 from urlparse import urljoin
-from xml.etree.cElementTree import fromstring, tostring, iselement, Element, SubElement
+
+# If we're running from an SVN checkout, tweak the path to find the main
+# package from the checkout in preference to any that may be installed in the
+# system's library
+mypath = os.path.dirname(sys.argv[0])
+if (os.path.exists(os.path.join(mypath, '.svn')) and
+		os.path.exists(os.path.join(mypath, '..', '..', '..', 'db2makedoc'))):
+	sys.path.insert(0, os.path.realpath(os.path.join(mypath, '..', '..', '..')))
+
+from db2makedoc.etree import fromstring, tostring, iselement, Element, SubElement
 
 
 # Create a simple UTF-8 encoder function. If you wish output to be in a
@@ -153,6 +162,8 @@ class InfoCenterRetriever(object):
 				logging.error('Failed to find description for object %s.%s' % (schema, obj))
 				obj_desc = ''
 			table = f.find('.//table')
+			part_count = 0
+			part = 0
 			columns = {}
 			for row in table.find('tbody'):
 				cells = row.findall('td')
@@ -164,7 +175,14 @@ class InfoCenterRetriever(object):
 				# although the table is 4 columns wide
 				if 3 <= len(cells) <= 5:
 					column = cells[0]
-					col_desc = cells[-1]
+					# If a description spans multiple rows reuse the initial
+					# cell
+					if part == part_count:
+						col_desc = cells[-1]
+						part_count = int(col_desc.attrib.get('rowspan', '1'))
+						part = 1
+					else:
+						part += 1
 					# Strip all whitespace (newlines, space, etc.) - sometimes
 					# the docs include essentially erroneous whitespace to
 					# allow wrapping for really long column names
@@ -196,6 +214,8 @@ class InfoCenterRetriever(object):
 					if column[-8:] == "(cont'd)":
 						column = column[:-8]
 						columns[column] += convert_desc(col_desc)
+					elif part_count > 1:
+						columns[column] = '(%d/%d) %s' % (part, part_count, convert_desc(col_desc))
 					else:
 						columns[column] = convert_desc(col_desc)
 			yield (schema, obj, obj_desc, columns)
