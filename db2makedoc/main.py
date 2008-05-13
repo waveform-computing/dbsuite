@@ -90,7 +90,7 @@ are listed below.""")
 	elif options.plugin:
 		help_plugin(options.plugin)
 	elif len(args) == 0:
-		parser.error(NO_FILES_ERR)
+		parser.error('You must specify at least one configuration file')
 	elif options.test:
 		test_config(args)
 	else:

@@ -182,7 +182,7 @@ POPUPS = [
 					the - terms. Terms not marked with + or - contribute
 					towards the document rankings. You can also use + and - on
 					phrases and on bracketed expressions."""),
-				tag.dt('"Capitalized Words'),
+				tag.dt('Capitalized Words'),
 				tag.dd("""Lower-case search terms are "stemmed" when searching,
 					e.g. """, tag.code('country'), """ will match the words
 					"country" and "countries". Capitalized words like """,
