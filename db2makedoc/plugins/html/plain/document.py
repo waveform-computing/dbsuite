@@ -17,7 +17,7 @@ from db2makedoc.db import (
 )
 from db2makedoc.plugins.html.document import (
 	Attrs, ElementFactory, WebSite, HTMLDocument, HTMLObjectDocument,
-	CSSDocument, GraphDocument, GraphObjectDocument
+	CSSDocument, SQLCSSDocument, GraphDocument, GraphObjectDocument
 )
 
 # Import the imaging library
@@ -73,6 +73,7 @@ class PlainDocument(HTMLDocument):
 		# Add styles
 		headnode = tag._find(doc, 'head')
 		headnode.append(tag.style(src=PlainCSSDocument._url, media='all'))
+		headnode.append(tag.style(src=SQLCSSDocument._url, media='all'))
 		if self.site.stylesheets:
 			for url in self.site.stylesheets:
 				headnode.append(tag.style(src=url, media='all'))
@@ -425,40 +426,6 @@ p#timestamp {
 p.search-pages {
 	font-weight: bold;
 }
-
-/* SQL syntax highlighting */
-.sql {
-	font-size: 9pt;
-	font-family: "Courier New", monospace;
-}
-
-pre.sql {
-	background-color: #ddf;
-	padding: 1em;
-	/* Ensure <pre> stuff wraps if it's too long */
-	white-space: -moz-pre-wrap; /* Mozilla */
-	white-space: -o-pre-wrap;   /* Opera 7 */
-	white-space: -pre-wrap;     /* Opera 4-6 */
-	white-space: pre-wrap;      /* CSS 2.1 (Opera8+) */
-	/* No way to do this in IE... */
-}
-
-.sql span.sql-error      { background-color: red; }
-.sql span.sql-comment    { font-style: italic; color: green; }
-.sql span.sql-keyword    { font-weight: bold; color: blue; }
-.sql span.sql-datatype   { font-weight: bold; color: green; }
-.sql span.sql-register   { font-weight: bold; color: purple; }
-.sql span.sql-label      { font-weight: bold; font-style: italic; color: teal; }
-.sql span.sql-identifier { }
-.sql span.sql-number     { color: maroon; }
-.sql span.sql-string     { color: maroon; }
-.sql span.sql-operator   { }
-.sql span.sql-parameter  { font-style: italic; }
-.sql span.sql-terminator { }
-
-/* Cell formats for line-numbered SQL */
-td.num-cell { background-color: silver; }
-td.sql-cell { background-color: gray; }
 
 /* Fix display of border around diagrams in Firefox */
 img { border: 0 none; }

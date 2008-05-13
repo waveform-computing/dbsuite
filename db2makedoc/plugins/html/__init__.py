@@ -12,7 +12,7 @@ import sys
 mswindows = sys.platform[:5] == 'win32'
 import codecs
 import db2makedoc.plugins
-from db2makedoc.plugins.html.document import WebSite
+from db2makedoc.plugins.html.document import WebSite, SQLCSSDocument
 from db2makedoc.graph import DEFAULT_CONVERTER
 
 class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
@@ -126,6 +126,7 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 		extra (non database object) documents to the site. For example, style
 		sheets, JavaScript libraries, or static HTML documents.
 		"""
+		SQLCSSDocument(site)
 		site.database.touch(self.create_document, site)
 	
 	def create_document(self, dbobject, site):

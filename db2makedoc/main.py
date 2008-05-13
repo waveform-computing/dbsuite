@@ -100,8 +100,8 @@ def production_excepthook(type, value, tb):
 	"""Exception hook for non-debug mode."""
 	# I/O errors and plugin errors should be simple to solve - no need to
 	# bother the user with a full stack trace, just the error message will
-	# suffice
-	if issubclass(type, (IOError, db2makedoc.plugins.PluginError)):
+	# suffice. Same for user interrupts
+	if issubclass(type, (IOError, KeyboardInterrupt, db2makedoc.plugins.PluginError)):
 		logging.critical(str(value))
 	else:
 		# Otherwise, log the stack trace and the exception into the log file

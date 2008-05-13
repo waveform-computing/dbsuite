@@ -19,7 +19,8 @@ from db2makedoc.db import (
 )
 from db2makedoc.plugins.html.document import (
 	Attrs, ElementFactory, WebSite, HTMLDocument, HTMLObjectDocument,
-	CSSDocument, JavaScriptDocument, GraphDocument, GraphObjectDocument
+	CSSDocument, JavaScriptDocument, GraphDocument, GraphObjectDocument,
+	SQLCSSDocument
 )
 
 # Import the imaging library
@@ -197,6 +198,7 @@ class W3ArticleDocument(W3Document):
 			@import url("//w3.ibm.com/ui/v8/css/interior-1-col.css");
 		""", media='all'))
 		headnode.append(tag.style(src=W3CSSDocument._url, media='all'))
+		headnode.append(tag.style(src=SQLCSSDocument._url, media='all'))
 		headnode.append(tag.style(src='//w3.ibm.com/ui/v8/css/print.css', media='print'))
 		headnode.append(tag.script(src=W3JavaScriptDocument._url))
 		# Generate the masthead and accessibility sections
@@ -465,7 +467,7 @@ class W3MainDocument(HTMLObjectDocument, W3ArticleDocument):
 					'More items',            # title
 					True,                    # visible
 					False,                   # active
-					'showItems(this);',      # onclick
+					'javascript:return showItems(this);', # onclick
 					[]                       # children
 				))
 			if more_below:
@@ -475,7 +477,7 @@ class W3MainDocument(HTMLObjectDocument, W3ArticleDocument):
 					'More items',            # title
 					True,                    # visible
 					False,                   # active
-					'showItems(this);',      # onclick
+					'javascript:return showItems(this);', # onclick
 					[]                       # children
 				))
 			return items
@@ -922,7 +924,7 @@ print($doc->saveXML(limit_search($doc)));
 class W3CSSDocument(CSSDocument):
 	"""Stylesheet class to supplement the w3v8 style with SQL syntax highlighting."""
 
-	_url = 'sql.css'
+	_url = 'styles.css'
 
 	def __init__(self, site):
 		super(W3CSSDocument, self).__init__(site, self._url)
@@ -932,39 +934,12 @@ class W3CSSDocument(CSSDocument):
 		# are reasonably comprehensive). So this method is brutally simple...
 		doc = super(W3CSSDocument, self).generate()
 		return doc + u"""
-/* SQL syntax highlighting */
-.sql {
-	font-size: 8pt;
-	font-family: "Courier New", monospace;
+/* Override some w3 styles for SQL syntax highlighting */
+ol.sql li {
+	line-height: 1em;
+	margin-top: 0;
+	margin-bottom: 0;
 }
-
-pre.sql {
-	background-color: #ddd;
-	padding: 1em;
-	/* Ensure <pre> stuff wraps if it's too long */
-	white-space: -moz-pre-wrap; /* Mozilla */
-	white-space: -o-pre-wrap;   /* Opera 7 */
-	white-space: -pre-wrap;     /* Opera 4-6 */
-	white-space: pre-wrap;      /* CSS 2.1 (Opera8+) */
-	/* No way to do this in IE... */
-}
-
-.sql span.sql-error      { background-color: red; }
-.sql span.sql-comment    { font-style: italic; color: green; }
-.sql span.sql-keyword    { font-weight: bold; color: blue; }
-.sql span.sql-datatype   { font-weight: bold; color: green; }
-.sql span.sql-register   { font-weight: bold; color: purple; }
-.sql span.sql-label      { font-weight: bold; font-style: italic; color: teal; }
-.sql span.sql-identifier { }
-.sql span.sql-number     { color: maroon; }
-.sql span.sql-string     { color: maroon; }
-.sql span.sql-operator   { }
-.sql span.sql-parameter  { font-style: italic; }
-.sql span.sql-terminator { }
-
-/* Cell formats for line-numbered SQL */
-td.num-cell { background-color: silver; }
-td.sql-cell { background-color: gray; }
 
 /* Styles for search results (the w3v8 search.css is unusable) */
 .limit-search {
@@ -1108,6 +1083,18 @@ function showItems(e) {
 			else
 				break;
 	e.style.display = 'none';
+	return false;
+}
+
+// Toggles the line numbers in a syntax highlighted SQL block
+function toggleLineNums(e) {
+	if (typeof e == 'string')
+		e = document.getElementById(e);
+	if (e.className.match(/ *hidenum/))
+		e.className = e.className.replace(/ *hidenum/, '')
+	else
+		e.className += ' hidenum';
+	return false;
 }
 
 var W3_SEARCH = 'http://w3.ibm.com/search/do/search';
@@ -1321,7 +1308,7 @@ zoom = {
 		removeEvent(document, 'keypress', zoom.dragKeys);
 		removeEvent(document, 'keypress', zoom.switchKeyEvents);
 		removeEvent(document, 'keydown', zoom.dragKeys);
-		zoom.box.className = zoom.box.className.replace(/dragged/,'');
+		zoom.box.className = zoom.box.className.replace(/ *dragged/, '');
 		zoom.box._link.style.display = 'block';
 		zoom.box._title.lastChild.data = zoom.defaultTitle;
 		zoom.saveTitle = undefined;

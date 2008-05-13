@@ -125,7 +125,7 @@ class SQLTokenizerBase(object):
 		self.keywords = set(sql92_keywords)
 		self.identchars = set(sql92_identchars)
 		self.spacechars = ' \t\r\n'
-		self.line_split= False
+		self.line_split = False
 		self.sql_comments = True
 		self.c_comments = False
 		self.cpp_comments = False

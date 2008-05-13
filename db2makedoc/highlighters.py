@@ -144,7 +144,7 @@ class SQLHighlighter(object):
 	
 	def format_line(self, index, line):
 		"""Stub handler for a line of tokens"""
-		return ''.join([self.format_token(token) for token in line])
+		return ''.join(self.format_token(token) for token in line)
 
 	def format_token(self, token):
 		"""Stub handler for a token"""
@@ -178,7 +178,7 @@ class SQLHighlighter(object):
 		tokens = self.tokenizer.parse(sql, terminator)
 		# Check for errors in the tokens
 		errors = [token for token in tokens if token[0] == ERROR]
-		if len(errors) > 0:
+		if errors:
 			# If errors were found, log a warning for each error and return the
 			# SQL highlighted from the tokenized stream without reformatting
 			logging.warning('While tokenizing %s' % excerpt(tokens))
@@ -194,9 +194,12 @@ class SQLHighlighter(object):
 				logging.warning('While formatting %s' % excerpt(tokens))
 				logging.warning('error %s found at line %d, column %d' % (e.message, e.line, e.col))
 		if line_split:
-			return [self.format_line(index + 1, line) for (index, line) in enumerate(tokens)]
+			return (
+				self.format_line(line + 1, (token for token in tokens if token[3] == line + 1))
+				for line in xrange(tokens[-1][3])
+			)
 		else:
-			return [self.format_token(token) for token in tokens]
+			return (self.format_token(token) for token in tokens)
 	
 	def parse_prototype(self, sql):
 		"""Utility routine for marking up a routine prototype (as opposed to a complete SQL script)"""

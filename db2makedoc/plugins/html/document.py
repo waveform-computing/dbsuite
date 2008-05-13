@@ -347,11 +347,8 @@ class HTMLSQLHighlighter(SQLHighlighter):
 	attribute determines the CSS classes which are attached to the <span>
 	elements.
 
-	If the number_lines attribute is True (it is False by default) then lines
-	will be output as <tr> elements with two columns - the left containing the
-	line number. In this case the number_class attribute specifies the class of
-	the left column, and the sql_class attribute specifies the class of the
-	right column.
+	When operating in line_split mode, the result is a sequence of <li>
+	elements containing the <span> elements.
 
 	The construction of the HTML elements is actually handled by the methods of
 	the HTMLDocument object passed to the constructor.
@@ -375,9 +372,6 @@ class HTMLSQLHighlighter(SQLHighlighter):
 			TERMINATOR: 'sql-terminator',
 			STATEMENT:  'sql-terminator',
 		}
-		self.number_lines = False
-		self.number_class = 'num-cell'
-		self.sql_class = 'sql-cell'
 
 	def format_token(self, token):
 		(token_type, token_value, source, _, _) = token
@@ -385,19 +379,16 @@ class HTMLSQLHighlighter(SQLHighlighter):
 			css_class = self.css_classes[(token_type, token_value)]
 		except KeyError:
 			css_class = self.css_classes.get(token_type, None)
+		# XXX Disgusting hack because IE's too thick to handle pre-formatted
+		# whitespace in anything except <pre>
+		source = re.sub(' {2,}', lambda m: u'\u00A0' * len(m.group()), source)
 		if css_class is not None:
 			return tag.span(source, class_=css_class)
 		else:
 			return source
 
 	def format_line(self, index, line):
-		if self.number_lines:
-			return tag.tr(
-				tag.td(index, class_=self.number_class),
-				tag.td([self.format_token(token) for token in line], class_=self.sql_class)
-			)
-		else:
-			return [self.format_token(token) for token in line]
+		return tag.li(self.format_token(token) for token in line)
 
 
 class WebSite(object):
@@ -838,11 +829,15 @@ class HTMLDocument(WebSiteDocument):
 	def format_comment(self, comment, summary=False):
 		return self.comment_highlighter.parse(comment, summary)
 
-	def format_sql(self, sql, terminator=';', splitlines=False):
-		return self.sql_highlighter.parse(sql, terminator, splitlines)
+	def format_sql(self, sql, terminator=';', number_lines=False, id=None):
+		tokens = self.sql_highlighter.parse(sql, terminator, line_split=number_lines)
+		if number_lines:
+			return tag.ol(tokens, class_='sql', id=id)
+		else:
+			return tag.pre(tokens, class_='sql', id=id)
 
 	def format_prototype(self, sql):
-		return self.sql_highlighter.parse_prototype(sql)
+		return tag.code(self.sql_highlighter.parse_prototype(sql), class_='sql')
 
 	def link(self):
 		"""Returns the Element(s) required to link to the document."""
@@ -914,6 +909,61 @@ class CSSDocument(WebSiteDocument):
 		# Child classes can override this to build the stylesheet
 		return u''
 	
+class SQLCSSDocument(CSSDocument):
+	"""Stylesheet class for SQL syntax highlighting."""
+
+	_url = 'sql.css'
+
+	def __init__(self, site):
+		super(SQLCSSDocument, self).__init__(site, self._url)
+
+	def generate(self):
+		doc = super(SQLCSSDocument, self).generate()
+		return doc + u"""\
+/* SQL syntax highlighting */
+pre.sql, ol.sql { background-color: #ddf; }
+pre.sql { padding: 1em; }
+
+ol.sql {
+    list-style: decimal;
+    padding-top: 1em;
+    padding-right: 1em;
+    padding-bottom: 1em;
+}
+
+ol.sql.hidenum {
+    list-style: none;
+    padding: 1em;
+}
+
+pre.sql,
+ol.sql li {
+    font-size: 9pt;
+    font-family: "Courier New", monospace;
+    /* Ensure <pre> stuff wraps if it's too long */
+    white-space: -moz-pre-wrap; /* Mozilla */
+    white-space: -o-pre-wrap;   /* Opera 7 */
+    white-space: -pre-wrap;     /* Opera 4-6 */
+    white-space: pre-wrap;      /* CSS 2.1 (Opera8+) */
+    /* No way to do this in IE... */
+}
+
+ol.sql li { color: #779; }
+
+.sql span.sql-error      { background-color: red; color: black; }
+.sql span.sql-comment    { font-style: italic; color: green; }
+.sql span.sql-keyword    { font-weight: bold; color: blue; }
+.sql span.sql-datatype   { font-weight: bold; color: green; }
+.sql span.sql-register   { font-weight: bold; color: purple; }
+.sql span.sql-label      { font-weight: bold; font-style: italic; color: teal; }
+.sql span.sql-identifier { color: black; }
+.sql span.sql-number     { color: maroon; }
+.sql span.sql-string     { color: maroon; }
+.sql span.sql-operator   { color: black; }
+.sql span.sql-parameter  { font-style: italic; color: black; }
+.sql span.sql-terminator { color: black; }
+"""
+
 
 class JavaScriptDocument(WebSiteDocument):
 	"""Represents a simple JavaScript document.

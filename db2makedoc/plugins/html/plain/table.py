@@ -226,7 +226,7 @@ class PlainTableDocument(PlainMainDocument):
 		))
 		result.append((
 			'sql', 'SQL Definition',
-			tag.pre(self.format_sql(self.dbobject.create_sql), class_='sql')
+			self.format_sql(self.dbobject.create_sql, number_lines=True)
 		))
 		return result
 

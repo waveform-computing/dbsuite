@@ -99,8 +99,10 @@ class W3FunctionDocument(W3MainDocument):
 			))
 		if self.dbobject.create_sql:
 			result.append((
-				'sql', 'SQL Definition',
-				tag.pre(self.format_sql(self.dbobject.create_sql), class_='sql')
+				'sql', 'SQL Definition', [
+					tag.p(tag.a('Line #s On/Off', href='#', onclick='javascript:return toggleLineNums("sqldef");', class_='zoom')),
+					self.format_sql(self.dbobject.create_sql, number_lines=True, id='sqldef')
+				]
 			))
 		return result
 
