@@ -20,8 +20,9 @@ from db2makedoc.highlighters import CommentHighlighter, SQLHighlighter
 from db2makedoc.plugins.html.entities import HTML_ENTITIES
 from db2makedoc.graph import Graph, Node, Edge, Cluster
 from db2makedoc.db import (
-	DatabaseObject, Database, Schema, Relation, Table, View,
-	Alias, Trigger
+	DatabaseObject, Relation, Routine, Constraint, Database, Tablespace,
+	Schema, Table, View, Alias, Index, Trigger, Function, Procedure, Datatype,
+	Field, UniqueKey, PrimaryKey, ForeignKey, Check, Param
 )
 from db2makedoc.etree import (
 	fromstring, tostring, iselement, Element, Comment, flatten_html
@@ -425,6 +426,30 @@ class WebSite(object):
 		self.diagrams = bool(options['diagrams'])
 		if self.title is None:
 			self.title = '%s Documentation' % self.database.name
+		self.type_names = {
+			Alias:          'Alias',
+			Check:          'Check Constraint',
+			Constraint:     'Constraint',
+			Database:       'Database',
+			DatabaseObject: 'Object',
+			Datatype:       'Data Type',
+			Field:          'Field',
+			ForeignKey:     'Foreign Key',
+			Function:       'Function',
+			Index:          'Index',
+			Param:          'Parameter',
+			PrimaryKey:     'Primary Key',
+			Procedure:      'Procedure',
+			Relation:       'Relation',
+			Routine:        'Routine',
+			Schema:         'Schema',
+			Tablespace:     'Tablespace',
+			Table:          'Table',
+			Trigger:        'Trigger',
+			UniqueKey:      'Unique Key',
+			View:           'View',
+		}
+		self.default_desc = 'No description in the system catalog'
 		self.urls = {}
 		self.stylesheets = []
 		self.scripts = []
@@ -638,7 +663,7 @@ class WebSite(object):
 		assert issubclass(dbclass, DatabaseObject)
 		doc = self.index_document(dbclass, letter, *args, **kwargs)
 		if doc is None:
-			return tag.p('%s index is not available' % dbclass.type_name)
+			return tag.p('%s index is not available' % self.type_names[dbclass])
 		elif letter is None:
 			return doc.link()
 		else:
@@ -676,14 +701,14 @@ class WebSite(object):
 		Override this in descendents if the index_docs structure is changed or
 		enhanced.
 		"""
-		dbclasses = sorted(self.index_docs.iterkeys(), key=lambda dbclass: dbclass.type_name)
+		dbclasses = sorted(self.index_docs.iterkeys(), key=lambda dbclass: self.type_names[dbclass])
 		# Create "fake" documents to represent each index. Note that the URL
 		# constructed here is ultimately discarded, but must still be unique
 		# (see below)
 		dbclass_docs = [
 			HTMLExternalDocument(self,
 				'indexof_%s.html' % dbclass.config_names[0],
-				'%s Index' % dbclass.type_name
+				'%s Index' % self.type_names[dbclass]
 			)
 			for dbclass in dbclasses
 		]
@@ -1059,7 +1084,7 @@ class HTMLDocument(WebSiteDocument):
 		return tag.html(tag.head(content), tag.body())
 
 	def format_comment(self, comment, summary=False):
-		return self.comment_highlighter.parse(comment, summary)
+		return self.comment_highlighter.parse(comment or self.site.default_desc, summary)
 
 	def format_sql(self, sql, terminator=';', number_lines=False, id=None):
 		tokens = self.sql_highlighter.parse(sql, terminator, line_split=number_lines)
@@ -1117,7 +1142,7 @@ class HTMLIndexDocument(HTMLDocument):
 		else:
 			url = 'indexof_%s_%s.html' % (dbclass.config_names[0], hex(ord(letter)))
 		super(HTMLIndexDocument, self).__init__(site, url)
-		self.title = '%s Index' % dbclass.type_name
+		self.title = '%s Index' % self.site.type_names[dbclass]
 		self.description = self.title
 		self.search = False
 		self.items = site.index_maps[dbclass][letter]
@@ -1137,14 +1162,13 @@ class HTMLObjectDocument(HTMLDocument):
 			ident = dbobject.identifier
 		super(HTMLObjectDocument, self).__init__(site, '%s.html' % ident)
 		self.title = '%s %s' % (
-			self.dbobject.type_name,
+			self.site.type_names[self.dbobject.__class__],
 			self.dbobject.qualified_name
 		)
-		# XXX Default to 'No description in system catalog' ?
 		self.description = self.dbobject.description or self.title
 		self.keywords = [
 			self.site.database.name,
-			self.dbobject.type_name,
+			self.site.type_names[self.dbobject.__class__],
 			self.dbobject.name,
 			self.dbobject.qualified_name
 		]

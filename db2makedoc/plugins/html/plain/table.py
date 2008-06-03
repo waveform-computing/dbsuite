@@ -171,7 +171,7 @@ class PlainTableDocument(PlainObjectDocument):
 					tag.tbody((
 						tag.tr(
 							tag.td(self.site.link_to(constraint)),
-							tag.td(constraint.type_name),
+							tag.td(self.site.type_names[constraint.__class__]),
 							tag.td(fields(constraint)),
 							tag.td(self.format_comment(constraint.description, summary=True))
 						) for constraint in constraints
@@ -214,7 +214,7 @@ class PlainTableDocument(PlainObjectDocument):
 					tag.tbody((
 						tag.tr(
 							tag.td(self.site.link_to(dep)),
-							tag.td(dep.type_name),
+							tag.td(self.site.type_names[dep.__class__]),
 							tag.td(self.format_comment(dep.description, summary=True))
 						) for dep in dependents
 					))

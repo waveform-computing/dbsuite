@@ -436,7 +436,6 @@ class DatabaseObject(object):
 	"""Base class for all documented database objects"""
 
 	config_names = ['all']
-	type_name = 'Object'
 
 	def __init__(self, parent, name, system=False, description=None):
 		"""Initializes an instance of the class.
@@ -458,14 +457,10 @@ class DatabaseObject(object):
 		assert not parent or isinstance(parent, DatabaseObject)
 		self.parent = parent
 		self.name = name
-		if description:
-			self.description = description
-		else:
-			# XXX This should be None - the alternate text should be plugin specific
-			self.description = 'No description in the system catalog'
+		self.description = description
 		self._system = system
 		self._parent_index = None
-		logging.debug("Building %s %s" % (self.type_name, self.qualified_name))
+		logging.debug("Building %s %s" % (self.__class__.__name__, self.qualified_name))
 
 	def _get_database(self):
 		"""Returns the database which owns the object.
@@ -683,7 +678,6 @@ class Relation(SchemaObject):
 	"""Base class for relations that belong in a schema (e.g. tables, views, etc.)"""
 
 	config_names = ['relation', 'relations']
-	type_name = 'Relation'
 
 	def _get_identifier(self):
 		return "relation_%s_%s" % (self.schema.name, self.name)
@@ -734,7 +728,6 @@ class Routine(SchemaObject):
 	"""Base class for routines that belong in a schema (functions, procedures, etc.)"""
 
 	config_names = ['routine', 'routines']
-	type_name = 'Routine'
 
 	def __init__(self, parent, name, specific_name, system=False, description=None):
 		"""Initializes an instance of the class.
@@ -808,7 +801,6 @@ class Constraint(RelationObject):
 	"""Base class for constraints that belong in a relation (e.g. primary keys, checks, etc.)"""
 
 	config_names = ['constraint', 'constraints']
-	type_name = 'Constraint'
 
 	def __init__(self, parent, name, system=False, description=None):
 		"""Initializes an instance of the class"""
@@ -860,7 +852,6 @@ class Database(DatabaseObject):
 	"""Class representing a DB2 database"""
 
 	config_names = ['database', 'databases', 'db', 'dbs']
-	type_name = 'Database'
 	
 	def __init__(self, input):
 		"""Initializes an instance of the class"""
@@ -996,7 +987,6 @@ class Tablespace(DatabaseObject):
 	"""Class representing a tablespace"""
 
 	config_names = ['tablespace', 'tablespaces']
-	type_name = 'Tablespace'
 
 	def __init__(self, database, input, *row):
 		"""Initializes an instance of the class from a input row"""
@@ -1043,7 +1033,6 @@ class Schema(DatabaseObject):
 	"""Class representing a schema"""
 
 	config_names = ['schema', 'schemas']
-	type_name = 'Schema'
 
 	def __init__(self, database, input, *row):
 		"""Initializes an instance of the class from a input row"""
@@ -1181,7 +1170,6 @@ class Table(Relation):
 	"""Class representing a table"""
 
 	config_names = ['table', 'tables']
-	type_name = 'Table'
 
 	def __init__(self, schema, input, *row):
 		"""Initializes an instance of the class from a input row"""
@@ -1341,7 +1329,6 @@ class View(Relation):
 	"""Class representing a view"""
 
 	config_names = ['view', 'views']
-	type_name = 'View'
 	
 	def __init__(self, schema, input, *row):
 		"""Initializes an instance of the class from a input row"""
@@ -1416,7 +1403,6 @@ class Alias(Relation):
 	"""Class representing a alias"""
 
 	config_names = ['alias', 'aliases']
-	type_name = 'Alias'
 	
 	def __init__(self, schema, input, *row):
 		"""Initializes an instance of the class from a input row"""
@@ -1496,7 +1482,6 @@ class Index(SchemaObject):
 	"""Class representing an index"""
 
 	config_names = ['index', 'indexes', 'indices']
-	type_name = 'Index'
 
 	def __init__(self, schema, input, *row):
 		"""Initializes an instance of the class from a input row"""
@@ -1582,7 +1567,6 @@ class Trigger(SchemaObject):
 	"""Class representing an index"""
 
 	config_names = ['trigger', 'triggers']
-	type_name = 'Trigger'
 
 	def __init__(self, schema, input, *row):
 		"""Initializes an instance of the class from a input row"""
@@ -1637,7 +1621,6 @@ class Function(Routine):
 	"""Class representing a function"""
 
 	config_names = ['function', 'functions', 'func', 'funcs']
-	type_name = 'Function'
 	
 	def __init__(self, schema, input, *row):
 		"""Initializes an instance of the class from a input row"""
@@ -1731,7 +1714,6 @@ class Procedure(Routine):
 	"""Class representing a procedure"""
 
 	config_names = ['procedure', 'procedures', 'proc', 'procs']
-	type_name = 'Procedure'
 	
 	def __init__(self, schema, input, *row):
 		"""Initializes an instance of the class from a input row"""
@@ -1804,7 +1786,6 @@ class Datatype(SchemaObject):
 	"""Class representing a datatype"""
 
 	config_names = ['datatype', 'datatypes', 'type', 'types']
-	type_name = 'Data Type'
 	
 	def __init__(self, schema, input, *row):
 		"""Initializes an instance of the class from a input row"""
@@ -1848,7 +1829,6 @@ class Field(RelationObject):
 	"""Class representing a field in a relation"""
 
 	config_names = ['field', 'fields', 'column', 'columns', 'col', 'cols']
-	type_name = 'Field'
 
 	def __init__(self, relation, input, position, *row):
 		"""Initializes an instance of the class from a input row"""
@@ -1985,8 +1965,8 @@ class Field(RelationObject):
 class UniqueKey(Constraint):
 	"""Class representing a unique key in a table"""
 
-	config_names = ['unique_key', 'unique_keys', 'uniquekey', 'uniquekeys', 'unique', 'uniques']
-	type_name = 'Unique Key'
+	config_names = ['unique_key', 'unique_keys', 'uniquekey', 'uniquekeys',
+		'unique', 'uniques']
 
 	def __init__(self, table, input, *row):
 		"""Initializes an instance of the class from a input row"""
@@ -2027,8 +2007,8 @@ class UniqueKey(Constraint):
 class PrimaryKey(UniqueKey):
 	"""Class representing a primary key in a table"""
 
-	config_names = ['primary_key', 'primary_keys', 'primarykey', 'primarykeys', 'primary', 'primaries', 'key', 'keys', 'pk', 'pks']
-	type_name = 'Primary Key'
+	config_names = ['primary_key', 'primary_keys', 'primarykey', 'primarykeys',
+		'primary', 'primaries', 'key', 'keys', 'pk', 'pks']
 
 	def _get_prototype(self):
 		sql = 'PRIMARY KEY (%s)' % ', '.join([format_ident(field.name) for field in self.fields])
@@ -2040,8 +2020,8 @@ class PrimaryKey(UniqueKey):
 class ForeignKey(Constraint):
 	"""Class representing a foreign key in a table"""
 
-	config_names = ['foreign_key', 'foreign_keys', 'foreignkey', 'foreignkeys', 'reference', 'references', 'fk', 'fks']
-	type_name = 'Foreign Key'
+	config_names = ['foreign_key', 'foreign_keys', 'foreignkey', 'foreignkeys',
+		'reference', 'references', 'fk', 'fks']
 
 	def __init__(self, table, input, *row):
 		"""Initializes an instance of the class from a input row"""
@@ -2105,7 +2085,6 @@ class Check(Constraint):
 	"""Class representing a check constraint in a table"""
 
 	config_names = ['check', 'checks', 'ck', 'cks']
-	type_name = 'Check Constraint'
 
 	def __init__(self, table, input, *row):
 		"""Initializes an instance of the class from a input row"""
@@ -2138,8 +2117,8 @@ class Check(Constraint):
 class Param(RoutineObject):
 	"""Class representing a parameter in a routine in a DB2 database"""
 
-	config_names = ['parameter', 'parameters', 'param', 'parameters', 'parm', 'parms']
-	type_name = 'Parameter'
+	config_names = ['parameter', 'parameters', 'param', 'parameters',
+		'parm', 'parms']
 
 	def __init__(self, routine, input, position, *row):
 		"""Initializes an instance of the class from a input row"""

@@ -13,15 +13,6 @@ from db2makedoc.db import (
 )
 
 
-FILENAME_OPTION = 'filename'
-ENCODING_OPTION = 'encoding'
-INDENT_OPTION = 'indent'
-
-FILENAME_DESC = """The filename for the XML output file (mandatory)"""
-ENCODING_DESC = """The character encoding to use for the XML output file (optional)"""
-INDENT_DESC = """If true (the default), the XML will be indented for human readability"""
-
-
 class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 	"""Output plugin for metadata storage (in XML format).
 
@@ -38,15 +29,16 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 	def __init__(self):
 		"""Initializes an instance of the class."""
 		super(OutputPlugin, self).__init__()
-		self.add_option(FILENAME_OPTION, default=None, doc=FILENAME_DESC,
-			convert=self.convert_path)
-		self.add_option(ENCODING_OPTION, default='UTF-8', doc=ENCODING_DESC)
-		self.add_option(INDENT_OPTION, default=True, doc=INDENT_DESC,
-			convert=self.convert_bool)
-	
+		self.add_option('filename', default=None, convert=self.convert_path,
+			doc="""The filename for the XML output file (mandatory)""")
+		self.add_option('encoding', default='UTF-8',
+			doc="""The character encoding to use for the XML output file (optional)""")
+		self.add_option('indent', default=True, convert=self.convert_bool,
+			doc="""If true (the default), the XML will be indented for human readbility""")
+
 	def configure(self, config):
 		super(OutputPlugin, self).configure(config)
-		codecs.lookup(self.options[ENCODING_OPTION])
+		codecs.lookup(self.options['encoding'])
 	
 	def execute(self, database):
 		super(OutputPlugin, self).execute(database)
@@ -65,19 +57,19 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 		# an appropriate XML PI and the specific encoding
 		logging.debug('Converting output')
 		root = self.elements[database]
-		if self.options[INDENT_OPTION]:
+		if self.options['indent']:
 			indent(root)
 		s = unicode(tostring(root))
 		s = u'''\
 <?xml version="1.0" encoding="%(encoding)s"?>
 %(content)s''' % {
-			'encoding': self.options[ENCODING_OPTION],
+			'encoding': self.options['encoding'],
 			'content': s,
 		}
-		s = codecs.getencoder(self.options[ENCODING_OPTION])(s)[0]
+		s = codecs.getencoder(self.options['encoding'])(s)[0]
 		# Finally, write the document to disk
-		logging.debug('Writing %s' % self.options[FILENAME_OPTION])
-		f = open(self.options[FILENAME_OPTION], 'w')
+		logging.info('Writing output to "%s"' % self.options['filename'])
+		f = open(self.options['filename'], 'w')
 		try:
 			f.write(s)
 		finally:

@@ -501,7 +501,7 @@ class W3SiteIndexDocument(HTMLIndexDocument, W3ArticleDocument):
 		items = sorted(self.items, key=lambda item: '%s %s' % (item.name, item.qualified_name))
 		index = tag.dl(
 			(
-				tag.dt(item.name, ' (', item.type_name, ' ', self.site.link_to(item, parent=True), ')'),
+				tag.dt(item.name, ' (', self.site.type_names[item.__class__], ' ', self.site.link_to(item, parent=True), ')'),
 				tag.dd(self.format_comment(item.description, summary=True))
 			)
 			for item in items

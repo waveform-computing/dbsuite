@@ -132,7 +132,7 @@ class PlainObjectDocument(HTMLObjectDocument, PlainDocument):
 		doc = super(PlainObjectDocument, self).generate()
 		# Add body content
 		bodynode = tag._find(doc, 'body')
-		bodynode.append(tag.h2('%s %s' % (self.dbobject.type_name, self.dbobject.qualified_name)))
+		bodynode.append(tag.h2('%s %s' % (self.site.type_names[self.dbobject.__class__], self.dbobject.qualified_name)))
 		sections = self.generate_sections()
 		if sections:
 			bodynode.append(tag.ul((
@@ -164,7 +164,7 @@ class PlainSiteIndexDocument(HTMLIndexDocument, PlainDocument):
 		doc = super(PlainSiteIndexDocument, self).generate()
 		# Add body content
 		bodynode = tag._find(doc, 'body')
-		bodynode.append(tag.h2('%s Index' % self.dbclass.type_name))
+		bodynode.append(tag.h2('%s Index' % self.site.type_names[self.dbclass]))
 		# Generate the letter links to other docs in the index
 		links = tag.p()
 		item = self.first
@@ -184,7 +184,7 @@ class PlainSiteIndexDocument(HTMLIndexDocument, PlainDocument):
 		items = sorted(self.items, key=lambda item: '%s %s' % (item.name, item.qualified_name))
 		bodynode.append(tag.dl(
 			(
-				tag.dt(item.name, ' (', item.type_name, ' ', self.site.link_to(item, parent=True), ')'),
+				tag.dt(item.name, ' (', self.site.type_names[item.__class__], ' ', self.site.link_to(item, parent=True), ')'),
 				tag.dd(self.format_comment(item.description, summary=True))
 			)
 			for item in items

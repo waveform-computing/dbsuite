@@ -89,7 +89,7 @@ class W3AliasDocument(W3ObjectDocument):
 					tag.tbody((
 						tag.tr(
 							tag.td(self.site.link_to(dep)),
-							tag.td(dep.type_name),
+							tag.td(self.site.type_names[dep.__class__]),
 							tag.td(self.format_comment(dep.description, summary=True))
 						) for dep in dependents
 					))

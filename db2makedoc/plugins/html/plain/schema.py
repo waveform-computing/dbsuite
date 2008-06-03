@@ -43,7 +43,7 @@ class PlainSchemaDocument(PlainObjectDocument):
 					tag.tbody((
 						tag.tr(
 							tag.td(self.site.link_to(relation)),
-							tag.td(relation.type_name),
+							tag.td(self.site.type_names[relation.__class__]),
 							tag.td(self.format_comment(relation.description, summary=True))
 						) for relation in relations
 					))
@@ -111,7 +111,7 @@ class PlainSchemaDocument(PlainObjectDocument):
 						tag.tr(
 							tag.td(self.site.link_to(routine)),
 							tag.td(routine.specific_name),
-							tag.td(routine.type_name),
+							tag.td(self.site.type_names[routine.__class__]),
 							tag.td(self.format_comment(routine.description, summary=True))
 						) for routine in routines
 					))
