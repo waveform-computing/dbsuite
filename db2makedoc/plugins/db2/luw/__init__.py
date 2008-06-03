@@ -847,7 +847,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		schema        -- The schema of the table containing the key
 		name          -- The name of the table containing the key
 		keyname       -- The name of the key
-		owner         -- The name of the user who owns the key
+		owner*        -- The name of the user who owns the key
 		system        -- True of the key is system maintained (boolean)
 		created*      -- When the key was created (datetime)
 		primary       -- True if the unique key is also a primary key

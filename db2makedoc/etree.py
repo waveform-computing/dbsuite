@@ -19,9 +19,9 @@ except ImportError:
 				raise ImportError('Unable to find an ElementTree implementation')
 
 
-__all__ = ['fromstring', 'tostring', 'iselement', 'Element', 'SubElement',
-		'Comment', 'ProcessingInstruction', 'QName', 'indent', 'flatten',
-		'flatten_html']
+__all__ = ['fromstring', 'tostring', 'parse', 'iselement', 'Element',
+		'SubElement', 'Comment', 'ProcessingInstruction', 'QName', 'indent',
+		'flatten', 'flatten_html']
 
 
 def indent(elem, level=0, indent_str='\t'):

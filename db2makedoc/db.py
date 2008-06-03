@@ -947,6 +947,8 @@ class Database(DatabaseObject):
 		method(self, *args, **kwargs)
 		for schema in self.schemas.itervalues():
 			method(schema, *args, **kwargs)
+			for datatype in schema.datatypes.itervalues():
+				method(datatype, *args, **kwargs)
 			for table in schema.tables.itervalues():
 				method(table, *args, **kwargs)
 				for ukey in table.unique_keys.itervalues():

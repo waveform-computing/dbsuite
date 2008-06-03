@@ -1,6 +1,6 @@
 # vim: set noet sw=4 ts=4:
 
-"""Output plugin for XML data storage."""
+"""Output plugin for XML metadata storage."""
 
 import codecs
 import logging
@@ -38,7 +38,11 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 
 	def configure(self, config):
 		super(OutputPlugin, self).configure(config)
+		# Ensure we can find the specified encoding
 		codecs.lookup(self.options['encoding'])
+		# Ensure the filename was specified
+		if not self.options['filename']:
+			raise db2makedoc.plugins.PluginConfigurationError('The filename option must be specified')
 	
 	def execute(self, database):
 		super(OutputPlugin, self).execute(database)
