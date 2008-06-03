@@ -1985,7 +1985,7 @@ class Field(RelationObject):
 class UniqueKey(Constraint):
 	"""Class representing a unique key in a table"""
 
-	config_names = ['uniquekey', 'uniquekeys', 'unique', 'uniques']
+	config_names = ['unique_key', 'unique_keys', 'uniquekey', 'uniquekeys', 'unique', 'uniques']
 	type_name = 'Unique Key'
 
 	def __init__(self, table, input, *row):
@@ -2027,7 +2027,7 @@ class UniqueKey(Constraint):
 class PrimaryKey(UniqueKey):
 	"""Class representing a primary key in a table"""
 
-	config_names = ['primarykey', 'primarykeys', 'primary', 'primaries', 'key', 'keys']
+	config_names = ['primary_key', 'primary_keys', 'primarykey', 'primarykeys', 'primary', 'primaries', 'key', 'keys', 'pk', 'pks']
 	type_name = 'Primary Key'
 
 	def _get_prototype(self):
@@ -2040,6 +2040,7 @@ class PrimaryKey(UniqueKey):
 class ForeignKey(Constraint):
 	"""Class representing a foreign key in a table"""
 
+	config_names = ['foreign_key', 'foreign_keys', 'foreignkey', 'foreignkeys', 'reference', 'references', 'fk', 'fks']
 	type_name = 'Foreign Key'
 
 	def __init__(self, table, input, *row):
@@ -2103,7 +2104,7 @@ class ForeignKey(Constraint):
 class Check(Constraint):
 	"""Class representing a check constraint in a table"""
 
-	config_names = ['check', 'checks']
+	config_names = ['check', 'checks', 'ck', 'cks']
 	type_name = 'Check Constraint'
 
 	def __init__(self, table, input, *row):
