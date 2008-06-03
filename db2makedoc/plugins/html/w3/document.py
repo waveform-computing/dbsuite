@@ -283,7 +283,6 @@ class W3ArticleDocument(W3Document):
 								class_='submit'
 							)
 						),
-						# XXX Should be conditional on self.site.search
 						tag.tr(
 							tag.td(),
 							tag.td(
@@ -862,6 +861,12 @@ class W3CSSDocument(CSSDocument):
 		# We only need one supplemental CSS stylesheet (the default w3v8 styles
 		# are reasonably comprehensive). So this method is brutally simple...
 		doc = super(W3CSSDocument, self).generate()
+		# If local search is not enabled, ensure the local search check box is
+		# not shown
+		if not self.site.search:
+			doc += u"""
+td.limiter { display: none; }
+"""
 		return doc + u"""
 /* Override some w3 styles for SQL syntax highlighting */
 ol.sql li {
