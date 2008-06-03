@@ -1,7 +1,7 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import Procedure
-from db2makedoc.plugins.html.w3.document import W3MainDocument, tag
+from db2makedoc.plugins.html.w3.document import W3ObjectDocument, tag
 
 access = {
 	None: 'No SQL',
@@ -11,7 +11,7 @@ access = {
 	'M':  'Modifies SQL',
 }
 
-class W3ProcedureDocument(W3MainDocument):
+class W3ProcedureDocument(W3ObjectDocument):
 	def __init__(self, site, procedure):
 		assert isinstance(procedure, Procedure)
 		super(W3ProcedureDocument, self).__init__(site, procedure)

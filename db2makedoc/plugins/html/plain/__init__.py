@@ -77,21 +77,20 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 			Procedure:  set([PlainProcedureDocument]),
 			Tablespace: set([PlainTablespaceDocument]),
 		}
+		graph_map = {
+			Schema:  PlainSchemaGraph,
+			Table:   PlainTableGraph,
+			View:    PlainViewGraph,
+			Alias:   PlainAliasGraph,
+		}
 		for item in self.options['diagrams']:
-			if item == 'schema':
-				self.class_map[Schema].add(PlainSchemaGraph)
-			elif item == 'relation':
-				self.class_map[Alias].add(PlainAliasGraph)
-				self.class_map[Table].add(PlainTableGraph)
-				self.class_map[View].add(PlainViewGraph)
-			elif item == 'alias':
-				self.class_map[Alias].add(PlainAliasGraph)
-			elif item == 'table':
-				self.class_map[Table].add(PlainTableGraph)
-			elif item == 'view':
-				self.class_map[View].add(PlainViewGraph)
-			else:
-				raise db2makedoc.plugins.PluginConfigurationError('Invalid type "%s" specified for diagram option' % item)
+			try:
+				self.class_map[item].add(graph_map[item])
+			except KeyError:
+				raise db2makedoc.plugins.PluginConfigurationError('No diagram support for "%s" objects (supported objects are %s)' % (
+					item.config_names[0],
+					', '.join(c.config_names[0] for c in graph_map.iterkeys()))
+				)
 
 	def create_documents(self, site):
 		# Overridden to add static CSS and JavaScript documents

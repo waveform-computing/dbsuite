@@ -42,7 +42,7 @@ class PlainAliasDocument(PlainMainDocument):
 					),
 					tag.tr(
 						tag.td('Alias For'),
-						tag.td(self.site.link_to(self.dbobject.relation, qualifiedname=True), colspan=3)
+						tag.td(self.site.link_to(self.dbobject.relation), colspan=3)
 					)
 				)
 			)
@@ -88,7 +88,7 @@ class PlainAliasDocument(PlainMainDocument):
 					),
 					tag.tbody((
 						tag.tr(
-							tag.td(self.site.link_to(dep, qualifiedname=True)),
+							tag.td(self.site.link_to(dep)),
 							tag.td(dep.type_name),
 							tag.td(self.format_comment(dep.description, summary=True))
 						) for dep in dependents

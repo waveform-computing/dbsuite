@@ -1,7 +1,7 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import View
-from db2makedoc.plugins.html.w3.document import W3MainDocument, W3GraphDocument, tag
+from db2makedoc.plugins.html.w3.document import W3ObjectDocument, W3GraphDocument, tag
 
 times = {
 	'A': 'After',
@@ -14,7 +14,7 @@ events = {
 	'D': 'Delete',
 }
 
-class W3ViewDocument(W3MainDocument):
+class W3ViewDocument(W3ObjectDocument):
 	def __init__(self, site, view):
 		assert isinstance(view, View)
 		super(W3ViewDocument, self).__init__(site, view)
@@ -101,7 +101,7 @@ class W3ViewDocument(W3MainDocument):
 					),
 					tag.tbody((
 						tag.tr(
-							tag.td(self.site.link_to(trigger, qualifiedname=True)),
+							tag.td(self.site.link_to(trigger)),
 							tag.td(times[trigger.trigger_time]),
 							tag.td(events[trigger.trigger_event]),
 							tag.td(self.format_comment(trigger.description, summary=True))
@@ -122,7 +122,7 @@ class W3ViewDocument(W3MainDocument):
 					),
 					tag.tbody((
 						tag.tr(
-							tag.td(self.site.link_to(dep, qualifiedname=True)),
+							tag.td(self.site.link_to(dep)),
 							tag.td(dep.type_name),
 							tag.td(self.format_comment(dep.description, summary=True))
 						) for dep in dependents
@@ -142,7 +142,7 @@ class W3ViewDocument(W3MainDocument):
 					),
 					tag.tbody((
 						tag.tr(
-							tag.td(self.site.link_to(dep, qualifiedname=True)),
+							tag.td(self.site.link_to(dep)),
 							tag.td(dep.type_name),
 							tag.td(self.format_comment(dep.description, summary=True))
 						) for dep in dependencies

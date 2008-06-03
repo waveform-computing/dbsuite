@@ -1,9 +1,9 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import Index
-from db2makedoc.plugins.html.w3.document import W3MainDocument, tag
+from db2makedoc.plugins.html.w3.document import W3ObjectDocument, tag
 
-class W3IndexDocument(W3MainDocument):
+class W3IndexDocument(W3ObjectDocument):
 	def __init__(self, site, index):
 		assert isinstance(index, Index)
 		super(W3IndexDocument, self).__init__(site, index)

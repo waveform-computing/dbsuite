@@ -1,7 +1,7 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import Alias
-from db2makedoc.plugins.html.w3.document import W3MainDocument, W3GraphDocument, tag
+from db2makedoc.plugins.html.w3.document import W3ObjectDocument, W3GraphDocument, tag
 
 def _inc_index(i):
 	if i is None:
@@ -9,7 +9,7 @@ def _inc_index(i):
 	else:
 		return i + 1
 
-class W3AliasDocument(W3MainDocument):
+class W3AliasDocument(W3ObjectDocument):
 	def __init__(self, site, alias):
 		assert isinstance(alias, Alias)
 		super(W3AliasDocument, self).__init__(site, alias)
@@ -42,7 +42,7 @@ class W3AliasDocument(W3MainDocument):
 					),
 					tag.tr(
 						tag.td('Alias For'),
-						tag.td(self.site.link_to(self.dbobject.relation, qualifiedname=True), colspan=3)
+						tag.td(self.site.link_to(self.dbobject.relation), colspan=3)
 					)
 				)
 			)
@@ -88,7 +88,7 @@ class W3AliasDocument(W3MainDocument):
 					),
 					tag.tbody((
 						tag.tr(
-							tag.td(self.site.link_to(dep, qualifiedname=True)),
+							tag.td(self.site.link_to(dep)),
 							tag.td(dep.type_name),
 							tag.td(self.format_comment(dep.description, summary=True))
 						) for dep in dependents

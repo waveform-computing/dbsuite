@@ -1,9 +1,9 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import Check
-from db2makedoc.plugins.html.w3.document import W3MainDocument, tag
+from db2makedoc.plugins.html.w3.document import W3ObjectDocument, tag
 
-class W3CheckDocument(W3MainDocument):
+class W3CheckDocument(W3ObjectDocument):
 	def __init__(self, site, check):
 		assert isinstance(check, Check)
 		super(W3CheckDocument, self).__init__(site, check)

@@ -57,7 +57,7 @@ class PlainTriggerDocument(PlainMainDocument):
 						tag.td(self.site.url_document('granularity.html').link()),
 						tag.td(granularity[self.dbobject.granularity]),
 						tag.td('Relation'),
-						tag.td(self.site.link_to(self.dbobject.relation, qualifiedname=True))
+						tag.td(self.site.link_to(self.dbobject.relation))
 					)
 				)
 			)

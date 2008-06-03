@@ -1,7 +1,7 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import ForeignKey
-from db2makedoc.plugins.html.w3.document import W3MainDocument, tag
+from db2makedoc.plugins.html.w3.document import W3ObjectDocument, tag
 
 rules = {
 	'C': 'Cascade',
@@ -10,7 +10,7 @@ rules = {
 	'R': 'Raise Error',
 }
 
-class W3ForeignKeyDocument(W3MainDocument):
+class W3ForeignKeyDocument(W3ObjectDocument):
 	def __init__(self, site, foreignkey):
 		assert isinstance(foreignkey, ForeignKey)
 		super(W3ForeignKeyDocument, self).__init__(site, foreignkey)

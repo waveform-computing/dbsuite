@@ -106,7 +106,7 @@ class Attrs(dict):
 		if source is not None and isinstance(source, dict):
 			self.update(source)
 		self.update(kwargs)
-	
+
 	def __add__(self, other):
 		result = Attrs(self)
 		result.update(other)
@@ -119,7 +119,7 @@ class Attrs(dict):
 
 	def __iadd__(self, other):
 		self.update(other)
-	
+
 	def __setitem__(self, key, value):
 		if value is None:
 			if key in self:
@@ -131,7 +131,7 @@ class Attrs(dict):
 				del self[key]
 		else:
 			super(Attrs, self).__setitem__(key.rstrip('_'), str(value))
-	
+
 	def update(self, source):
 		for key, value in source.iteritems():
 			self[key] = value
@@ -216,7 +216,7 @@ class ElementFactory(object):
 		else:
 			# Everything else is converted to an ASCII string
 			return str(content)
-	
+
 	def _append(self, node, content):
 		"""Adds content (string, node, node-list, etc.) to a node"""
 		if isinstance(content, basestring):
@@ -241,7 +241,7 @@ class ElementFactory(object):
 					self._append(node, n)
 			except TypeError:
 				self._append(node, self._format(content))
-	
+
 	def _element(self, _name, *content, **attrs):
 		if attrs:
 			attrs = Attrs(attrs)
@@ -275,7 +275,7 @@ class ElementFactory(object):
 			attrs['rel'] = 'stylesheet'
 			attrs['href'] = attrs['src']
 			del attrs['src']
-			return self._element('link', *content, **attrs)
+			return self._element('link', **attrs)
 		else:
 			return self._element('style', *content, **attrs)
 
@@ -414,6 +414,7 @@ class WebSite(object):
 		self.keywords = [self.database.name]
 		self.author_name = options['author_name']
 		self.author_email = options['author_email']
+		self.top = options['top']
 		self.date = datetime.datetime.today()
 		self.lang, self.sublang = options['lang']
 		self.copyright = options['copyright']
@@ -425,12 +426,42 @@ class WebSite(object):
 		if self.title is None:
 			self.title = '%s Documentation' % self.database.name
 		self.urls = {}
+		self.stylesheets = []
+		self.scripts = []
 		self.object_docs = {}
 		self.object_graphs = {}
-	
+		# If indexes are requested, build the sorted object lists now (and set
+		# up the first level of the index_docs mapping)
+		self.index_maps = {}
+		self.index_docs = {}
+		if options['indexes']:
+			for cls in options['indexes']:
+				self.index_maps[cls] = {}
+				self.index_docs[cls] = {}
+			self.database.touch(self.index_object, options['indexes'])
+
+	def index_object(self, dbobject, dbclasses):
+		"""Adds a database object to the relevant index lists.
+
+		This is a utility method called for each object in the database
+		hierarchy. If the object is an instance of any class in dbclasses, it
+		is added to an index list (index lists are keyed by database class and
+		initial letter). Note that the lists are not sorted here (or even in
+		the caller) - it is up to index documents to sort these lists (which
+		allows for multiple index documents to reference the same index list
+		and sort it in different ways).
+		"""
+		for cls in dbclasses:
+			if isinstance(dbobject, cls):
+				letter = dbobject.name[:1]
+				if letter in self.index_maps[cls]:
+					self.index_maps[cls][letter].append(dbobject)
+				else:
+					self.index_maps[cls][letter] = [dbobject]
+
 	def add_document(self, document):
 		"""Adds a document to the website.
-		
+
 		This method adds a document to the website, and updates several data
 		structures which track the associations between database objects and
 		documents / graphs. The base implementation here permits a database
@@ -446,7 +477,13 @@ class WebSite(object):
 			self.object_docs[document.dbobject] = document
 		elif isinstance(document, GraphObjectDocument):
 			self.object_graphs[document.dbobject] = document
-	
+		elif isinstance(document, HTMLIndexDocument):
+			self.index_docs[document.dbclass][document.letter] = document
+		elif isinstance(document, CSSDocument):
+			self.stylesheets.append(document)
+		elif isinstance(document, JavaScriptDocument):
+			self.scripts.append(document)
+
 	def url_document(self, url):
 		"""Returns the WebSiteDocument associated with a given URL.
 
@@ -455,9 +492,38 @@ class WebSite(object):
 		"""
 		return self.urls.get(url)
 
+	def index_document(self, dbclass, letter=None, *args, **kwargs):
+		"""Returns the HTMLDocument which indexes a particular database class.
+
+		This methods returns a single HTMLDocument which contains an index for
+		the specified database class (e.g. tables), if one exists (if one does
+		not exist, the result is None).
+
+		If the optional letter parameter is provided, and an index for the
+		specific letter of the database class can be found, it will be
+		returned. Otherwise, the first index (in alphabetical terms) for the
+		class will be returned.
+
+		The args and kwargs parameters capture any extra criteria that should
+		be used to select between documents in the case that an index is
+		represented by multiple documents (e.g. framed and unframed versions).
+		"""
+		assert issubclass(dbclass, DatabaseObject)
+		if letter:
+			try:
+				return self.index_docs[dbclass][letter]
+			except KeyError:
+				return None
+		else:
+			docs = self.index_docs.get(dbclass)
+			if docs:
+				return docs[sorted(docs.keys())[0]]
+			else:
+				return None
+
 	def object_document(self, dbobject, *args, **kwargs):
 		"""Returns the HTMLDocument associated with a database object.
-		
+
 		This method returns a single HTMLDocument which is associated with the
 		specified database object (dbobject). If the specified object has no
 		associated HTMLDocument object, the method returns None.
@@ -493,37 +559,45 @@ class WebSite(object):
 		assert isinstance(dbobject, DatabaseObject)
 		return self.object_graphs.get(dbobject)
 
-	def link_to(self, dbobject, typename=False, qualifiedname=False, *args, **kwargs):
+	def link_to(self, dbobject, parent=False, *args, **kwargs):
 		"""Returns a link to a document representing the specified database object.
 
 		Given a database object, this method returns the Element(s) required to
-		link to an HTMLDocument representing that object. The typename and
-		qualifiedname parameters affect the text that the link will display. If
-		typename is True, the link will include a type prefix (e.g. 'Table' or
-		'View'). If qualifiedname is True, the link will include the object's
-		fully qualified name. Both parameters are False by default.
+		link to an HTMLDocument representing that object. The link will include
+		the object's fully qualified name.
+
+		If the specified object is not associated with any HTMLDocument, the
+		parent parameter determines the result. If parent is False (the
+		default), the method returns the text that the link would have
+		contained (according to the typename and qualifiedname parameters).
+		Otherwise, the method searches the object's parents for an associated
+		document, returning a link to the first documented parent found.
 
 		The args and kwargs parameters permit additional arguments to be
 		relayed to the object_document() method in case the site implements
 		multiple documents per object (e.g. framed and non-framed versions).
-
-		If the specified object is not associated with any HTMLDocument, the
-		method returns the text that the link would have contained (according
-		to the typename and qualifiedname parameters).
 		"""
 		assert isinstance(dbobject, DatabaseObject)
-		if qualifiedname:
-			content = dbobject.qualified_name
-		else:
-			content = dbobject.name
-		if typename:
-			content = '%s %s' % (dbobject.type_name, content)
 		doc = self.object_document(dbobject, *args, **kwargs)
-		if doc is None:
-			return content
-		else:
+		if doc:
 			assert isinstance(doc, HTMLDocument)
-			return tag.a(content, href=doc.url, title=doc.title)
+			return tag.a(dbobject.qualified_name, href=doc.url, title=doc.title)
+		elif parent:
+			suffixes = []
+			target = dbobject
+			while doc is None:
+				suffixes.insert(0, target.name)
+				target = target.parent
+				doc = self.object_document(target, *args, **kwargs)
+				if isinstance(target, Database):
+					target = None
+					break
+			return [
+				self.link_to(target, False, *args, **kwargs),
+				''.join(['.' + s for s in suffixes]),
+			]
+		else:
+			return dbobject.qualified_name
 
 	def img_of(self, dbobject, *args, **kwargs):
 		"""Returns a link to a graph representing the specified database object.
@@ -538,9 +612,6 @@ class WebSite(object):
 		If the specified object is not associated with any GraphDocument, the
 		method returns some text indicating that no graph is available.
 		"""
-		# Special version of "img" to create diagrams of a database object. The
-		# args and kwargs parameters capture extra information to be used to
-		# distinguish between multiple documents
 		assert isinstance(dbobject, DatabaseObject)
 		graph = self.object_graph(dbobject, *args, **kwargs)
 		if graph is None:
@@ -549,8 +620,100 @@ class WebSite(object):
 			assert isinstance(graph, GraphDocument)
 			return graph.link()
 
+	def index_of(self, dbclass, letter=None, *args, **kwargs):
+		"""Returns a link to an index of objects of the specified class.
+
+		Given a database class (Table, Relation, etc.), this method returns
+		the Element(s) required to link to the alphabetical index of objects
+		of that class.
+
+		If the letter parameter is ommitted, the link will be to the first
+		letter of the index. The args and kwargs parameters permit additional
+		arguments to be relayed to the index_document() method in case the site
+		implements multiple indexes per class.
+
+		If the specified class does not have an associated index, the method
+		returns some text indicating that no index is available.
+		"""
+		assert issubclass(dbclass, DatabaseObject)
+		doc = self.index_document(dbclass, letter, *args, **kwargs)
+		if doc is None:
+			return tag.p('%s index is not available' % dbclass.type_name)
+		elif letter is None:
+			return doc.link()
+		else:
+			return tag.a(letter, href=doc.url, title=doc.title)
+
+	def link_indexes(self):
+		"""Utility method for linking letters of indexes together.
+
+		This method is called during write() to generate the first, prior,
+		next, last, and parent links of the index documents. Normally, this
+		sort of thing would be done in the generate() method of the document in
+		question. However, it's much more efficient to do this at the site
+		level for the index documents as we can sort the list of documents by
+		letter once, and apply the links from the result.
+
+		In this method, we also generate a bunch of "fake" documents
+		representing each index. The HTMLExternalDocument class is used for
+		this, and each "fake" document actually points to the document for the
+		first letter of the index. These documents are used to provide another
+		level of structure to the document hierarchy, which groups together
+		each index letter document, e.g.:
+
+		Database Document
+		+- Table Index (fake)
+		|  +- A
+		|  +- B
+		|  +- C
+		|  +- D
+		|  +- ...
+		+- View Index (fake)
+		   +- A
+		   +- B
+		   +- ...
+
+		Override this in descendents if the index_docs structure is changed or
+		enhanced.
+		"""
+		dbclasses = sorted(self.index_docs.iterkeys(), key=lambda dbclass: dbclass.type_name)
+		# Create "fake" documents to represent each index. Note that the URL
+		# constructed here is ultimately discarded, but must still be unique
+		# (see below)
+		dbclass_docs = [
+			HTMLExternalDocument(self,
+				'indexof_%s.html' % dbclass.config_names[0],
+				'%s Index' % dbclass.type_name
+			)
+			for dbclass in dbclasses
+		]
+		dbclass_parent = self.object_document(self.database)
+		dbclass_prior = None
+		for (dbclass, dbclass_doc) in zip(dbclasses, dbclass_docs):
+			letter_docs = sorted(self.index_docs[dbclass].itervalues(), key=lambda doc: doc.letter)
+			if letter_docs:
+				# Replace the URL of the class document with the URL of the
+				# first letter of the index. We can't do this at construction
+				# time or the fake document will supplant the real document
+				# (for the first letter) in the site's structures.
+				dbclass_doc.url = letter_docs[0].url
+				dbclass_doc.first = dbclass_docs[0]
+				dbclass_doc.last = dbclass_docs[-1]
+				dbclass_doc.parent = dbclass_parent
+				dbclass_doc.prior = dbclass_prior
+				dbclass_prior = dbclass_doc
+				letter_prior = None
+				for letter_doc in letter_docs:
+					letter_doc.first = letter_docs[0]
+					letter_doc.last = letter_docs[-1]
+					letter_doc.parent = dbclass_doc
+					letter_doc.prior = letter_prior
+					letter_prior = letter_doc
+
 	def write(self):
 		"""Writes all documents in the site to disk."""
+		if self.index_docs:
+			self.link_indexes()
 		if self.threads == 1:
 			if self.diagrams:
 				logging.info('Writing documents and graphs')
@@ -592,13 +755,13 @@ class WebSite(object):
 			except:
 				db.cancel_transaction()
 				raise
-	
+
 	def write_single(self, docs):
 		"""Single-threaded document writer method."""
 		logging.debug("Single-threaded writer")
 		for doc in set(docs):
 			doc.write()
-	
+
 	def write_multi(self, docs):
 		"""Multi-threaded document writer method.
 
@@ -624,7 +787,7 @@ class WebSite(object):
 			(i, thread) = threads.pop()
 			thread.join()
 			logging.debug("Writer thread #%d finished" % i)
-	
+
 	def __thread_write(self):
 		"""Sub-routine for writing documents.
 
@@ -634,7 +797,7 @@ class WebSite(object):
 		"""
 		while self._documents_set:
 			self._documents_set.pop().write()
-	
+
 
 class WebSiteDocument(object):
 	"""Represents a document in a website (e.g. HTML, CSS, image, etc.)"""
@@ -653,16 +816,31 @@ class WebSiteDocument(object):
 		else:
 			self.filename = filename
 		self.site.add_document(self)
-	
+
 	def write(self):
 		"""Writes this document to a file in the site's path.
-		
+
 		Derived classes should override this method to write the content of the
 		document to the file specified by the instance's filename property.  If
 		writing a text-based format, remember to encode the output with the
 		encoding specified by the owning site object.
 		"""
 		logging.debug('Writing %s' % self.filename)
+
+	def link(self, *args, **kwargs):
+		"""Returns the Element(s) required to link to the document.
+
+		Derived classes should override this method to produce the Element(s)
+		required to link to this document. In the case of an HTML document,
+		this is likely to be an <a>nchor, while a graphic might produce an
+		<img> element, and a stylesheet a <link> element. The default
+		implementation here simply returns the url as a link.
+
+		The args and kwargs parameters capture additional information for the
+		generation of the link. For example, in the case of a stylesheet a
+		media parameter might be included.
+		"""
+		return tag.a(self.url, href=self.url)
 
 
 class HTMLDocument(WebSiteDocument):
@@ -675,7 +853,6 @@ class HTMLDocument(WebSiteDocument):
 	"""
 
 	def __init__(self, site, url, filename=None):
-		"""Initializes an instance of the class."""
 		super(HTMLDocument, self).__init__(site, url, filename)
 		self.ftsdoc = None
 		self.title = ''
@@ -690,23 +867,71 @@ class HTMLDocument(WebSiteDocument):
 		self.search = site.search
 		self.robots_index = True
 		self.robots_follow = True
-		self.link_first = None
-		self.link_prior = None
-		self.link_next = None
-		self.link_last = None
-		self.link_up = None
 		self.comment_highlighter = HTMLCommentHighlighter(self.site)
 		self.sql_highlighter = HTMLSQLHighlighter()
-	
-	# Regex which finds characters within the range of characters capable of
-	# being encoded as HTML entities
-	entitiesre = re.compile(u'[%s-%s]' % (
-		unichr(min(HTML_ENTITIES.iterkeys())),
-		unichr(max(HTML_ENTITIES.iterkeys()))
-	))
+		self._first = None
+		self._prior = None
+		self._next = None
+		self._last = None
+		self._parent = None
+
+	def _get_first(self):
+		return self._first
+	def _set_first(self, value):
+		assert (value is None) or isinstance(value, HTMLDocument)
+		self._first = value
+
+	def _get_prior(self):
+		return self._prior
+	def _set_prior(self, value):
+		assert (value is None) or isinstance(value, HTMLDocument)
+		assert not value is self
+		if self._prior:
+			self._prior._next = None
+		self._prior = value
+		if value:
+			value._next = self
+
+	def _get_next(self):
+		return self._next
+	def _set_next(self, value):
+		assert (value is None) or isinstance(value, HTMLDocument)
+		assert not value is self
+		if self._next:
+			self._next._prior =None
+		self._next = value
+		if value:
+			value._prior = self
+
+	def _get_last(self):
+		return self._last
+	def _set_last(self, value):
+		assert (value is None) or isinstance(value, HTMLDocument)
+		self._last = value
+
+	def _get_parent(self):
+		return self._parent
+	def _set_parent(self, value):
+		assert (value is None) or isinstance(value, HTMLDocument)
+		assert not value is self
+		self._parent = value
+
+	def _get_level(self):
+		result = 0
+		item = self
+		while item.parent:
+			result += 1
+			item = item.parent
+		return result
+
+	first = property(lambda self: self._get_first(), lambda self, value: self._set_first(value))
+	prior = property(lambda self: self._get_prior(), lambda self, value: self._set_prior(value))
+	next = property(lambda self: self._get_next(), lambda self, value: self._set_next(value))
+	last = property(lambda self: self._get_last(), lambda self, value: self._set_last(value))
+	parent = property(lambda self: self._get_parent(), lambda self, value: self._set_parent(value))
+	level = property(_get_level)
 
 	def write(self):
-		"""Writes this document to a file in the site's path"""
 		super(HTMLDocument, self).write()
 		doc = self.generate()
 		# If full-text-searching is enabled, set up a Xapian indexer and
@@ -733,7 +958,14 @@ class HTMLDocument(WebSiteDocument):
 			f.write(self.serialize(doc))
 		finally:
 			f.close()
-	
+
+	# Regex which finds characters within the range of characters capable of
+	# being encoded as HTML entities
+	entitiesre = re.compile(u'[%s-%s]' % (
+		unichr(min(HTML_ENTITIES.iterkeys())),
+		unichr(max(HTML_ENTITIES.iterkeys()))
+	))
+
 	def serialize(self, content):
 		"""Converts the document into a string for writing."""
 		# "Pure" XML won't handle HTML character entities. So we do it
@@ -785,7 +1017,7 @@ class HTMLDocument(WebSiteDocument):
 		return flatten_html(content.find('body'))
 
 	def generate(self):
-		"""Constructs the content of the document."""
+		"""Called by write() to generate the document as an ElementTree."""
 		# Override this in descendent classes to include additional content
 		# Add some standard <meta> elements (encoding, keywords, author, robots
 		# info, Dublin Core stuff, etc.)
@@ -809,23 +1041,23 @@ class HTMLDocument(WebSiteDocument):
 			content.append(tag.link(rel='author', href='mailto:%s' % self.author_email, title=self.author_name))
 		# Add some navigation <link> elements
 		content.append(tag.link(rel='home', href=self.site.home_url))
-		if isinstance(self.link_first, HTMLDocument):
-			content.append(tag.link(rel='first', href=self.link_first.url))
-		if isinstance(self.link_prior, HTMLDocument):
-			content.append(tag.link(rel='prev', href=self.link_prior.url))
-		if isinstance(self.link_next, HTMLDocument):
-			content.append(tag.link(rel='next', href=self.link_next.url))
-		if isinstance(self.link_last, HTMLDocument):
-			content.append(tag.link(rel='last', href=self.link_last.url))
-		if isinstance(self.link_up, HTMLDocument):
-			content.append(tag.link(rel='up', href=self.link_up.url))
+		if self.first:
+			content.append(tag.link(rel='first', href=self.first.url))
+		if self.prior:
+			content.append(tag.link(rel='prev', href=self.prior.url))
+		if self.next:
+			content.append(tag.link(rel='next', href=self.next.url))
+		if self.last:
+			content.append(tag.link(rel='last', href=self.last.url))
+		if self.parent:
+			content.append(tag.link(rel='up', href=self.parent.url))
 		# Add the title
 		if self.title is not None:
 			content.append(tag.title('%s - %s' % (self.site.title, self.title)))
 		# Create the <head> element with the above content, and an empty <body>
 		# element
 		return tag.html(tag.head(content), tag.body())
-	
+
 	def format_comment(self, comment, summary=False):
 		return self.comment_highlighter.parse(comment, summary)
 
@@ -839,20 +1071,71 @@ class HTMLDocument(WebSiteDocument):
 	def format_prototype(self, sql):
 		return tag.code(self.sql_highlighter.parse_prototype(sql), class_='sql')
 
-	def link(self):
-		"""Returns the Element(s) required to link to the document."""
+	def link(self, *args, **kwargs):
 		return tag.a(self.title, href=self.url, title=self.title)
-	
+
+
+class HTMLExternalDocument(HTMLDocument):
+	"""Document class representing an external document.
+
+	This class is used to represent HTML documents which are not generated by
+	db2makedoc (whether on the local web server or elsewhere). The write()
+	method of this class is overridden to do nothing. Instances of this class
+	primarily serve as the target of other document's links.
+
+	Note that the filename parameter to the constructor is replaced by title
+	(there's no point having a filename for a document we'll never write to
+	after all!).
+	"""
+
+	def __init__(self, site, url, title):
+		super(HTMLExternalDocument, self).__init__(site, url, '')
+		self.title = title
+
+	def write(self):
+		# Overridden to do nothing
+		pass
+
+
+class HTMLIndexDocument(HTMLDocument):
+	"""Document class representing an alphabetical index of objects."""
+
+	def __init__(self, site, dbclass, letter):
+		assert dbclass in site.index_maps
+		assert letter in site.index_maps[dbclass]
+		# Set dbclass and letter before calling the inherited method so that
+		# site.add_document knows what to do with us
+		self.dbclass = dbclass
+		self.letter = letter
+		# If the letter isn't a simple ASCII alphanumeric character, use the
+		# hex value of the character in the URL (which becomes the filename),
+		# in case the character is either illegal for the underlying FS (e.g.
+		# backslash on Windows), or the FS doesn't support Unicode (e.g. some
+		# older UNIX FSs)
+		if re.match('[a-zA-Z0-9]', letter):
+			url = 'indexof_%s_%s.html' % (dbclass.config_names[0], letter)
+		else:
+			url = 'indexof_%s_%s.html' % (dbclass.config_names[0], hex(ord(letter)))
+		super(HTMLIndexDocument, self).__init__(site, url)
+		self.title = '%s Index' % dbclass.type_name
+		self.description = self.title
+		self.search = False
+		self.items = site.index_maps[dbclass][letter]
+
 
 class HTMLObjectDocument(HTMLDocument):
 	"""Document class representing a database object (schema, table, etc.)"""
 
 	def __init__(self, site, dbobject):
-		"""Initializes an instance of the class."""
 		# Set dbobject before calling the inherited method to ensure that
 		# site.add_document knows what object we represent
 		self.dbobject = dbobject
-		super(HTMLObjectDocument, self).__init__(site, '%s.html' % dbobject.identifier)
+		# Override the identifier for the top-level document
+		if isinstance(dbobject, Database):
+			ident = site.top or dbobject.identifier
+		else:
+			ident = dbobject.identifier
+		super(HTMLObjectDocument, self).__init__(site, '%s.html' % ident)
 		self.title = '%s %s' % (
 			self.dbobject.type_name,
 			self.dbobject.qualified_name
@@ -866,21 +1149,40 @@ class HTMLObjectDocument(HTMLDocument):
 			self.dbobject.qualified_name
 		]
 
-	def generate(self):
-		# Overridden to automatically set the header links from the represented
-		# database object
-		if not self.link_first and self.dbobject.first:
-			self.link_first = self.site.object_document(self.dbobject.first)
-		if not self.link_prior and self.dbobject.prior:
-			self.link_prior = self.site.object_document(self.dbobject.prior)
-		if not self.link_next and self.dbobject.next:
-			self.link_next = self.site.object_document(self.dbobject.next)
-		if not self.link_last and self.dbobject.last:
-			self.link_last = self.site.object_document(self.dbobject.last)
-		if not self.link_up and self.dbobject.parent:
-			self.link_up = self.site.object_document(self.dbobject.parent)
-		# Call the inherited method to create the skeleton document
-		return super(HTMLObjectDocument, self).generate()
+	def _get_first(self):
+		result = super(HTMLObjectDocument, self)._get_first()
+		if not result and self.dbobject.first:
+			return self.site.object_document(self.dbobject.first)
+		else:
+			return result
+
+	def _get_prior(self):
+		result = super(HTMLObjectDocument, self)._get_prior()
+		if not result and self.dbobject.prior:
+			return self.site.object_document(self.dbobject.prior)
+		else:
+			return result
+
+	def _get_next(self):
+		result = super(HTMLObjectDocument, self)._get_next()
+		if not result and self.dbobject.next:
+			return self.site.object_document(self.dbobject.next)
+		else:
+			return result
+
+	def _get_last(self):
+		result = super(HTMLObjectDocument, self)._get_last()
+		if not result and self.dbobject.last:
+			return self.site.object_document(self.dbobject.last)
+		else:
+			return result
+
+	def _get_parent(self):
+		result = super(HTMLObjectDocument, self)._get_parent()
+		if not result and self.dbobject.parent:
+			return self.site.object_document(self.dbobject.parent)
+		else:
+			return result
 
 
 class CSSDocument(WebSiteDocument):
@@ -891,15 +1193,18 @@ class CSSDocument(WebSiteDocument):
 	return the CSS to write to the file.
 	"""
 
+	def __init__(self, site, url, filename=None, media='all'):
+		super(CSSDocument, self).__init__(site, url, filename)
+		self.media = media
+
 	def write(self):
-		"""Writes this document to a file in the site's path"""
 		super(CSSDocument, self).write()
 		f = open(self.filename, 'w')
 		try:
 			f.write(self.serialize(self.generate()))
 		finally:
 			f.close()
-	
+
 	def serialize(self, content):
 		"""Converts the document into a string for writing."""
 		return codecs.getencoder(self.site.encoding)(content)[0]
@@ -908,14 +1213,19 @@ class CSSDocument(WebSiteDocument):
 		"""Constructs the content of the stylesheet."""
 		# Child classes can override this to build the stylesheet
 		return u''
-	
+
+	def link(self, *args, **kwargs):
+		# Overridden to return a <link> to the stylesheet (the tag
+		# ElementFactory takes care of converting <style> into <link> when
+		# there's no content, and src is specified)
+		return tag.style(src=self.url, media=self.media)
+
+
 class SQLCSSDocument(CSSDocument):
 	"""Stylesheet class for SQL syntax highlighting."""
 
-	_url = 'sql.css'
-
 	def __init__(self, site):
-		super(SQLCSSDocument, self).__init__(site, self._url)
+		super(SQLCSSDocument, self).__init__(site, 'sql.css')
 
 	def generate(self):
 		doc = super(SQLCSSDocument, self).generate()
@@ -974,7 +1284,6 @@ class JavaScriptDocument(WebSiteDocument):
 	"""
 
 	def write(self):
-		"""Writes this document to a file in the site's path"""
 		super(JavaScriptDocument, self).write()
 		f = open(self.filename, 'w')
 		try:
@@ -988,9 +1297,13 @@ class JavaScriptDocument(WebSiteDocument):
 
 	def generate(self):
 		"""Constructs the content of the JavaScript library."""
-		# Child classes can override this to build the stylesheet
+		# Child classes can override this to build the script
 		return u''
-	
+
+	def link(self, *args, **kwargs):
+		# Overridden to return a <script> element
+		return tag.script(src=self.url)
+
 
 class GraphDocument(WebSiteDocument):
 	"""Represents a graph in GraphViz dot language.
@@ -1047,7 +1360,7 @@ class GraphDocument(WebSiteDocument):
 		"""Constructs the content of the graph."""
 		self.generated = True
 		return self.graph
-	
+
 	def style(self, node):
 		"""Applies common styles to graph objects."""
 		# Override this in descendents to change common graph styles
@@ -1058,8 +1371,7 @@ class GraphDocument(WebSiteDocument):
 			node.fontname = 'Verdana'
 			node.fontsize = 10.0
 
-	def link(self):
-		"""Returns the Element(s) required to link to the image."""
+	def link(self, *args, **kwargs):
 		if self.usemap:
 			# If the graph uses a client side image map for links a bit
 			# more work is required. We need to get the graph to generate
@@ -1097,7 +1409,7 @@ class GraphObjectDocument(GraphDocument):
 		self.dbobject = dbobject # must be set before calling the inherited method
 		super(GraphObjectDocument, self).__init__(site, '%s.png' % dbobject.identifier)
 		self.dbobjects = {}
-	
+
 	def style(self, node):
 		# Overridden to add URLs to graph items representing database objects,
 		# and to apply common styles for database objects

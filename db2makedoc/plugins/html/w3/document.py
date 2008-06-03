@@ -9,6 +9,7 @@ certain methods to provide formatting specific to the w3 style [1].
 """
 
 import os
+import re
 import codecs
 import logging
 from db2makedoc.graph import Graph, Node, Edge, Cluster
@@ -19,8 +20,8 @@ from db2makedoc.db import (
 )
 from db2makedoc.plugins.html.document import (
 	Attrs, ElementFactory, WebSite, HTMLDocument, HTMLObjectDocument,
-	CSSDocument, JavaScriptDocument, GraphDocument, GraphObjectDocument,
-	SQLCSSDocument
+	HTMLIndexDocument, HTMLExternalDocument, CSSDocument, JavaScriptDocument,
+	GraphDocument, GraphObjectDocument, SQLCSSDocument
 )
 
 # Import the imaging library
@@ -96,6 +97,12 @@ class W3Site(WebSite):
 		self.feedback_url = options['feedback_url']
 		self.menu_items = options['menu_items']
 		self.related_items = options['related_items']
+		self.object_menus = {}
+		self.menu = None
+
+
+class W3ExternalDocument(HTMLExternalDocument):
+	pass
 
 
 class W3Document(HTMLDocument):
@@ -126,7 +133,7 @@ class W3PopupDocument(W3Document):
 		self.body = body
 		self.width = width
 		self.height = height
-	
+
 	def generate(self):
 		# Call the inherited method to create the skeleton document
 		doc = super(W3PopupDocument, self).generate()
@@ -138,8 +145,9 @@ class W3PopupDocument(W3Document):
 			@import url("//w3.ibm.com/ui/v8/css/interior.css");
 			@import url("//w3.ibm.com/ui/v8/css/popup-window.css");
 		""", media='all'))
-		headnode.append(tag.style(src=W3CSSDocument._url, media='all'))
 		headnode.append(tag.style(src='//w3.ibm.com/ui/v8/css/print.css', media='print'))
+		for sheet in self.site.stylesheets:
+			headnode.append(sheet.link())
 		# Generate the popup content
 		bodynode = tag._find(doc, 'body')
 		bodynode.append(tag.div(
@@ -185,7 +193,7 @@ class W3ArticleDocument(W3Document):
 		self.feedback_url = site.feedback_url
 		self.menu_items = site.menu_items
 		self.related_items = site.related_items
-	
+
 	def generate(self):
 		doc = super(W3ArticleDocument, self).generate()
 		# Add the w3v8 1-column article styles
@@ -197,10 +205,11 @@ class W3ArticleDocument(W3Document):
 			@import url("//w3.ibm.com/ui/v8/css/interior.css");
 			@import url("//w3.ibm.com/ui/v8/css/interior-1-col.css");
 		""", media='all'))
-		headnode.append(tag.style(src=W3CSSDocument._url, media='all'))
-		headnode.append(tag.style(src=SQLCSSDocument._url, media='all'))
 		headnode.append(tag.style(src='//w3.ibm.com/ui/v8/css/print.css', media='print'))
-		headnode.append(tag.script(src=W3JavaScriptDocument._url))
+		for sheet in self.site.stylesheets:
+			headnode.append(sheet.link())
+		for script in self.site.scripts:
+			headnode.append(script.link())
 		# Generate the masthead and accessibility sections
 		bodynode = tag._find(doc, 'body')
 		bodynode.attrib['class'] = 'article'
@@ -304,9 +313,7 @@ class W3ArticleDocument(W3Document):
 		bodynode.append(tag.div(
 			tag.h1('Start of main content', class_='access'),
 			tag.div(
-				# XXX Should be conditional on self.last_updated
 				self.generate_head(),
-				# XXX Should be conditional on self.breadcrumbs
 				self.generate_crumbs(),
 				id='content-head'
 			),
@@ -332,6 +339,107 @@ class W3ArticleDocument(W3Document):
 		))
 		return doc
 
+	def generate_crumbs(self):
+		"""Creates the breadcrumb links above the article body."""
+		# Return a list of (title, url) tuples. If a particular breadcrumb
+		# entry shouldn't be a link (e.g. the last item), simply use None as
+		# the url. The default implementation sets the first breadcrumb to
+		# the home page. Descendents should override and extend this list
+		if self.breadcrumbs:
+			links = [self.title]
+			item = self.parent
+			while item:
+				links.insert(0, ' > ')
+				links.insert(0, tag.a(item.title, href=item.url))
+				item = item.parent
+			return tag.p(links, id='breadcrumbs')
+		else:
+			return ''
+
+	def generate_related(self):
+		"""Creates the related links below the left-hand navigation menu."""
+		# Return a list of (title, url) tuples. The default implementation here
+		# simply returns the document's related_items list which, by default,
+		# is the site's related_items list. Descendents should override and
+		# extend this list if necessary
+		if self.related_items:
+			return (
+				tag.p('Related links:'),
+				tag.ul(tag.li(tag.a(title, href=url)) for (title, url) in self.related_items)
+			)
+		else:
+			return ''
+
+	def generate_menu(self):
+		"""Creates the left navigation menu links."""
+
+		def link(doc, active=False, visible=True):
+			"""Sub-routine which generates a menu link from a document."""
+			if isinstance(doc, HTMLObjectDocument) and doc.level > 0:
+				content = doc.dbobject.name
+			elif isinstance(doc, HTMLIndexDocument):
+				content = doc.letter
+			else:
+				content = doc.title
+			# Non-top-level items longer than 12 characters are truncated
+			# and suffixed with a horizontal ellipsis (\u2026)
+			return tag.a(
+				[content, content[:11] + u'\u2026'][bool(len(content) > 12 and doc.parent)],
+				href=doc.url,
+				title=doc.title,
+				class_=[None, 'active'][active],
+				style=['display: none;', None][visible]
+			)
+
+		def more(above):
+			"""Sub-routine which generates a "More Items" link."""
+			return tag.a(
+				[u'\u2193', u'\u2191'][above] + ' More items',
+				href='#',
+				title='More items',
+				onclick='javascript:return showItems(this);'
+			)
+
+		def menu(doc, active=True, children=''):
+			"""Sub-routine which generates all menu links recursively."""
+			# Recurse upwards if level is too high (w3v8 doesn't support more
+			# than 3 levels of menus)
+			if doc.level >= 3:
+				return menu(doc.parent, active, '')
+			# Build the list of links for this menu level. The count is the
+			# number of visible items before we start hiding things with "More
+			# Items"
+			links = [link(doc, active=active), children]
+			count = 10
+			pdoc = doc.prior
+			ndoc = doc.next
+			more_above = more_below = False
+			while pdoc or ndoc:
+				if pdoc:
+					more_above = count <= 0 and doc.level > 0
+					links.insert(0, link(pdoc, visible=not more_above))
+					pdoc = pdoc.prior
+					count -= 1
+				if ndoc:
+					more_below = count <= 0 and doc.level > 0
+					links.append(link(ndoc, visible=not more_below))
+					ndoc = ndoc.next
+					count -= 1
+			# Insert "More Items" links if necessary
+			if more_above:
+				links.insert(0, more(True))
+			if more_below:
+				links.append(more(False))
+			# Wrap the list of links in a div
+			links = tag.div(links, class_=['top-level', 'second-level', 'third-level'][doc.level])
+			# Recurse up the document hierarchy if there are more levels
+			if doc.level:
+				return menu(doc.parent, False, links)
+			else:
+				return links
+
+		return menu(self)
+
 	def generate_head(self):
 		"""Creates the header text above the article body."""
 		if self.last_updated:
@@ -341,31 +449,13 @@ class W3ArticleDocument(W3Document):
 			)
 		else:
 			return ''
-	
-	def generate_crumbs(self):
-		"""Creates the breadcrumb links above the article body."""
-		return ''
 
 	def generate_main(self):
 		"""Creates the article body."""
 		return ''
-	
-	def generate_menu(self):
-		"""Creates the links for the left-hand navigation menu."""
-		return ''
 
-	def generate_related(self):
-		"""Creates the related links below the left-hand navigation menu."""
-		if len(self.related_items):
-			return (
-				tag.p('Related links:'),
-				tag.ul(tag.li(tag.a(title, href=url)) for (title, url) in self.related_items)
-			)
-		else:
-			return ''
-	
 
-class W3MainDocument(HTMLObjectDocument, W3ArticleDocument):
+class W3ObjectDocument(HTMLObjectDocument, W3ArticleDocument):
 	"""Document class representing a database object (table, view, index, etc.)"""
 
 	def flatten(self, content):
@@ -374,19 +464,6 @@ class W3MainDocument(HTMLObjectDocument, W3ArticleDocument):
 		# navigation menu don't corrupt the search results
 		return flatten_html(tag._find(content, 'div', id='content-main'))
 
-	def generate_crumbs(self):
-		if self.breadcrumbs:
-			crumbs = []
-			item = self.dbobject
-			while item is not None:
-				crumbs.insert(0, self.site.link_to(item, typename=True, qualifiedname=False))
-				crumbs.insert(0, ' > ')
-				item = item.parent
-			crumbs.insert(0, tag.a(self.site.home_title, href=self.site.home_url))
-			return tag.p(crumbs, id='breadcrumbs')
-		else:
-			return ''
-	
 	def generate_main(self):
 		sections = self.generate_sections()
 		return (
@@ -399,167 +476,74 @@ class W3MainDocument(HTMLObjectDocument, W3ArticleDocument):
 				for (id, title, content) in sections
 			)
 		)
-	
+
 	def generate_sections(self):
 		"""Creates the actual body content."""
 		# Override in descendents to return a list of tuples with the following
 		# structure: (id, title, [content]). "content" is a list of Elements.
 		return []
 
-	def generate_menu(self):
-		def make_menu_level(selitem, active, subitems):
-			# Get the list of siblings and figure out the range of visible items
-			if selitem.parent_list is None:
-				siblings = [selitem]
-				first_visible = 0
-				last_visible = 0
+
+class W3SiteIndexDocument(HTMLIndexDocument, W3ArticleDocument):
+	"""Document class containing an alphabetical index of objects"""
+
+	def __init__(self, site, dbclass, letter):
+		super(W3SiteIndexDocument, self).__init__(site, dbclass, letter)
+
+	def generate_main(self):
+		# Generate the letter links to other docs in the index
+		links = tag.p()
+		doc = self.first
+		while doc:
+			if doc is self:
+				tag._append(links, tag.strong(doc.letter))
 			else:
-				index = selitem.parent_index
-				siblings = selitem.parent_list
-				if len(selitem.parent_list) <= 10:
-					first_visible = 0
-					last_visible = len(siblings) - 1
-				elif index <= 3:
-					first_visible = 0
-					last_visible = 6
-				elif index >= len(selitem.parent_list) - 4:
-					first_visible = len(siblings) - 7
-					last_visible = len(siblings) - 1
-				else:
-					first_visible = index - 3
-					last_visible = index + 3
-			more_above = first_visible > 0
-			more_below = last_visible < len(siblings) - 1
-			# items is a list of tuples of the following fields:
-			# (URL, content, title, visible, active, onclick, [children])
-			items = []
-			index = 0
-			for item in siblings:
-				content = item.name
-				if len(content) > 10:
-					content = '%s...' % content[:10]
-				title = '%s %s' % (item.type_name, item.qualified_name)
-				if item is selitem:
-					items.append((
-						self.site.object_document(item).url, # url/href
-						content,    # content
-						title,      # title
-						True,       # visible
-						active,     # active
-						None,       # onclick
-						subitems    # children
-					))
-				else:
-					items.append((
-						self.site.object_document(item).url, # url/href
-						content,    # content
-						title,      # title
-						first_visible <= index <= last_visible, # visible
-						False,      # active
-						None,       # onclick
-						[]          # children
-					))
-				index += 1
-			if more_above:
-				items.insert(0, (
-					'#',                     # url/href
-					u'\u2191 More items...', # content, \u2191 == &uarr;
-					'More items',            # title
-					True,                    # visible
-					False,                   # active
-					'javascript:return showItems(this);', # onclick
-					[]                       # children
-				))
-			if more_below:
-				items.append((
-					'#',                     # url/href
-					u'\u2193 More items...', # content, \u2193 == &darr;
-					'More items',            # title
-					True,                    # visible
-					False,                   # active
-					'javascript:return showItems(this);', # onclick
-					[]                       # children
-				))
-			return items
+				tag._append(links, tag.a(doc.letter, href=doc.url))
+			tag._append(links, ' ')
+			doc = doc.next
+		# Sort the list of items in the index, and build the content. Note that
+		# self.items is actually reference to a site level object and therefore
+		# must be considered read-only, hence why the list is not sorted
+		# in-place here
+		items = sorted(self.items, key=lambda item: '%s %s' % (item.name, item.qualified_name))
+		index = tag.dl(
+			(
+				tag.dt(
+					item.name,
+					' (',
+					item.type_name,
+					' ',
+					self.site.link_to(item, parent=True),
+					')'
+				),
+				tag.dd(self.format_comment(item.description, summary=True))
+			)
+			for item in items
+		)
+		return (
+			links,
+			tag.hr(),
+			index
+		)
 
-		def make_menu_tree(item, active=True):
-			items = []
-			while item is not None:
-				items = make_menu_level(item, active, items)
-				active = False
-				item = item.parent
-			# Build a list of the top-level menu items
-			site_items = [(self.site.home_title, self.site.home_url)] + self.site.menu_items
-			# Combine the site_items array with the items tree. The special URL
-			# "#" in site_items indicates where the items tree should be
-			# positioned in the final menu. If not present, the items tree will
-			# wind up as the last item
-			index = 0
-			for (title, url) in site_items:
-				if url == '#':
-					# Found the special entry. Replace the menu entry title,
-					# but copy everything else from the original entry
-					items[index] = items[index][:1] + (title,) + items[index][2:]
-				else:
-					items.insert(index, (
-						url,   # url/href
-						title, # content
-						title, # title
-						True,  # visible
-						False, # active
-						None,  # onclick
-						[],    # children
-					))
-				index += 1
-			return items
-
-		def make_menu_elements(items, parent=None, level=0):
-			# Recursively build divs containing links
-			classes = ['top-level', 'second-level', 'third-level']
-			root = tag.div(class_=classes[level])
-			if parent:
-				parent.append(root)
-			for (url, content, title, visible, active, onclick, children) in items:
-				link = tag.a(content, href=url, title=title)
-				if active:
-					link.attrib['class'] = 'active'
-				if not visible:
-					link.attrib['style'] = 'display: none;'
-				if onclick:
-					link.attrib['onclick'] = onclick
-				root.append(link)
-				if len(children) > 0 and level + 1 < len(classes):
-					make_menu_elements(children, root, level + 1)
-			return root
-
-		return make_menu_elements(make_menu_tree(self.dbobject))
-	
 
 class W3SearchDocument(W3ArticleDocument):
 	"""Document class containing the PHP search script"""
 
-	_url = 'search.php'
-
 	def __init__(self, site):
-		super(W3SearchDocument, self).__init__(site, self._url)
+		super(W3SearchDocument, self).__init__(site, 'search.php')
 		self.title = 'Search results'
 		self.description = self.title
 		self.search = False
 		self.last_updated = site.last_updated
 	
-	def generate_crumbs(self):
-		if self.breadcrumbs:
-			return tag.p(
-				tag.a(self.site.home_title, href=self.site.home_url),
-				' > ',
-				tag.a(self.site.title, href=self.site.object_document(self.site.database).url),
-				' > ',
-				self.title,
-				id='breadcrumbs'
-			)
+	def _get_parent(self):
+		result = super(W3SearchDocument, self)._get_parent()
+		if not result:
+			return self.site.object_document(self.site.database)
 		else:
-			return ''
-	
+			return result
+
 	def generate_main(self):
 		# XXX Dirty hack to work around a bug in ElementTree: if we use an ET
 		# ProcessingInstruction here, ET converts XML special chars (<, >,
@@ -569,45 +553,6 @@ class W3SearchDocument(W3ArticleDocument):
 		# the PHP code contains any non-ASCII characters and/or the target
 		# encoding is not ASCII-based (e.g. EBCDIC).
 		return ProcessingInstruction('php', '__PHP__')
-
-	def generate_menu(self):
-		def make_menu_tree():
-			# Create a list of (title, url, active, [children]) items
-			# representing top level menu items
-			items = [
-				(title, url, False, [])
-				for (title, url) in
-				[(self.site.home_title, self.site.home_url)] + self.site.menu_items
-			]
-			# Find the "special" item in the site_items array which represents
-			# where we should position our own menu items, and add a "Search
-			# Results" dead link
-			new_items = []
-			for (title, url, active, children) in items:
-				if url == '#':
-					new_items.append((title, self.site.object_document(self.site.database).url, False, [
-						(self.title, '#', True, [])
-					]))
-				else:
-					new_items.append((title, url, active, children))
-			return new_items
-
-		def make_menu_elements(items, parent=None, level=0):
-			# Recursively generate divs containing anchors
-			classes = ['top-level', 'second-level', 'third-level']
-			root = tag.div(class_=classes[level])
-			if parent:
-				parent.append(root)
-			for (title, url, active, children) in items:
-				link = tag.a(title, href=url, title=title)
-				if active:
-					link.attrib['class'] = 'active'
-				root.append(link)
-				if len(children) > 0 and level + 1 < len(classes):
-					make_menu_elements(children, root, level + 1)
-			return root
-
-		return make_menu_elements(make_menu_tree())
 
 	def serialize(self, content):
 		# XXX See generate_main()
@@ -653,7 +598,7 @@ function run_query() {
 	foreach ($QUERIES as $q) {
 		$left = $parser->parse_query($q,
 			XapianQueryParser::FLAG_BOOLEAN_ANY_CASE |  # Enable boolean operators (with any case)
-			XapianQueryParser::FLAG_PHRASE |            # Enable quoted phrases 
+			XapianQueryParser::FLAG_PHRASE |            # Enable quoted phrases
 			XapianQueryParser::FLAG_LOVEHATE |          # Enable + and -
 			XapianQueryParser::FLAG_SPELLING_CORRECTION # Enable suggested corrections
 		);
@@ -919,15 +864,13 @@ print($doc->saveXML(limit_search($doc)));
 		php = php.replace('__ENCODING__', self.site.encoding)
 		result = super(W3SearchDocument, self).serialize(content)
 		return result.replace('__PHP__', php)
-	
+
 
 class W3CSSDocument(CSSDocument):
 	"""Stylesheet class to supplement the w3v8 style with SQL syntax highlighting."""
 
-	_url = 'styles.css'
-
 	def __init__(self, site):
-		super(W3CSSDocument, self).__init__(site, self._url)
+		super(W3CSSDocument, self).__init__(site, 'styles.css')
 
 	def generate(self):
 		# We only need one supplemental CSS stylesheet (the default w3v8 styles
@@ -1054,10 +997,8 @@ div.zoom :visited {
 class W3JavaScriptDocument(JavaScriptDocument):
 	"""Code class to supplement the w3v8 style with some simple routines."""
 
-	_url = 'scripts.js'
-
 	def __init__(self, site):
-		super(W3JavaScriptDocument, self).__init__(site, self._url)
+		super(W3JavaScriptDocument, self).__init__(site, 'scripts.js')
 
 	def generate(self):
 		doc = super(W3JavaScriptDocument, self).generate()
@@ -1098,7 +1039,7 @@ function toggleLineNums(e) {
 }
 
 var W3_SEARCH = 'http://w3.ibm.com/search/do/search';
-var DOC_SEARCH = '__SEARCH__';
+var DOC_SEARCH = 'search.php';
 
 // Toggles the target of the masthead search box
 function toggleSearch() {
@@ -1170,7 +1111,7 @@ function Position(x, y) {
 // version of PPK's excellent "Drag and drop" script. The original can be
 // found at: http://www.quirksmode.org/js/dragdrop.html
 zoom = {
-	// Configuration variables 
+	// Configuration variables
 	keySpeed: 10, // pixels per keypress event
 	defaultTitle: 'Zoom', // title bar of normal zoom box
 	mouseTitle: undefined, // title bar of zoom box during mouse drag
@@ -1187,7 +1128,7 @@ zoom = {
 	dXKeys: undefined,
 	dYKeys: undefined,
 	box: undefined,
-	
+
 	toggle: function (thumb, src, map) {
 		if (typeof thumb == 'string')
 			thumb = document.getElementById(thumb);
@@ -1232,10 +1173,10 @@ zoom = {
 		link.onclick = zoom.startDragKeys;
 		title.onmousedown = zoom.startDragMouse;
 		// Return the top-level <div> in case the caller wants to customize
-		// the content 
+		// the content
 		return box;
 	},
-	
+
 	done: function(thumb) {
 		if (zoom.box) zoom.endDrag();
 		if (typeof thumb == 'string')
@@ -1379,14 +1320,13 @@ zoom = {
 		zoom.box._image.style.top = -newImagePos.y + 'px';
 	}
 }
-""".replace('__SEARCH__', W3SearchDocument._url)
+"""
 
 
 class W3GraphDocument(GraphObjectDocument):
 	"""Graph class representing a database object or collection of objects."""
 
 	def __init__(self, site, dbobject):
-		"""Initializes an instance of the class."""
 		super(W3GraphDocument, self).__init__(site, dbobject)
 		(maxw, maxh) = self.site.max_graph_size
 		self.graph.ratio = str(float(maxh) / float(maxw))
@@ -1397,7 +1337,7 @@ class W3GraphDocument(GraphObjectDocument):
 			s, ext = self.url.rsplit('.', 1)
 			self.zoom_url = s + '.zoom.' + ext
 			self.scale = None
-	
+
 	def write(self):
 		# Overridden to set the introduced "written" flag (to ensure we don't
 		# attempt to write the graph more than once due to the induced write()
@@ -1430,7 +1370,7 @@ class W3GraphDocument(GraphObjectDocument):
 					else:
 						im = im.resize((neww, newh), Image.NEAREST)
 					im.save(self.filename)
-	
+
 	def map(self, zoom=False):
 		# Overridden to allow generating the client-side map for the "full
 		# size" graph, or the smaller version potentially produced by the
@@ -1461,8 +1401,8 @@ class W3GraphDocument(GraphObjectDocument):
 						for coord in coords
 					)
 		return result
-	
-	def link(self):
+
+	def link(self, *args, **kwargs):
 		# Overridden to allow "zoomed" graphs with some extra JavaScript. The
 		# write() method handles checking if a graph is large
 		# (>self.max_graph_size) and creating a second scaled down version if

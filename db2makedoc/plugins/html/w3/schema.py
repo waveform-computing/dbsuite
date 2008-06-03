@@ -1,7 +1,7 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import Schema, Table, View, Alias
-from db2makedoc.plugins.html.w3.document import W3MainDocument, W3GraphDocument, tag
+from db2makedoc.plugins.html.w3.document import W3ObjectDocument, W3GraphDocument, tag
 
 times = {
 	'A': 'After',
@@ -14,7 +14,7 @@ events = {
 	'D': 'Delete',
 }
 
-class W3SchemaDocument(W3MainDocument):
+class W3SchemaDocument(W3ObjectDocument):
 	def __init__(self, site, schema):
 		assert isinstance(schema, Schema)
 		super(W3SchemaDocument, self).__init__(site, schema)
@@ -65,7 +65,7 @@ class W3SchemaDocument(W3MainDocument):
 						tag.tr(
 							tag.td(self.site.link_to(index)),
 							tag.td(index.unique),
-							tag.td(self.site.link_to(index.table, qualifiedname=True)),
+							tag.td(self.site.link_to(index.table)),
 							tag.td(self.format_comment(index.description, summary=True))
 						) for index in indexes
 					))
@@ -89,7 +89,7 @@ class W3SchemaDocument(W3MainDocument):
 							tag.td(self.site.link_to(trigger)),
 							tag.td(times[trigger.trigger_time]),
 							tag.td(events[trigger.trigger_event]),
-							tag.td(self.site.link_to(trigger.relation, qualifiedname=True)),
+							tag.td(self.site.link_to(trigger.relation)),
 							tag.td(self.format_comment(trigger.description, summary=True))
 						) for trigger in triggers
 					))

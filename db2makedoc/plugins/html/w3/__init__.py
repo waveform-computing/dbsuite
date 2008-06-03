@@ -13,7 +13,7 @@ from db2makedoc.db import (
 )
 from db2makedoc.plugins.html.w3.document import (
 	W3Site, W3CSSDocument, W3JavaScriptDocument, W3SearchDocument,
-	W3PopupDocument
+	W3SiteIndexDocument, W3ExternalDocument, W3PopupDocument
 )
 from db2makedoc.plugins.html.w3.database import W3DatabaseDocument
 from db2makedoc.plugins.html.w3.schema import W3SchemaDocument, W3SchemaGraph
@@ -69,7 +69,7 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 			for an example""")
 		self.add_option('max_graph_size', default='600x800',
 			convert=lambda value: self.convert_list(value, separator='x',
-			subconvert=lambda value: self.convert_int(value, minvalue=100),
+			subconvert=lambda value: self.convert_int(value.strip(), minvalue=100),
 			minvalues=2, maxvalues=2),
 			doc="""The maximum size that diagrams are allowed to be on the
 			page. If diagrams are larger, they will be resized and a zoom
@@ -101,31 +101,55 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 			Procedure:  set([W3ProcedureDocument]),
 			Tablespace: set([W3TablespaceDocument]),
 		}
+		graph_map = {
+			Schema:  W3SchemaGraph,
+			Table:   W3TableGraph,
+			View:    W3ViewGraph,
+			Alias:   W3AliasGraph,
+		}
 		for item in self.options['diagrams']:
-			if item == 'schema':
-				self.class_map[Schema].add(W3SchemaGraph)
-			elif item == 'relation':
-				self.class_map[Alias].add(W3AliasGraph)
-				self.class_map[Table].add(W3TableGraph)
-				self.class_map[View].add(W3ViewGraph)
-			elif item == 'alias':
-				self.class_map[Alias].add(W3AliasGraph)
-			elif item == 'table':
-				self.class_map[Table].add(W3TableGraph)
-			elif item == 'view':
-				self.class_map[View].add(W3ViewGraph)
-			else:
-				raise db2makedoc.plugins.PluginConfigurationError('Invalid type "%s" specified for diagram option' % item)
+			try:
+				self.class_map[item].add(graph_map[item])
+			except KeyError:
+				raise db2makedoc.plugins.PluginConfigurationError('No diagram support for "%s" objects (supported objects are %s)' % (
+					item.config_names[0],
+					', '.join(c.config_names[0] for c in graph_map.iterkeys()))
+				)
 
 	def create_documents(self, site):
-		# Overridden to add static CSS, JavaScript, and HTML documents
+		# Add static documents (CSS, JavaScript, search if requested)
 		W3CSSDocument(site)
 		W3JavaScriptDocument(site)
 		if site.search:
 			W3SearchDocument(site)
 		for (url, title, body) in POPUPS:
 			W3PopupDocument(site, url, title, body)
+		# Call inherited method to generate documents for all objects
 		super(OutputPlugin, self).create_documents(site)
+		# Add index documents for all indexed classes
+		for dbclass in site.index_maps:
+			for letter in site.index_maps[dbclass]:
+				W3SiteIndexDocument(site, dbclass, letter)
+		# Add external documents for all menu_items
+		found_top = False
+		menu_docs = []
+		for (title, url) in [(self.options['home_title'], self.options['home_url'])] + self.options['menu_items']:
+			if url == '#':
+				doc = site.object_document(site.database)
+				doc.title = title
+				found_top = True
+			else:
+				doc = W3ExternalDocument(site, url, title)
+			menu_docs.append(doc)
+		if not found_top:
+			doc = site.object_document(site.database)
+			menu_docs.append(doc)
+		prior = None
+		for doc in menu_docs:
+			doc.first = menu_docs[0]
+			doc.last = menu_docs[-1]
+			doc.prior = prior
+			prior = doc
 	
 	def create_document(self, dbobject, site):
 		# Overridden to generate documents and graphs for specific types of

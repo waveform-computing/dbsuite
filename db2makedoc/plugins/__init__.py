@@ -16,6 +16,7 @@ import logging
 import datetime
 import re
 from fnmatch import fnmatchcase as fnmatch
+import db2makedoc.db
 
 if sys.hexversion < 0x02050000:
 	# Define the any() and all() functions for backward compatibility with
@@ -79,6 +80,38 @@ class Plugin(object):
 		"""
 		super(Plugin, self).__init__()
 		self.options = {}
+		# Construct some utility mappings for the database class conversions
+		classes = [
+			cls for cls in db2makedoc.db.__dict__.itervalues()
+			if type(cls) == type(object)
+			and issubclass(cls, db2makedoc.db.DatabaseObject)
+			and hasattr(cls, 'config_names')
+		]
+		# Generate a mapping of configuration names to classes
+		self.__names = dict(
+			(config_name, cls)
+			for cls in classes
+			for config_name in cls.config_names
+		)
+		# Generate a mapping of classes to their children. Note that we "tweak"
+		# the UniqueKey entry afterward otherwise it'll wind up being treated
+		# as an abstract base class for PrimaryKey (which it isn't)
+		self.__abstracts = dict(
+			(parent, [
+				child
+				for child in classes
+				if child != parent
+				and issubclass(child, parent)
+			])
+			for parent in classes
+		)
+		self.__abstracts[db2makedoc.db.UniqueKey] = []
+		# Remove concrete classes (those with no children)
+		self.__abstracts = dict(
+			(base, classes)
+			for (base, classes) in self.__abstracts.iteritems()
+			if classes
+		)
 
 	def add_option(self, name, default=None, doc=None, convert=None):
 		"""Adds a new option to the configuration directory.
@@ -168,9 +201,9 @@ class Plugin(object):
 		if value.strip() == '':
 			return []
 		elif subconvert is None:
-			return value.split(separator)
+			return [item.strip() for item in value.split(separator)]
 		else:
-			return [subconvert(item) for item in value.split(separator)]
+			return [subconvert(item.strip()) for item in value.split(separator)]
 	
 	def convert_list(self, value, separator=',', subconvert=None, minvalues=0,
 		maxvalues=None):
@@ -242,6 +275,57 @@ class Plugin(object):
 			]
 		return result
 
+	def convert_dbclass(self, value, abstract=False):
+		"""Conversion handler for configuration values containing a database class.
+
+		This conversion method handles a value which refers to a database
+		class. For example, "type=table". Alternate versions (e.g. plurals) of
+		the class names are accepted (see the "config_names" attribute of the
+		classes in the db2makedoc.db module), and values are case insensitive.
+
+		If the optional abstract parameter is True, abstract base classes like
+		Relation, Constraint, and Routine will be permitted as the result.  If
+		it is False (the default), only concrete classes will be permitted
+		(anything else will raise an error).
+		"""
+		try:
+			result = self.__names[value]
+		except KeyError:
+			raise PluginConfigurationError('Unknown database object type "%s"' % value)
+		if not abstract and result in self.__abstracts:
+			raise PluginConfigurationError('Abstract object type "%s" not permitted' % value)
+		return value
+
+	def convert_dbclasses(self, value, separator=',', abstract=False):
+		"""Conversion handler for configuration values containing a set of database classes.
+
+		This conversion method handles lists of database classes, for example
+		"diagrams=alias,table,view". Alternate versions (e.g. plurals) of the
+		class names are accepted (see the "config_names" attribute of the
+		classes in the db2makedoc.db module), and values are case insensitive.
+
+		If the optional abstract parameter is True, abstract base classes like
+		Relation, Constraint, and Routine will be permitted in the result. If
+		it is False (the default), abstract classes will be converted to the
+		concrete classes descended from them (e.g. Relation becomes Alias,
+		Table, View).  The result is a set (rather than a list) of classes.
+		"""
+		try:
+			value = set(
+				self.__names[name] for name in
+				self.convert_set(value, separator, subconvert=lambda x: x.lower())
+			)
+		except KeyError, e:
+			raise PluginConfigurationError('Unknown database object type "%s"' % str(e))
+		if abstract:
+			return value
+		else:
+			return set(
+				child
+				for parent in value
+				for child in self.__abstracts.get(parent, [parent])
+			)
+	
 	def configure(self, config):
 		"""Loads the plugin configuration.
 

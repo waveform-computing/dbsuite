@@ -11,6 +11,8 @@ import os
 import sys
 mswindows = sys.platform[:5] == 'win32'
 import codecs
+import logging
+import db2makedoc.db
 import db2makedoc.plugins
 from db2makedoc.plugins.html.document import WebSite, SQLCSSDocument
 from db2makedoc.graph import DEFAULT_CONVERTER
@@ -33,6 +35,12 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 		self.add_option('path', default='.', convert=self.convert_path, 
 			doc="""The folder into which all files (HTML, CSS, SVG, etc.) will
 			be written""")
+		self.add_option('top', default='index',
+			doc="""The base name (without path or extension) of the top-level
+			file in the output (i.e. the file documenting the database itself).
+			The default "index" results in the top-level file being named
+			"index.html". Change this if you wish to have a separate index.html
+			file which is not touched by db2makedoc""")
 		self.add_option('encoding', default='UTF-8',
 			doc="""The character encoding to use for all text-based files
 			(HTML, JavaScript, CSS, SVG, etc.)""")
@@ -56,20 +64,26 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 			doc="""If True, a full-text-search database will be generated and
 			a small PHP script will be included with the output for searching
 			purposes""")
-		self.add_option('diagrams', default='',
-			convert=lambda value: self.convert_set(value,
-			subconvert=lambda value: value.lower()),
+		self.add_option('diagrams', default='', convert=self.convert_dbclasses,
 			doc="""A comma separated list of the object types for which
-			diagrams should be generated. Supported values are currently:
-			alias, schema, table, view, relation (equivalent to
-			"alias,table,view"). Node that schema diagrams may require an
-			extremely large amount of RAM to process """)
-		self.add_option('lang', default='en-US', convert=lambda value: self.convert_list(value, separator='-', minvalues=2, maxvalues=2),
+			diagrams should be generated, e.g. "schemas, relations". Currently
+			only diagrams of schemas and relations (tables, views, and aliases)
+			are supported. Note that schema diagrams may require an extremely
+			large amount of RAM (1Gb+) to process""")
+		self.add_option('indexes', default='',
+			convert=lambda value: self.convert_dbclasses(value, abstract=True),
+			doc="""A comma separated list of the object types for which
+			alphabetical index lists should be generated, e.g. "schemas,
+			tables, fields, all". The value "all" generates an index of all
+			objects in the database, regardless of type.""")
+		self.add_option('lang', default='en-US',
+			convert=lambda value: self.convert_list(value, separator='-', minvalues=2, maxvalues=2),
 			doc="""The ISO639 language code indicating the language that the
-			site uses. Defaults to en-US. Note that this is used both for the
-			XML language, and for the language-specific stemming algorithm
-			(if search is true)""")
-		self.add_option('threads', default='1', convert=lambda value: self.convert_int(value, minvalue=1),
+			site uses. Note that this is used both for the XML language, and
+			for the language-specific stemming algorithm (if search is
+			true)""")
+		self.add_option('threads', default='1',
+			convert=lambda value: self.convert_int(value, minvalue=1),
 			doc="""The number of threads to utilize when writing the output.
 			Defaults to 1. If you have more than 1 processor or core, setting
 			this to 2 or more may yield better performance (although values
@@ -112,6 +126,7 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 		super(HTMLOutputPlugin, self).execute(database)
 		site = self.site_class(database, self.options)
 		self.create_documents(site)
+		logging.info('Writing output to "%s"' % self.options['path'])
 		site.write()
 	
 	def create_documents(self, site):

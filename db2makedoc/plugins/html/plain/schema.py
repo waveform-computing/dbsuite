@@ -65,7 +65,7 @@ class PlainSchemaDocument(PlainMainDocument):
 						tag.tr(
 							tag.td(self.site.link_to(index)),
 							tag.td(index.unique),
-							tag.td(self.site.link_to(index.table, qualifiedname=True)),
+							tag.td(self.site.link_to(index.table)),
 							tag.td(self.format_comment(index.description, summary=True))
 						) for index in indexes
 					))
@@ -89,7 +89,7 @@ class PlainSchemaDocument(PlainMainDocument):
 							tag.td(self.site.link_to(trigger)),
 							tag.td(times[trigger.trigger_time]),
 							tag.td(events[trigger.trigger_event]),
-							tag.td(self.site.link_to(trigger.relation, qualifiedname=True)),
+							tag.td(self.site.link_to(trigger.relation)),
 							tag.td(self.format_comment(trigger.description, summary=True))
 						) for trigger in triggers
 					))

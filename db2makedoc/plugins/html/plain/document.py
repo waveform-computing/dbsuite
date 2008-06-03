@@ -306,7 +306,7 @@ class PlainMainDocument(HTMLObjectDocument, PlainDocument):
 		crumbs = []
 		item = self.dbobject
 		while item is not None:
-			crumbs.insert(0, self.site.link_to(item, typename=True, qualifiedname=False))
+			crumbs.insert(0, self.site.object_document(item).link())
 			crumbs.insert(0, ' > ')
 			item = item.parent
 		crumbs.insert(0, tag.a(self.site.home_title, href=self.site.home_title))

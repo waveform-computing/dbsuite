@@ -59,7 +59,7 @@ class PlainTablespaceDocument(PlainMainDocument):
 					),
 					tag.tbody((
 						tag.tr(
-							tag.td(self.site.link_to(table, qualifiedname=True)),
+							tag.td(self.site.link_to(table)),
 							tag.td(self.format_comment(table.description, summary=True))
 						) for table in tables
 					))
@@ -78,8 +78,8 @@ class PlainTablespaceDocument(PlainMainDocument):
 					),
 					tag.tbody((
 						tag.tr(
-							tag.td(self.site.link_to(index, qualifiedname=True)),
-							tag.td(self.site.link_to(index.table, qualifiedname=True)),
+							tag.td(self.site.link_to(index)),
+							tag.td(self.site.link_to(index.table)),
 							tag.td(self.format_comment(index.description, summary=True))
 						) for index in indexes
 					))

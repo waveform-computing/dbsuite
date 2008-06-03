@@ -1,7 +1,7 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import Trigger
-from db2makedoc.plugins.html.w3.document import W3MainDocument, tag
+from db2makedoc.plugins.html.w3.document import W3ObjectDocument, tag
 
 trigtime = {
 	'A': 'After',
@@ -18,7 +18,7 @@ granularity = {
 	'S': 'Statement',
 }
 
-class W3TriggerDocument(W3MainDocument):
+class W3TriggerDocument(W3ObjectDocument):
 	def __init__(self, site, trigger):
 		assert isinstance(trigger, Trigger)
 		super(W3TriggerDocument, self).__init__(site, trigger)
@@ -57,7 +57,7 @@ class W3TriggerDocument(W3MainDocument):
 						tag.td(self.site.url_document('granularity.html').link()),
 						tag.td(granularity[self.dbobject.granularity]),
 						tag.td('Relation'),
-						tag.td(self.site.link_to(self.dbobject.relation, qualifiedname=True))
+						tag.td(self.site.link_to(self.dbobject.relation))
 					)
 				)
 			)

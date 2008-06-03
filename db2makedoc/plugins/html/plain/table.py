@@ -136,7 +136,7 @@ class PlainTableDocument(PlainMainDocument):
 					),
 					tag.tbody((
 						tag.tr(
-							tag.td(self.site.link_to(index, qualifiedname=True)),
+							tag.td(self.site.link_to(index)),
 							tag.td(index.unique),
 							tag.td(tag.ol((tag.li(ixfield.name) for (ixfield, _) in index.field_list), style=olstyle)),
 							tag.td(tag.ol((tag.li(orders[ixorder]) for (_, ixorder) in index.field_list), style=olstyle)),
@@ -192,7 +192,7 @@ class PlainTableDocument(PlainMainDocument):
 					),
 					tag.tbody((
 						tag.tr(
-							tag.td(self.site.link_to(trigger, qualifiedname=True)),
+							tag.td(self.site.link_to(trigger)),
 							tag.td(times[trigger.trigger_time]),
 							tag.td(events[trigger.trigger_event]),
 							tag.td(self.format_comment(trigger.description, summary=True))
@@ -213,7 +213,7 @@ class PlainTableDocument(PlainMainDocument):
 					),
 					tag.tbody((
 						tag.tr(
-							tag.td(self.site.link_to(dep, qualifiedname=True)),
+							tag.td(self.site.link_to(dep)),
 							tag.td(dep.type_name),
 							tag.td(self.format_comment(dep.description, summary=True))
 						) for dep in dependents

@@ -1,9 +1,9 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import Tablespace
-from db2makedoc.plugins.html.w3.document import W3MainDocument, tag
+from db2makedoc.plugins.html.w3.document import W3ObjectDocument, tag
 
-class W3TablespaceDocument(W3MainDocument):
+class W3TablespaceDocument(W3ObjectDocument):
 	def __init__(self, site, tablespace):
 		assert isinstance(tablespace, Tablespace)
 		super(W3TablespaceDocument, self).__init__(site, tablespace)
@@ -59,7 +59,7 @@ class W3TablespaceDocument(W3MainDocument):
 					),
 					tag.tbody((
 						tag.tr(
-							tag.td(self.site.link_to(table, qualifiedname=True)),
+							tag.td(self.site.link_to(table)),
 							tag.td(self.format_comment(table.description, summary=True))
 						) for table in tables
 					))
@@ -78,8 +78,8 @@ class W3TablespaceDocument(W3MainDocument):
 					),
 					tag.tbody((
 						tag.tr(
-							tag.td(self.site.link_to(index, qualifiedname=True)),
-							tag.td(self.site.link_to(index.table, qualifiedname=True)),
+							tag.td(self.site.link_to(index)),
+							tag.td(self.site.link_to(index.table)),
 							tag.td(self.format_comment(index.description, summary=True))
 						) for index in indexes
 					))

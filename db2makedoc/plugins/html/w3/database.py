@@ -1,9 +1,9 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import Database
-from db2makedoc.plugins.html.w3.document import W3MainDocument, tag
+from db2makedoc.plugins.html.w3.document import W3ObjectDocument, tag
 
-class W3DatabaseDocument(W3MainDocument):
+class W3DatabaseDocument(W3ObjectDocument):
 	def __init__(self, site, database):
 		assert isinstance(database, Database)
 		super(W3DatabaseDocument, self).__init__(site, database)
@@ -60,6 +60,20 @@ class W3DatabaseDocument(W3MainDocument):
 								tag.td(self.format_comment(tbspace.description, summary=True))
 							) for tbspace in tbspaces
 						))
+					)
+				]
+			))
+		if self.site.index_docs:
+			result.append((
+				'indexes', 'Alphabetical Indexes', [
+					tag.p("""These are alphabetical lists of objects in the
+					database. Indexes are constructed by type (including
+					generic types like Relation which encompasses Tables,
+					Views, and Aliases), and entries are indexed by their
+					unqualified name."""),
+					tag.ul(
+						tag.li(self.site.index_of(dbclass))
+						for dbclass in self.site.index_docs.iterkeys()
 					)
 				]
 			))
