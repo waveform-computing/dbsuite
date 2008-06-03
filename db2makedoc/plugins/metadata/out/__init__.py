@@ -129,13 +129,18 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 			result.attrib['system'] = 'system'
 		if datatype.created:
 			result.attrib['created'] = datatype.created.isoformat()
+		if datatype.variable_size:
+			result.attrib['variable'] = ['size', 'scale'][datatype.variable_scale]
 		if datatype.source:
-			# XXX DB2 specific?
 			result.attrib['source'] = datatype.source.identifier
 			if datatype.source.variable_size:
 				result.attrib['size'] = str(datatype.size)
 				if datatype.source.variable_scale:
 					result.attrib['scale'] = str(datatype.scale)
+			if datatype.codepage:
+				result.attrib['codepage'] = str(datatype.codepage)
+			if datatype.final:
+				result.attrib['final'] = 'final'
 		SubElement(result, 'description').text = datatype.description
 		return result
 
@@ -287,7 +292,7 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 			result.attrib['system'] = 'system'
 		if check.created:
 			result.attrib['created'] = check.created.isoformat()
-		result.attrib['expression'] = check.expression
+		SubElement(result, 'expression').text = check.expression
 		SubElement(result, 'description').text = check.description
 		for field in check.fields:
 			SubElement(result, 'checkfield').attrib['ref'] = field.identifier
@@ -379,13 +384,13 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 			result.attrib['externalaction'] = 'externalaction'
 		if function.null_call:
 			result.attrib['nullcall'] = 'nullcall'
-		if function.sql_access:
-			result.attrib['access'] = {
-				'N': 'none',
-				'C': 'contains',
-				'R': 'reads',
-				'M': 'modifies',
-			}[function.sql_access]
+		result.attrib['access'] = {
+			None: 'none',
+			'N':  'none',
+			'C':  'contains',
+			'R':  'reads',
+			'M':  'modifies',
+		}[function.sql_access]
 		SubElement(result, 'description').text = function.description
 		SubElement(result, 'sql').text = function.sql
 		for param in function.param_list:
@@ -411,13 +416,13 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 			result.attrib['externalaction'] = 'externalaction'
 		if procedure.null_call:
 			result.attrib['nullcall'] = 'nullcall'
-		if procedure.sql_access:
-			result.attrib['access'] = {
-				'N': 'none',
-				'C': 'contains',
-				'R': 'reads',
-				'M': 'modifies',
-			}[procedure.sql_access]
+		result.attrib['access'] = {
+			None: 'none',
+			'N':  'none',
+			'C':  'contains',
+			'R':  'reads',
+			'M':  'modifies',
+		}[procedure.sql_access]
 		SubElement(result, 'description').text = procedure.description
 		SubElement(result, 'sql').text = procedure.sql
 		for param in procedure.param_list:
@@ -437,9 +442,11 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 		result.attrib['position'] = str(param.position)
 		result.attrib['datatype'] = param.datatype.identifier
 		if param.datatype.variable_size:
-			result.attrib['size'] = str(param.size)
+			if param.size is not None:
+				result.attrib['size'] = str(param.size)
 			if param.datatype.variable_scale:
-				result.attrib['scale'] = str(param.scale)
+				if param.scale is not None:
+					result.attrib['scale'] = str(param.scale)
 		if param.codepage:
 			result.attrib['codepage'] = str(param.codepage)
 		SubElement(result, 'description').text = param.description

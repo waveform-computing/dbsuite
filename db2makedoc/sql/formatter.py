@@ -683,7 +683,7 @@ class BaseFormatter(object):
 		while self._convert_valign():
 			self._recalc_positions()
 		# Strip trailing whitespace / EOF / blank tokens
-		while self._output[-1][0] in (WHITESPACE, EOF) or not self._output[-1][2]:
+		while self._output and (self._output[-1][0] in (WHITESPACE, EOF) or not self._output[-1][2]):
 			del self._output[-1]
 
 	def _parse_top(self):

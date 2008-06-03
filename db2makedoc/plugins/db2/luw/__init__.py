@@ -262,6 +262,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		owner*         -- The name of the user who owns the datatype
 		system         -- True if the type is system maintained (boolean)
 		created*       -- When the type was created (datetime)
+		var_size       -- True if the type has a variable length (e.g. VARCHAR)
+		var_scale      -- True if the type has a variable scale (e.g. DECIMAL)
 		source_schema* -- The schema of the base system type of the datatype
 		source_name*   -- The name of the base system type of the datatype
 		size*          -- The length of the type for character based types or
@@ -310,12 +312,15 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				final,
 				desc
 			) in cursor.fetchall():
+			system = make_bool(system)
 			result.append((
 				schema,
 				name,
 				owner,
-				make_bool(system),
+				system,
 				make_datetime(created),
+				system and not size and (name not in ('XML', 'REFERENCE')),
+				system and (name == 'DECIMAL'),
 				source_schema,
 				source_name,
 				size or None,

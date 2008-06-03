@@ -9,7 +9,7 @@ import db2makedoc.plugins
 from db2makedoc.etree import parse, iselement
 
 
-_timestamp_re = re.compile(r'^(\d{4})-(\d{2})-(\d{2})[T -]((\d{2})[:.](\d{2})[:.](\d{2})(\.(\d+))?)?$')
+_timestamp_re = re.compile(r'^(\d{4})-(\d{2})-(\d{2})([T -](\d{2})[:.](\d{2})[:.](\d{2})(\.(\d+))?)?$')
 def timestamp(value):
 	"""Utility routine for converting a value into a datetime object.
 
@@ -101,6 +101,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 	def open(self):
 		"""Opens and parses the source file."""
 		super(InputPlugin, self).open()
+		logging.info('Reading input from "%s"' % self.options['filename'])
 		# Open and parse the document, and check its got the right root
 		self.doc = parse(self.options['filename']).getroot()
 		if self.doc.tag != 'database':
@@ -108,6 +109,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		self.name = self.doc.attrib['name']
 		# Generate a parent map for the document (we'll need this later to
 		# lookup the parents of nodes addressed by ID)
+		logging.debug('Building parent map')
 		self.parents = dict(
 			(child, parent)
 			for parent in self.doc.getiterator()
@@ -115,6 +117,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		)
 		# Generate an ID map (the structure uses a lot of IDREFS, so this
 		# speeds things up considerably)
+		logging.debug('Building IDREF map')
 		self.ids = dict(
 			(elem.attrib['id'], elem)
 			for elem in self.doc.getiterator()
@@ -124,6 +127,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 	def close(self):
 		"""Closes the source file and cleans up any resources."""
 		super(InputPlugin, self).close()
+		del self.ids
 		del self.parents
 		del self.doc
 	
@@ -165,6 +169,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		owner*         -- The name of the user who owns the datatype
 		system         -- True if the type is system maintained (boolean)
 		created*       -- When the type was created (datetime)
+		var_size       -- True if the type has a variable length (e.g. VARCHAR)
+		var_scale      -- True if the type has a variable scale (e.g. DECIMAL)
 		source_schema* -- The schema of the base system type of the datatype
 		source_name*   -- The name of the base system type of the datatype
 		size*          -- The length of the type for character based types or
@@ -180,18 +186,21 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		for schema in self.doc.findall('schema'):
 			for datatype in schema.findall('datatype'):
 				source = self.ids.get(datatype.attrib.get('source'))
+				usertype = [None, True][iselement(source)]
 				result.append((
 					schema.attrib['name'],
 					datatype.attrib['name'],
 					datatype.attrib.get('owner'),
 					bool(datatype.attrib.get('system')),
 					timestamp(datatype.attrib.get('created')),
-					source and self.parents[source].attrib['name'],
-					source and source.attrib['name'],
-					source and datatype.attrib.get('size'),
-					source and datatype.attrib.get('scale'),
-					None, # XXX Not present in metadata.out
-					False, # XXX Not present in metadata.out
+					datatype.attrib.get('variable') in ('size', 'scale'),
+					datatype.attrib.get('variable') == 'scale',
+					usertype and self.parents[source].attrib['name'],
+					usertype and source.attrib['name'],
+					usertype and datatype.attrib.get('size'),
+					usertype and datatype.attrib.get('scale'),
+					usertype and datatype.attrib.get('codepage'),
+					usertype and bool(datatype.attrib.get('final')),
 					text(datatype.find('description')),
 				))
 		return result
@@ -357,7 +366,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		for schema in self.doc.findall('schema'):
 			for index in schema.findall('index'):
 				table = self.ids[index.attrib['table']]
-				tbspace = self.ids[index.attrib['tbspace']]
+				tbspace = self.ids[index.attrib['tablespace']]
 				result.append((
 					schema.attrib['name'],
 					index.attrib['name'],
@@ -643,7 +652,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 						check.attrib.get('owner'),
 						bool(check.attrib.get('system')),
 						timestamp(check.attrib.get('created')),
-						check.attrib.get('expression'), # XXX This should be a sub-element
+						text(check.find('expression')),
 						text(check.find('description')),
 					))
 		return result

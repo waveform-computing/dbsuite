@@ -1797,6 +1797,8 @@ class Datatype(SchemaObject):
 			self.owner,
 			system,
 			self.created,
+			self.variable_size,
+			self.variable_scale,
 			self._source_schema,
 			self._source_name,
 			self.size,
@@ -1806,9 +1808,6 @@ class Datatype(SchemaObject):
 			desc
 		) = row
 		super(Datatype, self).__init__(schema, name, system, desc)
-		# XXX DB2 specific
-		self.variable_size = self._system and (self.size is None) and (self.name not in ("XML", "REFERENCE"))
-		self.variable_scale = self._system and (self.name == "DECIMAL")
 
 	def _get_identifier(self):
 		return "datatype_%s_%s" % (self.schema.name, self.name)

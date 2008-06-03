@@ -193,13 +193,16 @@ class SQLHighlighter(object):
 			except ParseTokenError, e:
 				logging.warning('While formatting %s' % excerpt(tokens))
 				logging.warning('error %s found at line %d, column %d' % (e.message, e.line, e.col))
-		if line_split:
-			return (
-				self.format_line(line + 1, (token for token in tokens if token[3] == line + 1))
-				for line in xrange(tokens[-1][3])
-			)
+		if tokens:
+			if line_split:
+				return (
+					self.format_line(line + 1, (token for token in tokens if token[3] == line + 1))
+					for line in xrange(tokens[-1][3])
+				)
+			else:
+				return (self.format_token(token) for token in tokens)
 		else:
-			return (self.format_token(token) for token in tokens)
+			return ()
 	
 	def parse_prototype(self, sql):
 		"""Utility routine for marking up a routine prototype (as opposed to a complete SQL script)"""

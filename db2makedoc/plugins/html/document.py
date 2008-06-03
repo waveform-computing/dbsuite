@@ -131,7 +131,11 @@ class Attrs(dict):
 			elif key in self:
 				del self[key]
 		else:
-			super(Attrs, self).__setitem__(key.rstrip('_'), str(value))
+			# Try to use ASCII encodings when possible (for performance)
+			try:
+				super(Attrs, self).__setitem__(key.rstrip('_'), str(value))
+			except UnicodeEncodeError:
+				super(Attrs, self).__setitem__(key.rstrip('_'), unicode(value))
 
 	def update(self, source):
 		for key, value in source.iteritems():
