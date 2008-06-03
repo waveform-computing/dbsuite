@@ -461,6 +461,7 @@ class WebSite(object):
 		self.object_graphs = {}
 		# If indexes are requested, build the sorted object lists now (and set
 		# up the first level of the index_docs mapping)
+		self.first_index = None
 		self.index_maps = {}
 		self.index_docs = {}
 		if options['indexes']:
@@ -716,6 +717,7 @@ class WebSite(object):
 			)
 			for dbclass in dbclasses
 		]
+		self.first_index = dbclass_docs[0]
 		dbclass_parent = self.object_document(self.database)
 		dbclass_prior = None
 		for (dbclass, dbclass_doc) in zip(dbclasses, dbclass_docs):

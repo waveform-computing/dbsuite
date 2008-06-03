@@ -497,13 +497,23 @@ class W3SiteIndexDocument(HTMLIndexDocument, W3ArticleDocument):
 		# self.items is actually reference to a site level object and therefore
 		# must be considered read-only, hence why the list is not sorted
 		# in-place here
-		items = sorted(self.items, key=lambda item: '%s %s' % (item.name, item.qualified_name))
+		index = sorted(self.items, key=lambda item: '%s %s' % (item.name, item.qualified_name))
+		index = sorted(dict(
+			(item1.name, [item2 for item2 in index if item1.name == item2.name])
+			for item1 in index
+		).iteritems(), key=lambda (name, _): name)
 		index = tag.dl(
 			(
-				tag.dt(item.name, ' (', self.site.type_names[item.__class__], ' ', self.site.link_to(item, parent=True), ')'),
-				tag.dd(self.format_comment(item.description, summary=True))
-			)
-			for item in items
+				tag.dt(name),
+				tag.dd(
+					tag.dl(
+						(
+							tag.dt(self.site.type_names[item.__class__], ' ', self.site.link_to(item, parent=True)),
+							tag.dd(self.format_comment(item.description, summary=True))
+						) for item in items
+					)
+				)
+			) for (name, items) in index
 		)
 		return (
 			links,

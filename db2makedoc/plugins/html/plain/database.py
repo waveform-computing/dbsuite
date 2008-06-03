@@ -64,6 +64,11 @@ class PlainDatabaseDocument(PlainObjectDocument):
 				]
 			))
 		if self.site.index_docs:
+			indexes = []
+			doc = self.site.first_index
+			while doc:
+				indexes.append(doc)
+				doc = doc.next
 			result.append((
 				'indexes', 'Alphabetical Indexes', [
 					tag.p("""These are alphabetical lists of objects in the
@@ -72,8 +77,8 @@ class PlainDatabaseDocument(PlainObjectDocument):
 					Views, and Aliases), and entries are indexed by their
 					unqualified name."""),
 					tag.ul(
-						tag.li(self.site.index_of(dbclass))
-						for dbclass in self.site.index_docs.iterkeys()
+						tag.li(doc.link())
+						for doc in indexes
 					)
 				]
 			))
