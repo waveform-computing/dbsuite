@@ -341,27 +341,23 @@ class W3ArticleDocument(W3Document):
 
 	def generate_crumbs(self):
 		"""Creates the breadcrumb links above the article body."""
-		# Return a list of (title, url) tuples. If a particular breadcrumb
-		# entry shouldn't be a link (e.g. the last item), simply use None as
-		# the url. The default implementation sets the first breadcrumb to
-		# the home page. Descendents should override and extend this list
-		if self.breadcrumbs:
-			links = [self.title]
-			item = self.parent
-			while item:
+		if self.breadcrumbs and self.parent:
+			if isinstance(self, W3SiteIndexDocument):
+				doc = self.parent
+			else:
+				doc = self
+			links = [doc.title]
+			doc = doc.parent
+			while doc:
 				links.insert(0, ' > ')
-				links.insert(0, tag.a(item.title, href=item.url))
-				item = item.parent
+				links.insert(0, doc.link())
+				doc = doc.parent
 			return tag.p(links, id='breadcrumbs')
 		else:
 			return ''
 
 	def generate_related(self):
 		"""Creates the related links below the left-hand navigation menu."""
-		# Return a list of (title, url) tuples. The default implementation here
-		# simply returns the document's related_items list which, by default,
-		# is the site's related_items list. Descendents should override and
-		# extend this list if necessary
 		if self.related_items:
 			return (
 				tag.p('Related links:'),
@@ -487,9 +483,6 @@ class W3ObjectDocument(HTMLObjectDocument, W3ArticleDocument):
 class W3SiteIndexDocument(HTMLIndexDocument, W3ArticleDocument):
 	"""Document class containing an alphabetical index of objects"""
 
-	def __init__(self, site, dbclass, letter):
-		super(W3SiteIndexDocument, self).__init__(site, dbclass, letter)
-
 	def generate_main(self):
 		# Generate the letter links to other docs in the index
 		links = tag.p()
@@ -508,14 +501,7 @@ class W3SiteIndexDocument(HTMLIndexDocument, W3ArticleDocument):
 		items = sorted(self.items, key=lambda item: '%s %s' % (item.name, item.qualified_name))
 		index = tag.dl(
 			(
-				tag.dt(
-					item.name,
-					' (',
-					item.type_name,
-					' ',
-					self.site.link_to(item, parent=True),
-					')'
-				),
+				tag.dt(item.name, ' (', item.type_name, ' ', self.site.link_to(item, parent=True), ')'),
 				tag.dd(self.format_comment(item.description, summary=True))
 			)
 			for item in items

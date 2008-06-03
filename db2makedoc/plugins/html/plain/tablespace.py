@@ -1,9 +1,9 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import Tablespace
-from db2makedoc.plugins.html.plain.document import PlainMainDocument, tag
+from db2makedoc.plugins.html.plain.document import PlainObjectDocument, tag
 
-class PlainTablespaceDocument(PlainMainDocument):
+class PlainTablespaceDocument(PlainObjectDocument):
 	def __init__(self, site, tablespace):
 		assert isinstance(tablespace, Tablespace)
 		super(PlainTablespaceDocument, self).__init__(site, tablespace)

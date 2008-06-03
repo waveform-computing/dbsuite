@@ -1,9 +1,9 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import Check
-from db2makedoc.plugins.html.plain.document import PlainMainDocument, tag
+from db2makedoc.plugins.html.plain.document import PlainObjectDocument, tag
 
-class PlainCheckDocument(PlainMainDocument):
+class PlainCheckDocument(PlainObjectDocument):
 	def __init__(self, site, check):
 		assert isinstance(check, Check)
 		super(PlainCheckDocument, self).__init__(site, check)

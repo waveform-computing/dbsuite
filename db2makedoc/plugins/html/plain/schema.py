@@ -1,7 +1,7 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import Schema, Table, View, Alias
-from db2makedoc.plugins.html.plain.document import PlainMainDocument, PlainGraphDocument, tag
+from db2makedoc.plugins.html.plain.document import PlainObjectDocument, PlainGraphDocument, tag
 
 times = {
 	'A': 'After',
@@ -14,7 +14,7 @@ events = {
 	'D': 'Delete',
 }
 
-class PlainSchemaDocument(PlainMainDocument):
+class PlainSchemaDocument(PlainObjectDocument):
 	def __init__(self, site, schema):
 		assert isinstance(schema, Schema)
 		super(PlainSchemaDocument, self).__init__(site, schema)

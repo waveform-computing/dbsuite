@@ -1,7 +1,7 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import Trigger
-from db2makedoc.plugins.html.plain.document import PlainMainDocument, tag
+from db2makedoc.plugins.html.plain.document import PlainObjectDocument, tag
 
 trigtime = {
 	'A': 'After',
@@ -18,7 +18,7 @@ granularity = {
 	'S': 'Statement',
 }
 
-class PlainTriggerDocument(PlainMainDocument):
+class PlainTriggerDocument(PlainObjectDocument):
 	def __init__(self, site, trigger):
 		assert isinstance(trigger, Trigger)
 		super(PlainTriggerDocument, self).__init__(site, trigger)

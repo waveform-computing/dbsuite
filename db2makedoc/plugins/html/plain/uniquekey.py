@@ -1,9 +1,9 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import UniqueKey
-from db2makedoc.plugins.html.plain.document import PlainMainDocument, tag
+from db2makedoc.plugins.html.plain.document import PlainObjectDocument, tag
 
-class PlainUniqueKeyDocument(PlainMainDocument):
+class PlainUniqueKeyDocument(PlainObjectDocument):
 	def __init__(self, site, uniquekey):
 		assert isinstance(uniquekey, UniqueKey)
 		super(PlainUniqueKeyDocument, self).__init__(site, uniquekey)

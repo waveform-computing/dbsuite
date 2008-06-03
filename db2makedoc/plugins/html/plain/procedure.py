@@ -1,7 +1,7 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import Procedure
-from db2makedoc.plugins.html.plain.document import PlainMainDocument, tag
+from db2makedoc.plugins.html.plain.document import PlainObjectDocument, tag
 
 access = {
 	None: 'No SQL',
@@ -11,7 +11,7 @@ access = {
 	'M':  'Modifies SQL',
 }
 
-class PlainProcedureDocument(PlainMainDocument):
+class PlainProcedureDocument(PlainObjectDocument):
 	def __init__(self, site, procedure):
 		assert isinstance(procedure, Procedure)
 		super(PlainProcedureDocument, self).__init__(site, procedure)

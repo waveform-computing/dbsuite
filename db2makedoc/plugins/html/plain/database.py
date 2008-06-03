@@ -1,9 +1,9 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import Database
-from db2makedoc.plugins.html.plain.document import PlainMainDocument, tag
+from db2makedoc.plugins.html.plain.document import PlainObjectDocument, tag
 
-class PlainDatabaseDocument(PlainMainDocument):
+class PlainDatabaseDocument(PlainObjectDocument):
 	def __init__(self, site, database):
 		assert isinstance(database, Database)
 		super(PlainDatabaseDocument, self).__init__(site, database)
@@ -60,6 +60,20 @@ class PlainDatabaseDocument(PlainMainDocument):
 								tag.td(self.format_comment(tbspace.description, summary=True))
 							) for tbspace in tbspaces
 						))
+					)
+				]
+			))
+		if self.site.index_docs:
+			result.append((
+				'indexes', 'Alphabetical Indexes', [
+					tag.p("""These are alphabetical lists of objects in the
+					database. Indexes are constructed by type (including
+					generic types like Relation which encompasses Tables,
+					Views, and Aliases), and entries are indexed by their
+					unqualified name."""),
+					tag.ul(
+						tag.li(self.site.index_of(dbclass))
+						for dbclass in self.site.index_docs.iterkeys()
 					)
 				]
 			))

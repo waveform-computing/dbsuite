@@ -1,7 +1,7 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import Alias
-from db2makedoc.plugins.html.plain.document import PlainMainDocument, PlainGraphDocument, tag
+from db2makedoc.plugins.html.plain.document import PlainObjectDocument, PlainGraphDocument, tag
 
 def _inc_index(i):
 	if i is None:
@@ -9,7 +9,7 @@ def _inc_index(i):
 	else:
 		return i + 1
 
-class PlainAliasDocument(PlainMainDocument):
+class PlainAliasDocument(PlainObjectDocument):
 	def __init__(self, site, alias):
 		assert isinstance(alias, Alias)
 		super(PlainAliasDocument, self).__init__(site, alias)

@@ -7,8 +7,14 @@ import logging
 import db2makedoc.plugins
 import db2makedoc.plugins.html
 
-from db2makedoc.db import Database, Schema, Table, View, Alias, UniqueKey, ForeignKey, Check, Index, Trigger, Function, Procedure, Tablespace
-from db2makedoc.plugins.html.plain.document import PlainSite, PlainSearchDocument, PlainCSSDocument, PlainPopupDocument
+from db2makedoc.db import (
+	Database, Schema, Table, View, Alias, UniqueKey, ForeignKey,
+	Check, Index, Trigger, Function, Procedure, Tablespace
+)
+from db2makedoc.plugins.html.plain.document import (
+	PlainSite, PlainSearchDocument, PlainSiteIndexDocument,
+	PlainExternalDocument, PlainCSSDocument, PlainPopupDocument
+)
 from db2makedoc.plugins.html.plain.database import PlainDatabaseDocument
 from db2makedoc.plugins.html.plain.schema import PlainSchemaDocument, PlainSchemaGraph
 from db2makedoc.plugins.html.plain.table import PlainTableDocument, PlainTableGraph
@@ -93,13 +99,18 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 				)
 
 	def create_documents(self, site):
-		# Overridden to add static CSS and JavaScript documents
+		# Overridden to add static documents (CSS, PHP, etc.)
 		PlainCSSDocument(site)
 		if site.search:
 			PlainSearchDocument(site)
 		for (url, title, body) in POPUPS:
 			PlainPopupDocument(site, url, title, body)
+		# Call inherited method to generate documents for all objects
 		super(OutputPlugin, self).create_documents(site)
+		# Add index documents for all indexed classes
+		for dbclass in site.index_maps:
+			for letter in site.index_maps[dbclass]:
+				PlainSiteIndexDocument(site, dbclass, letter)
 	
 	def create_document(self, dbobject, site):
 		# Overridden to generate documents and graphs for specific types of

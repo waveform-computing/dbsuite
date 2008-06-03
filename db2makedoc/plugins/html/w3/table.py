@@ -1,6 +1,6 @@
 # vim: set noet sw=4 ts=4:
 
-from db2makedoc.db import Table, ForeignKey, PrimaryKey, UniqueKey, Check
+from db2makedoc.db import Alias, Table, View, ForeignKey, PrimaryKey, UniqueKey, Check
 from db2makedoc.plugins.html.w3.document import W3ObjectDocument, W3GraphDocument, tag
 
 orders = {
@@ -245,7 +245,10 @@ class W3TableGraph(W3GraphDocument):
 		for dependent in table.dependent_list:
 			dep_node = self.add(dependent)
 			dep_edge = dep_node.connect_to(table_node)
-			dep_edge.label = '<uses>'
+			if isinstance(dependent, View):
+				dep_edge.label = '<uses>'
+			elif isinstance(dependent, Alias):
+				dep_edge.label = '<for>'
 			dep_edge.arrowhead = 'onormal'
 		for key in table.foreign_key_list:
 			key_node = self.add(key.ref_table)

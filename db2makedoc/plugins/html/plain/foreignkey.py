@@ -1,7 +1,7 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import ForeignKey
-from db2makedoc.plugins.html.plain.document import PlainMainDocument, tag
+from db2makedoc.plugins.html.plain.document import PlainObjectDocument, tag
 
 rules = {
 	'C': 'Cascade',
@@ -10,7 +10,7 @@ rules = {
 	'R': 'Raise Error',
 }
 
-class PlainForeignKeyDocument(PlainMainDocument):
+class PlainForeignKeyDocument(PlainObjectDocument):
 	def __init__(self, site, foreignkey):
 		assert isinstance(foreignkey, ForeignKey)
 		super(PlainForeignKeyDocument, self).__init__(site, foreignkey)

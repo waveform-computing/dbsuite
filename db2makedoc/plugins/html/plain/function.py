@@ -1,7 +1,7 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import Function
-from db2makedoc.plugins.html.plain.document import PlainMainDocument, tag
+from db2makedoc.plugins.html.plain.document import PlainObjectDocument, tag
 
 functype = {
 	'C': 'Column/Aggregate',
@@ -17,7 +17,7 @@ access = {
 	'M':  'Modifies SQL',
 }
 
-class PlainFunctionDocument(PlainMainDocument):
+class PlainFunctionDocument(PlainObjectDocument):
 	def __init__(self, site, function):
 		assert isinstance(function, Function)
 		super(PlainFunctionDocument, self).__init__(site, function)

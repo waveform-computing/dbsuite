@@ -17,7 +17,8 @@ from db2makedoc.db import (
 )
 from db2makedoc.plugins.html.document import (
 	Attrs, ElementFactory, WebSite, HTMLDocument, HTMLObjectDocument,
-	CSSDocument, SQLCSSDocument, GraphDocument, GraphObjectDocument
+	HTMLIndexDocument, HTMLExternalDocument, CSSDocument, SQLCSSDocument,
+	GraphDocument, GraphObjectDocument
 )
 
 # Import the imaging library
@@ -57,11 +58,14 @@ class PlainSite(WebSite):
 	"""Site class representing a collection of PlainDocument instances."""
 
 	def __init__(self, database, options):
-		"""Initializes an instance of the class."""
 		super(PlainSite, self).__init__(database, options)
 		self.last_updated = options['last_updated']
 		self.max_graph_size = options['max_graph_size']
 		self.stylesheets = options['stylesheets']
+
+
+class PlainExternalDocument(HTMLExternalDocument):
+	pass
 
 
 class PlainDocument(HTMLDocument):
@@ -72,8 +76,8 @@ class PlainDocument(HTMLDocument):
 		doc = super(PlainDocument, self).generate()
 		# Add styles
 		headnode = tag._find(doc, 'head')
-		headnode.append(tag.style(src=PlainCSSDocument._url, media='all'))
-		headnode.append(tag.style(src=SQLCSSDocument._url, media='all'))
+		for sheet in self.site.stylesheets:
+			headnode.append(sheet.link())
 		if self.site.stylesheets:
 			for url in self.site.stylesheets:
 				headnode.append(tag.style(src=url, media='all'))
@@ -93,18 +97,146 @@ function popup(url, type, height, width) {
 				tag.input(type='text', name='q', size=20),
 				' ',
 				tag.input(type='submit', value='Go'),
-				method='GET', action=PlainSearchDocument._url
+				method='GET', action='search.php'
 			))
+		bodynode.append(self.generate_crumbs())
 		return doc
+
+	def generate_crumbs(self):
+		"""Creates the breadcrumb links above the article body."""
+		if self.parent:
+			if isinstance(self, PlainSiteIndexDocument):
+				doc = self.parent
+			else:
+				doc = self
+			links = [doc.title]
+			doc = doc.parent
+			while doc:
+				links.insert(0, ' > ')
+				links.insert(0, doc.link())
+				doc = doc.parent
+			return tag.p(links, id='breadcrumbs')
+		else:
+			return tag.p()
+
+
+class PlainObjectDocument(HTMLObjectDocument, PlainDocument):
+	"""Document class representing a database object (table, view, index, etc.)"""
+
+	def __init__(self, site, dbobject):
+		super(PlainObjectDocument, self).__init__(site, dbobject)
+		self.last_updated = site.last_updated
+	
+	def generate(self):
+		# Call the inherited method to create the skeleton document
+		doc = super(PlainObjectDocument, self).generate()
+		# Add body content
+		bodynode = tag._find(doc, 'body')
+		bodynode.append(tag.h2('%s %s' % (self.dbobject.type_name, self.dbobject.qualified_name)))
+		sections = self.generate_sections()
+		if sections:
+			bodynode.append(tag.ul((
+				tag.li(tag.a(title, href='#' + id, title='Jump to section'))
+				for (id, title, content) in sections
+			), id='toc'))
+			tag._append(bodynode, (
+				(tag.h3(title, id=id), content, tag.p(tag.a('Back to top', href='#top')))
+				for (id, title, content) in sections
+			))
+		if self.copyright:
+			bodynode.append(tag.p(self.copyright, id='footer'))
+		if self.last_updated:
+			bodynode.append(tag.p('Updated on %s' % self.date.strftime('%a, %d %b %Y'), id='timestamp'))
+		return doc
+
+	def generate_sections(self):
+		"""Creates the actual body content."""
+		# Override in descendents to return a list of tuples with the following
+		# structure: (id, title, [content]). "content" is a list of Elements.
+		return []
+
+
+class PlainSiteIndexDocument(HTMLIndexDocument, PlainDocument):
+	"""Document class containing an alphabetical index of objects"""
+
+	def generate(self):
+		# Call the inherited method to create the skeleton document
+		doc = super(PlainSiteIndexDocument, self).generate()
+		# Add body content
+		bodynode = tag._find(doc, 'body')
+		bodynode.append(tag.h2('%s Index' % self.dbclass.type_name))
+		# Generate the letter links to other docs in the index
+		links = tag.p()
+		item = self.first
+		while item:
+			if item is self:
+				tag._append(links, tag.strong(item.letter))
+			else:
+				tag._append(links, tag.a(item.letter, href=item.url))
+			tag._append(links, ' ')
+			item = item.next
+		bodynode.append(links)
+		bodynode.append(tag.hr())
+		# Sort the list of items in the index, and build the content. Note that
+		# self.items is actually reference to a site level object and therefore
+		# must be considered read-only, hence why the list is not sorted
+		# in-place here
+		items = sorted(self.items, key=lambda item: '%s %s' % (item.name, item.qualified_name))
+		bodynode.append(tag.dl(
+			(
+				tag.dt(item.name, ' (', item.type_name, ' ', self.site.link_to(item, parent=True), ')'),
+				tag.dd(self.format_comment(item.description, summary=True))
+			)
+			for item in items
+		))
+		return doc
+
+
+class PlainPopupDocument(PlainDocument):
+	"""Document class representing a popup help window."""
+
+	def __init__(self, site, url, title, body, width=400, height=300):
+		"""Initializes an instance of the class."""
+		super(PlainPopupDocument, self).__init__(site, url)
+		self.title = title
+		self.body = body
+		self.width = width
+		self.height = height
+	
+	def generate(self):
+		# Call the inherited method to create the skeleton document
+		doc = super(PlainPopupDocument, self).generate()
+		# Add styles specific to w3v8 popup documents
+		headnode = tag._find(doc, 'head')
+		# Generate the popup content
+		bodynode = tag._find(doc, 'body')
+		del bodynode[:] # Clear the existing body content
+		bodynode.append(tag.div(
+			tag.h2(self.title),
+			self.body,
+			tag.div(
+				tag.hr(),
+				tag.div(
+					tag.a('Close Window', href='javascript:close();'),
+					tag.a('Print', href='javascript:window.print();'),
+					class_='content'
+				),
+				id='footer'
+			)
+		))
+		return doc
+
+	def link(self):
+		# Modify the link to use the JS popup() routine
+		return tag.a(self.title, href=self.url, title=self.title,
+			onclick='javascript:return popup("%s","internal",%d,%d);' % (self.url, self.height, self.width))
 
 
 class PlainSearchDocument(PlainDocument):
 	"""Document class containing the PHP search script"""
 
-	_url = 'search.php'
-
 	def __init__(self, site):
-		super(PlainSearchDocument, self).__init__(site, self._url)
+		super(PlainSearchDocument, self).__init__(site, 'search.php')
 		self.title = '%s - Search Results' % site.title
 		self.description = 'Search Results'
 		self.search = False
@@ -270,102 +402,11 @@ catch (Exception $e) {
 		return result.replace('__PHP__', php)
 
 
-class PlainMainDocument(HTMLObjectDocument, PlainDocument):
-	"""Document class representing a database object (table, view, index, etc.)"""
-
-	def __init__(self, site, dbobject):
-		"""Initializes an instance of the class."""
-		super(PlainMainDocument, self).__init__(site, dbobject)
-		self.last_updated = site.last_updated
-	
-	def generate(self):
-		# Call the inherited method to create the skeleton document
-		doc = super(PlainMainDocument, self).generate()
-		# Add body content
-		bodynode = tag._find(doc, 'body')
-		bodynode.append(self.generate_crumbs())
-		bodynode.append(tag.h2('%s %s' % (self.dbobject.type_name, self.dbobject.qualified_name)))
-		sections = self.generate_sections()
-		if sections:
-			bodynode.append(tag.ul((
-				tag.li(tag.a(title, href='#' + id, title='Jump to section'))
-				for (id, title, content) in sections
-			), id='toc'))
-			tag._append(bodynode, (
-				(tag.h3(title, id=id), content, tag.p(tag.a('Back to top', href='#top')))
-				for (id, title, content) in sections
-			))
-		if self.copyright:
-			bodynode.append(tag.p(self.copyright, id='footer'))
-		if self.last_updated:
-			bodynode.append(tag.p('Updated on %s' % self.date.strftime('%a, %d %b %Y'), id='timestamp'))
-		return doc
-
-	def generate_crumbs(self):
-		"""Creates the breadcrumb links at the top of the page."""
-		crumbs = []
-		item = self.dbobject
-		while item is not None:
-			crumbs.insert(0, self.site.object_document(item).link())
-			crumbs.insert(0, ' > ')
-			item = item.parent
-		crumbs.insert(0, tag.a(self.site.home_title, href=self.site.home_title))
-		return tag.p(crumbs, id='breadcrumbs')
-	
-	def generate_sections(self):
-		"""Creates the actual body content."""
-		# Override in descendents to return a list of tuples with the following
-		# structure: (id, title, [content]). "content" is a list of Elements.
-		return []
-
-
-class PlainPopupDocument(PlainDocument):
-	"""Document class representing a popup help window."""
-
-	def __init__(self, site, url, title, body, width=400, height=300):
-		"""Initializes an instance of the class."""
-		super(PlainPopupDocument, self).__init__(site, url)
-		self.title = title
-		self.body = body
-		self.width = width
-		self.height = height
-	
-	def generate(self):
-		# Call the inherited method to create the skeleton document
-		doc = super(PlainPopupDocument, self).generate()
-		# Add styles specific to w3v8 popup documents
-		headnode = tag._find(doc, 'head')
-		# Generate the popup content
-		bodynode = tag._find(doc, 'body')
-		del bodynode[:] # Clear the existing body content
-		bodynode.append(tag.div(
-			tag.h2(self.title),
-			self.body,
-			tag.div(
-				tag.hr(),
-				tag.div(
-					tag.a('Close Window', href='javascript:close();'),
-					tag.a('Print', href='javascript:window.print();'),
-					class_='content'
-				),
-				id='footer'
-			)
-		))
-		return doc
-
-	def link(self):
-		# Modify the link to use the JS popup() routine
-		return tag.a(self.title, href=self.url, title=self.title,
-			onclick='javascript:return popup("%s","internal",%d,%d);' % (self.url, self.height, self.width))
-
-
 class PlainCSSDocument(CSSDocument):
 	"""Stylesheet class to define the base site style."""
 
-	_url = 'styles.css'
-
 	def __init__(self, site):
-		super(PlainCSSDocument, self).__init__(site, self._url)
+		super(PlainCSSDocument, self).__init__(site, 'styles.css')
 
 	def generate(self):
 		doc = super(PlainCSSDocument, self).generate()
@@ -404,6 +445,10 @@ h3 {
     background: #47b;
     color: white;
     padding: 0.5em;
+}
+
+dl dt {
+	font-weight: bold;
 }
 
 ul#toc {

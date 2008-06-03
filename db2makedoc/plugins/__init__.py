@@ -1093,9 +1093,14 @@ class InputPlugin(Plugin):
 		if self.__relation_dependents is None:
 			if self.__view_dependencies is None:
 				self.__view_dependencies = self._filter(self.get_view_dependencies(), 0, 2)
+			if self.__aliases is None:
+				self.__aliases = self._filter(self.get_aliases(), 0, 5)
 			self.__relation_dependents = dict([
 				(relation[:2], [dep[:2]
-					for dep in self.__view_dependencies
+					for dep in self.__view_dependencies + [
+						(alias_schema, alias_name, base_schema, base_name)
+						for (alias_schema, alias_name, _, _, _, base_schema, base_name, _) in self.__aliases
+					]
 					if relation[:2] == dep[2:4]
 				])
 				for relation in self.relations
