@@ -77,7 +77,7 @@ class W3DatabaseDocument(W3ObjectDocument):
 					Views, and Aliases), and entries are indexed by their
 					unqualified name."""),
 					tag.ul(
-						tag.li(doc.links())
+						tag.li(doc.link())
 						for doc in indexes
 					)
 				]
