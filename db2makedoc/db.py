@@ -744,6 +744,18 @@ class Routine(SchemaObject):
 	def _get_identifier(self):
 		return "routine_%s_%s" % (self.schema.name, self.specific_name)
 
+	def _get_qualified_specific_name(self):
+		"""Returns the fully qualified specific name of the routine.
+
+		This property recurses up the hierarchy to construct the fully
+		qualified specific name of the object (the result should be valid as an
+		SQL routine name, although not for invocation).
+		"""
+		result = self.specific_name
+		if self.parent:
+			result = self.parent.qualified_name + '.' + result
+		return result
+
 	def _get_params(self):
 		"""Returns a dictionary of parameters.
 
@@ -790,6 +802,7 @@ class Routine(SchemaObject):
 		"""
 		raise NotImplementedError
 	
+	qualified_specific_name = property(lambda self: self._get_qualified_specific_name(), doc=_get_qualified_specific_name.__doc__)
 	params = property(lambda self: self._get_params(), doc=_get_params.__doc__)
 	param_list = property(lambda self: self._get_param_list(), doc=_get_param_list.__doc__)
 	returns = property(lambda self: self._get_returns(), doc=_get_returns.__doc__)
