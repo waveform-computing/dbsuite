@@ -116,7 +116,8 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 			result.attrib['system'] = 'system'
 		if schema.created:
 			result.attrib['created'] = schema.created.isoformat()
-		SubElement(result, 'description').text = schema.description
+		if schema.description:
+			SubElement(result, 'description').text = schema.description
 		return result
 
 	def make_datatype(self, datatype):
@@ -141,13 +142,15 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 				result.attrib['codepage'] = str(datatype.codepage)
 			if datatype.final:
 				result.attrib['final'] = 'final'
-		SubElement(result, 'description').text = datatype.description
+		if datatype.description:
+			SubElement(result, 'description').text = datatype.description
 		return result
 
 	def make_table(self, table):
 		result = Element('table')
 		result.attrib['id'] = table.identifier
 		result.attrib['name'] = table.name
+		result.attrib['tablespace'] = table.tablespace.identifier
 		if table.owner:
 			result.attrib['owner'] = table.owner
 		if table.system:
@@ -160,8 +163,8 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 			result.attrib['cardinality'] = str(table.cardinality)
 		if table.size:
 			result.attrib['size'] = str(table.size)
-		result.attrib['tablespace'] = table.tablespace.identifier
-		SubElement(result, 'description').text = table.description
+		if table.description:
+			SubElement(result, 'description').text = table.description
 		# XXX Add reverse dependencies?
 		# XXX Add associated triggers?
 		# XXX Add creation SQL?
@@ -179,7 +182,8 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 			result.attrib['created'] = view.created.isoformat()
 		if view.read_only:
 			result.attrib['readonly'] = 'readonly'
-		SubElement(result, 'description').text = view.description
+		if view.description:
+			SubElement(result, 'description').text = view.description
 		SubElement(result, 'sql').text = view.sql
 		for dependency in view.dependency_list:
 			SubElement(result, 'viewdep').attrib['ref'] = dependency.identifier
@@ -189,14 +193,15 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 		result = Element('alias')
 		result.attrib['id'] = alias.identifier
 		result.attrib['name'] = alias.name
+		result.attrib['relation'] = alias.relation.identifier
 		if alias.owner:
 			result.attrib['owner'] = alias.owner
 		if alias.system:
 			result.attrib['system'] = 'system'
 		if alias.created:
 			result.attrib['created'] = alias.created.isoformat()
-		result.attrib['relation'] = alias.relation.identifier
-		SubElement(result, 'description').text = alias.description
+		if alias.description:
+			SubElement(result, 'description').text = alias.description
 		# XXX Add creation SQL?
 		return result
 
@@ -230,7 +235,8 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 			}[field.generated]
 			if field.default:
 				result.attrib['expression'] = field.default
-		SubElement(result, 'description').text = field.description
+		if field.description:
+			SubElement(result, 'description').text = field.description
 		# XXX Add key position?
 		# XXX Add creation SQL?
 		return result
@@ -245,7 +251,8 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 			result.attrib['system'] = 'system'
 		if key.created:
 			result.attrib['created'] = key.created.isoformat()
-		SubElement(result, 'description').text = key.description
+		if key.description:
+			SubElement(result, 'description').text = key.description
 		for field in key.fields:
 			SubElement(result, 'keyfield').attrib['ref'] = field.identifier
 		# XXX Include parent keys?
@@ -257,25 +264,26 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 		return result
 
 	def make_foreign_key(self, key):
-		result = Element('foreignkey')
-		result.attrib['id'] = key.identifier
-		result.attrib['name'] = key.name
-		if key.owner:
-			result.attrib['owner'] = key.owner
-		if key.system:
-			result.attrib['system'] = 'system'
-		if key.created:
-			result.attrib['created'] = key.created.isoformat()
 		action_map = {
 			'A': 'noaction',
 			'C': 'cascade',
 			'N': 'setnull',
 			'R': 'restrict',
 		}
+		result = Element('foreignkey')
+		result.attrib['id'] = key.identifier
+		result.attrib['name'] = key.name
 		result.attrib['ondelete'] = action_map[key.delete_rule]
 		result.attrib['onupdate'] = action_map[key.update_rule]
 		result.attrib['references'] = key.ref_key.identifier
-		SubElement(result, 'description').text = key.description
+		if key.owner:
+			result.attrib['owner'] = key.owner
+		if key.system:
+			result.attrib['system'] = 'system'
+		if key.created:
+			result.attrib['created'] = key.created.isoformat()
+		if key.description:
+			SubElement(result, 'description').text = key.description
 		for (field, parent) in key.fields:
 			e = SubElement(result, 'fkeyfield')
 			e.attrib['sourceref'] = field.identifier
@@ -292,8 +300,10 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 			result.attrib['system'] = 'system'
 		if check.created:
 			result.attrib['created'] = check.created.isoformat()
-		SubElement(result, 'expression').text = check.expression
-		SubElement(result, 'description').text = check.description
+		if check.description:
+			SubElement(result, 'description').text = check.description
+		if check.expression:
+			SubElement(result, 'expression').text = check.expression
 		for field in check.fields:
 			SubElement(result, 'checkfield').attrib['ref'] = field.identifier
 		return result
@@ -302,6 +312,8 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 		result = Element('index')
 		result.attrib['id'] = index.identifier
 		result.attrib['name'] = index.name
+		result.attrib['table'] = index.table.identifier
+		result.attrib['tablespace'] = index.tablespace.identifier
 		if index.owner:
 			result.attrib['owner'] = index.owner
 		if index.system:
@@ -316,9 +328,8 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 			result.attrib['size'] = str(index.size)
 		if index.unique:
 			result.attrib['unique'] = 'unique'
-		result.attrib['table'] = index.table.identifier
-		result.attrib['tablespace'] = index.tablespace.identifier
-		SubElement(result, 'description').text = 'description'
+		if index.description:
+			SubElement(result, 'description').text = index.description
 		for (field, order) in index.field_list:
 			e = SubElement(result, 'indexfield')
 			e.attrib['ref'] = field.identifier
@@ -334,12 +345,6 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 		result = Element('trigger')
 		result.attrib['id'] = trigger.identifier
 		result.attrib['name'] = trigger.name
-		if trigger.owner:
-			result.attrib['owner'] = trigger.owner
-		if trigger.system:
-			result.attrib['system'] = 'system'
-		if trigger.created:
-			result.attrib['created'] = trigger.created.isoformat()
 		result.attrib['relation'] = trigger.relation.identifier
 		result.attrib['time'] = {
 			'A': 'after',
@@ -355,8 +360,16 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 			'R': 'row',
 			'S': 'statement',
 		}[trigger.granularity]
-		SubElement(result, 'description').text = trigger.description
-		SubElement(result, 'sql').text = trigger.sql
+		if trigger.owner:
+			result.attrib['owner'] = trigger.owner
+		if trigger.system:
+			result.attrib['system'] = 'system'
+		if trigger.created:
+			result.attrib['created'] = trigger.created.isoformat()
+		if trigger.description:
+			SubElement(result, 'description').text = trigger.description
+		if trigger.sql:
+			SubElement(result, 'sql').text = trigger.sql
 		for dependency in trigger.dependency_list:
 			SubElement(result, 'trigdep').attrib['ref'] = dependency.identifier
 		return result
@@ -366,24 +379,12 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 		result.attrib['id'] = function.identifier
 		result.attrib['name'] = function.name
 		result.attrib['specificname'] = function.specific_name
-		if function.owner:
-			result.attrib['owner'] = function.owner
-		if function.system:
-			result.attrib['system'] = 'system'
-		if function.created:
-			result.attrib['created'] = function.created.isoformat()
 		result.attrib['type'] = {
 			'C': 'column',
 			'R': 'row',
 			'T': 'table',
 			'S': 'scalar',
 		}[function.type]
-		if function.deterministic:
-			result.attrib['deterministic'] = 'deterministic'
-		if function.external_action:
-			result.attrib['externalaction'] = 'externalaction'
-		if function.null_call:
-			result.attrib['nullcall'] = 'nullcall'
 		result.attrib['access'] = {
 			None: 'none',
 			'N':  'none',
@@ -391,8 +392,22 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 			'R':  'reads',
 			'M':  'modifies',
 		}[function.sql_access]
-		SubElement(result, 'description').text = function.description
-		SubElement(result, 'sql').text = function.sql
+		if function.owner:
+			result.attrib['owner'] = function.owner
+		if function.system:
+			result.attrib['system'] = 'system'
+		if function.created:
+			result.attrib['created'] = function.created.isoformat()
+		if function.deterministic:
+			result.attrib['deterministic'] = 'deterministic'
+		if function.external_action:
+			result.attrib['externalaction'] = 'externalaction'
+		if function.null_call:
+			result.attrib['nullcall'] = 'nullcall'
+		if function.description:
+			SubElement(result, 'description').text = function.description
+		if function.sql:
+			SubElement(result, 'sql').text = function.sql
 		for param in function.param_list:
 			result.append(self.make_param(param))
 		for param in function.return_list:
@@ -404,6 +419,13 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 		result.attrib['id'] = procedure.identifier
 		result.attrib['name'] = procedure.name
 		result.attrib['specificname'] = procedure.specific_name
+		result.attrib['access'] = {
+			None: 'none',
+			'N':  'none',
+			'C':  'contains',
+			'R':  'reads',
+			'M':  'modifies',
+		}[procedure.sql_access]
 		if procedure.owner:
 			result.attrib['owner'] = procedure.owner
 		if procedure.system:
@@ -416,15 +438,10 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 			result.attrib['externalaction'] = 'externalaction'
 		if procedure.null_call:
 			result.attrib['nullcall'] = 'nullcall'
-		result.attrib['access'] = {
-			None: 'none',
-			'N':  'none',
-			'C':  'contains',
-			'R':  'reads',
-			'M':  'modifies',
-		}[procedure.sql_access]
-		SubElement(result, 'description').text = procedure.description
-		SubElement(result, 'sql').text = procedure.sql
+		if procedure.description:
+			SubElement(result, 'description').text = procedure.description
+		if procedure.sql:
+			SubElement(result, 'sql').text = procedure.sql
 		for param in procedure.param_list:
 			result.append(self.make_param(param))
 		return result
@@ -449,21 +466,23 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 					result.attrib['scale'] = str(param.scale)
 		if param.codepage:
 			result.attrib['codepage'] = str(param.codepage)
-		SubElement(result, 'description').text = param.description
+		if param.description:
+			SubElement(result, 'description').text = param.description
 		return result
 
 	def make_tablespace(self, tablespace):
 		result = Element('tablespace')
 		result.attrib['id'] = tablespace.identifier
 		result.attrib['name'] = tablespace.name
+		result.attrib['type'] = tablespace.type
 		if tablespace.owner:
 			result.attrib['owner'] = tablespace.owner
 		if tablespace.system:
 			result.attrib['system'] = 'system'
 		if tablespace.created:
 			result.attrib['created'] = tablespace.created.isoformat()
-		result.attrib['type'] = tablespace.type
-		SubElement(result, 'description').text = tablespace.description
+		if tablespace.description:
+			SubElement(result, 'description').text = tablespace.description
 		# XXX Include table and index lists?
 		#for table in tablespace.table_list:
 		#	SubElement(result, 'containstable').attrib['ref'] = table.identifier
