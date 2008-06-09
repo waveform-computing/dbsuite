@@ -139,8 +139,9 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 		return self.comment('TRIGGER', o.name, o.description)
 
 	def comment_table(self, o):
+		maxlen = max(len(f.name) for f in o.field_list)
 		field_comments = ',\n'.join([
-			'\t%s IS %s' % (f.name, quote(f.description))
+			'\t%-*s IS %s' % (maxlen, f.name, quote(f.description))
 			for f in o.field_list
 			if f.description or self.options['blanks']
 		])

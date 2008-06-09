@@ -460,7 +460,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		lookup = {'always': 'A', 'default': 'D'}
 		for schema in self.doc.findall('schema'):
 			for relation in schema.findall('table') + schema.findall('view') + schema.findall('alias'):
-				for field in relation.findall('field'):
+				for field in sorted(relation.findall('field'), key=lambda elem: int(elem.attrib['position'])):
 					datatype = self.ids[field.attrib['datatype']]
 					result.append((
 						schema.attrib['name'],
