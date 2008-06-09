@@ -353,7 +353,7 @@ def get_plugins(root, name=None):
 		if is_plugin(m):
 			yield ('%s.%s' % (name, d), m)
 		# Recursively call ourselves with the directory module
-		for (n, m) in get_plugins(m, '%s.%s' % (name, m.__name__)):
+		for (n, m) in get_plugins(m, '%s.%s' % (name, d)):
 			yield (n, m)
 
 def load_plugin(name):
