@@ -243,7 +243,10 @@ def list_plugins():
 
 def help_plugin(plugin_name):
 	"""Pretty-print some help text for the specified plugin."""
-	plugin = load_plugin(plugin_name)
+	try:
+		plugin = load_plugin(plugin_name)
+	except ImportError, e:
+		raise db2makedoc.plugins.PluginLoadError('Plugin "%s" failed to load: %s' % (plugin_name, str(e)))
 	if is_input_plugin(plugin):
 		plugin = plugin.InputPlugin()
 	elif is_output_plugin(plugin):
