@@ -54,7 +54,7 @@ SUFFIX_KMG = {
 
 def quote_str(s, qchar="'"):
 	"""Quotes a string, doubling all quotation characters within it.
-	
+
 	The s parameter provides the string to be quoted. The optional qchar
 	parameter provides the quotation mark used to enclose the string. If the
 	string contains any non-printable control characters (e.g. NULL) it will be
@@ -69,7 +69,7 @@ def quote_str(s, qchar="'"):
 
 def format_ident(name, namechars=set(ibmdb2udb_namechars), qchar='"'):
 	"""Format an SQL identifier with quotes if required.
-	
+
 	The name parameter provides the object name to format. The optional
 	namechars parameter provides the set of characters which are permitted in
 	unquoted names. If the entire name consists of such characters (excepting
@@ -95,7 +95,7 @@ def format_ident(name, namechars=set(ibmdb2udb_namechars), qchar='"'):
 
 def format_param(param):
 	"""Format a parameter with quotes if required.
-	
+
 	Performs a similar role to format_ident but for parameters instead of
 	identifiers.  If the parameter specified by param is None (indicating an
 	anonymous parameter) a question mark (?) will be returned. Otherwise, the
@@ -106,10 +106,10 @@ def format_param(param):
 		return '?'
 	else:
 		return ':%s' % (format_ident(param))
-	
+
 def format_size(value, for_sql=True):
 	"""Formats sizes with standard K/M/G/T/etc. suffixes.
-	
+
 	Given a value, this function returns it with the largest scale suffix
 	possible while leaving the value >= 1. If the optional for_sql parameter is
 	True (which it is by default), only exact powers will be used when scaling,
@@ -144,7 +144,7 @@ class Error(Exception):
 		"""Initializes an instance of the exception with an optional message"""
 		Exception.__init__(self, msg)
 		self.message = msg
-	
+
 	def __repr__(self):
 		"""Outputs a representation of the exception"""
 		return self.message
@@ -182,7 +182,7 @@ class ParseTokenError(ParseError):
 		(_, _, _, self.line, self.col) = errtoken
 		# Initialize the exception
 		ParseError.__init__(self, msg)
-	
+
 	def __str__(self):
 		"""Outputs a string version of the exception."""
 		# Generate a block of context with an indicator showing the error
@@ -291,7 +291,7 @@ class BaseFormatter(object):
 		self.reformat = True # Default to reformating the input
 		self.line_split = False # See Tokenizer class
 		self.debugging = 0
-	
+
 	def _insert_output(self, token, index):
 		"""Inserts the specified token into the output.
 
@@ -341,12 +341,12 @@ class BaseFormatter(object):
 		if self._output[-1][0] == INDENT:
 			del self._output[-1]
 		self._newline(index)
-	
+
 	def _valign(self, index=0):
 		"""Inserts a VALIGN token into the output."""
 		token = (VALIGN, None, '')
 		self._insert_output(token, index)
-	
+
 	def _vapply(self, index=0):
 		"""Inserts a VAPPLY token into the output."""
 		token = (VAPPLY, None, '')
@@ -374,7 +374,7 @@ class BaseFormatter(object):
 	def _forget_state(self):
 		"""Destroys the saved state at the head of the save stack."""
 		self._statestack.pop()
-	
+
 	def _token(self, index):
 		"""Returns the token at the specified index, or an EOF token."""
 		try:
@@ -436,10 +436,10 @@ class BaseFormatter(object):
 				return None
 		else:
 			assert False, "Invalid template token (%s) %s" % (str(type(template)), str(template))
-	
+
 	def _peek(self, template):
 		"""Compares the current token against a template token.
-		
+
 		Compares the provided template token against the current token in the
 		stream. If the comparison is successful, the input token is returned
 		(note that the _cmp_tokens() method may transform the token to match
@@ -466,7 +466,7 @@ class BaseFormatter(object):
 
 	def _match(self, template):
 		"""Attempt to match the current token against a template token.
-		
+
 		Matches the provided template token against the current token in the
 		stream. If the match is successful the current position is moved
 		forward to the next non-junk token, and the (potentially transformed)
@@ -592,7 +592,7 @@ class BaseFormatter(object):
 			while self._token(i)[0] in (COMMENT, WHITESPACE):
 				i += 1
 		raise ParseExpectedSequenceError(self._tokens, found, templates)
-	
+
 	def _expected_one_of(self, templates):
 		"""Raises an error explaining one of several template tokens was expected."""
 		raise ParseExpectedOneOfError(self._tokens, self._token(self._index), templates)
@@ -605,7 +605,7 @@ class BaseFormatter(object):
 		# recalculated in _parse_finish. The default implementation here
 		# performs no transformation
 		return t[:3]
-		
+
 	def _reformat_output(self):
 		"""Reformats all output tokens with _format_token()"""
 		newoutput = []
@@ -617,7 +617,7 @@ class BaseFormatter(object):
 				else:
 					newoutput.append(token)
 		self._output = newoutput
-	
+
 	def _convert_valign(self):
 		"""Converts the first VALIGN token on each line into a WHITESPACE token"""
 		result = False
@@ -651,7 +651,7 @@ class BaseFormatter(object):
 			else:
 				i += 1
 		return result
-	
+
 	def _recalc_positions(self):
 		"""Recalculates the line and col elements of all output tokens"""
 		line = 1
@@ -675,7 +675,7 @@ class BaseFormatter(object):
 		self._index = 0
 		self._output = []
 		self._level = 0
-	
+
 	def _parse_finish(self):
 		"""Cleans up output tokens and recalculates line and column positions"""
 		self._reformat_output()
@@ -741,7 +741,7 @@ class SQLFormatter(BaseFormatter):
 
 	def _format_token(self, t):
 		"""Reformats a token for output"""
-		
+
 		# Override this method in descendent classes to transform the token in
 		# whatever manner you wish. Return the transformed token without the
 		# line and column elements (the last two) as these will be recalculated
@@ -792,7 +792,7 @@ class SQLFormatter(BaseFormatter):
 				return t[:3]
 
 	# PATTERNS ###############################################################
-	
+
 	def _parse_subrelation_name(self):
 		"""Parses the (possibly qualified) name of a relation-owned object.
 
@@ -811,6 +811,11 @@ class SQLFormatter(BaseFormatter):
 
 	_parse_column_name = _parse_subrelation_name
 	_parse_constraint_name = _parse_subrelation_name
+	# These are cheats; remote object names consist of server.schema.object
+	# instead of schema.relation.object, and source object names consist of
+	# schema.package.object, but they'll do
+	_parse_remote_object_name = _parse_subrelation_name
+	_parse_source_object_name = _parse_subrelation_name
 
 	def _parse_subschema_name(self):
 		"""Parses the (possibly qualified) name of a schema-owned object.
@@ -829,6 +834,7 @@ class SQLFormatter(BaseFormatter):
 	_parse_table_name = _parse_subschema_name
 	_parse_view_name = _parse_subschema_name
 	_parse_alias_name = _parse_subschema_name
+	_parse_nickname_name = _parse_subschema_name
 	_parse_trigger_name = _parse_subschema_name
 	_parse_index_name = _parse_subschema_name
 	_parse_routine_name = _parse_subschema_name
@@ -837,6 +843,8 @@ class SQLFormatter(BaseFormatter):
 	_parse_method_name = _parse_subschema_name
 	_parse_sequence_name = _parse_subschema_name
 	_parse_type_name = _parse_subschema_name
+	# Another cheat; security labels exist within a security policy
+	_parse_security_label_name = _parse_subschema_name
 
 	def _parse_size(self, optional=False, suffix={}):
 		"""Parses a parenthesized size with an optional scale suffix.
@@ -964,6 +972,10 @@ class SQLFormatter(BaseFormatter):
 			elif self._match((DATATYPE, 'DOUBLE')):
 				self._match((DATATYPE, 'PRECISION'))
 				typename = 'DOUBLE'
+			elif self._match((DATATYPE, 'DECFLOAT')):
+				if self._match('('):
+					size = self._expect(NUMBER)[1]
+					self._expect(')')
 			elif self._match_one_of([(DATATYPE, 'DEC'), (DATATYPE, 'DECIMAL')]):
 				typename = 'DECIMAL'
 				if self._match('('):
@@ -1027,6 +1039,9 @@ class SQLFormatter(BaseFormatter):
 				size = self._parse_size(optional=True)
 			elif self._match((DATATYPE, 'XML')):
 				typename = 'XML'
+			elif self._match((DATATYPE, 'DB2SECURITYLABEL')):
+				typeschema = 'SYSPROC'
+				typename = 'DB2SECURITYLABEL'
 			else:
 				raise ParseBacktrack()
 		except ParseError:
@@ -1062,7 +1077,7 @@ class SQLFormatter(BaseFormatter):
 			elif newlines:
 				self._newline()
 		return result
-	
+
 	def _parse_expression_list(self, allowdefault=False, newlines=False):
 		"""Parses a comma separated list of expressions.
 
@@ -1079,7 +1094,7 @@ class SQLFormatter(BaseFormatter):
 				break
 			elif newlines:
 				self._newline()
-	
+
 	def _parse_datatype_list(self, newlines=False):
 		"""Parses a comma separated list of data-types.
 
@@ -1093,7 +1108,7 @@ class SQLFormatter(BaseFormatter):
 				break
 			elif newlines:
 				self._newline()
-	
+
 	def _parse_ident_type_list(self, newlines=False):
 		"""Parses a comma separated list of identifiers and data-types.
 
@@ -1162,7 +1177,7 @@ class SQLFormatter(BaseFormatter):
 				if linebreaks: self._newline(-1)
 			else:
 				break
-	
+
 	def _parse_predicate(self):
 		"""Parse high precedence predicate operators (BETWEEN, IN, etc.)"""
 		if self._match('EXISTS'):
@@ -1223,6 +1238,28 @@ class SQLFormatter(BaseFormatter):
 					'<=',
 					'>='
 				])
+	
+	def _parse_duration_label(self, optional=False):
+		labels = (
+			'YEARS',
+			'YEAR',
+			'DAYS',
+			'DAY',
+			'MONTHS',
+			'MONTH',
+			'HOURS',
+			'HOUR',
+			'MINUTES',
+			'MINUTE',
+			'SECONDS',
+			'SECOND',
+			'MICROSECONDS',
+			'MICROSECOND',
+		)
+		if optional:
+			self._match_one_of(labels)
+		else:
+			self._expect_one_of(labels)
 
 	def _parse_expression(self):
 		while True:
@@ -1275,22 +1312,7 @@ class SQLFormatter(BaseFormatter):
 				else:
 					self._forget_state()
 			# Parse an optional interval suffix
-			self._match_one_of([
-				'YEARS',
-				'YEAR',
-				'DAYS',
-				'DAY',
-				'MONTHS',
-				'MONTH',
-				'HOURS',
-				'HOUR',
-				'MINUTES',
-				'MINUTE',
-				'SECONDS',
-				'SECOND',
-				'MICROSECONDS',
-				'MICROSECOND',
-			])
+			self._parse_duration_label(optional=True)
 			if not self._match_one_of(['+', '-', '*', '/', '||', 'CONCAT']): # Binary operators
 				break
 
@@ -1322,7 +1344,7 @@ class SQLFormatter(BaseFormatter):
 		# Parse an OLAP suffix if one exists
 		if self._match('OVER'):
 			self._parse_olap_function_call()
-	
+
 	def _parse_xml_function_call(self):
 		"""Parses an XML function call (which has non-standard internal syntax)"""
 		# Parse the optional SYSIBM schema prefix
@@ -1341,7 +1363,7 @@ class SQLFormatter(BaseFormatter):
 		elif xmlfunc == 'XML2CLOB':
 			self._parse_xml_value_function()
 		self._expect(')')
-	
+
 	def _parse_xml_value_function(self):
 		"""Parses an XML value function (which has non-standard internal syntax)"""
 		# Parse the optional SYSIBM schema prefix
@@ -1360,7 +1382,7 @@ class SQLFormatter(BaseFormatter):
 			self._parse_xmlforest()
 		elif xmlfunc == 'XMLCONCAT':
 			self._parse_xmlconcat()
-	
+
 	def _parse_xmlagg(self):
 		"""Parses an XMLAGG value function"""
 		# XMLAGG already matched
@@ -1441,7 +1463,7 @@ class SQLFormatter(BaseFormatter):
 			if not self._match(','):
 				break
 		self._expect(')')
-	
+
 	def _parse_xmlnamespaces(self):
 		"""Parses an XMLNAMESPACES definition"""
 		# XMLNAMESPACES already matched
@@ -1479,7 +1501,7 @@ class SQLFormatter(BaseFormatter):
 		# Parse an OLAP suffix if one exists
 		if self._match('OVER'):
 			self._parse_olap_function_call()
-	
+
 	def _parse_olap_range(self, optional):
 		"""Parses a ROWS or RANGE specification in an OLAP-function call"""
 		# [ROWS|RANGE] already matched
@@ -1492,7 +1514,7 @@ class SQLFormatter(BaseFormatter):
 		else:
 			return False
 		return True
-	
+
 	def _parse_olap_function_call(self):
 		"""Parses the aggregation suffix in an OLAP-function call"""
 		# OVER already matched
@@ -1520,7 +1542,7 @@ class SQLFormatter(BaseFormatter):
 				self._expect('AND')
 				self._parse_olap_range(False)
 		self._expect(')')
-	
+
 	def _parse_cast_expression(self):
 		"""Parses a CAST() expression"""
 		# CAST already matched
@@ -1599,7 +1621,7 @@ class SQLFormatter(BaseFormatter):
 		"""Parses a grouping-expression in a GROUP BY clause"""
 		if not self._match_sequence(['(', ')']):
 			self._parse_expression()
-	
+
 	def _parse_super_group(self):
 		"""Parses a super-group in a GROUP BY clause"""
 		# [ROLLUP|CUBE] already matched
@@ -1617,7 +1639,7 @@ class SQLFormatter(BaseFormatter):
 				self._newline()
 		self._outdent()
 		self._expect(')')
-	
+
 	def _parse_grouping_sets(self):
 		"""Parses a GROUPING SETS expression in a GROUP BY clause"""
 		# GROUPING SETS already matched
@@ -1669,7 +1691,7 @@ class SQLFormatter(BaseFormatter):
 			if not self._match_sequence(['WITH', 'ROLLUP']):
 				self._match_sequence(['WITH', 'CUBE'])
 
-	def _parse_sub_select(self):
+	def _parse_sub_select(self, allowinto=False):
 		"""Parses a sub-select expression"""
 		# SELECT already matched
 		self._match_one_of(['ALL', 'DISTINCT'])
@@ -1681,6 +1703,10 @@ class SQLFormatter(BaseFormatter):
 					break
 				else:
 					self._newline()
+			self._outdent()
+		if allowinto and self._match('INTO'):
+			self._indent()
+			self._parse_ident_list(newlines=True)
 			self._outdent()
 		self._expect('FROM')
 		self._indent()
@@ -1891,15 +1917,17 @@ class SQLFormatter(BaseFormatter):
 		self._parse_search_condition()
 		self._outdent()
 
-	def _parse_full_select(self, allowdefault=False):
+	def _parse_full_select(self, allowdefault=False, allowinto=False):
 		"""Parses set operators (low precedence) in a full-select expression"""
-		self._parse_relation(allowdefault)
+		self._parse_relation(allowdefault, allowinto)
 		while True:
 			if self._match_one_of(['UNION', 'INTERSECT', 'EXCEPT']):
 				self._newline(-1)
 				self._match('ALL')
 				self._newline()
 				self._newline()
+				# No need to include allowinto here (it's only permitted in a
+				# top-level subselect)
 				self._parse_relation(allowdefault)
 			else:
 				break
@@ -1916,19 +1944,21 @@ class SQLFormatter(BaseFormatter):
 			self._expect_one_of(['ROW', 'ROWS'])
 			self._expect('ONLY')
 
-	def _parse_relation(self, allowdefault=False):
+	def _parse_relation(self, allowdefault=False, allowinto=False):
 		"""Parses relation generators (high precedence) in a full-select expression"""
 		if self._match('('):
+			# No need to include allowinto here (it's only permitted in a
+			# top-level subselect)
 			self._parse_full_select(allowdefault)
 			self._expect(')')
 		elif self._match('SELECT'):
-			self._parse_sub_select()
+			self._parse_sub_select(allowinto)
 		elif self._match('VALUES'):
 			self._parse_values_expression(allowdefault)
 		else:
 			self._expected_one_of(['SELECT', 'VALUES', '('])
 
-	def _parse_query(self, allowdefault=False):
+	def _parse_query(self, allowdefault=False, allowinto=False):
 		"""Parses a full-select with optional common-table-expression"""
 		# Parse the optional common-table-expression
 		if self._match('WITH'):
@@ -1943,8 +1973,9 @@ class SQLFormatter(BaseFormatter):
 				self._expect('AS')
 				self._expect('(')
 				self._indent()
-				# Note that DEFAULT is *never* permitted in a CTE
-				self._parse_full_select(allowdefault=False)
+				# No need to include allowdefault or allowinto here. Neither
+				# are ever permitted in a CTE
+				self._parse_full_select()
 				self._outdent()
 				self._expect(')')
 				if not self._match(','):
@@ -1954,11 +1985,11 @@ class SQLFormatter(BaseFormatter):
 			self._newline()
 		# Parse the actual full-select. DEFAULT may be permitted here if the
 		# full-select turns out to be a VALUES statement
-		self._parse_full_select(allowdefault)
+		self._parse_full_select(allowdefault, allowinto)
 
 	# CLAUSES ################################################################
 
-	def _parse_set_clause(self, allowdefault):
+	def _parse_assignment_clause(self, allowdefault):
 		"""Parses a SET clause"""
 		# SET already matched
 		while True:
@@ -1974,8 +2005,23 @@ class SQLFormatter(BaseFormatter):
 			else:
 				# Parse simple assignment
 				self._parse_subrelation_name()
+				if self._match('['):
+					self._parse_expression()
+					self._expect(']')
 				self._expect('=')
-				if not (allowdefault and self._match('DEFAULT')):
+				if self._match('ARRAY'):
+					self._expect('[')
+					# Ambiguity: Expression list vs. select-statement
+					self._save_state()
+					try:
+						self._parse_expression_list()
+					except ParseError:
+						self._restore_state()
+						self._parse_full_select()
+					else:
+						self._forget_state()
+					self._expect(']')
+				elif not (allowdefault and self._match('DEFAULT')):
 					self._parse_expression()
 			if not self._match(','):
 				break
@@ -2001,9 +2047,7 @@ class SQLFormatter(BaseFormatter):
 		# XXX Allow backward compatibility options here?  Backward
 		# compatibility options include comma separation of arguments, and
 		# NOMINVALUE instead of NO MINVALUE, etc.
-		while True:
-			if not valid:
-				break
+		while valid:
 			if alter == 'COLUMN':
 				if self._match('RESTART'):
 					if self._match('WITH'):
@@ -2038,8 +2082,8 @@ class SQLFormatter(BaseFormatter):
 				t = self._expect_one_of(validno)[1]
 				validno.remove(t)
 				valid.remove(t)
-	
-	def _parse_column_definition(self, aligntypes=False):
+
+	def _parse_column_definition(self, aligntypes=False, federated=False):
 		"""Parses a column definition in a CREATE TABLE statement"""
 		# Parse a column definition
 		self._expect(IDENTIFIER)
@@ -2049,7 +2093,7 @@ class SQLFormatter(BaseFormatter):
 		# Parse column options
 		while True:
 			if self._match('NOT'):
-				self._expect_one_of(['NULL', 'LOGGED', 'COMPACT'])
+				self._expect_one_of(['NULL', 'LOGGED', 'COMPACT', 'HIDDEN'])
 			elif self._match('LOGGED'):
 				pass
 			elif self._match('COMPACT'):
@@ -2074,16 +2118,30 @@ class SQLFormatter(BaseFormatter):
 			elif self._match('GENERATED'):
 				if self._expect_one_of(['ALWAYS', 'BY'])[1] == 'BY':
 					self._expect('DEFAULT')
-				self._expect('AS')
-				if self._match('IDENTITY'):
-					if self._match('('):
-						self._parse_identity_options()
+				if self._match('AS'):
+					if self._match('IDENTITY'):
+						if self._match('('):
+							self._parse_identity_options()
+							self._expect(')')
+					elif self._match('('):
+						self._parse_expression()
 						self._expect(')')
-				elif self._match('('):
-					self._parse_expression()
-					self._expect(')')
+					else:
+						self._expected_one_of(['IDENTITY', '('])
 				else:
-					self._expected_one_of(['IDENTITY', '('])
+					self._expect_sequence(['FOR', 'EACH', 'ROW', 'ON', 'UPDATE', 'AS', 'ROW', 'CHANGE', 'TIMESTAMP'])
+			elif self._match('INLINE'):
+				self._expect_sequence(['LENGTH', NUMBER])
+			elif self._match('COMPRESS'):
+				self._expect_sequence(['SYSTEM', 'DEFAULT'])
+			elif self._match('COLUMN'):
+				self._expect_sequence(['SECURED', 'WITH', IDENTIFIER])
+			elif self._match('SECURED'):
+				self._expect_sequence(['WITH', IDENTIFIER])
+			elif self._match('IMPLICITLY'):
+				self._expect('HIDDEN')
+			elif federated and self._match('OPTIONS'):
+				self._parse_federated_options()
 			else:
 				self._save_state()
 				try:
@@ -2130,7 +2188,26 @@ class SQLFormatter(BaseFormatter):
 					break
 		elif self._match('CHECK'):
 			self._expect('(')
-			self._parse_search_condition()
+			# Ambiguity: check constraint can be a search condition or a
+			# functional dependency. Try the search condition first
+			self._save_state()
+			try:
+				self._parse_search_condition()
+			except ParseError:
+				self._restore_state()
+				if self._match('('):
+					self._parse_ident_list()
+					self._expect(')')
+				else:
+					self._expect(IDENTIFIER)
+				self._expect_sequence(['DETERMINED', 'BY'])
+				if self._match('('):
+					self._parse_ident_list()
+					self._expect(')')
+				else:
+					self._expect(IDENTIFIER)
+			else:
+				self._forget_state()
 			self._expect(')')
 		else:
 			self._expected_one_of([
@@ -2185,7 +2262,26 @@ class SQLFormatter(BaseFormatter):
 					break
 		elif self._match('CHECK'):
 			self._expect('(')
-			self._parse_search_condition()
+			# Ambiguity: check constraint can be a search condition or a
+			# functional dependency. Try the search condition first
+			self._save_state()
+			try:
+				self._parse_search_condition()
+			except ParseError:
+				self._restore_state()
+				if self._match('('):
+					self._parse_ident_list()
+					self._expect(')')
+				else:
+					self._expect(IDENTIFIER)
+				self._expect_sequence(['DETERMINED', 'BY'])
+				if self._match('('):
+					self._parse_ident_list()
+					self._expect(')')
+				else:
+					self._expect(IDENTIFIER)
+			else:
+				self._forget_state()
 			self._expect(')')
 		else:
 			self._expected_one_of([
@@ -2195,6 +2291,29 @@ class SQLFormatter(BaseFormatter):
 				'FOREIGN',
 				'CHECK'
 			])
+
+	def _parse_table_definition(self, aligntypes=False, federated=False):
+		"""Parses a table definition (list of columns and constraints)"""
+		self._expect('(')
+		self._indent()
+		while True:
+			self._save_state()
+			try:
+				# Try parsing a table constraint definition
+				self._parse_table_constraint()
+			except ParseError:
+				# If that fails, rewind and try and parse a column definition
+				self._restore_state()
+				self._parse_column_definition(aligntypes=aligntypes, federated=federated)
+			else:
+				self._forget_state()
+			if not self._match(','):
+				break
+			else:
+				self._newline()
+		self._outdent()
+		self._vapply()
+		self._expect(')')
 
 	def _parse_constraint_alteration(self):
 		"""Parses a constraint-alteration in an ALTER TABLE statement"""
@@ -2260,19 +2379,34 @@ class SQLFormatter(BaseFormatter):
 			else:
 				self._forget_state()
 
+	def _parse_federated_column_alteration(self):
+		"""Parses a column-alteration in an ALTER NICKNAME statement"""
+		self._expect(IDENTIFIER)
+		while True:
+			if self._match('LOCAL'):
+				if self._match('NAME'):
+					self._expect(IDENTIFIER)
+				elif self._match('TYPE'):
+					self._parse_datatype()
+			elif self._match('OPTIONS'):
+				self._parse_federated_options(alter=True)
+			if not self._match(','):
+				break
+
 	def _parse_auth_list(self):
 		"""Parses an authorization list in a GRANT or REVOKE statement"""
 		# [TO|FROM] already matched
 		while True:
-			self._match_one_of(['USER', 'GROUP'])
-			self._expect_one_of(['PUBLIC', IDENTIFIER])
+			if not self._match('PUBLIC'):
+				self._match_one_of(['USER', 'GROUP', 'ROLE'])
+				self._expect(IDENTIFIER)
 			if not self._match(','):
 				break
 
 	def _parse_grant_revoke(self, grant):
 		"""Parses the body of a GRANT or REVOKE statement"""
 		# [GRANT|REVOKE] already matched
-		tofrom = ['FROM', 'TO'][grant]
+		seclabel = False
 		if self._match_one_of([
 			'BINDADD',
 			'CONNECT',
@@ -2283,146 +2417,117 @@ class SQLFormatter(BaseFormatter):
 			'DBADM',
 			'LOAD',
 			'QUIESCE_CONNECT',
+			'SECADM',
 		]):
-			self._expect_sequence(['ON', 'DATABASE', tofrom])
-			self._parse_auth_list()
-			if not grant and self._match('BY'):
-				self._expect('ALL')
+			self._expect_sequence(['ON', 'DATABASE'])
+		elif self._match('EXEMPTION'):
+			self._expect_sequence(['ON', 'RULE'])
+			if self._match_one_of([
+				'DB2LBACREADARRAY',
+				'DB2LBACREADSET',
+				'DB2LBACREADTREE',
+				'DB2LBACWRITEARRAY',
+				'DB2LBACWRITESET',
+				'DB2LBACWRITETREE',
+				'ALL'
+			])[1] == 'DB2LBACWRITEARRAY':
+				self._expect_one_of(['WRITEDOWN', 'WRITEUP'])
+			self._expect_sequence(['FOR', IDENTIFIER])
 		elif self._match_one_of([
 			'ALTERIN',
 			'CREATEIN',
 			'DROPIN',
 		]):
-			self._expect_sequence(['ON', 'SCHEMA', IDENTIFIER, tofrom])
-			self._parse_auth_list()
-			if grant and self._match('WITH'):
-				self._expect_sequence(['GRANT', 'OPTION'])
-			elif not grant and self._match('BY'):
-				self._expect('ALL')
+			self._expect_sequence(['ON', 'SCHEMA', IDENTIFIER])
 		elif self._match('CONTROL'):
 			self._expect('ON')
 			if self._match('INDEX'):
-				self._expect_sequence([IDENTIFIER, tofrom])
-				self._parse_auth_list()
-				if not grant and self._match('BY'):
-					self._expect('ALL')
+				self._parse_index_name()
 			else:
 				self._match('TABLE')
 				self._parse_table_name()
-				self._expect(tofrom)
-				self._parse_auth_list()
-				if grant and self._match('WITH'):
-					self._expect_sequence(['GRANT', 'OPTION'])
-				elif not grant and self._match('BY'):
-					self._expect('ALL')
 		elif self._match('USAGE'):
-			self._expect_sequence(['ON', 'SEQUENCE'])
-			self._parse_sequence_name()
-			self._expect(tofrom)
-			self._parse_auth_list()
-			if grant and self._match('WITH'):
-				self._expect_sequence(['GRANT', 'OPTION'])
-			elif not grant:
-				self._match('RESTRICT')
+			self._expect('ON')
+			if self._match('SEQUENCE'):
+				self._parse_sequence_name()
+			elif self._match('WORKLOAD'):
+				self._expect(IDENTIFIER)
+			else:
+				self._expected_one_of(['SEQUENCE', 'WORKLOAD'])
 		elif self._match('ALTER'):
 			self._expect('ON')
 			if self._match('SEQUENCE'):
 				self._parse_sequence_name()
-				self._expect(tofrom)
-				self._parse_auth_list()
-				if grant and self._match('WITH'):
-					self._expect_sequence(['GRANT', 'OPTION'])
-				elif not grant:
-					self._match('RESTRICT')
 			else:
 				self._match('TABLE')
 				self._parse_table_name()
-				self._expect(tofrom)
-				self._parse_auth_list()
-				if grant and self._match('WITH'):
-					self._expect_sequence(['GRANT', 'OPTION'])
-				elif not grant and self._match('BY'):
-					self._expect('ALL')
-		elif self._match('USE'):
-			self._expect_sequence(['OF', 'TABLESPACE', IDENTIFIER, tofrom])
-			self._parse_auth_list()
-			if grant and self._match('WITH'):
-				self._expect_sequence(['GRANT', 'OPTION'])
-			elif not grant and self._match('BY'):
-				self._expect('ALL')
-		elif self._match('EXECUTE'):
+		elif self._match('ALL'):
+			self._match('PRIVILEGES')
 			self._expect('ON')
+			if self._match('VARIABLE'):
+				self._expect(IDENTIFIER)
+			else:
+				self._match('TABLE')
+				self._parse_table_name()
+		elif self._match('USE'):
+			self._expect_sequence(['OF', 'TABLESPACE', IDENTIFIER])
+		elif self._match_sequence(['EXECUTE', 'ON']):
 			if self._match_one_of(['FUNCTION', 'PROCEDURE']):
 				# Ambiguity: Can use schema.* or schema.name(prototype) here
 				if not self._match('*') and not self._match_sequence([IDENTIFIER, '.', '*']):
 					self._parse_routine_name()
 					if self._match('('):
-						while True:
-							self._parse_datatype()
-							if not self._match(','):
-								break
+						self._parse_datatype_list()
 						self._expect(')')
 			elif self._match('SPECIFIC'):
 				self._expect_one_of(['FUNCTION', 'PROCEDURE'])
 				self._parse_routine_name()
 			else:
 				self._expected_one_of(['FUNCTION', 'PROCEDURE', 'SPECIFIC'])
-			self._expect((KEYWORD, tofrom))
-			self._parse_auth_list()
-			if grant and self._match('WITH'):
-				self._expect_sequence(['GRANT', 'OPTION'])
-			elif not grant:
-				if self._match('BY'):
-					self._expect('ALL')
-				self._expect('RESTRICT')
-		else:
-			if self._match('ALL'):
-				self._match('PRIVILEGES')
-			elif self._match_one_of(['REFERENCES', 'UPDATE']):
-				if self._match('('):
-					self._parse_ident_list()
-					self._expect(')')
-			elif self._match_one_of(['DELETE', 'INDEX', 'INSERT', 'SELECT']):
-				pass
-			else:
-				self._expected_one_of([
-					# Prefix of GRANT ... ON TABLE
-					'ALL',
-					'DELETE',
-					'INDEX',
-					'INSERT',
-					'SELECT',
-					'REFERENCES',
-					'UPDATE',
-					# Other possibilities from above
-					'ALTER',
-					'USAGE',
-					'EXECUTE',
-					'CONNECT',
-					'USE',
-					'BINDADD',
-					'CREATETAB',
-					'CREATE_EXTERNAL_ROUTINE',
-					'CREATE_NOT_FENCED_ROUTINE',
-					'IMPLICIT_SCHEMA',
-					'DBADM',
-					'LOAD',
-					'QUIESCE_CONNECT',
-					'ALTERIN',
-					'CREATEIN',
-					'DROPIN',
-					'CONTROL',
-				])
+		elif self._match('PASSTHRU'):
+			self._expect_sequence(['ON', 'SERVER', IDENTIFIER])
+		elif self._match_sequence(['SECURITY', 'LABEL']):
+			self._expect(IDENTIFIER)
+			seclabel = grant
+		elif self._match('ROLE'):
+			self._parse_ident_list()
+		elif self._match('SETSESSIONUSER'):
 			self._expect('ON')
-			self._match('TABLE')
-			self._parse_table_name()
-			self._expect(tofrom)
-			self._parse_auth_list()
-			if grant and self._match('WITH'):
-				self._expect_sequence(['GRANT', 'OPTION'])
-			elif not grant and self._match('BY'):
-				self._expect('ALL')
-	
+			if not self._match('PUBLIC'):
+				self._expect_sequence(['USER', IDENTIFIER])
+		else:
+			# Ambiguity: Here we could be matching table privs (SELECT, INSERT,
+			# et al.) or variable privs (READ, WRITE), or arbitrary IDENTIFIERs
+			# for GRANT ROLE where ROLE has been ommitted. Hence we just loop
+			# round grabbing IDENTs (taking care of the special syntax for
+			# REFERENCES and UPDATE which can include a column list)
+			while True:
+				if self._expect(IDENTIFIER)[1] in ('REFERENCES', 'UPDATE'):
+					if self._match('('):
+						self._parse_ident_list()
+						self._expect(')')
+				if not self._match(','):
+					break
+			self._expect('ON')
+			if self._match('VARIABLE'):
+				self._expect(IDENTIFIER)
+			else:
+				self._match('TABLE')
+				self._parse_table_name()
+		# XXX The following is a bit lax, but again, adhering strictly to the
+		# syntax results in a ridiculously complex syntax
+		self._expect(['FROM', 'TO'][grant])
+		self._parse_auth_list()
+		if seclabel:
+			if self._match('FOR'):
+				self._expect_one_of(['ALL', 'READ', 'WRITE'])
+				self._expect('ACCESS')
+		elif grant:
+			self._match_sequence(['WITH', 'GRANT', 'OPTION'])
+		else:
+			self._match_sequence(['BY', 'ALL'])
+			self._match('RESTRICT')
+
 	def _parse_tablespace_size_attributes(self):
 		"""Parses DMS size attributes in a CREATE TABLESPACE statement"""
 		if self._match('AUTORESIZE'):
@@ -2437,7 +2542,7 @@ class SQLFormatter(BaseFormatter):
 			if not self._match('NONE'):
 				self._expect(NUMBER)
 				self._expect_one_of(['K', 'M', 'G'])
-	
+
 	def _parse_database_container_clause(self, size=True):
 		"""Parses a container clause for a DMS tablespace"""
 		self._expect('(')
@@ -2450,7 +2555,7 @@ class SQLFormatter(BaseFormatter):
 			if not self._match(','):
 				break
 		self._expect(')')
-	
+
 	def _parse_system_container_clause(self):
 		"""Parses a container clause for an SMS tablespace"""
 		self._expect('(')
@@ -2459,10 +2564,9 @@ class SQLFormatter(BaseFormatter):
 			if not self._match(','):
 				break
 		self._expect(')')
-	
+
 	def _parse_db_partitions_clause(self, size=False):
-		"""Parses an ON DBPARTITIONNUM clause in a CREATE/ALTER TABLESPACE statement"""
-		# ON already matched
+		"""Parses an DBPARTITIONNUM clause in a CREATE/ALTER TABLESPACE statement"""
 		self._expect_one_of([
 			'DBPARTITIONNUM',
 			'DBPARTITIONNUMS',
@@ -2478,7 +2582,7 @@ class SQLFormatter(BaseFormatter):
 			if not self._match(','):
 				break
 		self._expect(')')
-	
+
 	def _parse_function_predicates_clause(self):
 		"""Parses the PREDICATES clause in a CREATE FUNCTION statement"""
 		# PREDICATES already matched
@@ -2492,9 +2596,7 @@ class SQLFormatter(BaseFormatter):
 		else:
 			self._parse_expression()
 		valid = ['SEARCH', 'FILTER']
-		while True:
-			if not valid:
-				break
+		while valid:
 			t = self._match_one_of(valid)
 			if t:
 				t = t[1]
@@ -2525,14 +2627,488 @@ class SQLFormatter(BaseFormatter):
 					self._parse_scalar_function_call()
 		if parens:
 			self._expect(')')
-	
+
+	def _parse_federated_options(self, alter=False):
+		"""Parses an OPTIONS list for a federated object"""
+		# OPTIONS already matched
+		self._expect('(')
+		while True:
+			if alter and self._match('DROP'):
+				self._expect(IDENTIFIER)
+			else:
+				if alter:
+					self._match_one_of('ADD', 'SET')
+				else:
+					self._match('ADD')
+				self._expect(IDENTIFIER)
+				self._expect(STRING)
+			if not self._match(','):
+				break
+		self._expect(')')
+
+	def _parse_remote_server(self):
+		"""Parses a remote server specification"""
+		# SERVER already matched
+		if self._match('TYPE'):
+			self._expect(IDENTIFIER)
+			if self._match('VERSION'):
+				self._parse_server_version()
+				if self._match('WRAPPER'):
+					self._expect(IDENTIFIER)
+		else:
+			self._expect(IDENTIFIER)
+			if self._match('VERSION'):
+				self._parse_server_version()
+
+	def _parse_server_version(self):
+		"""Parses a federated server version"""
+		# VERSION already matched
+		if self._match(NUMBER):
+			if self._match('.'):
+				self._expect(NUMBER)
+				if self._match('.'):
+					self._expect(NUMBER)
+		elif self._match(STRING):
+			pass
+		else:
+			self._expected_one_of([NUMBER, STRING])
+
+	def _parse_partition_boundary(self):
+		"""Parses a partition boundary in a PARTITION clause"""
+		if self._match('STARTING'):
+			self._match('FROM')
+			if self._match('('):
+				while True:
+					self._expect_one_of([NUMBER, 'MINVALUE', 'MAXVALUE'])
+					if not self._match(','):
+						break
+				self._expect(')')
+			else:
+				self._expect_one_of([NUMBER, 'MINVALUE', 'MAXVALUE'])
+			self._match_one_of(['INCLUSIVE', 'EXCLUSIVE'])
+		self._expect('ENDING')
+		self._match('AT')
+		if self._match('('):
+			while True:
+				self._expect_one_of([NUMBER, 'MINVALUE', 'MAXVALUE'])
+				if not self._match(','):
+					break
+			self._expect(')')
+		else:
+			self._expect_one_of([NUMBER, 'MINVALUE', 'MAXVALUE'])
+		self._match_one_of(['INCLUSIVE', 'EXCLUSIVE'])
+
+	def _parse_copy_options(self):
+		"""Parse copy options for CREATE TABLE... LIKE statements"""
+		# XXX Tidy this up (shouldn't just be a 2-time loop)
+		for i in xrange(2):
+			if self._match_one_of(['INCLUDING', 'EXCLUDING']):
+				if self._match('COLUMN'):
+					self._expect('DEFAULTS')
+				elif self._match('DEFAULTS'):
+					pass
+				elif self._match('IDENTITY'):
+					self._match_sequence(['COLUMN', 'ATTRIBUTES'])
+
+	def _parse_refreshable_table_options(self, alter=False):
+		"""Parses refreshable table options in a materialized query definition"""
+		if not alter and self._match('WITH'):
+			self._expect_sequence(['NO', 'DATA'])
+			self._parse_copy_options()
+		else:
+			valid = [
+				'DATA',
+				'REFRESH',
+				'ENABLE',
+				'DISABLE',
+				'MAINTAINED',
+			]
+			while valid:
+				t = self._match_one_of(valid)
+				if t:
+					t = t[1]
+					valid.remove(t)
+				else:
+					break
+				if t == 'DATA':
+					self._expect_sequence(['INITIALLY', 'DEFERRED'])
+				elif t == 'REFRESH':
+					self._expect_one_of(['DEFERRED', 'IMMEDIATE'])
+				elif t in ('ENABLE', 'DISABLE'):
+					self._expect_sequence(['QUERY', 'OPTIMIZATION'])
+					if t == 'ENABLE':
+						valid.remove('DISABLE')
+					else:
+						valid.remove('ENABLE')
+				elif t == 'MAINTAINED':
+					self._expect('BY')
+					self._expect_one_of(['SYSTEM', 'USER', 'FEDERATED_TOOL'])
+
+	def _parse_action_types_clause(self):
+		"""Parses an action types clause in a WORK ACTION"""
+		if self._match('MAP'):
+			self._expect('ACTIVITY')
+			if self._match_one_of(['WITH', 'WITHOUT']):
+				self._expect('NESTED')
+			self._expect('TO')
+			self._expect(IDENTIFIER)
+		elif self._match('WHEN'):
+			self._parse_threshold_predicate()
+			self._parse_threshold_exceeded_actions()
+		elif self._match('PREVENT'):
+			self._expect('EXECUTION')
+		elif self._match('COUNT'):
+			self._expect('ACTIVITY')
+		elif self._match('COLLECT'):
+			if self._match('ACTIVITY'):
+				self._expect('DATA')
+				self._parse_collect_activity_data_clause()
+			elif self._match('AGGREGATE'):
+				self._expect_sequence(['ACTIVITY', 'DATA'])
+				self._match_one_of(['BASE', 'EXTENDED'])
+		else:
+			self._expected_one_of(['MAP', 'WHEN', 'PREVENT', 'COUNT', 'COLLECT'])
+
+	def _parse_threshold_predicate(self):
+		"""Parses a threshold predicate in a WORK ACTION"""
+		if self._match_one_of([
+			'TOTALDBPARTITIONCONNECTIONS',
+			'CONCURRENTWORKLOADOCCURRENCES',
+			'CONCURRENTWORKLOADACTIVITIES',
+			'ESTIMATEDSQLCOST',
+			'SQLROWSRETURNED',
+		]):
+			self._expect_sequence(['>', NUMBER])
+		elif self._match('TOTALSCPARTITIONCONNECTIONS'):
+			self._expect_sequence(['>', NUMBER])
+			if self._match('QUEUEDCONNECTIONS'):
+				if self._match('>'):
+					self._expect(NUMBER)
+				elif self._match('UNBOUNDED'):
+					pass
+				else:
+					self._expected_one_of(['>', 'UNBOUNDED'])
+		elif self._match('CONCURRENTDBCOORDACTIVITIES'):
+			self._expect_sequence(['>', NUMBER])
+			if self._match('QUEUEDACTIVITIES'):
+				if self._match('>'):
+					self._expect(NUMBER)
+				elif self._match('UNBOUNDED'):
+					pass
+				else:
+					self._expected_one_of(['>', 'UNBOUNDED'])
+		elif self._match_one_of([
+			'CONNECTIONIDLETIME',
+			'ACTIVITYTOTALTIME',
+		]):
+			self._expect_sequence(['>', NUMBER])
+			self._expect_one_of([
+				'DAY',
+				'DAYS',
+				'HOUR',
+				'HOURS',
+				'MINUTE',
+				'MINUTES'
+			])
+		elif self._match('SQLTEMPSPACE'):
+			self._expect_sequence(['>', NUMBER])
+			self._expect_one_of(['K', 'M', 'G'])
+
+	def _parse_threshold_exceeded_actions(self):
+		"""Parses a threshold exceeded actions clause in a WORK ACTION"""
+		if self._match_sequence(['COLLECT', 'ACTIVITY', 'DATA']):
+			self._parse_collect_activity_data_clause(alter=True)
+		if self._match('STOP'):
+			self._expect('EXECUTION')
+		elif not self._match('CONTINUE'):
+			self._expected_one_of(['STOP', 'CONTINUE'])
+
+	def _parse_collect_activity_data_clause(self, alter=False):
+		"""Parses a COLLECT ACTIVITY clause in an action clause"""
+		# COLLECT ACTIVITY DATA already matched
+		if not (alter and self._match('NONE')):
+			self._expect('ON')
+			if self._match('ALL'):
+				self._match_sequence(['DATABASE', 'PARTITIONS'])
+			elif self._match('COORDINATOR'):
+				self._match_sequence(['DATABASE', 'PARTITION'])
+			else:
+				self._expected_one_of(['ALL', 'COORDINATOR'])
+			if self._match('WITHOUT'):
+				self._expect('DETAILS')
+			elif self._match('WITH'):
+				self._expect('DETAILS')
+				if self._match('AND'):
+					self._expect('VALUES')
+			else:
+				self._expected_one_of(['WITHOUT', 'WITH'])
+
+	def _parse_histogram_template_clause(self):
+		"""Parses a history template clause in a WORK ACTION"""
+		if self._match('ACTIVITY'):
+			self._expect_one_of(['LIFETIME', 'QUEUETIME', 'EXECUTETIME', 'ESIMATEDCOST', 'INTERARRIVALTIME'])
+			self._expect_sequence(['HISTOGRAM', 'TEMPLATE'])
+			self._expect_one_of(['SYSDEFAULTHISTOGRAM', IDENTIFIER])
+
+	def _parse_work_attributes(self):
+		"""Parses a work attributes clause in a WORK CLASS"""
+		self._expect_sequence(['WORK', 'TYPE'])
+		if self._match_one_of(['READ', 'WRITE', 'DML']):
+			self._parse_for_from_to_clause()
+		elif self._match('ALL'):
+			if self._match('FOR'):
+				self._parse_for_from_to_clause()
+			if self._match('ROUTINES'):
+				self._parse_routines_in_schema_clause()
+		elif self._match('CALL'):
+			if self._match('ROUTINES'):
+				self._parse_routines_in_schema_clause()
+		elif not self._match_one_of(['DDL', 'LOAD']):
+			self._expected_one_of(['READ', 'WRITE', 'DML', 'DDL', 'LOAD', 'ALL', 'CALL'])
+
+	def _parse_for_from_to_clause(self, alter=False):
+		"""Parses a FOR .. FROM .. TO clause in a WORK CLASS definition"""
+		# FOR already matched
+		if alter and self._match('ALL'):
+			self._expect_sequence(['UNITS', 'UNBOUNDED'])
+		else:
+			self._expect_one_of(['TIMERONCOST', 'CARDINALITY'])
+			self._expect_sequence(['FROM', NUMBER])
+			if self._match('TO'):
+				self._expect_one_of(['UNBOUNDED', NUMBER])
+
+	def _parse_routines_in_schema_clause(self, alter=False):
+		"""Parses a schema clause in a WORK CLASS definition"""
+		# ROUTINES already matched
+		if alter and self._match('ALL'):
+			pass
+		else:
+			self._expect_sequence(['IN', 'SCHEMA', IDENTIFIER])
+
+	def _parse_position_clause(self):
+		"""Parses a POSITION clause in a WORK CLASS definition"""
+		# POSITION already matched
+		if self._match('AT'):
+			self._expect(NUMBER)
+		elif self._match_one_of(['BEFORE', 'AFTER']):
+			self._expect(IDENTIFIER)
+		elif self._match('LAST'):
+			pass
+		else:
+			self._expected_one_of(['AT', 'BEFORE', 'AFTER', 'LAST'])
+
+	def _parse_connection_attributes(self):
+		"""Parses connection attributes in a WORKLOAD"""
+		if self._match_one_of(['APPLNAME', 'SYSTEM_USER']):
+			pass
+		elif self._match('SESSION_USER'):
+			self._match('GROUP')
+		elif self._match('CURRENT'):
+			self._expect_one_of([
+				'CLIENT_USERID',
+				'CLIENT_APPLNAME',
+				'CLIENT_WRKSTNNAME',
+				'CLIENT_ACCTNG'
+			])
+		else:
+			self._expected_one_of(['APPLNAME', 'SYSTEM_USER', 'SESSION_USER', 'CURRENT'])
+		self._expect('(')
+		while True:
+			if not self._match(STRING):
+				self._expect(')')
+				break
+
+	def _parse_audit_policy(self, alter=False):
+		"""Parses an AUDIT POLICY definition"""
+		valid = set(['CATEGORIES', 'ERROR'])
+		while valid:
+			t = self._match_one_of(valid)
+			if t:
+				t = t[1]
+				valid.remove(t)
+			else:
+				break
+			if t == 'CATEGORIES':
+				while True:
+					if self._expect_one_of([
+						'ALL',
+						'AUDIT',
+						'CHECKING',
+						'CONTEXT',
+						'EXECUTE',
+						'OBJMAINT',
+						'SECMAINT',
+						'VALIDATE'
+					])[1] == 'EXECUTE':
+						if self._match_one_of(['WITH', 'WITHOUT']):
+							self._expect('DATA')
+					self._expect('STATUS')
+					self._expect_one_of(['BOTH', 'FAILURE', 'NONE', 'SUCCESS'])
+					if not self._match(','):
+						break
+			elif t == 'ERROR':
+				self._expect('TYPE')
+				self._expect_one_of(['NORMAL', 'AUDIT'])
+		# If we're defining a new policy, ensure both terms are specified
+		if not alter and valid:
+			self._expected(valid.pop())
+
+	def _parse_evm_group(self):
+		"""Parses an event monitor group in a non-wlm event monitor definition"""
+		while True:
+			self._expect(IDENTIFIER)
+			if self._match('('):
+				valid = set(['TABLE', 'IN', 'PCTDEACTIVATE', 'TRUNC', 'INCLUDES', 'EXCLUDES'])
+				while valid:
+					t = self._match_one_of(valid)
+					if t:
+						t = t[1]
+						valid.remove(t)
+					else:
+						break
+					if t == 'TABLE':
+						self._parse_table_name()
+					elif t == 'IN':
+						self._expect(IDENTIFIER)
+					elif t == 'PCTDEACTIVATE':
+						self._expect(NUMBER)
+					elif t == 'TRUNC':
+						pass
+					elif t == 'INCLUDES' or t == 'EXCLUDES':
+						self._expect('(')
+						while True:
+							self._expect(IDENTIFIER)
+							if not self._match(','):
+								break
+						self._expect(')')
+				self._expect(')')
+			if not self._match(','):
+				break
+
+	def _parse_evm_write_to(self):
+		"""Parses a WRITE TO clause in an event monitor definition"""
+		# WRITE TO already matched
+		if self._match('TABLE'):
+			valid = set(['BUFFERSIZE', 'BLOCKED', 'NONBLOCKED', 'evm-group'])
+			while valid:
+				t = self._match_one_of(valid)
+				if t:
+					t = t[1]
+					valid.remove(t)
+				elif 'evm-group' in valid:
+					self._save_state()
+					try:
+						self._parse_evm_group()
+						valid.remove('evm-group')
+					except ParseError:
+						self._restore_state()
+						break
+					else:
+						self._forget_state()
+				else:
+					break
+				if t == 'BUFFERSIZE':
+					self._expect(NUMBER)
+				elif t == 'BLOCKED':
+					valid.remove('NONBLOCKED')
+				elif t == 'NONBLOCKED':
+					valid.remove('BLOCKED')
+		elif self._match('PIPE'):
+			self._expect(STRING)
+		elif self._match('FILE'):
+			self._expect(STRING)
+			valid = set(['MAXFILES', 'MAXFILESIZE', 'BUFFERSIZE', 'BLOCKED', 'NONBLOCKED', 'APPEND', 'REPLACE'])
+			while valid:
+				t = self._match_one_of(valid)
+				if t:
+					t = t[1]
+					valid.remove(t)
+				else:
+					break
+				if t == 'MAXFILES' or t == 'MAXFILESIZE':
+					self._expect_one_of(['NONE', NUMBER])
+				elif t == 'BLOCKED':
+					valid.remove('NONBLOCKED')
+				elif t == 'NONBLOCKED':
+					valid.remove('BLOCKED')
+				elif t== 'APPEND':
+					valid.remove('REPLACE')
+				elif t == 'REPLACE':
+					valid.remove('APPEND')
+		else:
+			self._expected_one_of(['TABLE', 'PIPE', 'FILE'])
+
+	def _parse_evm_options(self):
+		"""Parses the options after an event monitor definition"""
+		valid = set(['WRITE', 'AUTOSTART', 'MANUALSTART', 'ON', 'LOCAL', 'GLOBAL'])
+		while valid:
+			t = self._match_one_of(valid)
+			if t:
+				t = t[1]
+				valid.remove(t)
+			else:
+				break
+			if t == 'WRITE':
+				self._expect('TO')
+				self._parse_evm_write_to()
+			elif t == 'AUTOSTART':
+				valid.remove('MANUALSTART')
+			elif t == 'MANUALSTART':
+				valid.remove('AUTOSTART')
+			elif t == 'ON':
+				self._expect_one_of(['NODE', 'DBPARTITIONNUM'])
+				self._expect(NUMBER)
+			elif t == 'LOCAL':
+				valid.remove('GLOBAL')
+			elif t == 'GLOBAL':
+				valid.remove('LOCAL')
+
+	def _parse_nonwlm_event_monitor(self):
+		"""Parses a non-wlm event monitor definition"""
+		while True:
+			if self._match_one_of(['DATABASE', 'TABLES', 'BUFFERPOOLS', 'TABLESPACES']):
+				pass
+			elif self._match('DEADLOCKS'):
+				if self._match_sequence(['WITH', 'DETAILS']):
+					if self._match('HISTORY'):
+						self._match('VALUES')
+			elif self._match_one_of(['CONNECTIONS', 'STATEMENTS', 'TRANSACTIONS']):
+				if self._match('WHERE'):
+					self._parse_search_condition()
+			else:
+				self._expected_one_of([
+					'DATABASE',
+					'TABLES',
+					'BUFFERPOOLS',
+					'TABLESPACES',
+					'DEADLOCKS',
+					'CONNECTIONS',
+					'STATEMENTS',
+					'TRANSACTIONS',
+				])
+			if not self._match(','):
+				break
+		self._parse_evm_options()
+
+	def _parse_wlm_event_monitor(self):
+		"""Parses a wlm event monitor definition"""
+		if self._expect_one_of(['ACTIVITIES', 'STATISTICS', 'THRESHOLD'])[1] == 'THRESHOLD':
+			self._expect('VIOLATIONS')
+		self._parse_evm_options()
+
 	# STATEMENTS #############################################################
 
 	def _parse_allocate_cursor_statement(self):
-		"""Parses an ALLOCATE CURSOR statement in a procedure """
+		"""Parses an ALLOCATE CURSOR statement in a procedure"""
 		# ALLOCATE already matched
 		self._expect_sequence([IDENTIFIER, 'CURSOR', 'FOR', 'RESULT', 'SET', IDENTIFIER])
-	
+
+	def _parse_alter_audit_policy_statement(self):
+		"""Parses an ALTER AUDIT POLICY statement"""
+		# ALTER AUDIT POLICY already matched
+		self._expect(IDENTIIER)
+		self._parse_audit_policy(alter=True)
+
 	def _parse_alter_bufferpool_statement(self):
 		"""Parses an ALTER BUFFERPOOL statement"""
 		# ALTER BUFFERPOOL already matched
@@ -2556,7 +3132,10 @@ class SQLFormatter(BaseFormatter):
 			if self._match_one_of(['DBPARTITIONNUM', 'NODE']):
 				self._expect(NUMBER)
 			self._expect('SIZE')
-			self._expect(NUMBER)
+			if self._match(NUMBER):
+				self._match('AUTOMATIC')
+			else:
+				self._expect_one_of([NUMBER, 'AUTOMATIC'])
 
 	def _parse_alter_database_statement(self):
 		"""Parses an ALTER DATABASE statement"""
@@ -2569,7 +3148,7 @@ class SQLFormatter(BaseFormatter):
 			self._expect(STRING)
 			if not self._match(','):
 				break
-	
+
 	def _parse_alter_function_statement(self, specific):
 		"""Parses an ALTER FUNCTION statement"""
 		# ALTER [SPECIFIC] FUNCTION already matched
@@ -2597,7 +3176,7 @@ class SQLFormatter(BaseFormatter):
 			else:
 				break
 			first = False
-	
+
 	def _parse_alter_partition_group_statement(self):
 		"""Parses an ALTER DATABASE PARTITION GROUP statement"""
 		# ALTER [DATABASE PARTITION GROUP|NODEGROUP] already matched
@@ -2616,7 +3195,53 @@ class SQLFormatter(BaseFormatter):
 				self._expected_one_of(['ADD', 'DROP'])
 			if not self._match(','):
 				break
-	
+
+	def _parse_alter_histogram_template_statement(self):
+		"""Parses an ALTER HISTOGRAM TEMPLATE statement"""
+		# ALTER HISTOGRAM TEMPLATE already matched
+		self._expect_sequence([IDENTIFIER, 'HIGH', 'BIN', 'VALUE', NUMBER])
+
+	def _parse_alter_nickname_statement(self):
+		"""Parses an ALTER NICKNAME statement"""
+		# ALTER NICKNAME already matched
+		self._parse_nickname_name()
+		if self._match('OPTIONS'):
+			self._parse_federated_options(alter=True)
+		while True:
+			if self._match('ADD'):
+				self._parse_table_constraint()
+			elif self._match('ALTER'):
+				if self._match('FOREIGN'):
+					self._expect('KEY')
+					self._parse_constraint_alteration()
+				elif self._match('CHECK'):
+					self._parse_constraint_alteration()
+				else:
+					# Ambiguity: A column can be called COLUMN
+					self._save_state()
+					try:
+						self._match('COLUMN')
+						self._parse_federated_column_alteration()
+					except ParseError:
+						self._restore_state()
+						self._parse_federated_column_alteration()
+					else:
+						self._forget_state()
+			elif self._match('DROP'):
+				if self._match('PRIMARY'):
+					self._expect('KEY')
+				elif self._match('FOREIGN'):
+					self._expect_sequence(['KEY', IDENTIFIER])
+				elif self._match_one_of(['UNIQUE', 'CHECK', 'CONSTRAINT']):
+					self._expect(IDENTIFIER)
+				else:
+					self._expected_one_of(['PRIMARY', 'FOREIGN', 'CHECK', 'CONSTRAINT'])
+			elif self._match_one_of(['ALLOW', 'DISALLOW']):
+				self._expect('CACHING')
+			else:
+				break
+			self._newline()
+
 	def _parse_alter_procedure_statement(self, specific):
 		"""Parses an ALTER PROCEDURE statement"""
 		# ALTER [SPECIFIC] PROCEDURE already matched
@@ -2628,8 +3253,12 @@ class SQLFormatter(BaseFormatter):
 		first = True
 		while True:
 			if self._match('EXTERNAL'):
-				self._expect('NAME')
-				self._expect([STRING, IDENTIFIER])
+				if self._match('NAME'):
+					self._expect([STRING, IDENTIFIER])
+				elif self._match('ACTION'):
+					pass
+				else:
+					self._expected_one_of(['NAME', 'ACTION'])
 			elif self._match('NOT'):
 				self._expect_one_of(['FENCED', 'THREADSAFE'])
 			elif self._match_one_of(['FENCED', 'THREADSAFE']):
@@ -2638,6 +3267,9 @@ class SQLFormatter(BaseFormatter):
 				self._expect_sequence(['EXTERNAL', 'ACTION'])
 			elif self._match('NEW'):
 				self._expect_sequence(['SAVEPOINT', 'LEVEL'])
+			elif self._match('ALTER'):
+				self._expect_sequence(['PARAMETER', IDENTIFIER, 'SET', 'DATA', 'TYPE'])
+				self._parse_datatype()
 			elif first:
 				self._expected_one_of([
 					'EXTERNAL',
@@ -2646,17 +3278,271 @@ class SQLFormatter(BaseFormatter):
 					'NO',
 					'EXTERNAL',
 					'THREADSAFE',
+					'ALTER',
 				])
 			else:
 				break
 			first = False
-	
+
+	def _parse_alter_security_label_component_statement(self):
+		"""Parses an ALTER SECURITY LABEL COMPONENT statement"""
+		# ALTER SECURITY LABEL COMPONENT already matched
+		self._expect_sequence(IDENTIFIER, 'ADD', 'ELEMENT', STRING)
+		if self._match_one_of(['BEFORE', 'AFTER']):
+			self._expect(STRING)
+		elif self._match('ROOT'):
+			pass
+		elif self._match('UNDER'):
+			self._expect(STRING)
+			if self._match('OVER'):
+				while True:
+					self._expect(STRING)
+					if not self._match(','):
+						break
+					self._expect('OVER')
+
+	def _parse_alter_security_policy_statement(self):
+		"""Parses an ALTER SECURITY POLICY statement"""
+		# ALTER SECURITY POLICY
+		self._expect(IDENTIFIER)
+		while True:
+			if self._match('ADD'):
+				self._expect_sequence(['SECURITY', 'LABEL', 'COMPONENT', IDENTIFIER])
+			elif self._match_one_of(['OVERRIDE', 'RESTRICT']):
+				self._expect_sequence(['NOT', 'AUTHORIZED', 'WRITE', 'SECURITY', 'LABEL'])
+			elif self._match_one_of(['USE', 'IGNORE']):
+				self._expect_one_of('GROUP', 'ROLE'])
+				self._expect('AUTHORIZATIONS')
+			else:
+				break
+
 	def _parse_alter_sequence_statement(self):
 		"""Parses an ALTER SEQUENCE statement"""
 		# ALTER SEQUENCE already matched
 		self._parse_sequence_name()
 		self._parse_identity_options(alter='SEQUENCE')
-	
+
+	def _parse_alter_server_statement(self):
+		"""Parses an ALTER SERVER statement"""
+		# ALTER SERVER already matched
+		self._parse_remote_server()
+		if self._match('OPTIONS'):
+			self._parse_federated_options(alter=True)
+
+	def _parse_alter_service_class_statement(self):
+		"""Parses an ALTER SERVICE CLASS statement"""
+		# ALTER SERVICE CLASS already matched
+		self._expect(IDENTIFIER)
+		if self._match('UNDER'):
+			self._expect(IDENTIFIER)
+		first = True
+		while True:
+			if self._match('AGENT'):
+				self._expect('PRIORITY')
+				self._expect_one_of(['DEFAULT', NUMBER])
+			elif self._match('PREFETCH'):
+				self._expect('PRIORITY')
+				self._expect_one_of(['LOW', 'MEDIUM', 'HIGH', 'DEFAULT'])
+			elif self._match('OUTBOUND'):
+				self._expect('CORRELATOR')
+				self._expect_one_of(['NONE', STRING])
+			elif self._match('COLLECT'):
+				if self._match('ACTIVITY'):
+					self._expect('DATA')
+					if self._match('ON'):
+						if self._match('ALL'):
+							self._match_sequence(['DATABASE', 'PARTITIONS'])
+						elif self._match('COORDINATOR'):
+							self._match_sequence(['DATABASE', 'PARTITION'])
+						else:
+							self._expected_one_of(['ALL', 'COORDINATOR'])
+						self._expect_one_of(['WITH', 'WITHOUT'])
+						self._expect('DETAILS')
+						self._match_sequence(['AND', 'VALUES'])
+					elif self._match('NONE'):
+						pass
+					else:
+						self._expected_one_of(['ON', 'NONE'])
+				elif self._match('AGGREGATE'):
+					if self._match('ACTIVITY'):
+						self._expect('DATA')
+						self._match_one_of(['BASE', 'EXTENDED', 'NONE'])
+					elif self._match('REQUEST'):
+						self._expect('DATA')
+						self._match_one_of(['BASE', 'NONE'])
+					else:
+						self._expected_one_of(['ACTIVITY', 'REQUEST'])
+				else:
+					self._expected_one_of(['ACTIVITY', 'AGGREGATE'])
+			elif self._match('ACTIVITY'):
+				self._expect_one_of(['LIFETIME', 'QUEUETIME', 'EXECUTETIME', 'ESTIMATEDCOST', 'INTERARRIVALTIME'])
+				self._expect_sequence(['HISTOGRAM', 'TEMPLATE', IDENTIFIER])
+			elif self._match('REQUEST'):
+				self._expect_sequence(['EXECUTETIME', 'HISTOGRAM', 'TEMPLATE', IDENTIFIER])
+			elif self._match_one_of(['ENABLE', 'DISABLE']):
+				pass
+			elif not first:
+				break
+			else:
+				self._expected_one_of([
+					'AGENT',
+					'PREFETCH',
+					'OUTBOUND',
+					'COLLECT',
+					'ACTIVITY',
+					'REQUEST',
+					'ENABLE',
+					'DISABLE'
+				])
+
+	def _parse_alter_table_statement(self):
+		"""Parses an ALTER TABLE statement"""
+		# ALTER TABLE already matched
+		self._parse_table_name()
+		self._indent()
+		while True:
+			if self._match('ADD'):
+				if self._match('RESTRICT'):
+					self._expect_sequence(['ON', 'DROP'])
+				elif self._match('PARTITION'):
+					# Ambiguity: optional partition name
+					self._save_state()
+					try:
+						self._match(IDENTIFIER)
+						self._parse_partition_boundary()
+					except ParseError:
+						self._restore_state()
+						self._parse_partition_boundary()
+					else:
+						self._forget_state()
+					if self._match('IN'):
+						self._expect(IDENTIFIER)
+					if self._match('LONG'):
+						self._expect('IN')
+						self._expect(IDENTIFIER)
+				elif self._match('MATERIALIZED'):
+					self._expect('QUERY')
+					self._expect('(')
+					self._parse_full_select()
+					self._expect(')')
+					self._parse_refreshable_table_options(alter=True)
+				elif self._match('QUERY'):
+					self._expect('(')
+					self._parse_full_select()
+					self._expect(')')
+					self._parse_refreshable_table_options(alter=True)
+				elif self._match('('):
+					self._parse_full_select()
+					self._expect(')')
+					self._parse_refreshable_table_options(alter=True)
+				elif self._match('COLUMN'):
+					self._parse_column_definition()
+				elif self._match('SECURITY'):
+					self._expect('POLICY')
+					self._expect(IDENTIFIER)
+				else:
+					self._save_state()
+					try:
+						# Try parsing a table constraint definition
+						self._parse_table_constraint()
+					except ParseError:
+						# If that fails, rewind and try and parse a column definition
+						self._restore_state()
+						self._parse_column_definition()
+					else:
+						self._forget_state()
+			elif self._match('ATTACH'):
+				self._expect('PARTITION')
+				# Ambiguity: optional partition name
+				self._save_state()
+				try:
+					self._match(IDENTIFIER)
+					self._parse_partition_boundary()
+				except ParseError:
+					self._restore_state()
+					self._parse_partition_boundary()
+				else:
+					self._forget_state()
+				self._expect('FROM')
+				self._parse_table_name()
+			elif self._match('DETACH'):
+				self._expect_sequence(['PARTITION', IDENTIFIER, 'FROM'])
+				self._parse_table_name()
+			elif self._match('ALTER'):
+				if self._match('FOREIGN'):
+					self._expect('KEY')
+					self._parse_constraint_alteration()
+				elif self._match('CHECK'):
+					self._parse_constraint_alteration()
+				else:
+					# Ambiguity: A column can be called COLUMN
+					self._save_state()
+					try:
+						self._match('COLUMN')
+						self._parse_column_alteration()
+					except ParseError:
+						self._restore_state()
+						self._parse_column_alteration()
+					else:
+						self._forget_state()
+			elif self._match('DROP'):
+				if self._match('PRIMARY'):
+					self._expect('KEY')
+				elif self._match('FOREIGN'):
+					self._expect_sequence(['KEY', IDENTIFIER])
+				elif self._match_one_of(['UNIQUE', 'CHECK', 'CONSTRAINT']):
+					self._expect(IDENTIFIER)
+				elif self._match('COLUMN'):
+					self._expect(IDENTIFIER)
+					self._match_one_of(['CASCADE', 'RESTRICT'])
+				elif self._match('RESTRICT'):
+					self._expect_sequence(['ON', 'DROP'])
+				elif self._match('DISTRIBUTION'):
+					pass
+				elif self._match('MATERIALIZED'):
+					self._expect('QUERY')
+				elif self._match('QUERY'):
+					pass
+				elif self._match('SECURITY'):
+					self._expect('POLICY')
+				else:
+					self._expect(IDENTIFIER)
+					self._match_one_of(['CASCADE', 'RESTRICT'])
+			elif self._match('DATA'):
+				self._expect('CAPTURE')
+				if self._match('CHANGES'):
+					self._match_sequence(['INCLUDE', 'LONGVAR', 'COLUMNS'])
+				elif self._match('NONE'):
+					pass
+				else:
+					self._expected_one_of(['NONE', 'CHANGES'])
+			elif self._match('PCTFREE'):
+				self._expect(NUMBER)
+			elif self._match('LOCKSIZE'):
+				self._expect_one_of(['ROW', 'BLOCKINSERT', 'TABLE'])
+			elif self._match('APPEND'):
+				self._expect_one_of(['ON', 'OFF'])
+			elif self._match('VOLATILE'):
+				self._match('CARDINALITY')
+			elif self._match('NOT'):
+				self._expect('VOLATILE')
+				self._match('CARDINALITY')
+			elif self._match('COMPRESS'):
+				self._expect_one_of(['YES', 'NO'])
+			elif self._match('ACTIVATE'):
+				if self._expect_one_of(['NOT', 'VALUE'])[1] == 'NOT':
+					self._expect_sequence(['LOGGED', 'INITIALLY'])
+					if self._match('WITH'):
+						self._expect_sequence(['EMPTY', 'TABLE'])
+				else:
+					self._expect('COMPRESSION')
+			elif self._match('DEACTIVATE'):
+				self._expect_sequence(['VALUE', 'COMPRESSION'])
+			else:
+				break
+			self._newline()
+		self._outdent()
+
 	def _parse_alter_tablespace_statement(self):
 		"""Parses an ALTER TABLESPACE statement"""
 		# ALTER TABLESPACE already matched
@@ -2745,6 +3631,8 @@ class SQLFormatter(BaseFormatter):
 				if not self_match('NONE'):
 					self._expect(NUMBER)
 					self._expect_one_of(['K', 'M', 'G'])
+			elif self._match('CONVERT'):
+				self._expect_sequence(['TO', 'LARGE'])
 			elif first:
 				self._expected_one_of([
 					'ADD',
@@ -2762,83 +3650,241 @@ class SQLFormatter(BaseFormatter):
 					'SWITCH',
 					'INCREASESIZE',
 					'MAXSIZE',
+					'CONVERT',
 				])
 			else:
 				break
 			first = False
 
-	def _parse_alter_table_statement(self):
-		"""Parses an ALTER TABLE statement"""
-		# ALTER TABLE already matched
-		self._parse_table_name()
-		self._indent()
+	def _parse_alter_threshold_statement(self):
+		"""Parses an ALTER THRESHOLD statement"""
+		# ALTER THRESHOLD already matched
+		self._expect(IDENTIFIER)
+		while True:
+			if self._match('WHEN'):
+				self._parse_threshold_predicate()
+				self._parse_threshold_exceeded_actions()
+			elif not self._match_one_of(['ENABLE', 'DISABLE']):
+				break
+
+	def _parse_alter_trusted_context_statement(self):
+		"""Parses an ALTER TRUSTED CONTEXT statement"""
+		# ALTER TRUSTED CONTEXT already matched
+		self._expect(IDENTIFIER)
+		first = True
 		while True:
 			if self._match('ADD'):
-				if self._match('RESTRICT'):
-					self._expect_sequence(['ON', 'DROP'])
-				elif self._match('COLUMN'):
-					self._parse_column_definition()
+				if self._match('ATTRIBUTES'):
+					self._expect('(')
+					while True:
+						self._expect_sequence(['ADDRESS', STRING])
+						if self._match('WITH'):
+							self._expect_sequence(['ENCRYPTION', STRING])
+						if not self._match(','):
+							break
+					self._expect(')')
+				elif self._match('USE'):
+					self._expect('FOR')
+					while True:
+						if not self._match('PUBLIC'):
+							self._expect(IDENTIFIER)
+							self._match_sequence(['ROLE', IDENTIFIER])
+							if self._match_one_of(['WITH', 'WITHOUT']):
+								self._expect('AUTHENTICATION')
+						if not self._match(','):
+							break
 				else:
-					self._save_state()
-					try:
-						# Try parsing a table constraint definition
-						self._parse_table_constraint()
-					except ParseError:
-						# If that fails, rewind and try and parse a column definition
-						self._restore_state()
-						self._parse_column_definition()
-					else:
-						self._forget_state()
-			elif self._match('ALTER'):
-				if self._match('FOREIGN'):
-					self._expect('KEY')
-					self._parse_constraint_alteration()
-				elif self._match('CHECK'):
-					self._parse_constraint_alteration()
-				else:
-					# Ambiguity: A column can be called COLUMN
-					self._save_state()
-					try:
-						self._match('COLUMN')
-						self._parse_column_alteration()
-					except ParseError:
-						self._restore_state()
-						self._parse_column_alteration()
-					else:
-						self._forget_state()
+					self._expected_one_of(['ATTRIBUTES', 'USE'])
 			elif self._match('DROP'):
-				if self._match('PRIMARY'):
-					self._expect('KEY')
-				elif self._match('FOREIGN'):
-					self._expect_sequence(['KEY', IDENTIFIER])
-				elif self._match_one_of(['UNIQUE', 'CHECK', 'CONSTRAINT']):
-					self._expect(IDENTIFIER)
-				elif self._match('RESTRICT'):
-					self._expect_sequence(['ON', 'DROP'])
+				if self._match('ATTRIBUTES'):
+					self._expect('(')
+					while True:
+						self._expect_sequence(['ADDRESS', STRING])
+						if not self._match(','):
+							break
+					self._expect(')')
+				elif self._match('USE'):
+					self._expect('FOR')
+					while True:
+						if not self._match('PUBLIC'):
+							self._expect(IDENTIFIER)
+						if not self._match(','):
+							break
 				else:
-					self._expected_one_of(['PRIMARY', 'FOREIGN', 'CHECK', 'CONSTRAINT'])
-			elif self._match('LOCKSIZE'):
-				self._expect_one_of(['ROW', 'TABLE'])
-			elif self._match('APPEND'):
-				self._expect_one_of(['ON', 'OFF'])
-			elif self._match('VOLATILE'):
-				self._match('CARDINALITY')
-			elif self._match('NOT'):
-				self._expect('VOLATILE')
-				self._match('CARDINALITY')
-			elif self._match('ACTIVATE'):
-				if self._expect_one_of(['NOT', 'VALUE'])[1] == 'NOT':
-					self._expect_sequence(['LOGGED', 'INITIALLY'])
-					if self._match('WITH'):
-						self._expect_sequence(['EMPTY', 'TABLE'])
-				else:
-					self._expect('COMPRESSION')
-			elif self._match('DEACTIVATE'):
-				self._expect_sequence(['VALUE', 'COMPRESSION'])
+					self._expected_one_of(['ATTRIBUTES', 'USE'])
+			elif self._match('ALTER'):
+				while True:
+					if self._match('SYSTEM'):
+						self._expect_sequence(['AUTHID', IDENTIFIER])
+					elif self._match('ATTRIBUTES'):
+						self._expect('(')
+						while True:
+							self._expect_one_of(['ADDRESS', 'ENCRYPTION'])
+							self._expect(STRING)
+							if not self._match(','):
+								break
+						self._expect(')')
+					elif self._match('NO'):
+						self._expect_sequence(['DEFAULT', 'ROLE'])
+					elif self._match('DEFAULT'):
+						self._expect_sequence(['ROLE', IDENTIFIER])
+					elif not self._match_one_of(['ENABLE', 'DISABLE']):
+						break
+			elif self._match('REPLACE'):
+				self._expect_sequence(['USE', 'FOR'])
+				while True:
+					if not self._match('PUBLIC'):
+						self._expect(IDENTIFIER)
+						self._match_sequence(['ROLE', IDENTIFIER])
+						if self._match_one_of(['WITH', 'WITHOUT']):
+							self._expect('AUTHENTICATION')
+					if not self._match(','):
+						break
+			elif first:
+				self._expected_one_of(['ALTER', 'ADD', 'DROP', 'REPLACE'])
 			else:
 				break
-			self._newline()
-		self._outdent()
+			first = False
+
+	def _parse_alter_user_mapping_statement(self):
+		"""Parses an ALTER USER MAPPING statement"""
+		# ALTER USER MAPPING already matched
+		if not self._match('USER'):
+			self._expect_sequence([IDENTIFIER, 'SERVER', IDENTIFIER, 'OPTIONS'])
+			self._parse_federated_options(alter=True)
+
+	def _parse_alter_view_statement(self):
+		"""Parses an ALTER VIEW statement"""
+		# ALTER VIEW already matched
+		self._parse_view_name()
+		self._expect_one_of(['ENABLE', 'DISABLE'])
+		self._expect_sequence(['QUERY', 'OPTIMIZATION'])
+
+	def _parse_alter_work_action_set_statement(self):
+		"""Parses an ALTER WORK ACTION SET statement"""
+		# ALTER WORK ACTION SET already matched
+		self._expect(IDENTIFIER)
+		first = True
+		while True:
+			if self._match('ADD'):
+				self._match_sequence(['WORK', 'ACTION'])
+				self._expect_sequence([IDENTIFIER, 'ON', 'WORK', 'CLASS', IDENTIFIER])
+				self._parse_action_types_clause()
+				self._parse_histogram_template_clause()
+				self._match_one_of(['ENABLE', 'DISABLE'])
+			elif self._match('ALTER'):
+				self._match_sequence(['WORK', 'ACTION'])
+				self._expect(IDENTIFIER)
+				while True:
+					if self._match('SET'):
+						self._expect_sequence(['WORK', 'CLASS', IDENTIFIER])
+					elif self._match('ACTIVITY'):
+						self._expect_one_of(['LIFETIME', 'QUEUETIME', 'EXECUTETIME', 'ESIMATEDCOST', 'INTERARRIVALTIME'])
+						self._expect_sequence(['HISTOGRAM', 'TEMPLATE', IDENTIFIER])
+					elif self._match_one_of(['ENABLE', 'DISABLE']):
+						pass
+					else:
+						# Ambiguity: could be the end of the loop, or an action
+						# types clause
+						self._save_state()
+						try:
+							self._parse_action_types_clause()
+						except ParseError:
+							self._restore_state()
+							break
+						else:
+							self._forget_state()
+			elif self._match('DROP'):
+				self._match_sequence(['WORK', 'ACTION'])
+				self._expect(IDENTIFIER)
+			elif self._match_one_of(['ENABLE', 'DISABLE']):
+				pass
+			elif first:
+				self._expected_one_of(['ADD', 'ALTER', 'DROP', 'ENABLE', 'DISABLE'])
+			else:
+				break
+			first = False
+
+	def _parse_alter_work_class_set_statement(self):
+		"""Parses an ALTER WORK CLASS SET statement"""
+		# ALTER WORK CLASS SET already matched
+		self._expect(IDENTIFIER)
+		outer = True
+		while True:
+			if self._match('ADD'):
+				self._match_sequence(['WORK', 'CLASS'])
+				self._expect(IDENTIFIER)
+				self._parse_work_attributes()
+				self._expect('POSITION')
+				self._parse_position_clause()
+			elif self._match('ALTER'):
+				self._match_sequence(['WORK', 'CLASS'])
+				self._expect(IDENTIFIER)
+				inner = True
+				while True:
+					if self._match('FOR'):
+						self._parse_for_from_to_clause(alter=True)
+					elif self._match('POSITION'):
+						self._parse_position_clause()
+					elif self._match('ROUTINES'):
+						self._parse_routines_in_schema_clause(alter=True)
+					elif inner:
+						self._expected_one_of(['FOR', 'POSITION', 'ROUTINES'])
+					else:
+						break
+					inner = False
+			elif self._match('DROP'):
+				self._match_sequence(['WORK', 'CLASS'])
+				self._expect(IDENTIFIER)
+			elif outer:
+				self._expected_one_of(['ADD', 'ALTER', 'DROP'])
+			else:
+				break
+			outer = False
+
+	def _parse_alter_workload_statement(self):
+		"""Parses an ALTER WORKLOAD statement"""
+		self._expect(IDENTIFIER)
+		first = True
+		while True:
+			if self._match('ADD'):
+				self._parse_connection_attributes()
+			elif self._match('DROP'):
+				self._parse_connection_attributes()
+			elif self._match_one_of(['ALLOW', 'DISALLOW']):
+				self._expect_sequence(['DB', 'ACCESS'])
+			elif self._match_one_of(['ENABLE', 'DISABLE']):
+				pass
+			elif self._match('SERVICE'):
+				self._expect_sequence(['CLASS', IDENTIFIER])
+				if self._match('UNDER'):
+					self._expect(IDENTIFIER)
+			elif self._match('POSITION'):
+				self._parse_position_clause()
+			elif self._match_sequence(['COLLECT', 'ACTIVITY', 'DATA']):
+				self._parse_collect_activity_data_clause(alter=True)
+			elif first:
+				self._expected_one_of([
+					'ADD',
+					'DROP',
+					'ALLOW',
+					'DISALLOW',
+					'ENABLE',
+					'DISABLE',
+					'SERVICE',
+					'POSITION',
+					'COLLECT'
+				])
+			else:
+				break
+			first = False
+
+	def _parse_alter_wrapper_statement(self):
+		"""Parses an ALTER WRAPPER statement"""
+		# ALTER WRAPPER already matched
+		self._expect(IDENTIFIER)
+		self._expect('OPTIONS')
+		self._parse_federated_options(alter=True)
 
 	def _parse_associate_locators_statement(self):
 		"""Parses an ASSOCIATE LOCATORS statement in a procedure"""
@@ -2851,6 +3897,48 @@ class SQLFormatter(BaseFormatter):
 		self._expect_sequence(['WITH', 'PROCEDURE'])
 		self._parse_procedure_name()
 
+	def _parse_audit_statement(self):
+		"""Parses an AUDIT statement"""
+		# AUDIT already matched
+		while True:
+			if self._match_one_of([
+				'DATABASE',
+				'SYSADM',
+				'SYSCTRL',
+				'SYSMAINT',
+				'SYSMON',
+				'SECADM',
+				'DBADM',
+			]):
+				pass
+			elif self._match('TABLE'):
+				self._parse_table_name()
+			elif self._match_sequence(['TRUSTED', 'CONTEXT']):
+				self._expect(IDENTIFIER)
+			elif self._match_one_of(['USER', 'GROUP', 'ROLE']):
+				self._expect(IDENTIFIER)
+			else:
+				self._expected_one_of([
+					'DATABASE',
+					'SYSADM',
+					'SYSCTRL',
+					'SYSMAINT',
+					'SYSMON',
+					'SECADM',
+					'DBADM',
+					'TABLE',
+					'TRUSTED',
+					'USER',
+					'GROUP',
+					'ROLE',
+				])
+			if not self._match(','):
+				break
+		if self._match_one_of(['USING', 'REPLACE']):
+			self._expect_sequence(['POLICY', IDENTIFIER])
+		elif not self._match_sequence(['REMOVE', 'POLICY']):
+			self._expected_one_of(['USING', 'REPLACE', 'REMOVE'])
+
 	def _parse_call_statement(self):
 		"""Parses a CALL statement"""
 		# CALL already matched
@@ -2858,7 +3946,7 @@ class SQLFormatter(BaseFormatter):
 		if self._match('('):
 			self._parse_expression_list()
 			self._expect(')')
-	
+
 	def _parse_case_statement(self, inproc):
 		"""Parses a CASE-conditional in a procedure"""
 		# CASE already matched
@@ -2913,13 +4001,13 @@ class SQLFormatter(BaseFormatter):
 					self._newline()
 		self._outdent(-1)
 		self._expect('CASE')
-	
+
 	def _parse_close_statement(self):
 		"""Parses a CLOSE cursor statement"""
 		# CLOSE already matched
 		self._expect(IDENTIFIER)
 		self._match_sequence(['WITH', 'RELEASE'])
-	
+
 	def _parse_comment_statement(self):
 		"""Parses a COMMENT ON statement"""
 		# COMMENT ON already matched
@@ -2940,16 +4028,63 @@ class SQLFormatter(BaseFormatter):
 			# If that fails, rewind and parse a single-object comment
 			self._restore_state()
 			if reraise: raise
-			if self._match_one_of(['ALIAS', 'TABLE', 'INDEX', 'TRIGGER', 'TYPE']):
+			if self._match_one_of(['ALIAS', 'TABLE', 'NICKNAME', 'INDEX', 'TRIGGER', 'VARIABLE']):
 				self._parse_subschema_name()
+			elif self._match('TYPE'):
+				if self._match('MAPPING'):
+					self._expect(IDENTIFIER)
+				else:
+					self._parse_subschema_name()
+			elif self._match('PACKAGE'):
+				self._parse_subschema_name()
+				self._match('VERSION')
+				# XXX Ambiguity: IDENTIFIER will match "IS" below. How to solve
+				# this? Only double-quoted identifiers are actually permitted
+				# here (or strings)
+				self._match_one_of([IDENTIFIER, STRING])
 			elif self._match_one_of(['DISTINCT', 'DATA']):
 				self._expect('TYPE')
 				self._parse_type_name()
 			elif self._match_one_of(['COLUMN', 'CONSTRAINT']):
 				self._parse_subrelation_name()
-			elif self._match_one_of(['SCHEMA', 'TABLESPACE']):
+			elif self._match_one_of(['SCHEMA', 'TABLESPACE', 'WRAPPER', 'WORKLOAD', 'NODEGROUP', 'ROLE', 'THRESHOLD']):
 				self._expect(IDENTIFIER)
-			elif self._match_one_of(['FUNCTION', 'PROCEDURE']):
+			elif self._match_sequence(['DATABASE', 'PARTITION', 'GROUP']):
+				self._expect(IDENTIFIER)
+			elif self._match_sequence(['AUDIT', 'POLICY']):
+				self._expect(IDENTIFIER)
+			elif self._match_sequence(['SECURITY', 'POLICY']):
+				self._expect(IDENTIFIER)
+			elif self._match_sequence(['SECURITY', 'LABEL']):
+				self._match('COMPONENT')
+				self._expect(IDENTIFIER)
+			elif self._match('SERVER'):
+				if self._match('OPTION'):
+					self._expect_sequence([IDENTIFIER, 'FOR'])
+					self._parse_remote_server()
+				else:
+					self._expect(IDENTIFIER)
+			elif self._match('SERVICE'):
+				self._expect('CLASS')
+				self._expect(IDENTIFIER)
+				self._match_sequence(['UNDER', IDENTIFIER])
+			elif self._match_sequence(['TRUSTED', 'CONTEXT']):
+				self._expect(IDENTIFIER)
+			elif self._match_sequence(['HISTOGRAM', 'TEMPLATE']):
+				self._expect(IDENTIFIER)
+			elif self._match_sequence(['WORK', 'ACTION', 'SET']):
+				self._expect(IDENTIFIER)
+			elif self._match_sequence(['WORK', 'CLASS', 'SET']):
+				self._expect(IDENTIFIER)
+			elif self._match('FUNCTION'):
+				if self._match('MAPPING'):
+					self._expect(IDENTIFIER)
+				else:
+					self._parse_routine_name()
+					if self._match('('):
+						self._parse_datatype_list()
+						self._expect(')')
+			elif self._match('PROCEDURE'):
 				self._parse_routine_name()
 				if self._match('('):
 					self._parse_datatype_list()
@@ -2960,19 +4095,33 @@ class SQLFormatter(BaseFormatter):
 			else:
 				self._expected_one_of([
 					'ALIAS',
-					'TABLE',
-					'INDEX',
-					'TRIGGER',
-					'DATA',
-					'DISTINCT',
-					'TYPE',
+					'AUDIT',
 					'COLUMN',
 					'CONSTRAINT',
-					'SCHEMA',
-					'TABLESPACE',
+					'DATA',
+					'DATABASE',
+					'DISTINCT',
 					'FUNCTION',
+					'HISTOGRAM',
+					'INDEX',
+					'NICKNAME',
 					'PROCEDURE',
+					'ROLE',
+					'SCHEMA',
+					'SECURITY',
+					'SERVER',
+					'SERVICE',
 					'SPECIFIC',
+					'TABLE',
+					'TABLESPACE',
+					'THRESHOLD',
+					'TRIGGER',
+					'TRUSTED',
+					'TYPE',
+					'VARIABLE',
+					'WORK',
+					'WORKLOAD',
+					'WRAPPER',
 				])
 			self._expect_sequence(['IS', STRING])
 		else:
@@ -2982,14 +4131,20 @@ class SQLFormatter(BaseFormatter):
 		"""Parses a COMMIT statement"""
 		# COMMIT already matched
 		self._match('WORK')
-	
+
 	def _parse_create_alias_statement(self):
 		"""Parses a CREATE ALIAS statement"""
 		# CREATE ALIAS already matched
 		self._parse_relation_name()
 		self._expect('FOR')
 		self._parse_relation_name()
-	
+
+	def _parse_create_audit_policy_statement(self):
+		"""Parses a CREATE AUDIT POLICY statement"""
+		# CREATE AUDIT POLICY already matched
+		self._expect(IDENTIFIER)
+		self._parse_audit_policy()
+
 	def _parse_create_bufferpool_statement(self):
 		"""Parses a CREATE BUFFERPOOL statement"""
 		# CREATE BUFFERPOOL already matched
@@ -3003,18 +4158,15 @@ class SQLFormatter(BaseFormatter):
 		elif self._match('NODEGROUP'):
 			self._parse_ident_list()
 		self._expect('SIZE')
-		self._expect(NUMBER)
+		if self._match(NUMBER):
+			self._match('AUTOMATIC')
+		elif self._match('AUTOMATIC'):
+			pass
+		else:
+			self._expected_one_of([NUMBER, 'AUTOMATIC'])
 		# Parse function options (which can appear in any order)
-		valid = [
-			'NUMBLOCKPAGES',
-			'PAGESIZE',
-			'EXTENDED',
-			'EXCEPT',
-			'NOT',
-		]
-		while True:
-			if not valid:
-				break
+		valid = set(['NUMBLOCKPAGES', 'PAGESIZE', 'EXTENDED', 'EXCEPT', 'NOT'])
+		while valid:
 			t = self._match_one_of(valid)
 			if t:
 				t = t[1]
@@ -3038,14 +4190,30 @@ class SQLFormatter(BaseFormatter):
 				self._expect_sequence(['EXTENDED', 'STORAGE'])
 				valid.remove('EXTENDED')
 
-	def _parse_create_distinct_type_statement(self):
-		"""Parses a CREATE DISTINCT TYPE statement"""
-		# CREATE DISTINCT TYPE already matched
-		self._parse_type_name()
-		self._expect('AS')
-		self._parse_datatype()
-		self._match_sequence(['WITH', 'COMPARISONS'])
-	
+	def _parse_create_database_partition_group_statement(self):
+		"""Parses an CREATE DATABASE PARTITION GROUP statement"""
+		# CREATE [DATABASE PARTITION GROUP|NODEGROUP] already matched
+		self._expect(IDENTIFIER)
+		if self._match('ON'):
+			if self._match('ALL'):
+				self._expect_one_of(['DBPARTITIONNUMS', 'NODES'])
+			else:
+				self._parse_db_partitions_clause(size=False)
+
+	def _parse_create_event_monitor_statement(self):
+		"""Parses a CREATE EVENT MONITOR statement"""
+		# CREATE EVENT MONITOR already matched
+		self._expect(IDENTIFIER)
+		self._expect('FOR')
+		self._save_state()
+		try:
+			self._parse_wlm_event_monitor()
+		except ParseError:
+			self._restore_state()
+			self._parse_nonwlm_event_monitor()
+		else:
+			self._forget_state()
+
 	def _parse_create_function_statement(self):
 		"""Parses a CREATE FUNCTION statement"""
 		# CREATE FUNCTION already matched
@@ -3073,6 +4241,7 @@ class SQLFormatter(BaseFormatter):
 		valid = set([
 			'ALLOW',
 			'CALLED',
+			'CARDINALITY',
 			'CONTAINS',
 			'DBINFO',
 			'DETERMINISTIC',
@@ -3094,12 +4263,8 @@ class SQLFormatter(BaseFormatter):
 			'STATIC',
 			'THREADSAFE',
 			'TRANSFORM',
+			'VARIANT',
 		])
-		# It's all too difficult trying to track exactly what can still be
-		# specified in a CREATE FUNCTION statement (given the different types
-		# of SQL, external scalar, external table, etc). Here we simply loop
-		# round accepting any valid argument without tracking which we've seen
-		# before
 		while True:
 			# Ambiguity: INHERIT SPECIAL REGISTERS (which appears in the
 			# variable order options) and INHERIT ISOLATION LEVEL (which must
@@ -3109,13 +4274,21 @@ class SQLFormatter(BaseFormatter):
 				t = self._match_one_of(valid)
 				if t:
 					t = t[1]
+					# Note that matches aren't removed from valid, because it's
+					# simply too complex to figure out what option disallows
+					# other options in many cases
 				else:
 					# break would skip the except and else blocks
 					raise ParseBacktrack()
 				if t == 'ALLOW':
 					self._expect('PARALLEL')
+					if self._match_sequence(['EXECUTE', 'ON', 'ALL']):
+						self._match_sequence(['DATABASE', 'PARTITIONS'])
+						self._expect_sequence(['RESULT', 'TABLE', 'DISTRIBUTED'])
 				elif t == 'CALLED':
 					self._expect_sequence(['ON', 'NULL', 'INPUT'])
+				elif t == 'CARDINALITY':
+					self._expect(NUMBER)
 				elif t == 'CONTAINS':
 					self._expect('SQL')
 				elif t == 'DBINFO':
@@ -3149,7 +4322,7 @@ class SQLFormatter(BaseFormatter):
 					elif t == 'FINAL':
 						self._expect('CALL')
 				elif t == 'NOT':
-					self._expect_one_of(['DETERMINISTIC', 'FENCED', 'THREADSAFE'])
+					self._expect_one_of(['DETERMINISTIC', 'FENCED', 'THREADSAFE', 'VARIANT'])
 				elif t == 'NULL':
 					self._expect('CALL')
 				elif t == 'PARAMETER':
@@ -3157,7 +4330,7 @@ class SQLFormatter(BaseFormatter):
 						self._expect_one_of(['ASCII', 'UNICODE'])
 					else:
 						self._expect('STYLE')
-						self._expect_one_of(['DB2GENERAL', 'JAVA', 'SQL'])
+						self._expect_one_of(['DB2GENERAL', 'DB2GENERL', 'JAVA', 'SQL', 'DB2SQL'])
 				elif t == 'READS':
 					self._expect_sequence(['SQL', 'DATA'])
 				elif t == 'RETURNS':
@@ -3187,6 +4360,8 @@ class SQLFormatter(BaseFormatter):
 					pass
 				elif t == 'TRANSFORM':
 					self._expect_sequence(['GROUP', IDENTIFIER])
+				elif t == 'VARIANT':
+					pass
 				self._newline()
 			except ParseBacktrack:
 				# NOTE: This block only gets called for ParseBacktrack errors.
@@ -3214,6 +4389,29 @@ class SQLFormatter(BaseFormatter):
 			self._parse_return_statement()
 			self._outdent()
 
+	def _parse_create_function_mapping_statement(self):
+		"""Parses a CREATE FUNCTION MAPPING statement"""
+		# CREATE FUNCTION MAPPING already matched
+		if not self._match('FOR'):
+			self._expect_sequence([IDENTIFIER, 'FOR'])
+		if not self._match('SPECIFIC'):
+			self._parse_function_name()
+			self._expect('(')
+			self._parse_datatype_list()
+			self._expect(')')
+		else:
+			self._parse_function_name()
+		self._expect('SERVER')
+		self._parse_remote_server()
+		if self._match('OPTIONS'):
+			self._parse_federated_options()
+		self._match_sequence(['WITH', 'INFIX'])
+
+	def _parse_create_histogram_template_statement(self):
+		"""Parses a CREATE HISTOGRAM TEMPLATE statement"""
+		# CREATE HISTOGRAM TEMPLATE already matched
+		self._expect_sequence([IDENTIFIER, 'HIGH', 'BIN', 'VALUE', NUMBER])
+
 	def _parse_create_index_statement(self, unique):
 		"""Parses a CREATE INDEX statement"""
 		# CREATE [UNIQUE] INDEX already matched
@@ -3221,7 +4419,6 @@ class SQLFormatter(BaseFormatter):
 		self._indent()
 		self._expect('ON')
 		self._parse_table_name()
-		# Parse column list (with optional order indicators)
 		self._expect('(')
 		self._indent()
 		while True:
@@ -3233,33 +4430,79 @@ class SQLFormatter(BaseFormatter):
 				self._newline()
 		self._outdent()
 		self._expect(')')
-		# Parse optional include columns
-		if self._match('INCLUDE'):
-			self._newline(-1)
-			self._expect('(')
-			self._indent()
-			self._parse_ident_list(newlines=True)
-			self._outdent()
-			self._expect(')')
-		# Parse index options
-		if self._match_one_of(['ALLOW', 'DISALLOW']):
-			self._expect_sequence(['REVERSE', 'SCANS'])
-
-	def _parse_create_partition_group_statement(self):
-		"""Parses an CREATE DATABASE PARTITION GROUP statement"""
-		# CREATE [DATABASE PARTITION GROUP|NODEGROUP] already matched
-		self._expect(IDENTIFIER)
-		if self._match('ON'):
-			if self._match('ALL'):
-				self._expect_one_of(['DBPARTITIONNUMS', 'NODES'])
+		self._match_sequence(['IN', IDENTIFIER])
+		valid = set([
+			'SPECIFICATION',
+			'INCLUDE',
+			'CLUSTER',
+			'PCTFREE',
+			'LEVEL2',
+			'MINPCTUSED',
+			'ALLOW',
+			'DISALLOW',
+			'PAGE',
+			'COLLECT'
+		])
+		while valid:
+			t = self._match_one_of(valid)
+			if t:
+				self._newline(-1)
+				t = t[1]
+				valid.remove(t)
 			else:
-				self._parse_db_partitions_clause(size=False)
-	
+				break
+			if t == 'SPECIFICATION':
+				self._expect('ONLY')
+			elif t == 'INCLUDE':
+				self._expect('(')
+				self._indent()
+				self._parse_ident_list(newlines=True)
+				self._outdent()
+				self._expect(')')
+			elif t == 'CLUSTER':
+				pass
+			elif t == 'PCTFREE' or t == 'MINPCTUSED':
+				self._expect(NUMBER)
+			elif t == 'LEVEL2':
+				self._expect_sequence(['PCTFREE', NUMBER])
+			elif t == 'ALLOW' or t == 'DISALLOW':
+				valid.discard('ALLOW')
+				valid.discard('DISALLOW')
+				self._expect_sequence(['REVERSE', 'SCANS'])
+			elif t == 'PAGE':
+				self._expect('SPLIT')
+				self._expect_one_of(['SYMMETRIC', 'HIGH', 'LOW'])
+			elif t == 'COLLECT':
+				self._match('SAMPLED')
+				self._match('DETAILED')
+				self._expect('STATISTICS')
+
+	def _parse_create_nickname_statement(self):
+		"""Parses a CREATE NICKNAME statement"""
+		# CREATE NICKNAME already matched
+		self._parse_nickname_name()
+		if self._match('FOR'):
+			self._parse_remote_object_name()
+		else:
+			self._parse_table_definition(aligntypes=True, federated=True)
+			self._expect_sequence(['FOR', 'SERVER', IDENTIFIER])
+		if self._match('OPTIONS'):
+			self._parse_federated_options()
+
 	def _parse_create_procedure_statement(self):
 		"""Parses a CREATE PROCEDURE statement"""
 		# CREATE PROCEDURE already matched
 		self._parse_procedure_name()
-		if self._match('('):
+		if self._match('SOURCE'):
+			self._parse_source_object_name()
+			if self._match('('):
+				self._expect(')')
+			elif self._match('NUMBER'):
+				self._expect_sequence(['OF', 'PARAMETERS', NUMBER])
+			if self._match('UNIQUE'):
+				self._expect(STRING)
+			self.expect_sequence(['FOR', 'SERVER', IDENTIFIER])
+		elif self._match('('):
 			if not self._match(')'):
 				while True:
 					self._match_one_of(['IN', 'OUT', 'INOUT'])
@@ -3297,16 +4540,18 @@ class SQLFormatter(BaseFormatter):
 			'PARAMETER',
 			'PROGRAM',
 			'READS',
+			'RESULT',
 			'SPECIFIC',
 			'THREADSAFE',
+			'WITH',
 		])
-		# It's all too difficult trying to track exactly what can still be
-		# specified in a CREATE PROCEDURE statement. Here we simply loop round
-		# accepting any valid argument without tracking which we've seen before
 		while True:
 			t = self._match_one_of(valid)
 			if t:
 				t = t[1]
+				# Note that matches aren't removed from valid, because it's
+				# simply too complex to figure out what option disallows other
+				# options in many cases
 			else:
 				break
 			if t == 'CALLED':
@@ -3348,22 +4593,46 @@ class SQLFormatter(BaseFormatter):
 					self._expect_one_of(['ASCII', 'UNICODE'])
 				else:
 					self._expect('STYLE')
-					if self._expect_one_of(['DB2GENERAL', 'DB2SQL', 'GENERAL', 'JAVA', 'SQL'])[1] == 'GENERAL':
+					p = self._expect_one_of([
+						'DB2GENERAL',
+						'DB2GENERL',
+						'DB2DARI',
+						'DB2SQL',
+						'GENERAL',
+						'SIMPLE',
+						'JAVA',
+						'SQL'
+					])[1]
+					if p == 'GENERAL':
+						self._match_sequence(['WITH', 'NULLS'])
+					elif p == 'SIMPLE':
+						self._expect('CALL')
 						self._match_sequence(['WITH', 'NULLS'])
 			elif t == 'PROGRAM':
 				self._expect('TYPE')
 				self._expect_one_of(['SUB', 'MAIN'])
 			elif t == 'READS':
 				self._expect_sequence(['SQL', 'DATA'])
+			elif t == 'RESULT':
+				self._expect_sequence(['SETS', NUMBER])
 			elif t == 'SPECIFIC':
 				self._expect(IDENTIFIER)
 			elif t == 'THREADSAFE':
 				pass
+			elif t == 'WITH':
+				self._expect_sequence(['RETURN', 'TO'])
+				self._expect_one_of(['CALLER', 'CLIENT'])
+				self._expect('ALL')
 			self._newline()
 		self._outdent()
 		self._expect('BEGIN')
 		self._parse_procedure_compound_statement()
-	
+
+	def _parse_create_role_statement(self):
+		"""Parses a CREATE ROLE statement"""
+		# CREATE ROLE already matched
+		self._expect(IDENTIFIER)
+
 	def _parse_create_schema_statement(self):
 		"""Parses a CREATE SCHEMA statement"""
 		# CREATE SCHEMA already matched
@@ -3381,17 +4650,65 @@ class SQLFormatter(BaseFormatter):
 				elif self._match('VIEW'):
 					self._parse_create_view_statement()
 				elif self._match('INDEX'):
-					self._parse_create_index_statement()
+					self._parse_create_index_statement(unique=False)
+				elif self._match_sequence(['UNIQUE', 'INDEX']):
+					self._parse_create_index_statement(unique=True)
 				else:
-					self._expected_one_of(['TABLE', 'VIEW', 'INDEX'])
-			elif self._match('COMMENT'):
-				self._expect('ON')
+					self._expected_one_of(['TABLE', 'VIEW', 'INDEX', 'UNIQUE'])
+			elif self._match_sequence(['COMMENT', 'ON']):
 				self._parse_comment_statement()
 			elif self._match('GRANT'):
 				self._parse_grant_statement()
 			else:
 				break
-	
+
+	def _parse_create_security_label_component_statement(self):
+		"""Parses a CREATE SECURITY LABEL COMPONENT statement"""
+		# CREATE SECURITY LABEL COMPONENT already matched
+		self._expect(IDENTIFIER)
+		if self._match('ARRAY'):
+			self._expect('[')
+			while True:
+				self._expect(STRING)
+				if not self._match(','):
+					break
+			self._expect(']')
+		elif self._match('SET'):
+			self._expect('{')
+			while True:
+				self._expect(STRING)
+				if not self._match(','):
+					break
+			self._expect('}')
+		elif self._match('TREE'):
+			self._expect_sequence(['(', STRING, 'ROOT'])
+			while self._match(','):
+				self._expect_sequence([STRING, 'UNDER', STRING])
+			self._expect(')')
+
+	def _parse_create_security_label_statement(self):
+		"""Parses a CREATE SECURITY LABEL statement"""
+		# CREATE SECURITY LABEL already matched
+		self._parse_security_label_name()
+		while True:
+			self._expect_sequence(['COMPONENT', IDENTIFIER, STRING])
+			while self._match_sequence([',', STRING]):
+				pass
+			if not self._match(','):
+				break
+
+	def _parse_create_security_policy_statement(self):
+		"""Parses a CREATE SECURITY POLICY statement"""
+		# CREATE SECURITY POLICY already matched
+		self._expect_sequence([IDENTIFIER, 'COMPONENTS'])
+		while True:
+			self._expect(IDENTIFIER)
+			if not self._match(','):
+				break
+		self._expect_sequence(['WITH', 'DB2LBACRULES'])
+		if self._match_one_of(['OVERRIDE', 'RESTRICT']):
+			self._expect_sequence(['NOT', 'AUTHORIZED', 'WRITE', 'SECURITY', 'LABEL'])
+
 	def _parse_create_sequence_statement(self):
 		"""Parses a CREATE SEQUENCE statement"""
 		# CREATE SEQUENCE already matched
@@ -3400,6 +4717,203 @@ class SQLFormatter(BaseFormatter):
 			self._parse_datatype()
 		self._parse_identity_options()
 
+	def _parse_create_service_class_statement(self):
+		"""Parses a CREATE SERVICE CLASS statement"""
+		# CREATE SERVICE CLASS already matched
+		self._expect(IDENTIFIER)
+		if self._match('UNDER'):
+			self._expect(IDENTIFIER)
+		if self._match_sequence(['AGENT', 'PRIORITY']):
+			self._expect_one_of(['DEFAULT', NUMBER])
+		if self._match_sequence(['PREFETCH', 'PRIORITY']):
+			self._expect_one_of(['DEFAULT', 'HIGH', 'MEDIUM', 'LOW'])
+		if self._match_sequence(['OUTBOUND', 'CORRELATOR']):
+			self._expect_one_of(['NONE', STRING])
+		if self._match_sequence(['COLLECT', 'ACTIVITY', 'DATA']):
+			self._parse_collect_activity_data_clause(alter=True)
+		if self._match_sequence(['COLLECT', 'AGGREGATE', 'ACTIVITY', 'DATA']):
+			self._expect_one_of(['NONE', 'BASE', 'EXTENDED'])
+		if self._match_sequence(['COLLECT', 'AGGREGATE', 'REQUEST', 'DATA']):
+			self._expect_one_of(['NONE', 'BASE'])
+		self._parse_histogram_template_clause()
+		self._match_one_of(['ENABLE', 'DISABLE'])
+	
+	def _parse_create_server_statement(self):
+		"""Parses a CREATE SERVER statement"""
+		# CREATE SERVER already matched
+		self._expect(IDENTIFIER)
+		if self._match('TYPE'):
+			self._expect(IDENTIFIER)
+		if self._match('VERSION'):
+			self._parse_server_version()
+		if self._match('WRAPPER'):
+			self._expect(IDENTIFIER)
+		if self._match('AUTHORIZATION'):
+			self._expect_sequence([IDENTIFIER, 'PASSWORD', IDENTIFIER])
+		if self._match('OPTIONS'):
+			self._parse_federated_options()
+
+	def _parse_create_table_statement(self):
+		"""Parses a CREATE TABLE statement"""
+		# CREATE TABLE already matched
+		self._parse_table_name()
+		if self._match('LIKE'):
+			self._parse_relation_name()
+			self._parse_copy_options()
+		else:
+			# Ambiguity: Open parentheses could indicate an optional field list
+			# preceding a materialized query or staging table definition
+			reraise = False
+			self._save_state()
+			try:
+				# Try parsing CREATE TABLE ... AS first
+				if self._match('('):
+					self._indent()
+					self._parse_ident_list(newlines=True)
+					self._outdent()
+					self._expect(')')
+				if self._match('AS'):
+					reraise = True
+					self._expect('(')
+					self._indent()
+					self._parse_full_select()
+					self._outdent()
+					self._expect(')')
+					self._parse_refreshable_table_options()
+				elif self._match('FOR'):
+					reraise = True
+					self._parse_relation_name()
+					self._expected_sequence(['PROPAGATE', 'IMMEDIATE'])
+				else:
+					self._expected_one_of(['AS', 'FOR'])
+			except ParseError:
+				# If that fails, rewind and parse other CREATE TABLE forms
+				self._restore_state()
+				if reraise: raise
+				self._parse_table_definition(aligntypes=True, federated=False)
+			else:
+				self._forget_state()
+		# Parse table option suffixes. Not all of these are valid with
+		# particular table definitions, but it's too difficult to sort out
+		# which are valid for what we've parsed so far
+		valid = set([
+			'ORGANIZE',
+			'DATA',
+			'IN',
+			'INDEX',
+			'LONG',
+			'DISTRIBUTE',
+			'PARTITION',
+			'COMPRESS',
+			'VALUE',
+			'WITH',
+			'NOT',
+			'CCSID',
+			'SECURITY',
+			'OPTIONS',
+		])
+		while valid:
+			t = self._match_one_of(valid)
+			if t:
+				t = t[1]
+				valid.remove(t)
+			else:
+				break
+			if t == 'ORGANIZE':
+				self._expect('BY')
+				if self._match_sequence(['KEY', 'SEQUENCE']):
+					self._expect('(')
+					while True:
+						self._expect(IDENTIFIER)
+						if self._match('STARTING'):
+							self._match('FROM')
+							self._expect(NUMBER)
+						self._expect('ENDING')
+						self._match('AT')
+						self._expect(NUMBER)
+						if not self._match(','):
+							break
+					self._expect(')')
+					self._expect_one_of(['ALLOW', 'DISALLOW'])
+					self._expect('OVERFLOW')
+					if self._match('PCTFREE'):
+						self._expect(INTEGER)
+				else:
+					self._match('DIMENSIONS')
+					self._expect('(')
+					while True:
+						if self._match('('):
+							self._parse_ident_list()
+							self._expect(')')
+						else:
+							self._expect(IDENTIFIER)
+						if not self._match(','):
+							break
+			elif t == 'DATA':
+				self._expect('CAPTURE')
+				self._expect_one_of(['CHANGES', 'NONE'])
+			elif t == 'IN':
+				self._parse_ident_list()
+				if self._match('NO'):
+					self._expect('CYCLE')
+				else:
+					self._match('CYCLE')
+			elif t == 'LONG':
+				self._expect('IN')
+				self._parse_ident_list()
+			elif t == 'INDEX':
+				self._expect_sequence(['IN', IDENTIFIER])
+			elif t == 'DISTRIBUTE':
+				self._expect('BY')
+				if self._match('REPLICATION'):
+					pass
+				else:
+					self._match('HASH')
+					self._expect('(')
+					self._parse_ident_list()
+					self._expect(')')
+			elif t == 'PARTITION':
+				self._expect('BY')
+				self._match('RANGE')
+				self._expect('(')
+				while True:
+					self._expect(IDENTIFIER)
+					if self._match('NULLS'):
+						self._expect_one_of(['FIRST', 'LAST'])
+					if not self._match(','):
+						break
+				self._expect_sequence([')', '('])
+				while True:
+					if self._match('PARTITION'):
+						self._expect(IDENTIFIER)
+					self._parse_partition_boundary()
+					if self._match('IN'):
+						self._expect(IDENTIFIER)
+					elif self._match('EVERY'):
+						if self._match('('):
+							self._expect(NUMBER)
+							self._parse_duration_label()
+							self._expect(')')
+						else:
+							self._expect(NUMBER)
+							self._parse_duration_label()
+					if not self._match(','):
+						break
+			elif t == 'COMPRESS':
+				self._expect_one_of(['NO', 'YES'])
+			elif t == 'VALUE':
+				self._expect('COMPRESSION')
+			elif t == 'WITH':
+				self._expect_sequence(['RESTRICT', 'ON', 'DROP'])
+			elif t == 'NOT':
+				self._expect_sequence(['LOGGED', 'INITIALLY'])
+			elif t == 'CCSID':
+				self._expect_one_of(['ASCII', 'UNICODE'])
+			elif t == 'SECURITY':
+				self._expect_sequence(['POLICY', IDENTIFIER])
+			elif t == 'OPTIONS':
+				self._parse_federated_options(alter=False)
+
 	def _parse_create_tablespace_statement(self, tbspacetype='REGULAR'):
 		"""Parses a CREATE TABLESPACE statement"""
 		# CREATE TABLESPACE already matched
@@ -3407,6 +4921,8 @@ class SQLFormatter(BaseFormatter):
 		if self._match('IN'):
 			if self._match('DATABASE'):
 				self._expect_sequence(['PARTITION', 'GROUP'])
+			elif self._match('NODEGROUP'):
+				pass
 			self._expect(IDENTIFIER)
 		if self._match('PAGESIZE'):
 			self._expect(NUMBER)
@@ -3455,116 +4971,29 @@ class SQLFormatter(BaseFormatter):
 			self._expect_sequence(['TABLE', 'RECOVERY'])
 			self._expect_one_of(['ON', 'OFF'])
 	
-	def _parse_create_table_statement(self):
-		"""Parses a CREATE TABLE statement"""
-
-		def parse_copy_options():
-			# XXX Tidy this up (shouldn't just be a 2-time loop)
-			for i in xrange(2):
-				if self._match_one_of(['INCLUDING', 'EXCLUDING']):
-					if self._match('COLUMN'):
-						self._expect('DEFAULTS')
-					elif self._match('DEFAULTS'):
-						pass
-					elif self._match('IDENTITY'):
-						self._match_sequence(['COLUMN', 'ATTRIBUTES'])
-
-		# CREATE TABLE already matched
-		self._parse_table_name()
-		if self._match('LIKE'):
-			self._parse_relation_name()
-			parse_copy_options()
-		else:
-			# Ambiguity: Open parentheses could indicate an optional field list
-			# preceding a CREATE ... AS statement.
-			reraise = False
-			self._save_state()
-			try:
-				# Try parsing CREATE TABLE ... AS first
-				if self._match('('):
-					self._indent()
-					self._parse_ident_list(newlines=True)
-					self._outdent()
-					self._expect(')')
-				self._expect('AS')
-				reraise = True
-				self._expect('(')
-				self._indent()
-				self._parse_full_select()
-				self._outdent()
-				self._expect(')')
-				if self._match('WITH'):
-					self._expect_sequence(['NO', 'DATA'])
-					parse_copy_options()
-				else:
-					valid = [
-						'DATA',
-						'REFRESH',
-						'ENABLE',
-						'DISABLE',
-						'MAINTAINED',
-					]
-					while True:
-						if not valid:
-							break
-						t = self._match_one_of(valid)
-						if t:
-							t = t[1]
-							valid.remove(t)
-						else:
-							break
-						if t == 'DATA':
-							self._expect_sequence(['INITIALLY', 'DEFERRED'])
-						elif t == 'REFRESH':
-							self._expect_one_of(['DEFERRED', 'IMMEDIATE'])
-						elif t in ('ENABLE', 'DISABLE'):
-							self._expect_sequence(['QUERY', 'OPTIMIZATION'])
-							if t == 'ENABLE':
-								valid.remove('DISABLE')
-							else:
-								valid.remove('ENABLE')
-						elif t == 'MAINTAINED':
-							self._expect('BY')
-							self._expect_one_of(['SYSTEM', 'USER', 'FEDERATED_TOOL'])
-			except ParseError:
-				# If that fails, rewind and parse other CREATE TABLE forms
-				self._restore_state()
-				if reraise: raise
-				self._expect('(')
-				self._indent()
-				while True:
-					self._save_state()
-					try:
-						# Try parsing a table constraint definition
-						self._parse_table_constraint()
-					except ParseError:
-						# If that fails, rewind and try and parse a column definition
-						self._restore_state()
-						self._parse_column_definition(aligntypes=True)
-					else:
-						self._forget_state()
-					if not self._match(','):
-						break
-					else:
-						self._newline()
-				self._outdent()
-				self._vapply()
-				self._expect(')')
-			else:
-				self._forget_state()
-		# XXX Try and handle the bizarre [WITH NO DATA/IN/copy-options]
-		# ordering when parsing CREATE TABLE ... AS
-		# XXX Implement additional options (VALUE COMPRESSION, REPLICATED, WITH
-		# RESTRICT, NOT LOGGED, ORGANIZE BY, etc.)
-		# Parse tablespaces
-		if self._match('IN'):
+	def _parse_create_threshold_statement(self):
+		"""Parses a CREATE THRESHOLD statement"""
+		# CREATE THRESHOLD already matched
+		self._expect_sequence([IDENTIFIER, 'FOR'])
+		if self._match('SERVICE'):
+			self._expect_sequence(['CLASS', IDENTIFIER])
+			if self._match('UNDER'):
+				self._expect(IDENTIFIER)
+		elif self._match('WORKLOAD'):
 			self._expect(IDENTIFIER)
-			if self._match('INDEX'):
-				self._expect('IN')
-				self._expect(IDENTIFIER)
-			if self._match('LONG'):
-				self._expect('IN')
-				self._expect(IDENTIFIER)
+		elif not self._match('DATABASE'):
+			self._expected_one_of(['SERVICE', 'WORKLOAD', 'DATABASE'])
+		self._expect_sequence(['ACTIVITIES', 'ENFORCEMENT'])
+		if self._match('DATABASE'):
+			self._match('PARTITION')
+		elif self._match('WORKLOAD'):
+			self._expect('OCCURRENCE')
+		else:
+			self._expected_one_of(['DATABASE', 'WORKLOAD'])
+		self._match_one_of(['ENABLE', 'DISABLE'])
+		self._expect('WHEN')
+		self._parse_threshold_predicate()
+		self._parse_threshold_exceeded_actions()
 
 	def _parse_create_trigger_statement(self):
 		"""Parses a CREATE TRIGGER statement"""
@@ -3591,9 +5020,7 @@ class SQLFormatter(BaseFormatter):
 		if self._match('REFERENCING'):
 			self._newline(-1)
 			valid = ['OLD', 'NEW', 'OLD_TABLE', 'NEW_TABLE']
-			while True:
-				if not valid:
-					break
+			while valid:
 				if len(valid) == 4:
 					t = self._expect_one_of(valid)
 				else:
@@ -3637,6 +5064,121 @@ class SQLFormatter(BaseFormatter):
 			self._parse_routine_statement()
 			if not label: self._outdent()
 
+	def _parse_create_trusted_context_statement(self):
+		"""Parses a CREATE TRUSTED CONTEXT statement"""
+		# CREATE TRUSTED CONTEXT already matched
+		self._expect_sequence([IDENTIFIER, 'BASED', 'UPON', 'CONNECTION', 'USING'])
+		valid = set([
+			'SYSTEM',
+			'ATTRIBUTES',
+			'NO',
+			'DEFAULT',
+			'DISABLE',
+			'ENABLE',
+			'WITH',
+		])
+		while valid:
+			t = self._match_one_of(valid)
+			if t:
+				t = t[1]
+				valid.remove(t)
+			else:
+				break
+			if t == 'SYSTEM':
+				self._expect_sequence(['AUTHID', IDENTIFIER])
+			elif t == 'ATTRIBUTES':
+				self._expect('(')
+				if self._match('ADDRESS'):
+					self._expect(STRING)
+					if self._match('WITH'):
+						self._expect_sequence(['ENCRYPTION', STRING])
+				elif self._match('ENCRYPTION'):
+					self._expect(STRING)
+				if not self._match(','):
+					break
+				self._expect(')')
+			elif t == 'NO':
+				valid.remove('DEFAULT')
+				self._expect_sequence(['DEFAULT', 'ROLE'])
+			elif t == 'DEFAULT':
+				valid.remove('NO')
+				self._expect_sequence(['ROLE', IDENTIFIER])
+			elif t == 'DISABLE':
+				valid.remove('ENABLE')
+			elif t == 'ENABLE':
+				valid.remove('DISABLE')
+			elif t == 'WITH':
+				self._expect_sequence(['USE', 'FOR'])
+				if not self._match('PUBLIC'):
+					self._expect(IDENTIFIER)
+					if self._match('ROLE'):
+						self._expect(IDENTIFIER)
+				if self._match_one_of(['WITH', 'WITHOUT']):
+					self._expect('AUTHENTICATION')
+
+	def _parse_create_type_statement(self):
+		"""Parses a CREATE DISTINCT TYPE statement"""
+		# CREATE DISTINCT TYPE already matched
+		self._parse_type_name()
+		self._expect('AS')
+		self._parse_datatype()
+		if self._match('ARRAY'):
+			self._expect('[')
+			self._match(NUMBER)
+			self._expect(']')
+		else:
+			self._match_sequence(['WITH', 'COMPARISONS'])
+
+	def _parse_create_type_mapping_statement(self):
+		"""Parses a CREATE TYPE MAPPING statement"""
+		# CREATE TYPE MAPPING already matched
+		self._match(IDENTIFIER)
+		valid = set(['FROM', 'TO'])
+		t = self._expect_one_of(valid)[1]
+		valid.remove(t)
+		self._match_sequence(['LOCAL', 'TYPE'])
+		self._parse_datatype()
+		self._expect_one_of(valid)
+		self._parse_remote_server()
+		self._match('REMOTE')
+		self._expect('TYPE')
+		self._parse_type_name()
+		if self._match('FOR'):
+			self._expect_sequence(['BIT', 'DATA'])
+		elif self._match('('):
+			if self._match('['):
+				self._expect_sequence([NUMBER, '..', NUMBER])
+				self._expect(']')
+			else:
+				self._expect(NUMBER)
+			if self._match(','):
+				if self._match('['):
+					self._expect_sequence([NUMBER, '..', NUMBER])
+					self._expect(']')
+				else:
+					self._expect(NUMBER)
+			self._expect(')')
+			if self._match('P'):
+				self._expect_one_of(['=', '>', '<', '>=', '<=', '<>'])
+				self._expect('S')
+
+	def _parse_create_user_mapping_statement(self):
+		"""Parses a CREATE USER MAPPING statement"""
+		# CREATE USER MAPPING already matched
+		self._expect('FOR')
+		self._expect_one_of(['USER', IDENTIFIER])
+		self._expect_sequence(['SERVER', IDENTIFIER])
+		self._expect('OPTIONS')
+		self._parse_federated_options(alter=False)
+
+	def _parse_create_variable_statement(self):
+		"""Parses a CREATE VARIABLE statement"""
+		# CREATE VARIABLE already matched
+		self._expect(IDENTIFIER)
+		self._parse_datatype()
+		if self._match('DEFAULT'):
+			self._parse_expression()
+
 	def _parse_create_view_statement(self):
 		"""Parses a CREATE VIEW statement"""
 		# CREATE VIEW already matched
@@ -3649,6 +5191,98 @@ class SQLFormatter(BaseFormatter):
 		self._expect('AS')
 		self._newline()
 		self._parse_query()
+		valid = set(['CASCADED', 'LOCAL', 'CHECK', 'ROW', 'NO'])
+		while valid:
+			if not self._match('WITH'):
+				break
+			t = self._expect_one_of(valid)[1]
+			valid.remove(t)
+			if t in ('CASCADED', 'LOCAL', 'CHECK'):
+				valid.discard('CASCADED')
+				valid.discard('LOCAL')
+				valid.discard('CHECK')
+				if t != 'CHECK':
+					self._expect('CHECK')
+				self._expect('OPTION')
+			elif t == 'NO':
+				valid.remove('ROW')
+				self._expect_sequence(['ROW', 'MOVEMENT'])
+			elif t == 'ROW':
+				valid.remove('NO')
+				self._expect('MOVEMENT')
+
+	def _parse_create_work_action_set_statement(self):
+		"""Parses a CREATE WORK ACTION SET statement"""
+		# CREATE WORK ACTION SET already matched
+		self._expect(IDENTIFIER)
+		self._expect('FOR')
+		if self._match('SERVICE'):
+			self._expect_sequence(['CLASS', IDENTIFIER])
+		elif self._match('DATABASE'):
+			pass
+		else:
+			self._expected_one_of(['SERVICE', 'DATABASE'])
+		self._expect_sequence(['USING', 'WORK', 'CLASS', 'SET', IDENTIFIER])
+		if self._match('('):
+			self._expect_sequence(['WORK', 'ACTION', IDENTIFIER, 'ON', 'WORK', 'CLASS', IDENTIFIER])
+			self._parse_action_types_clause()
+			self._parse_histogram_template_clause()
+			self._match_one_of(['ENABLE', 'DISABLE'])
+			if not self._match(','):
+				break
+			self._expect(')')
+		self._match_one_of(['ENABLE', 'DISABLE'])
+
+	def _parse_create_work_class_set_statement(self):
+		"""Parses a CREATE WORK CLASS SET statement"""
+		# CREATE WORK CLASS SET already matched
+		self._expect(IDENTIFIER)
+		if self._match('('):
+			while True:
+				self._match_sequence(['WORK', 'CLASS'])
+				self._expect(IDENTIFIER)
+				self._parse_work_attributes()
+				self._match('POSITION'):
+					self._parse_position_clause()
+				if not self._match(','):
+					break
+			self._expect(')')
+
+	def _parse_create_workload_statement(self):
+		"""Parses a CREATE WORKLOAD statement"""
+		# CREATE WORKLOAD statement
+		self._expect(IDENTIFIER)
+		first = True
+		while True:
+			# Repeatedly try and match connection attributes. Only raise a
+			# parse error if the first match fails
+			try:
+				self._parse_connection_attributes()
+			except ParseError, e:
+				if first:
+					raise e
+			else:
+				first = False
+		self._match_one_of(['ENABLE', 'DISABLE'])
+		if self._match_one_of(['ALLOW', 'DISALLOW']):
+			self._expect_sequence(['DB', 'ACCESS'])
+		if self._match_sequence(['SERVICE', 'CLASS']):
+			if not self._match('SYSDEFAULTUSERCLASS'):
+				self._expect(IDENTIFIER)
+				self._match_sequence(['UNDER', IDENTIFIER])
+		if self._match('POSITION'):
+			self._parse_position_clause()
+		if self._match_sequence(['COLLECT', 'ACTIVITY', 'DATA']):
+			self._parse_collect_activity_data_clause(alter=True)
+
+	def _parse_create_wrapper_statement(self):
+		"""Parses a CREATE WRAPPER statement"""
+		# CREATE WRAPPER already matched
+		self._expect(IDENTIFIER)
+		if self._match('LIBRARY'):
+			self._expect(STRING)
+		if self._match('OPTIONS'):
+			self._parse_federated_options(alter=False)
 
 	def _parse_declare_cursor_statement(self):
 		"""Parses a top-level DECLARE CURSOR statement"""
@@ -3658,6 +5292,48 @@ class SQLFormatter(BaseFormatter):
 		self._expect('FOR')
 		self._newline()
 		self._parse_select_statement()
+
+	def _parse_declare_global_temporary_table_statement(self):
+		"""Parses a DECLARE GLOBAL TEMPORARY TABLE statement"""
+		# DECLARE GLOBAL TEMPORARY TABLE already matched
+		self._parse_table_name()
+		if self._match('LIKE'):
+			self._parse_table_name()
+			self._parse_copy_options()
+		elif self._match('AS'):
+			self._parse_full_select()
+			self._expect_sequence(['DEFINITION', 'ONLY'])
+			self._parse_copy_options()
+		else:
+			self._parse_table_definition(aligntypes=True, federated=False)
+		valid = set(['ON', 'NOT', 'WITH', 'IN', 'PARTITIONING'])
+		while valid:
+			t = self._match_one_of(valid)
+			if t:
+				t = t[1]
+				valid.remove(t)
+			else:
+				break
+			if t == 'ON':
+				self._expect('COMMIT')
+				self._expect_one_of(['DELETE', 'PRESERVE'])
+				self._expect('ROWS')
+			elif t == 'NOT':
+				self._expect('LOGGED')
+				if self._match('ON'):
+					self._expect('ROLLBACK')
+					self._expect_one_of(['DELETE', 'PRESERVE'])
+					self._expect('ROWS')
+			elif t == 'WITH':
+				self._expect('REPLACE')
+			elif t == 'IN':
+				self._expect(IDENTIFIER)
+			elif t == 'PARTITIONING':
+				self._expect('KEY')
+				self._expect('(')
+				self._parse_ident_list()
+				self._expect(')')
+				self._match_sequence(['USING', 'HASHING'])
 
 	def _parse_delete_statement(self):
 		"""Parses a DELETE statement"""
@@ -3686,8 +5362,10 @@ class SQLFormatter(BaseFormatter):
 			self._parse_ident_type_list(newlines=True)
 			self._outdent()
 			self._expect(')')
+			# XXX Is SET required for an assignment clause? The syntax diagram
+			# doesn't think so...
 			if self._match('SET'):
-				self._parse_set_clause(allowdefault=False)
+				self._parse_assignment_clause(allowdefault=False)
 		except ParseError:
 			# If that fails, rewind and parse an optional INCLUDE or an
 			# optional table correlation
@@ -3702,7 +5380,7 @@ class SQLFormatter(BaseFormatter):
 				self._expect(')')
 				if self._match('SET'):
 					self._newline(-1)
-					self._parse_set_clause(allowdefault=False)
+					self._parse_assignment_clause(allowdefault=False)
 			else:
 				self._parse_table_correlation()
 		else:
@@ -3715,72 +5393,136 @@ class SQLFormatter(BaseFormatter):
 		if self._match('WITH'):
 			self._newline(-1)
 			self._expect_one_of(['RR', 'RS', 'CS', 'UR'])
-	
+
 	def _parse_drop_statement(self):
 		"""Parses a DROP statement"""
 		# DROP already matched
-		if self._match('ALIAS'):
-			self._parse_alias_name()
-		elif self._match('BUFFERPOOL'):
-			self._expect(IDENTIFIER)
-		elif self._match('EVENT'):
-			self._expect('MONITOR')
-			self._expect(IDENTIFIER)
-		elif self._match_one_of(['TABLE', 'VIEW']):
-			self._match('HIERARCHY')
+		if self._match_one_of(['ALIAS', 'SYNONYM', 'TABLE', 'VIEW', 'NICKNAME']):
 			self._parse_relation_name()
-		elif self._match_one_of(['TABLESPACE', 'TABLESPACES']):
-			self._parse_ident_list()
-		elif self._match('TRIGGER'):
-			self._expect(IDENTIFIER)
-		elif self._match('INDEX'):
-			if self._match('EXTENSION'):
-				self._parse_index_name()
-				self._expect('RESTRICT')
-			else:
-				self._parse_index_name()
+		elif self._match_sequence(['FUNCTION', 'MAPPING']):
+			self._parse_function_name()
 		elif self._match_one_of(['FUNCTION', 'PROCEDURE']):
 			self._parse_routine_name()
 			if self._match('('):
 				self._parse_datatype_list()
 				self._expect(')')
-			self._match('RESTRICT')
 		elif self._match('SPECIFIC'):
 			self._expect_one_of(['FUNCTION', 'PROCEDURE'])
 			self._parse_routine_name()
-			self._match('RESTRICT')
+		elif self._match('INDEX'):
+			self._parse_index_name()
+		elif self._match('SEQUENCE'):
+			self._parse_sequence_name()
+		elif self._match_sequence(['SERVICE', 'CLASS']):
+			self._expect(IDENTIFIER)
+			if self._match('UNDER'):
+				self._expect(IDENTIFIER)
+		elif self._match_one_of(['TABLESPACE', 'TABLESPACES']):
+			self._parse_ident_list()
 		elif self._match_one_of(['DATA', 'DISTINCT']):
 			self._expect('TYPE')
 			self._parse_type_name()
+		elif self._match_sequence(['TYPE', 'MAPPING']):
+			self._parse_type_name()
 		elif self._match('TYPE'):
 			self._parse_type_name()
-		elif self._match('SCHEMA'):
+		elif self._match_sequence(['USER', 'MAPPING']):
+			self._expect('FOR')
+			self._expect_one_of(['USER', IDENTIFIER])
+			self._expect_sequence(['SERVER', IDENTIFIER])
+		elif (self._match_sequence(['AUDIT', 'POLICY']) or
+			self._match('BUFFERPOOL') or
+			self._match_sequence(['EVENT', 'MONITOR']) or
+			self._match_sequence(['HISTORGRAM', 'TEMPLATE']) or
+			self._match('NODEGROUP') or
+			self._match_sequence(['DATABASE', 'PARTITION', 'GROUP']) or
+			self._match('ROLE') or
+			self._match('SCHEMA') or
+			self._match_sequence(['SECURITY', 'LABEL', 'COMPONENT']) or
+			self._match_sequence(['SECURITY', 'LABEL']) or
+			self._match_sequence(['SECURITY', 'POLICY']) or
+			self._match('SERVER') or
+			self._match('THRESHOLD') or
+			self._match('TRIGGER') or
+			self._match_sequence(['TRUSTED', 'CONTEXT']) or
+			self._match('VARIABLE') or
+			self._match_sequence(['WORK', 'ACTION', 'SET']) or
+			self._match_sequence(['WORK', 'CLASS', 'SET']) or
+			self._match('WORKLOAD') or
+			self._match('WRAPPER')):
 			self._expect(IDENTIFIER)
-			self._match('RESTRICT')
 		else:
 			self._expected_one_of([
 				'ALIAS',
+				'AUDIT',
 				'BUFFERPOOL',
-				'TABLE',
-				'VIEW',
-				'INDEX',
-				'FUNCTION',
-				'PROCEDURE',
-				'SPECIFIC',
-				'DISTINCT',
 				'DATA',
-				'TYPE',
-				'SCHEMA',
-				'TABLESPACE',
-				'TRIGGER',
+				'DATABASE',
+				'DISTINCT',
 				'EVENT',
+				'FUNCTION',
+				'HISTOGRAM',
+				'INDEX',
+				'NICKNAME',
+				'NODEGROUP',
+				'PROCEDURE',
+				'ROLE',
+				'SCHEMA',
+				'SECURITY',
+				'SEQUENCE',
+				'SERVICE',
+				'SPECIFIC',
+				'TABLE',
+				'TABLESPACE',
+				'THRESHOLD',
+				'TRIGGER',
+				'TRUSTED',
+				'TYPE',
+				'USER',
+				'VARIABLE',
+				'VIEW',
+				'WORK',
+				'WORKLOAD',
+				'WRAPPER',
 			])
+		# XXX Strictly speaking, this isn't DB2 syntax - it's generic SQL. But
+		# if we stick to strict DB2 semantics, this routine becomes boringly
+		# long...
+		self._match_one_of(['RESTRICT', 'CASCADE'])
 
 	def _parse_execute_immediate_statement(self):
 		"""Parses an EXECUTE IMMEDIATE statement in a procedure"""
 		# EXECUTE IMMEDIATE already matched
 		self._parse_expression()
-	
+
+	def _parse_explain_statement(self):
+		"""Parses an EXPLAIN statement"""
+		# EXPLAIN already matched
+		if self._match('PLAN'):
+			self._match('SELECTION')
+		else:
+			self._expect_one_of(['PLAN', 'ALL'])
+		if self._match_one_of(['FOR', 'WITH']):
+			self._expect('SNAPSHOT')
+		self._match_sequence(['WITH', 'REOPT', 'ONCE'])
+		self._match_sequence(['SET', 'QUERYNO', '=', NUMBER])
+		self._match_sequence(['SET', 'QUEYRTAG', '=', STRING])
+		self._expect('FOR')
+		if self._match('DELETE'):
+			self._parse_delete_statement()
+		elif self._match('INSERT'):
+			self._parse_insert_statement()
+		elif self._match('MERGE'):
+			self._parse_merge_statement()
+		elif self._match_sequence(['REFRESH', 'TABLE']):
+			self._parse_refresh_table_statement()
+		elif self._match_sequence(['SET', 'INTEGRITY']):
+			self._parse_set_integrity_statement()
+		elif self._match('UPDATE'):
+			self._parse_update_statement()
+		else:
+			self._parse_select_statement()
+
 	def _parse_fetch_statement(self):
 		"""Parses a FETCH FROM statement in a procedure"""
 		# FETCH already matched
@@ -3793,7 +5535,13 @@ class SQLFormatter(BaseFormatter):
 			self._expect(IDENTIFIER)
 		else:
 			self._expected_one_of(['INTO', 'USING'])
-			
+
+	def _parse_flush_optimization_profile_cache_statement(self):
+		"""Parses a FLUSH OPTIMIZATION PROFILE CACHE statement"""
+		# FLUSH OPTIMIZATION PROFILE CACHE already matched
+		if not self._match('ALL'):
+			self._parse_subschema_name()
+
 	def _parse_for_statement(self, inproc, label=None):
 		"""Parses a FOR-loop in a dynamic compound statement"""
 		# FOR already matched
@@ -3801,11 +5549,13 @@ class SQLFormatter(BaseFormatter):
 		if inproc:
 			reraise = False
 			self._indent()
+			# Ambiguity: IDENTIFIER vs. select-statement
 			self._save_state()
 			try:
 				self._expect_sequence([IDENTIFIER, 'CURSOR'])
 				reraise = True
-				self._match_sequence(['WITH', 'HOLD'])
+				if self._match_one_of(['WITH', 'WITHOUT']):
+					self._expect('HOLD')
 				self._expect('FOR')
 			except ParseError:
 				self._restore_state()
@@ -3833,11 +5583,15 @@ class SQLFormatter(BaseFormatter):
 		self._expect('FOR')
 		if label:
 			self._match((IDENTIFIER, label))
-	
+
+	def _parse_free_locator_statement(self):
+		"""Parses a FREE LOCATOR statement"""
+		# FREE LOCATOR already matched
+		self._parse_ident_list()
+
 	def _parse_get_diagnostics_statement(self):
 		"""Parses a GET DIAGNOSTICS statement in a dynamic compound statement"""
-		# GET already matched
-		self._expect('DIAGNOSTICS')
+		# GET DIAGNOSTICS already matched
 		if self._match('EXCEPTION'):
 			self._expect((NUMBER, 1))
 			while True:
@@ -3848,7 +5602,7 @@ class SQLFormatter(BaseFormatter):
 		else:
 			self._expect_sequence([IDENTIFIER, '='])
 			self._expect(['ROW_COUNT', 'DB2_RETURN_STATUS'])
-	
+
 	def _parse_goto_statement(self):
 		"""Parses a GOTO statement in a procedure"""
 		# GOTO already matched
@@ -3898,7 +5652,7 @@ class SQLFormatter(BaseFormatter):
 			else:
 				break
 		self._expect('IF')
-	
+
 	def _parse_insert_statement(self):
 		"""Parses an INSERT statement"""
 		# INSERT already matched
@@ -3934,12 +5688,12 @@ class SQLFormatter(BaseFormatter):
 		"""Parses an ITERATE statement within a loop"""
 		# ITERATE already matched
 		self._match(IDENTIFIER)
-	
+
 	def _parse_leave_statement(self):
 		"""Parses a LEAVE statement within a loop"""
 		# LEAVE already matched
 		self._match(IDENTIFIER)
-	
+
 	def _parse_lock_table_statement(self):
 		"""Parses a LOCK TABLE statement"""
 		# LOCK TABLE already matched
@@ -3966,7 +5720,7 @@ class SQLFormatter(BaseFormatter):
 		self._expect('LOOP')
 		if label:
 			self._match((IDENTIFIER, label))
-	
+
 	def _parse_merge_statement(self):
 		# MERGE already matched
 		self._expect('INTO')
@@ -3992,7 +5746,7 @@ class SQLFormatter(BaseFormatter):
 			self._indent()
 			if self._match('UPDATE'):
 				self._expect('SET')
-				self._parse_set_clause(allowdefault=True)
+				self._parse_assignment_clause(allowdefault=True)
 			elif self._match('INSERT'):
 				if self._match('('):
 					self._parse_ident_list()
@@ -4019,22 +5773,50 @@ class SQLFormatter(BaseFormatter):
 		"""Parses an OPEN cursor statement"""
 		# OPEN already matched
 		self._expect(IDENTIFIER)
-	
+
 	def _parse_refresh_table_statement(self):
 		"""Parses a REFRESH TABLE statement"""
 		# REFRESH TABLE already matched
 		while True:
 			self._parse_table_name()
+			queryopt = False
+			if self._match('ALLOW'):
+				if self._match_one_of(['NO', 'READ', 'WRITE']):
+					self._expect('ACCESS')
+				elif self._match_sequence(['QUERY', 'OPTIMIZATION']):
+					queryopt = True
+					self._expect_sequence(['USING', 'REFRESH', 'DEFERRED', 'TABLES'])
+					self._match_sequence(['WITH', 'REFRESH', 'AGE', 'ANY'])
+				else:
+					self._expected_one_of(['NO', 'READ', 'WRITE', 'QUERY'])
+			if not queryopt:
+				if self._match_sequence(['USING', 'REFRESH', 'DEFERRED', 'TABLES']):
+					self._match_sequence(['WITH', 'REFRESH', 'AGE', 'ANY'])
 			if not self._match(','):
 				break
 		self._match('NOT')
 		self._match('INCREMENTAL')
-	
+
 	def _parse_release_savepoint_statement(self):
 		"""Parses a RELEASE SAVEPOINT statement"""
 		# RELEASE [TO] SAVEPOINT already matched
 		self._expect(IDENTIFIER)
-	
+
+	def _parse_rename_tablespace_statement(self):
+		"""Parses a RENAME TABLESPACE statement"""
+		# RENAME TABLESPACE already matched
+		self._expect_sequence([IDENTIFIER, 'TO', IDENTIFIER])
+
+	def _parse_rename_statement(self):
+		"""Parses a RENAME statement"""
+		# RENAME already matched
+		if self._match('INDEX'):
+			self._parse_index_name()
+		else:
+			self._match('TABLE')
+			self._parse_table_name()
+		self._expect_sequence(['TO', IDENTIFIER])
+
 	def _parse_repeat_statement(self, inproc, label=None):
 		"""Parses a REPEAT-loop in a procedure"""
 		# REPEAT already matched
@@ -4055,7 +5837,7 @@ class SQLFormatter(BaseFormatter):
 		self._expect_sequence(['END', 'REPEAT'])
 		if label:
 			self._match((IDENTIFIER, label))
-	
+
 	def _parse_resignal_statement(self):
 		"""Parses a RESIGNAL statement in a dynamic compound statement"""
 		# SIGNAL already matched
@@ -4068,7 +5850,7 @@ class SQLFormatter(BaseFormatter):
 		if self._match('SET'):
 			self._expect_sequence(['MESSAGE_TEXT', '='])
 			self._parse_expression()
-	
+
 	def _parse_return_statement(self):
 		"""Parses a RETURN statement in a compound statement"""
 		# RETURN already matched
@@ -4087,7 +5869,7 @@ class SQLFormatter(BaseFormatter):
 		"""Parses a REVOKE statement"""
 		# REVOKE already matched
 		self._parse_grant_revoke(grant=False)
-	
+
 	def _parse_rollback_statement(self):
 		"""Parses a ROLLBACK statement"""
 		# ROLLBACK already matched
@@ -4095,7 +5877,7 @@ class SQLFormatter(BaseFormatter):
 		if self._match('TO'):
 			self._expect('SAVEPOINT')
 			self._match(IDENTIFIER)
-	
+
 	def _parse_savepoint_statement(self):
 		"""Parses a SAVEPOINT statement"""
 		# SAVEPOINT already matched
@@ -4103,15 +5885,15 @@ class SQLFormatter(BaseFormatter):
 		self._match('UNIQUE')
 		self._expect_sequence(['ON', 'ROLLBACK', 'RETAIN', 'CURSORS'])
 		self._match_sequence(['ON', 'ROLLBACK', 'RETAIN', 'LOCKS'])
-	
-	def _parse_select_statement(self):
+
+	def _parse_select_statement(self, allowinto=False):
 		"""Parses a SELECT statement"""
-		self._parse_query()
+		# A top-level select-statement never permits DEFAULTS, although it
+		# might permit INTO in a procedure
+		self._parse_query(allowdefault=False, allowinto=allowinto)
 		# Parse optional SELECT attributes (FOR UPDATE, WITH isolation, etc.)
 		valid = ['WITH', 'FOR', 'OPTIMIZE']
-		while True:
-			if not valid:
-				break
+		while valid:
 			t = self._match_one_of(valid)
 			if t:
 				self._newline(-1)
@@ -4172,9 +5954,7 @@ class SQLFormatter(BaseFormatter):
 				'FULL',
 				'FOR',
 			]
-			while True:
-				if not valid:
-					break
+			while valid:
 				t = self._match_one_of(valid)
 				if t:
 					t = t[1]
@@ -4228,7 +6008,7 @@ class SQLFormatter(BaseFormatter):
 						])
 					if not self._match(','):
 						break
-		
+
 		# SET INTEGRITY already matched
 		self._expect('FOR')
 		# Ambiguity: SET INTEGRITY ... CHECKED and SET INTEGRITY ... UNCHECKED
@@ -4295,7 +6075,7 @@ class SQLFormatter(BaseFormatter):
 			pass
 		else:
 			self._expected_one_of(['WAIT', 'NOT', 'NULL', NUMBER])
-	
+
 	def _parse_set_path_statement(self):
 		"""Parses a SET PATH statement"""
 		# SET [CURRENT] PATH already matched
@@ -4314,34 +6094,47 @@ class SQLFormatter(BaseFormatter):
 				self._expect_one_of([IDENTIFIER, STRING])
 			if not self._match(','):
 				break
-	
+
 	def _parse_set_schema_statement(self):
 		"""Parses a SET SCHEMA statement"""
 		# SET [CURRENT] SCHEMA already matched
 		self._match('=')
 		self._expect_one_of([
 			(REGISTER, 'USER'),
+			(REGISTER, 'SESSION_USER'),
+			(REGISTER, 'SYSTEM_USER'),
 			(REGISTER, 'CURRENT_USER'),
 			IDENTIFIER,
 			STRING,
 		])
-	
+
 	def _parse_set_session_auth_statement(self):
 		"""Parses a SET SESSION AUTHORIZATION statement"""
 		# SET SESSION AUTHORIZATION already matched
 		self._match('=')
 		self._expect_one_of([
 			(REGISTER, 'USER'),
+			(REGISTER, 'SYSTEM_USER'),
 			(REGISTER, 'CURRENT_USER'),
 			IDENTIFIER,
 			STRING,
 		])
 		self._match_sequence(['ALLOW', 'ADMINISTRATION'])
 
-	def _parse_set_statement(self, inproc):
+	def _parse_set_statement(self):
 		"""Parses a SET statement in a dynamic compound statement"""
 		# SET already matched
 		if self._match('CURRENT'):
+			if self._match_sequence(['DECFLOAT', 'ROUNDING', 'MODE']):
+				self._match('=')
+				self._expect_one_of([
+					'ROUND_CEILING',
+					'ROUND_FLOOR',
+					'ROUND_DOWN',
+					'ROUND_HALF_EVEN',
+					'ROUND_HALF_UP',
+					STRING,
+				])
 			if self._match('DEGREE'):
 				self._match('=')
 				self._expect(STRING)
@@ -4365,10 +6158,15 @@ class SQLFormatter(BaseFormatter):
 					self._expect_one_of(['NO', 'YES', 'EXPLAIN', 'REOPT'])
 				else:
 					self._expected_one_of(['MODE', 'SNAPSHOT'])
+			elif self._match_sequence(['FEDERATED', 'ASYNCHRONY']):
+				self._match('=')
+				self._expect_one_of(['ANY', NUMBER])
+			elif self._match_sequence(['IMPLICIT', 'XMLPARSE', 'OPTION']):
+				self._match('=')
+				self._expect(STRING)
 			elif self._match('ISOLATION'):
 				self._parse_set_isolation_statement()
-			elif self._match('LOCK'):
-				self._expect('TIMEOUT')
+			elif self._match_sequence(['LOCK', 'TIMEOUT']):
 				self._parse_set_lock_timeout_statement()
 			elif self._match('MAINTAINED'):
 				self._match('TABLE')
@@ -4387,12 +6185,16 @@ class SQLFormatter(BaseFormatter):
 						self._match_sequence(['FOR', 'OPTIMIZATION'])
 					if not self._match(','):
 						break
-			elif self._match('QUERY'):
-				self._expect('OPTIMIZATION')
+			elif self._match_sequence(['MDC', 'ROLLOUT', 'MODE']):
+				self._expect_one_of(['NONE', 'IMMEDATE', 'DEFERRED'])
+			elif self._match_sequence(['OPTIMIZATION', 'PROFILE']):
+				self._match('=')
+				if not self._match(STRING) and not self._match('NULL'):
+					self._parse_subschema_name()
+			elif self._match_sequence(['QUERY', 'OPTIMIZATION']):
 				self._match('=')
 				self._expect(NUMBER)
-			elif self._match('REFRESH'):
-				self._expect('AGE')
+			elif self._match_sequence(['REFRESH', 'AGE']):
 				self._match('=')
 				self._expect_one_of(['ANY', NUMBER])
 			elif self._match('PATH'):
@@ -4411,37 +6213,39 @@ class SQLFormatter(BaseFormatter):
 					'PATH',
 					'SCHEMA',
 				])
+		elif self._match_sequence(['COMPILATION', 'ENVIRONMENT']):
+			self._match('=')
+			self._expect(IDENTIFIER)
 		elif self._match('ISOLATION'):
 			self._parse_set_isolation_statement()
-		elif self._match('ENCRYPTION'):
-			self._expect('PASSWORD')
+		elif self._match_sequence(['ENCRYPTION', 'PASSWORD']):
 			self._match('=')
 			self._expect(STRING)
-		elif self._match('INTEGRITY'):
-			self._parse_set_integrity_statement()
+		elif self._match_sequence(['EVENT', 'MONITOR']):
+			self._expect(IDENTIFIER)
+			self._expect('STATE')
+			self._match('=')
+			self._expect(NUMBER)
+		elif self._match('PASSTHRU'):
+			self._expect_one_of(['RESET', IDENTIFIER])
 		elif self._match('PATH'):
 			self._parse_set_path_statement()
+		elif self._match('ROLE'):
+			self._match('=')
+			self._expect(IDENTIFIER)
 		elif self._match('CURRENT_PATH'):
 			self._parse_set_path_statement()
 		elif self._match('SCHEMA'):
 			self._parse_set_schema_statement()
-		elif self._match('SESSION'):
-			self._expect('AUTHORIZATION')
+		elif self._match_sequence(['SERVER', 'OPTION']):
+			self._expect_sequence([IDENTIFIER, 'TO', STRING, 'FOR', 'SERVER', IDENTIFIER])
+		elif self._match_sequence(['SESSION', 'AUTHORIZATION']):
 			self._parse_set_session_auth_statement()
 		elif self._match('SESSION_USER'):
 			self._parse_set_session_auth_statement()
-		elif inproc:
-			self._parse_set_clause(allowdefault=False)
 		else:
-			self._expected_one_of([
-				'CURRENT',
-				'ISOLATION',
-				'ENCRYPTION',
-				'INTEGRITY',
-				'PATH',
-				'SCHEMA',
-			])
-	
+			self._parse_assignment_clause(allowdefault=True)
+
 	def _parse_signal_statement(self):
 		"""Parses a SIGNAL statement in a dynamic compound statement"""
 		# SIGNAL already matched
@@ -4457,7 +6261,69 @@ class SQLFormatter(BaseFormatter):
 			# XXX Ensure syntax only valid within a trigger
 			self._parse_expression()
 			self._expect(')')
-	
+
+	def _parse_transfer_ownership_statement(self):
+		"""Parses a TRANSFER OWNERSHIP statement"""
+		# TRANSFER OWNERSHIP already matched
+		self._expect('OF')
+		if self._match_one_of(['ALIAS', 'TABLE', 'VIEW', 'NICKNAME']):
+			self._parse_relation_name()
+		elif self._match_sequence(['FUNCTION', 'MAPPING']):
+			self._parse_function_name()
+		elif self._match_one_of(['FUNCTION', 'PROCEDURE']):
+			self._parse_routine_name()
+			if self._match('('):
+				self._parse_datatype_list()
+				self._expect(')')
+		elif self._match('SPECIFIC'):
+			self._expect_one_of(['FUNCTION', 'PROCEDURE'])
+			self._parse_routine_name()
+		elif self._match('INDEX'):
+			self._parse_index_name()
+		elif self._match('SEQUENCE'):
+			self._parse_sequence_name()
+		elif self._match('DISTINCT'):
+			self._expect('TYPE')
+			self._parse_type_name()
+		elif self._match_sequence(['TYPE', 'MAPPING']):
+			self._parse_type_name()
+		elif self._match('TYPE'):
+			self._parse_type_name()
+		elif (self._match_sequence(['EVENT', 'MONITOR']) or
+			self._match('NODEGROUP') or
+			self._match_sequence(['DATABASE', 'PARTITION', 'GROUP']) or
+			self._match('SCHEMA') or
+			self._match('TABLESPACE') or
+			self._match('TRIGGER') or
+			self._match('VARIABLE')):
+			self._expect(IDENTIFIER)
+		else:
+			self._expected_one_of([
+				'ALIAS',
+				'DATABASE',
+				'DISTINCT',
+				'EVENT',
+				'FUNCTION',
+				'INDEX',
+				'NICKNAME',
+				'NODEGROUP',
+				'PROCEDURE',
+				'SCHEMA',
+				'SEQUENCE',
+				'SPECIFIC',
+				'TABLE',
+				'TABLESPACE',
+				'TRIGGER',
+				'TYPE',
+				'VARIABLE',
+				'VIEW',
+			])
+		if self._match('USER'):
+			self._expect(IDENTIFIER)
+		else:
+			self._expect_one_of(['USER', 'SESSION_USER', 'SYSTEM_USER'])
+		self._expect_sequence(['PERSERVE', 'PRIVILEGES'])
+
 	def _parse_update_statement(self):
 		"""Parses an UPDATE statement"""
 		# UPDATE already matched
@@ -4503,7 +6369,7 @@ class SQLFormatter(BaseFormatter):
 		# Parse mandatory assignment clause allow DEFAULT values
 		self._expect('SET')
 		self._indent()
-		self._parse_set_clause(allowdefault=True)
+		self._parse_assignment_clause(allowdefault=True)
 		self._outdent()
 		if self._match('WHERE'):
 			self._indent()
@@ -4533,7 +6399,7 @@ class SQLFormatter(BaseFormatter):
 		self._expect('WHILE')
 		if label:
 			self._match((IDENTIFIER, label))
-	
+
 	# COMPOUND STATEMENTS ####################################################
 
 	def _parse_routine_statement(self):
@@ -4542,32 +6408,32 @@ class SQLFormatter(BaseFormatter):
 		# XXX Only permit ITERATE when part of a loop
 		if self._match('CALL'):
 			self._parse_call_statement()
-		elif self._match('GET'):
-			self._parse_get_diagnostics_statement()
-		elif self._match('SET'):
-			self._parse_set_statement(inproc=True)
+		elif self._match('DELETE'):
+			self._parse_delete_statement()
 		elif self._match('FOR'):
 			self._parse_for_statement(inproc=False)
-		elif self._match('WHILE'):
-			self._parse_while_statement(inproc=False)
+		elif self._match_sequence(['GET', 'DIAGNOSTICS']):
+			self._parse_get_diagnostics_statement()
 		elif self._match('IF'):
 			self._parse_if_statement(inproc=False)
-		elif self._match('SIGNAL'):
-			self._parse_signal_statement()
-		elif self._match('RETURN'):
-			self._parse_return_statement()
+		elif self._match('INSERT'):
+			self._parse_insert_statement()
 		elif self._match('ITERATE'):
 			self._parse_iterate_statement()
 		elif self._match('LEAVE'):
 			self._parse_leave_statement()
-		elif self._match('INSERT'):
-			self._parse_insert_statement()
-		elif self._match('UPDATE'):
-			self._parse_update_statement()
-		elif self._match('DELETE'):
-			self._parse_delete_statement()
 		elif self._match('MERGE'):
 			self._parse_merge_statement()
+		elif self._match('RETURN'):
+			self._parse_return_statement()
+		elif self._match('SET'):
+			self._parse_set_statement()
+		elif self._match('SIGNAL'):
+			self._parse_signal_statement()
+		elif self._match('UPDATE'):
+			self._parse_update_statement()
+		elif self._match('WHILE'):
+			self._parse_while_statement(inproc=False)
 		else:
 			try:
 				label = self._expect(LABEL)[1]
@@ -4580,7 +6446,7 @@ class SQLFormatter(BaseFormatter):
 					self._parse_while_statement(inproc=False, label=label)
 				else:
 					self._expected_one_of(['FOR', 'WHILE'])
-	
+
 	def _parse_dynamic_compound_statement(self, label=None):
 		"""Parses a dynamic compound statement"""
 		# BEGIN already matched
@@ -4614,72 +6480,65 @@ class SQLFormatter(BaseFormatter):
 		self._outdent(-1)
 		if label:
 			self._match((IDENTIFIER, label))
-	
+
 	def _parse_procedure_statement(self):
 		"""Parses a procedure statement within a procedure body"""
+		# XXX Should PREPARE be supported here?
 		try:
 			label = self._expect(LABEL)[1]
 		except ParseError:
 			label = None
 		# Procedure specific statements
-		if self._match('BEGIN'):
-			self._parse_procedure_compound_statement(label=label)
-		elif self._match('REPEAT'):
-			self._parse_repeat_statement(inproc=True, label=label)
-		elif self._match('LOOP'):
-			self._parse_loop_statement(inproc=True, label=label)
-		elif self._match('CASE'):
-			self._parse_case_statement(inproc=True)
-		elif self._match('GOTO'):
-			self._parse_goto_statement()
-		elif self._match('ALLOCATE'):
+		if self._match('ALLOCATE'):
 			self._parse_allocate_cursor_statement()
 		elif self._match('ASSOCIATE'):
 			self._parse_associate_locators_statement()
-		elif self._match('OPEN'):
-			self._parse_open_statement()
-		elif self._match('FETCH'):
-			self._parse_fetch_statement()
+		elif self._match('BEGIN'):
+			self._parse_procedure_compound_statement(label=label)
+		elif self._match('CASE'):
+			self._parse_case_statement(inproc=True)
 		elif self._match('CLOSE'):
 			self._parse_close_statement()
-		elif self._match('EXECUTE'):
-			self._expect('IMMEDIATE')
+		elif self._match_sequence(['EXECUTE', 'IMMEDIATE']):
 			self._parse_execute_immediate_statement()
+		elif self._match('FETCH'):
+			self._parse_fetch_statement()
+		elif self._match('GOTO'):
+			self._parse_goto_statement()
+		elif self._match('LOOP'):
+			self._parse_loop_statement(inproc=True, label=label)
+		elif self._match('OPEN'):
+			self._parse_open_statement()
+		elif self._match('REPEAT'):
+			self._parse_repeat_statement(inproc=True, label=label)
 		# Dynamic compound specific statements
-		elif self._match('GET'):
-			self._parse_get_diagnostics_statement()
-		elif self._match('SET'):
-			self._parse_set_statement(inproc=True)
 		elif self._match('FOR'):
 			self._parse_for_statement(inproc=True, label=label)
-		elif self._match('WHILE'):
-			self._parse_while_statement(inproc=True, label=label)
+		elif self._match_sequence(['GET', 'DIAGNOSTICS']):
+			self._parse_get_diagnostics_statement()
 		elif self._match('IF'):
 			self._parse_if_statement(inproc=True)
-		elif self._match('SIGNAL'):
-			self._parse_signal_statement()
-		elif self._match('RETURN'):
-			self._parse_return_statement()
 		elif self._match('ITERATE'):
 			self._parse_iterate_statement()
 		elif self._match('LEAVE'):
 			self._parse_leave_statement()
+		elif self._match('RETURN'):
+			self._parse_return_statement()
+		elif self._match('SET'):
+			self._parse_set_statement()
+		elif self._match('SIGNAL'):
+			self._parse_signal_statement()
+		elif self._match('WHILE'):
+			self._parse_while_statement(inproc=True, label=label)
 		# Generic SQL statements
+		elif self._match('AUDIT'):
+			self._parse_audit_statement()
 		elif self._match('CALL'):
 			self._parse_call_statement()
-		elif self._match('INSERT'):
-			self._parse_insert_statement()
-		elif self._match('UPDATE'):
-			self._parse_update_statement()
-		elif self._match('DELETE'):
-			self._parse_delete_statement()
-		elif self._match('MERGE'):
-			self._parse_merge_statement()
-		elif self._match('GRANT'):
-			self._parse_grant_statement()
-		elif self._match('COMMENT'):
-			self._expect('ON')
+		elif self._match_sequence(['COMMENT', 'ON']):
 			self._parse_comment_statement()
+		elif self._match('COMMIT'):
+			self._parse_commit_statement()
 		elif self._match('CREATE'):
 			if self._match('TABLE'):
 				self._parse_create_table_statement()
@@ -4692,27 +6551,44 @@ class SQLFormatter(BaseFormatter):
 				self._parse_create_index_statement()
 			else:
 				self._expected_one_of(['TABLE', 'VIEW', 'INDEX', 'UNIQUE'])
+		elif self._match_sequence(['DECLARE', 'GLOBAL', 'TEMPORARY', 'TABLE']):
+			self._parse_declare_global_temporary_table_statement()
+		elif self._match('DELETE'):
+			self._parse_delete_statement()
 		elif self._match('DROP'):
 			# XXX Limit this to tables, views and indexes somehow?
 			self._parse_drop_statement()
-		elif self._match('COMMIT'):
-			self._parse_commit_statement()
-		elif self._match('ROLLBACK'):
-			self._parse_rollback_statement()
-		elif self._match('REFRESH'):
-			self._expect('TABLE')
-			self._parse_refresh_table_statement()
+		elif self._match('EXPLAIN'):
+			self._parse_explain_statement()
+		elif self._match_sequence(['FLUSH', 'OPTIMIZATION', 'PROFILE', 'CACHE']):
+			self._parse_flush_optimization_profile_cache_statement()
+		elif self._match_sequence(['FREE', 'LOCATOR']):
+			self._parse_free_locator_statement()
+		elif self._match('GRANT'):
+			self._parse_grant_statement()
+		elif self._match('INSERT'):
+			self._parse_insert_statement()
+		elif self._match_sequence(['LOCK', 'TABLE']):
+			self._parse_lock_table_statement()
+		elif self._match('MERGE'):
+			self._parse_merge_statement()
 		elif self._match('RELEASE'):
 			self._match('TO')
 			self._expect('SAVEPOINT')
 			self._parse_release_savepoint_statement()
-		elif self._match('SAVEPOINT'):
-			self._parse_savepoint_statement()
 		elif self._match('RESIGNAL'):
 			self._parse_resignal_statement()
+		elif self._match('ROLLBACK'):
+			self._parse_rollback_statement()
+		elif self._match('SAVEPOINT'):
+			self._parse_savepoint_statement()
+		elif self._match_sequence(['TRANSFER', 'OWNERSHIP']):
+			self._parse_transfer_ownership_statement()
+		elif self._match('UPDATE'):
+			self._parse_update_statement()
 		else:
-			self._parse_select_statement()
-	
+			self._parse_select_statement(allowinto=True)
+
 	def _parse_procedure_compound_statement(self, label=None):
 		"""Parses a procedure compound statement (body)"""
 		# BEGIN already matched
@@ -4798,6 +6674,7 @@ class SQLFormatter(BaseFormatter):
 				self._save_state()
 				try:
 					# Try and parse a SELECT statement
+					# XXX Is SELECT INTO permitted in a DECLARE CURSOR?
 					self._parse_select_statement()
 				except ParseError:
 					# If that fails, rewind and parse a simple statement name
@@ -4856,7 +6733,7 @@ class SQLFormatter(BaseFormatter):
 		self._outdent(-1)
 		if label:
 			self._match((IDENTIFIER, label))
-	
+
 	def _parse_statement(self):
 		"""Parses a top-level statement in an SQL script"""
 		# XXX CREATE EVENT MONITOR
@@ -4876,29 +6753,79 @@ class SQLFormatter(BaseFormatter):
 					self._parse_alter_procedure_statement(specific=True)
 				else:
 					self._expected_one_of(['FUNCTION', 'PROCEDURE'])
+			elif self._match('NICKNAME'):
+				self._parse_alter_nickname_statement()
 			elif self._match('TABLESPACE'):
 				self._parse_alter_tablespace_statement()
 			elif self._match('BUFFERPOOL'):
 				self._parse_alter_bufferpool_statement()
+			elif self._match_sequence(['DATABASE', 'PARTITION', 'GROUP']):
+				self._parse_alter_partition_group_statement()
 			elif self._match('DATABASE'):
-				if self._match('PARTITION'):
-					self._expect('GROUP')
-					self._parse_alter_partition_group_statement()
-				else:
-					self._parse_alter_database_statement()
+				self._parse_alter_database_statement()
 			elif self._match('NODEGROUP'):
 				self._parse_alter_partition_group_statement()
+			elif self._match('SERVER'):
+				self._parse_alter_server()
+			elif self._match_sequence(['HISTOGRAM', 'TEMPLATE']):
+				self._parse_alter_histogram_template_statement()
+			elif self._match_sequence(['AUDIT', 'POLICY']):
+				self._parse_alter_audit_policy_statement()
+			elif self._match_sequence(['SECURITY', 'LABEL', 'COMPONENT']):
+				self._parse_alter_security_label_component_statement()
+			elif self._match_sequence(['SECURITY', 'POLICY']):
+				self._parse_alter_security_policy_statement()
+			elif self._match_sequence(['SERVICE', 'CLASS']):
+				self._parse_alter_service_class_statement()
+			elif self._match('THRESHOLD'):
+				self._parse_alter_threshold_statement()
+			elif self._match_sequence(['TRUSTED', 'CONTEXT']):
+				self._parse_alter_trusted_context_statement()
+			elif self._match_sequence(['USER', 'MAPPING']):
+				self._parse_alter_user_mapping_statement()
+			elif self._match('VIEW'):
+				self._parse_alter_view_statement()
+			elif self._match_sequence(['WORK', 'ACTION', 'SET']):
+				self._parse_alter_work_action_set_statement()
+			elif self._match_sequence(['WORK', 'CLASS', 'SET']):
+				self._parse_alter_work_class_set_statement()
+			elif self._match('WORKLOAD'):
+				self._parse_alter_workload_statement()
+			elif self._match('WRAPPER'):
+				self._parse_alter_wrapper_statement()
 			else:
 				self._expected_one_of([
-					'TABLE',
-					'SEQUENCE',
-					'FUNCTION',
-					'PROCEDURE',
-					'SPECIFIC',
-					'TABLESPACE',
+					'AUDIT',
+					'BUFFERPOOL',
 					'DATABASE',
+					'FUNCTION',
+					'HISTOGRAM',
+					'NICKNAME',
 					'NODEGROUP',
+					'PROCEDURE',
+					'SECURITY',
+					'SEQUENCE',
+					'SERVER',
+					'SERVICE',
+					'SPECIFIC',
+					'TABLE',
+					'TABLESPACE',
+					'THRESHOLD',
+					'TRUSTED',
+					'USER',
+					'VIEW',
+					'WORK',
+					'WORKLOAD',
+					'WRAPPER',
 				])
+		elif self._match('AUDIT'):
+			self._parse_audit_statement()
+		elif self._match('BEGIN'):
+			self._parse_dynamic_compound_statement()
+		elif self._match_sequence(['COMMENT', 'ON']):
+			self._parse_comment_statement()
+		elif self._match('COMMIT'):
+			self._parse_commit_statement()
 		elif self._match('CREATE'):
 			if self._match('TABLE'):
 				self._parse_create_table_statement()
@@ -4906,16 +6833,17 @@ class SQLFormatter(BaseFormatter):
 				self._parse_create_view_statement()
 			elif self._match('ALIAS'):
 				self._parse_create_alias_statement()
-			elif self._match('UNIQUE'):
-				self._expect('INDEX')
+			elif self._match_sequence(['UNIQUE', 'INDEX']):
 				self._parse_create_index_statement(unique=True)
 			elif self._match('INDEX'):
 				self._parse_create_index_statement(unique=False)
 			elif self._match('DISTINCT'):
 				self._expect('TYPE')
-				self._parse_create_distinct_type_statement()
+				self._parse_create_type_statement()
 			elif self._match('SEQUENCE'):
 				self._parse_create_sequence_statement()
+			elif self._match_sequence(['FUNCTION', 'MAPPING']):
+				self._parse_create_function_mapping_statement()
 			elif self._match('FUNCTION'):
 				self._parse_create_function_statement()
 			elif self._match('PROCEDURE'):
@@ -4924,19 +6852,56 @@ class SQLFormatter(BaseFormatter):
 				self._parse_create_tablespace_statement()
 			elif self._match('BUFFERPOOL'):
 				self._parse_create_bufferpool_statement()
-			elif self._match('DATABASE'):
-				self._expect('PARTITION')
-				self._expect('GROUP')
-				self._parse_create_partition_group_statement()
+			elif self._match_sequence(['DATABASE', 'PARTITION', 'GROUP']):
+				self._parse_create_database_partition_group_statement()
 			elif self._match('NODEGROUP'):
-				self._parse_create_partition_group_statement()
+				self._parse_create_database_partition_group_statement()
 			elif self._match('TRIGGER'):
 				self._parse_create_trigger_statement()
 			elif self._match('SCHEMA'):
 				self._parse_create_schema_statement()
+			elif self._match_sequence(['AUDIT', 'POLICY']):
+				self._parse_create_audit_policy_statement()
+			elif self._match_sequence(['EVENT', 'MONITOR']):
+				self._parse_create_event_monitor_statement()
+			elif self._match_sequence(['HISTOGRAM', 'TEMPLATE']):
+				self._parse_create_histogram_template_statement()
+			elif self._match('NICKNAME'):
+				self._parse_create_nickname_statement()
+			elif self._match('ROLE'):
+				self._parse_create_role_statement()
+			elif self._match_sequence(['SECURITY', 'LABEL', 'COMPONENT']):
+				self._parse_create_security_label_component_statement()
+			elif self._match_sequence(['SECURITY', 'LABEL']):
+				self._parse_create_security_label_statement()
+			elif self._match_sequence(['SECURITY', 'POLICY']):
+				self._parse_create_security_policy_statement()
+			elif self._match_sequence(['SERVICE', 'CLASS']):
+				self._parse_create_service_class_statement()
+			elif self._match('SERVER'):
+				self._parse_create_server_statement()
+			elif self._match('THRESHOLD'):
+				self._parse_create_threshold_statement()
+			elif self._match_sequence(['TRUSTED', 'CONTEXT']):
+				self._parse_create_trusted_context_statement()
+			elif self._match_sequence(['TYPE', 'MAPPING']):
+				self._parse_create_type_mapping_statement()
+			elif self._match_sequence(['USER', 'MAPPING']):
+				self._parse_create_user_mapping_statement()
+			elif self._match('VARIABLE'):
+				self._parse_create_variable_statement()
+			elif self._match_sequence(['WORK', 'ACTION', 'SET']):
+				self._parse_create_work_action_set_statement()
+			elif self._match_sequence(['WORK', 'CLASS', 'SET']):
+				self._parse_create_work_class_set_statement()
+			elif self._match('WORKLOAD'):
+				self._parse_create_workload_statement()
+			elif self._match('WRAPPER'):
+				self._parse_create_wrapper_statement()
 			else:
 				tbspacetype = self._match_one_of([
 					'REGULAR',
+					'LONG',
 					'LARGE',
 					'TEMPORARY',
 					'USER',
@@ -4947,55 +6912,88 @@ class SQLFormatter(BaseFormatter):
 						self._expect('TEMPORARY')
 					elif tbspacetype == 'TEMPORARY':
 						tbspacetype = 'SYSTEM'
+					elif tbspacetype == 'LONG':
+						tbspacetype = 'LARGE'
 					self._expect('TABLESPACE')
 					self._parse_create_tablespace_statement(tbspacetype)
 				else:
 					self._expected_one_of([
 						'ALIAS',
+						'AUDIT',
 						'BUFFERPOOL',
-						'TABLE',
-						'VIEW',
-						'INDEX',
-						'UNIQUE',
-						'DISTINCT',
-						'SEQUENCE',
-						'FUNCTION',
-						'PROCEDURE',
-						'TABLESPACE',
-						'TRIGGER',
 						'DATABASE',
+						'DISTINCT',
+						'EVENT',
+						'FUNCTION',
+						'INDEX',
+						'NICKNAME',
 						'NODEGROUP',
+						'PROCEDURE',
+						'ROLE',
+						'SECURITY',
+						'SEQUENCE',
+						'SERVER',
+						'SERVICE',
+						'TABLE',
+						'TABLESPACE',
+						'THRESHOLD',
+						'TRIGGER',
+						'TRUSTED',
+						'TYPE',
+						'UNIQUE',
+						'USER',
+						'VARIABLE',
+						'VIEW',
+						'WORK',
+						'WORKLOAD',
+						'WRAPPER',
 					])
-		elif self._match('DROP'):
-			self._parse_drop_statement()
-		elif self._match('DECLARE'):
-			self._parse_declare_cursor_statement()
-		elif self._match('BEGIN'):
-			self._parse_dynamic_compound_statement()
-		elif self._match('COMMIT'):
-			self._parse_commit_statement()
-		elif self._match('ROLLBACK'):
-			self._parse_rollback_statement()
-		elif self._match('INSERT'):
-			self._parse_insert_statement()
-		elif self._match('UPDATE'):
-			self._parse_update_statement()
 		elif self._match('DELETE'):
 			self._parse_delete_statement()
-		elif self._match('MERGE'):
-			self._parse_merge_statement()
+		elif self._match('DROP'):
+			self._parse_drop_statement()
+		elif self._match_sequence(['DECLARE', 'GLOBAL', 'TEMPORARY', 'TABLE']):
+			self._parse_declare_global_temporary_table_statement()
+		elif self._match('DECLARE'):
+			self._parse_declare_cursor_statement()
+		elif self._match('EXPLAIN'):
+			self._parse_explain_statement()
+		elif self._match_sequence(['FLUSH', 'OPTIMIZATION', 'PROFILE', 'CACHE']):
+			self._parse_flush_optimization_profile_cache_statement()
+		elif self._match_sequence(['FREE', 'LOCATOR']):
+			self._parse_free_locator_statement()
 		elif self._match('GRANT'):
 			self._parse_grant_statement()
+		elif self._match('INSERT'):
+			self._parse_insert_statement()
+		elif self._match_sequence(['LOCK', 'TABLE']):
+			self._parse_lock_table_statement()
+		elif self._match('MERGE'):
+			self._parse_merge_statement()
+		elif self._match_sequence(['REFRESH', 'TABLE']):
+			self._parse_refresh_table_statement()
+		elif self._match('RELEASE'):
+			self._match('TO')
+			self._expect('SAVEPOINT')
+			self._parse_release_savepoint_statement()
+		elif self._match_sequence(['RENAME', 'TABLESPACE']):
+			self._parse_rename_tablespace_statement()
+		elif self._match('RENAME'):
+			self._parse_rename_statement()
 		elif self._match('REVOKE'):
 			self._parse_revoke_statement()
-		elif self._match('COMMENT'):
-			self._expect('ON')
-			self._parse_comment_statement()
-		elif self._match('LOCK'):
-			self._expect('TABLE')
-			self._parse_lock_table_statement()
+		elif self._match('ROLLBACK'):
+			self._parse_rollback_statement()
+		elif self._match('SAVEPOINT'):
+			self._parse_savepoint_statement()
+		elif self._match_sequence(['SET', 'INTEGRITY']):
+			self._parse_set_integrity_statement()
 		elif self._match('SET'):
-			self._parse_set_statement(inproc=False)
+			self._parse_set_statement()
+		elif self._match_sequence(['TRANSFER', 'OWNERSHIP']):
+			self._parse_transfer_ownership_statement()
+		elif self._match('UPDATE'):
+			self._parse_update_statement()
 		else:
 			self._parse_select_statement()
 

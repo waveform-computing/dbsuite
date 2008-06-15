@@ -75,18 +75,44 @@ A number of classes which tokenize specific SQL dialects are derived from the
 base SQLTokenizer class. Currently the following classes are defined:
 
     Class               Dialect
-    --------------------------------------------------------
+    --------------------------------------------------
     SQLTokenizerBase    Base tokenizer class
     SQL92Tokenizer      ANSI SQL-92
     SQL99Tokenizer      ANSI SQL-99
     SQL2003Tokenizer    ANSI SQL-2003
-    DB2UDBSQLTokenizer  IBM DB2 UDB for Linux/Unix/Windows 8
-    DB2ZOSSQLTokenizer  IBM DB2 UDB for z/OS 8
+    DB2LUWTokenizer     IBM DB2 for Linux/UNIX/Windows
+    DB2ZOSTokenizer     IBM DB2 for z/OS
 """
 
+import re
 import sys
 import decimal
+import codecs
 from db2makedoc.sql.dialects import *
+
+__all__ = [
+	'EOF',
+	'ERROR',
+	'WHITESPACE',
+	'COMMENT',
+	'KEYWORD',
+	'IDENTIFIER',
+	'NUMBER',
+	'STRING',
+	'OPERATOR',
+	'LABEL',
+	'PARAMETER',
+	'TERMINATOR',
+	'SQLTokenizerBase',
+	'SQL92Tokenizer',
+	'SQL99Tokenizer',
+	'SQL2003Tokenizer',
+	'DB2LUWTokenizer',
+	'DB2ZOSTokenizer',
+]
+
+utf8decoder = codecs.getdecoder('UTF-8')
+utf8decode = lambda s: utf8decoder(s)[0]
 
 _tokenval = 0
 
@@ -119,7 +145,7 @@ def new_tokens(count):
 
 class SQLTokenizerBase(object):
 	"""Base SQL tokenizer class."""
-	
+
 	def __init__(self):
 		"""Initializes an instance of the class."""
 		self.keywords = set(sql92_keywords)
@@ -603,7 +629,7 @@ class SQL92Tokenizer(SQLTokenizerBase):
 
 class SQL99Tokenizer(SQLTokenizerBase):
 	"""ANSI SQL-99 tokenizer class."""
-	
+
 	def __init__(self):
 		super(SQL99Tokenizer, self).__init__()
 		self.keywords = set(sql99_keywords)
@@ -611,19 +637,19 @@ class SQL99Tokenizer(SQLTokenizerBase):
 
 class SQL2003Tokenizer(SQLTokenizerBase):
 	"""ANSI SQL-2003 tokenizer class."""
-	
+
 	def __init__(self):
 		super(SQL2003Tokenizer, self).__init__()
 		self.keywords = set(sql2003_keywords)
 		self.identchars = set(sql2003_identchars)
 
-class DB2ZOSSQLTokenizer(SQLTokenizerBase):
+class DB2ZOSTokenizer(SQLTokenizerBase):
 	"""IBM DB2 UDB for z/OS tokenizer class."""
-	
+
 	def __init__(self):
-		super(DB2ZOSSQLTokenizer, self).__init__()
-		self.keywords = set(ibmdb2zos_keywords)
-		self.identchars = set(ibmdb2zos_identchars)
+		super(DB2ZOSTokenizer, self).__init__()
+		self.keywords = set(db2zos_keywords)
+		self.identchars = set(db2zos_identchars)
 
 	def _handle_not(self):
 		"""Parses characters meaning "NOT" (! and ^) in the source."""
@@ -639,7 +665,7 @@ class DB2ZOSSQLTokenizer(SQLTokenizerBase):
 		else:
 			self._next()
 			self._add_token(OPERATOR, negatedop)
-	
+
 	def _handle_hexstring(self):
 		"""Parses a hexstring literal in the source."""
 		if self.nextchar == "'":
@@ -647,7 +673,7 @@ class DB2ZOSSQLTokenizer(SQLTokenizerBase):
 			try:
 				s = self._extract_string()
 				if len(s) % 2 != 0:
-					raise ValueError("Hex-string must have an even length")
+					raise ValueError('Hex-string must have an even length')
 				s = ''.join(chr(int(s[i:i + 2], 16)) for i in xrange(0, len(s), 2))
 			except ValueError, e:
 				self._add_token(ERROR, str(e))
@@ -655,25 +681,47 @@ class DB2ZOSSQLTokenizer(SQLTokenizerBase):
 				self._add_token(STRING, s)
 		else:
 			self._handle_ident()
-	
+
+	def _handle_unihexstring(self):
+		"""Parses a unicode hexstring literal in the source."""
+		if self.nextchar.upper() == 'X':
+			self._next()
+			if self.nextchar == "'":
+				self._next()
+				try:
+					s = self._extract_string()
+					if len(s) % 4 != 0:
+						raise ValueError('Unicode hex-string must have a length which is a multiple of 4')
+					s = ''.join(unichr(int(s[i:i + 4], 16)) for i in xrange(0, len(s), 4))
+				except ValueError, e:
+					self._add_token(ERROR, str(e))
+				else:
+					self._add_token(STRING, s)
+			else:
+				self._handle_ident()
+		else:
+			self._handle_ident()
+
 	def _handle_unistring(self):
-		"""Parses a Unicode string literal in the source."""
+		"""Parses a graphic literal in the source."""
 		if self.nextchar == "'":
 			self._next()
 			try:
 				# XXX Needs testing ... what exactly is the Info Center on
 				# about with these Graphic String literals (mixing DBCS in an
-				# SBCS file?!)
-				s = self._extract_string()
+				# SBCS/MBCS file?!)
+				s = unicode(self._extract_string())
 			except ValueError, e:
 				self._add_token(ERROR, str(e))
 			else:
 				self._add_token(STRING, s)
+		elif self.char.upper() == 'G' and self.nextchar.upper() == 'X':
+			self._handle_unihexstring()
 		else:
 			self._handle_ident()
 
 	def _init_handlers(self):
-		super(DB2ZOSSQLTokenizer, self)._init_handlers()
+		super(DB2ZOSTokenizer, self)._init_handlers()
 		self._jump['!'] = self._handle_not
 		self._jump['^'] = self._handle_not
 		self._jump['x'] = self._handle_hexstring
@@ -684,7 +732,7 @@ class DB2ZOSSQLTokenizer(SQLTokenizerBase):
 		self._jump['G'] = self._handle_unistring
 		# XXX What about the hook character here ... how to encode?
 
-class DB2UDBSQLTokenizer(DB2ZOSSQLTokenizer):
+class DB2LUWTokenizer(DB2ZOSTokenizer):
 	"""IBM DB2 UDB for Linux/Unix/Windows tokenizer class."""
 
 	# XXX Need to add support for changing statement terminator on the fly
@@ -692,12 +740,12 @@ class DB2UDBSQLTokenizer(DB2ZOSSQLTokenizer):
 	# token is a COMMENT, if so, set terminator property)
 
 	def __init__(self):
-		super(DB2UDBSQLTokenizer, self).__init__()
-		self.keywords = set(ibmdb2udb_keywords)
-		self.identchars = set(ibmdb2udb_identchars)
+		super(DB2LUWTokenizer, self).__init__()
+		self.keywords = set(db2udb_keywords)
+		self.identchars = set(db2udb_identchars)
 		# Support for C-style /*..*/ comments add in DB2 UDB v8 FP9
 		self.c_comments = True
-	
+
 	def _handle_period(self):
 		"""Parses full-stop characters (".") in the source."""
 		# Override the base method to handle DB2 UDB's method qualifiers (..)
@@ -705,4 +753,62 @@ class DB2UDBSQLTokenizer(DB2ZOSSQLTokenizer):
 			self._add_token(OPERATOR, '..')
 			self._next(2)
 		else:
-			super(DB2UDBSQLTokenizer, self)._handle_period()
+			super(DB2LUWTokenizer, self)._handle_period()
+
+	def _handle_open_bracket(self):
+		self._next()
+		self._add_token(OPERATOR, '[')
+
+	def _handle_close_bracket(self):
+		self._next()
+		self._add_token(OPERATOR, ']')
+
+	def _handle_open_brace(self):
+		self._next()
+		self._add_token(OPERATOR, '{')
+
+	def _handle_close_brace(self):
+		self._next()
+		self._add_token(OPERATOR, '}')
+
+	# XXX Support for UESCAPE needed at some point. This probably can't be
+	# implemented directly in the tokenizer. Instead, add a separate token type
+	# for UTF-8 strings and a "pre-parse" phase to the parser which scans for
+	# the new token type and a UESCAPE suffix and decodes the combination into
+	# a STRING token
+	utf8re = re.compile(r'\\(\\|[0-9A-Fa-f]{4}|\+[0-9A-Fa-f]{6})')
+	def _handle_utf8string(self):
+		"""Parses a UTF-8 string literal in the source."""
+		if self.nextchar == "&":
+			self._next(2)
+			if not self.char == "'":
+				self._add_token(ERROR, 'Expecting \'')
+			else:
+				def utf8sub(match):
+					if match.group(1) == '\\':
+						return '\\'
+					elif match.group(1).startswith('+'):
+						return unichr(int(match.group(1)[1:], 16))
+					else:
+						return unichr(int(match.group(1), 16))
+				try:
+					s = self._extract_string()
+				except ValueError, e:
+					self._add_token(ERROR, str(e))
+				else:
+					self._add_token(STRING, utf8re.sub(utf8sub, utf8decode(s)))
+		elif self.nextchar.upper() == 'X':
+			self._handle_unihexstring()
+		else:
+			self._handle_ident()
+
+	def _init_handlers(self):
+		super(DB2LUWTokenizer, self)._init_handlers()
+		self._jump['['] = self._handle_open_bracket
+		self._jump[']'] = self._handle_close_bracket
+		self._jump['{'] = self._handle_open_brace
+		self._jump['}'] = self._handle_close_brace
+		self._jump['u'] = self._handle_utf8string
+		self._jump['U'] = self._handle_utf8string
+		# XXX What about the hook character here ... how to encode?
+

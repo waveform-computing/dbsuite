@@ -1,5 +1,23 @@
 # vim: set noet sw=4 ts=4:
 
+__all__ = [
+	'sql92_identchars',
+	'sql92_namechars',
+	'sql92_keywords',
+	'sql99_identchars',
+	'sql99_namechars',
+	'sql99_keywords',
+	'sql2003_identchars',
+	'sql2003_namechars',
+	'sql2003_keywords',
+	'db2luw_identchars',
+	'db2luw_namechars',
+	'db2luw_keywords',
+	'db2zos_identchars',
+	'db2zos_namechars',
+	'db2zos_keywords',
+]
+
 # Set of characters valid in unquoted identifiers in ANSI SQL-92. This is the
 # list of characters used by the tokenizer to recognize an identifier in input
 # text. Hence it should include lowercase characters.
@@ -170,14 +188,14 @@ sql2003_keywords = [
 # (see above). Obtained from [1] (see node Reference / SQL / Language Elements)
 # [1] http://publib.boulder.ibm.com/infocenter/db2luw/v8/index.jsp
 
-ibmdb2udb_identchars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_$#@0123456789'
-ibmdb2udb_namechars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ_$#@0123456789'
+db2luw_identchars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_$#@0123456789'
+db2luw_namechars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ_$#@0123456789'
 
 # Set of reserved keywords in IBM DB2 UDB. Obtained from
 # <http://publib.boulder.ibm.com/infocenter/db2luw/v8/index.jsp> (see node
 # Reference / SQL / Reserved schema names and reserved words)
 
-ibmdb2udb_keywords = [
+db2luw_keywords = [
 	'ADD', 'AFTER', 'ALIAS', 'ALL', 'ALLOCATE', 'ALLOW', 'ALTER', 'AND', 'ANY',
 	'APPLICATION', 'AS', 'ASSOCIATE', 'ASUTIME', 'AUDIT', 'AUTHORIZATION',
 	'AUX', 'AUXILIARY', 'BEFORE', 'BEGIN', 'BETWEEN', 'BINARY', 'BUFFERPOOL',
@@ -229,8 +247,8 @@ ibmdb2udb_keywords = [
 # Set of valid characters for unquoted identifiers and names in IBM DB2 UDB for
 # z/OS (see above). Equivalent to IBM DB2 UDB for Linux/Unix/Windows
 
-ibmdb2zos_identchars = ibmdb2udb_identchars
-ibmdb2zos_namechars = ibmdb2udb_namechars
+db2zos_identchars = db2luw_identchars
+db2zos_namechars = db2luw_namechars
 
 # Set of reserved keywords in IBM DB2 UDB for z/OS. Obtained from
 # <http://publib.boulder.ibm.com/infocenter/dzichelp/v2r2/topic/com.ibm.db2.doc/db2prodhome.htm>
@@ -238,7 +256,7 @@ ibmdb2zos_namechars = ibmdb2udb_namechars
 # Additional information for DB2 SQL / Reserved schema names and reserved words /
 # Reserved words)
 
-ibmdb2zos_keywords = [
+db2zos_keywords = [
 	'ADD', 'AFTER', 'ALL', 'ALLOCATE', 'ALLOW', 'ALTER', 'AND', 'ANY', 'AS',
 	'ASENSITIVE', 'ASSOCIATE', 'ASUTIME', 'AUDIT', 'AUX', 'AUXILIARY',
 	'BEFORE', 'BEGIN', 'BETWEEN', 'BUFFERPOOL', 'BY', 'CALL', 'CAPTURE',
