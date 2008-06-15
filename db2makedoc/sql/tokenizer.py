@@ -86,8 +86,8 @@ base SQLTokenizer class. Currently the following classes are defined:
 
 import re
 import sys
-import decimal
 import codecs
+from decimal import Decimal
 from db2makedoc.sql.dialects import *
 
 __all__ = [
@@ -416,7 +416,7 @@ class SQLTokenizerBase(object):
 					self._next()
 			self._next()
 		try:
-			self._add_token(NUMBER, decimal.Decimal(self.markedchars))
+			self._add_token(NUMBER, Decimal(self.markedchars))
 		except ValueError, e:
 			self._add_token(ERROR, str(e))
 
@@ -745,6 +745,17 @@ class DB2LUWTokenizer(DB2ZOSTokenizer):
 		self.identchars = set(db2udb_identchars)
 		# Support for C-style /*..*/ comments add in DB2 UDB v8 FP9
 		self.c_comments = True
+
+	def _handle_ident(self):
+		super(DB2LUWTokenizer, self)._handle_ident()
+		# Rewrite the special values INFINITY, NAN and SNAN to their decimal
+		# counterparts with token type NUMBER
+		if self._tokens[-1][:2] == (IDENTIFIER, 'INFINITY'):
+			self._tokens[-1] = (NUMBER, Decimal('Infinity')) + self._tokens[-1][2:]
+		elif self._tokens[-1][:2] == (IDENTIFIER, 'NAN'):
+			self._tokens[-1] = (NUMBER, Decimal('NaN')) + self._tokens[-1][2:]
+		elif self._tokens[-1][:2] == (IDENTIFIER, 'SNAN'):
+			self._tokens[-1] = (NUMBER, Decimal('sNaN')) + self._tokens[-1][2:]
 
 	def _handle_period(self):
 		"""Parses full-stop characters (".") in the source."""

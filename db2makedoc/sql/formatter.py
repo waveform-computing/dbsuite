@@ -843,6 +843,7 @@ class SQLFormatter(BaseFormatter):
 	_parse_method_name = _parse_subschema_name
 	_parse_sequence_name = _parse_subschema_name
 	_parse_type_name = _parse_subschema_name
+	_parse_variable_name = _parse_subschema_name
 	# Another cheat; security labels exist within a security policy
 	_parse_security_label_name = _parse_subschema_name
 
@@ -881,6 +882,7 @@ class SQLFormatter(BaseFormatter):
 				(REGISTER, 'DBPARTITIONNUM'),
 				(REGISTER, 'DEGREE'),
 				(REGISTER, 'ISOLATION'),
+				(REGISTER, 'NODE'),
 				(REGISTER, 'PATH'),
 				(REGISTER, 'SCHEMA'),
 				(REGISTER, 'SERVER'),
@@ -890,25 +892,73 @@ class SQLFormatter(BaseFormatter):
 				(REGISTER, 'USER'),
 			]):
 				pass
-			elif self._match((REGISTER, 'DEFAULT')):
-				self._expect_sequence([(REGISTER, 'TRANSFORM'), (REGISTER, 'GROUP')])
+			elif self._match_sequence([
+				(REGISTER, 'DECFLOAT'),
+				(REGISTER, 'ROUNDING'),
+				(REGISTER, 'MODE')
+			]):
+				pass
+			elif self._match_sequence([
+				(REGISTER, 'DEFAULT'),
+				(REGISTER, 'TRANSFORM'),
+				(REGISTER, 'GROUP')
+			]):
+				pass
 			elif self._match((REGISTER, 'EXPLAIN')):
-				self._expect_one_of([(REGISTER, 'MODE'), (REGISTER, 'SNAPSHOT')])
-			elif self._match((REGISTER, 'LOCK')):
-				self._expect((REGISTER, 'TIMEOUT'))
-			elif self._match((REGISTER, 'MAINTAINED')):
-				self._expect_sequence([
-					(REGISTER, 'TABLE'),
-					(REGISTER, 'TYPES'),
-					(REGISTER, 'FOR'),
-					(REGISTER, 'OPTIMIZATION')
+				self._expect_one_of([
+					(REGISTER, 'MODE'),
+					(REGISTER, 'SNAPSHOT')
 				])
-			elif self._match((REGISTER, 'PACKAGE')):
-				self._expect((REGISTER, 'PATH'))
-			elif self._match((REGISTER, 'QUERY')):
-				self._expect((REGISTER, 'OPTIMIZATION'))
-			elif self._match((REGISTER, 'REFRESH')):
-				self._expect((REGISTER, 'AGE'))
+			elif self._match_sequence([
+				(REGISTER, 'FEDERATED'),
+				(REGISTER, 'ASYNCHRONY')
+			]):
+				pass
+			elif self._match_sequence([
+				(REGISTER, 'IMPLICIT'),
+				(REGISTER, 'XMLPARSE'),
+				(REGISTER, 'OPTION')]
+			):
+				pass
+			elif self._match_sequence([
+				(REGISTER, 'LOCK'),
+				(REGISTER, 'TIMEOUT')
+			]):
+				pass
+			elif self._match_sequence([
+				(REGISTER, 'MAINTAINED'),
+				(REGISTER, 'TABLE'),
+				(REGISTER, 'TYPES'),
+				(REGISTER, 'FOR'),
+				(REGISTER, 'OPTIMIZATION')
+			]):
+				pass
+			elif self._match_sequence([
+				(REGISTER, 'MDC'),
+				(REGISTER, 'ROLLOUT'),
+				(REGISTER, 'MODE')
+			]):
+				pass
+			elif self._match_sequence([
+				(REGISTER, 'OPTIMIZATION'),
+				(REGISTER, 'PROFILE')
+			]):
+				pass
+			elif self._match_sequence([
+				(REGISTER, 'PACKAGE'),
+				(REGISTER, 'PATH')
+			]):
+				pass
+			elif self._match_sequence([
+				(REGISTER, 'QUERY'),
+				(REGISTER, 'OPTIMIZATION')
+			]):
+				pass
+			elif self._match_sequence([
+				(REGISTER, 'REFRESH'),
+				(REGISTER, 'AGE')
+			]):
+				pass
 			else:
 				self._expected((REGISTER,))
 		elif self._match((REGISTER, 'CLIENT')):
@@ -929,8 +979,8 @@ class SQLFormatter(BaseFormatter):
 				(REGISTER, 'CURRENT_TIMEZONE'),
 				(REGISTER, 'CURRENT_USER'),
 				(REGISTER, 'SESSION_USER'),
-				(REGISTER, 'USER'),
 				(REGISTER, 'SYSTEM_USER'),
+				(REGISTER, 'USER'),
 			])
 
 	def _parse_datatype(self):
@@ -1189,6 +1239,8 @@ class SQLFormatter(BaseFormatter):
 			if self._match('NOT'):
 				if self._match('LIKE'):
 					self._parse_expression()
+					if self._match('ESCAPE'):
+						self._parse_expression()
 				elif self._match('BETWEEN'):
 					self._parse_expression()
 					self._expect('AND')
@@ -1203,6 +1255,8 @@ class SQLFormatter(BaseFormatter):
 					self._expected_one_of(['LIKE', 'BETWEEN', 'IN'])
 			elif self._match('LIKE'):
 				self._parse_expression()
+				if self._match('ESCAPE'):
+					self._parse_expression()
 			elif self._match('BETWEEN'):
 				self._parse_expression()
 				self._expect('AND')
@@ -1215,7 +1269,32 @@ class SQLFormatter(BaseFormatter):
 					self._parse_expression()
 			elif self._match('IS'):
 				self._match('NOT')
-				self._expect('NULL')
+				if self._match('VALIDATED'):
+					if self._match('ACCORDING'):
+						self._expect_sequence(['TO', 'XMLSCHEMA'])
+						if self._match('IN'):
+							self._expect('(')
+							while True:
+								self._parse_xml_schema_identification()
+								if not self._match(','):
+									break
+							self._expect(')')
+						else:
+							self._parse_xml_schema_identification()
+				else:
+					self._expect_one_of(['NULL', 'VALIDATED'])
+			elif self._match('XMLEXISTS'):
+				self._expect('(')
+				self._expect(STRING)
+				if self._match('PASSING'):
+					self._match_sequence(['BY', 'REF'])
+					while True:
+						self._parse_expression()
+						self._expect_sequence(['AS', IDENTIFIER])
+						self._match_sequence(['BY', 'REF'])
+						if not self._match(','):
+							break
+				self._expect(')')
 			elif self._match_one_of(['=', '<', '>', '<>', '<=', '>=']):
 				if self._match_one_of(['SOME', 'ANY', 'ALL']):
 					self._expect('(')
@@ -1269,57 +1348,93 @@ class SQLFormatter(BaseFormatter):
 				self._expect(')')
 			elif self._match('CAST'):
 				self._parse_cast_expression()
+			elif self._match('XMLCAST'):
+				self._parse_cast_expression()
 			elif self._match('CASE'):
 				if self._match('WHEN'):
 					self._parse_searched_case()
 				else:
 					self._parse_simple_case()
+			elif self._match_sequence(['NEXT', 'VALUE', 'FOR']):
+				self._parse_sequence_name()
+			elif self._match_sequence(['PREVIOUS', 'VALUE', 'FOR']):
+				self._parse_sequence_name()
+			elif self._match_sequence(['ROW', 'CHANGE']):
+				self._expect_one_of(['TOKEN', 'TIMESTAMP'])
+				self._expect('FOR')
+				self._parse_table_name()
 			elif self._match_one_of([NUMBER, STRING, PARAMETER, 'NULL']): # Literals
 				pass
 			else:
+				# Ambiguity: an identifier could be a register, a function
+				# call, a column name, etc.
 				self._save_state()
 				try:
-					# Try and parse an aggregation function
-					self._parse_aggregate_function_call()
+					self._parse_function_call()
 				except ParseError:
 					self._restore_state()
 					self._save_state()
 					try:
-						# Try and parse an XML function
-						self._parse_xml_function_call()
+						self._parse_special_register()
 					except ParseError:
 						self._restore_state()
-						self._save_state()
-						try:
-							# Try and parse a scalar function
-							self._parse_scalar_function_call()
-						except ParseError:
-							self._restore_state()
-							self._save_state()
-							try:
-								# Try and parse a special register
-								self._parse_special_register()
-							except ParseError:
-								self._restore_state()
-								# Parse a normal column reference
-								self._parse_column_name()
-							else:
-								self._forget_state()
-						else:
-							self._forget_state()
+						self._parse_column_name()
 					else:
 						self._forget_state()
 				else:
 					self._forget_state()
+			# Parse an optional array element suffix
+			if self._match('['):
+				self._parse_expression()
+				self._expect(']')
 			# Parse an optional interval suffix
 			self._parse_duration_label(optional=True)
 			if not self._match_one_of(['+', '-', '*', '/', '||', 'CONCAT']): # Binary operators
 				break
 
+	def _parse_function_call(self):
+		"""Parses a function call of various types"""
+		# Ambiguity: certain functions have "abnormal" internal syntaxes (extra
+		# keywords, etc). The _parse_scalar_function_call method is used to
+		# handle all "normal" syntaxes. Special methods are tried first for
+		# everything else
+		self._save_state()
+		try:
+			self._parse_aggregate_function_call()
+		except ParseError:
+			self._restore_state()
+			self._save_state()
+			try:
+				self._parse_olap_function_call()
+			except ParseError:
+				self._restore_state()
+				self._save_state()
+				try:
+					self._parse_xml_function_call()
+				except ParseError:
+					self._restore_state()
+					self._save_state()
+					try:
+						self._parse_sql_function_call()
+					except ParseError:
+						self._restore_state()
+						self._parse_scalar_function_call()
+					else:
+						self._forget_state()
+				else:
+					self._forget_state()
+			else:
+				self._forget_state()
+		else:
+			self._forget_state()
+
 	def _parse_aggregate_function_call(self):
 		"""Parses an aggregate function with it's optional arg-prefix"""
 		# Parse the optional SYSIBM schema prefix
 		self._match_sequence(['SYSIBM', '.'])
+		# Although CORRELATION and GROUPING are aggregate functions they're not
+		# included here as their syntax is entirely compatible with "ordinary"
+		# functions so _parse_scalar_function_call will handle them
 		aggfunc = self._expect_one_of([
 			'COUNT',
 			'COUNT_BIG',
@@ -1336,159 +1451,331 @@ class SQLFormatter(BaseFormatter):
 			# COUNT and COUNT_BIG can take '*' as a sole parameter
 			pass
 		else:
-			# Aggregation functions have an optional ALL/DISTINCT argument prefix
+			# The aggregation functions handled by this method have an optional
+			# ALL/DISTINCT argument prefix
 			self._match_one_of(['ALL', 'DISTINCT'])
 			# And only take a single expression as an argument
 			self._parse_expression()
 		self._expect(')')
 		# Parse an OLAP suffix if one exists
 		if self._match('OVER'):
-			self._parse_olap_function_call()
+			self._parse_olap_window_clause()
+
+	def _parse_olap_function_call(self):
+		"""Parses an OLAP function call (some of which have non-standard internal syntax)"""
+		self._match_sequence(['SYSIBM', '.'])
+		olapfunc = self._expect_one_of([
+			'ROW_NUMBER',
+			'RANK',
+			'DENSE_RANK',
+			'LAG',
+			'LEAD',
+			'FIRST_VALUE',
+			'LAST_VALUE',
+		])[1]
+		self._expect('(')
+		if olapfunc in ('LAG', 'LEAD'):
+			self._parse_expression()
+			if self._match(','):
+				self._expect(NUMBER)
+				if sel._match(','):
+					self._parse_expression()
+					if self._match(','):
+						self._expect_one_of([(STRING, 'RESPECT NULLS'), (STRING, 'IGNORE NULLS')])
+		elif olapfunc in ('FIRST_VALUE', 'LAST_VALUE'):
+			self._parse_expression()
+			if self._match(','):
+				self._expect_one_of([(STRING, 'RESPECT NULLS'), (STRING, 'IGNORE NULLS')])
+		self._expect(')')
+		self._expect('OVER')
+		self._parse_olap_window_clause()
 
 	def _parse_xml_function_call(self):
 		"""Parses an XML function call (which has non-standard internal syntax)"""
 		# Parse the optional SYSIBM schema prefix
 		self._match_sequence(['SYSIBM', '.'])
+		# Note that XML2CLOB (compatibility), XMLCOMMENT, XMLCONCAT,
+		# XMLDOCUMENT, XMLTEXT, and XMLXSROBJECTID aren't handled by this
+		# method as their syntax is "normal" so _parse_scalar_function_call
+		# will handle them
 		xmlfunc = self._expect_one_of([
+			'XMLAGG',
+			'XMLATTRIBUTES',
+			'XMLELEMENT',
+			'XMLFOREST',
+			'XMLGROUP',
+			'XMLNAMESPACES',
+			'XMLPARSE',
+			'XMLPI',
+			'XMLQUERY',
+			'XMLROW',
 			'XMLSERIALIZE',
-			'XML2CLOB',
+			'XMLVALIDATE',
+			'XMLTABLE',
+			'XMLTRANSFORM',
 		])[1]
 		self._expect('(')
-		if xmlfunc == 'XMLSERIALIZE':
-			self._expect('CONTENT')
-			self._parse_xml_value_function()
+		if xmlfunc == 'XMLAGG':
+			self._parse_expression()
+			if self._match_sequence(['ORDER', 'BY']):
+				while True:
+					self._parse_expression()
+					self._match_one_of(['ASC', 'DESC'])
+					if not self._match(','):
+						break
+		elif xmlfunc == 'XMLATTRIBUTES':
+			while True:
+				self._parse_expression()
+				if self._match('AS'):
+					self._expect(IDENTIFIER)
+				if not self._match(','):
+					break
+		elif xmlfunc == 'XMLELEMENT':
+			self._expect('NAME')
+			self._expect(IDENTIFIER)
+			if self._match(','):
+				# XXX We're not specifically checking for namespaces and
+				# attributes calls as we should here (although expression_list
+				# will parse them just fine)
+				self._parse_expression_list()
+				if self._match('OPTION'):
+					self._parse_xml_value_option()
+		elif xmlfunc == 'XMLFOREST':
+			while True:
+				# XXX We're not specifically checking for a namespaces call as
+				# we should here (although expression will parse it just fine)
+				self._parse_expression()
+				self._match_sequence(['AS', IDENTIFIER])
+				if not self._match(','):
+					break
+				if self._match('OPTION'):
+					self._parse_xml_value_option()
+		elif xmlfunc == 'XMLGROUP':
+			while True:
+				self._parse_expression()
+				if self._match('AS'):
+					self._expect(IDENTIFIER)
+				if not self._match(','):
+					break
+			if self._match_sequence(['ORDER', 'BY']):
+				while True:
+					self._parse_expression()
+					self._match_one_of(['ASC', 'DESC'])
+					if not self._match(','):
+						break
+			if self._match('OPTION'):
+				self._parse_xml_row_option(allowroot=True)
+		elif xmlfunc == 'XMLNAMESPACES':
+			while True:
+				if self._match('DEFAULT'):
+					self._expect(STRING)
+				elif self._match('NO'):
+					self._expect_sequence(['DEFAULT', STRING])
+				else:
+					self._expect_sequence([STRING, 'AS', IDENTIFIER])
+				if not self._match(','):
+					break
+		elif xmlfunc == 'XMLPARSE':
+			self._expect_sequence(['DOCUMENT', STRING])
+			if self._match_one_of(['STRIP', 'PRESERVE']):
+				self._expect('WHITESPACE')
+		elif xmlfunc == 'XMLPI':
+			self._expect_sequence(['NAME', IDENTIFIER])
+			if self._match(','):
+				self._expect(STRING)
+		elif xmlfunc == 'XMLQUERY':
+			self._expect(STRING)
+			if self._match('PASSING'):
+				self._match_sequence(['BY', 'REF'])
+				while True:
+					self._parse_expression()
+					self._expect_sequence(['AS', IDENTIFIER])
+					self._match_sequence(['BY', 'REF'])
+					if not self._match(','):
+						break
+			if self._match('RETURNING'):
+				self._expect('SEQUENCE')
+				self._match_sequence(['BY', 'REF'])
+			self._match_sequence(['EMPTY', 'ON', 'EMPTY'])
+		elif xmlfunc == 'XMLROW':
+			while True:
+				self._parse_expression()
+				self._match_sequence(['AS', IDENTIFIER])
+				if not self._match(','):
+					break
+			if self._match('OPTION'):
+				self._parse_xml_row_option(allowroot=False)
+		elif xmlfunc == 'XMLSERIALIZE':
+			self._match('CONTENT')
+			self._parse_expression()
 			self._expect('AS')
 			# XXX Data type can only be CHAR/VARCHAR/CLOB
 			self._parse_datatype()
-		elif xmlfunc == 'XML2CLOB':
-			self._parse_xml_value_function()
-		self._expect(')')
-
-	def _parse_xml_value_function(self):
-		"""Parses an XML value function (which has non-standard internal syntax)"""
-		# Parse the optional SYSIBM schema prefix
-		self._match_sequence(['SYSIBM', '.'])
-		xmlfunc = self._expect_one_of([
-			'XMLAGG',
-			'XMLELEMENT',
-			'XMLFOREST',
-			'XMLCONCAT',
-		])[1]
-		if xmlfunc == 'XMLAGG':
-			self._parse_xmlagg()
-		elif xmlfunc == 'XMLELEMENT':
-			self._parse_xmlelement()
-		elif xmlfunc == 'XMLFOREST':
-			self._parse_xmlforest()
-		elif xmlfunc == 'XMLCONCAT':
-			self._parse_xmlconcat()
-
-	def _parse_xmlagg(self):
-		"""Parses an XMLAGG value function"""
-		# XMLAGG already matched
-		self._expect('(')
-		# Parse the optional SYSIBM schema prefix
-		self._match_sequence(['SYSIBM', '.'])
-		self._expect('XMLELEMENT')
-		self._parse_xmlelement()
-		if self._match_sequence(['ORDER', 'BY']):
-			while True:
-				self._parse_expression()
-				self._match_one_of(['ASC', 'DESC'])
-				if not self._match(','):
-					break
-		self._expect(')')
-
-	def _parse_xmlelement(self):
-		"""Parses an XMLELEMENT value function"""
-		# XMLELEMENT already matched
-		self._expect('(')
-		self._expect('NAME')
-		self._expect(IDENTIFIER)
-		if self._match(','):
-			namespace = attributes = False
-			while True:
-				if not namespace and (self._match('XMLNAMESPACES') or
-						self._match_sequence(['SYSIBM', '.', 'XMLNAMESPACES'])):
-					self._parse_xmlnamespaces()
-					namespace = True
-				elif not attributes and (self._match('XMLATTRIBUTES') or
-						self._match_sequence(['SYSIBM', '.', 'XMLATTRIBUTES'])):
-					self._parse_xmlattributes()
-					namespace = attributes = True
+			valid = set(['VERSION', 'INCLUDING', 'EXCLUDING'])
+			while valid:
+				t = self._match_one_of(valid)
+				if t:
+					t = t[1]
+					valid.remove(t)
 				else:
-					self._save_state()
-					try:
-						self._parse_xml_value_function()
-					except ParseError:
-						self._restore_state()
-						self._parse_expression()
-					else:
-						self._forget_state()
-					namespace = attributes = True
-				if not self._match(','):
 					break
-		self._expect(')')
-
-	def _parse_xmlforest(self):
-		"""Parses an XMLFOREST value function"""
-		# XMLFOREST already matched
-		self._expect('(')
-		namespace = False
-		while True:
-			if not namespace and (self._match('XMLNAMESPACES') or
-					self._match_sequence(['SYSIBM', '.', 'XMLNAMESPACES'])):
-				self._parse_xmlnamespaces()
-			else:
-				self._save_state()
-				try:
-					self._parse_xml_value_function()
-				except ParseError:
-					self._restore_state()
+				if t == 'VERSION':
+					self._expect(STRING)
+				elif t == 'INCLUDING':
+					valid.remove('EXCLUDING')
+					self._expect('XMLDECLARATION')
+				elif t == 'EXCLUDING':
+					valid.remove('INCLUDING')
+					self._expect('XMLDECLARATION')
+		elif xmlfunc == 'XMLVALIDATE':
+			self._match('DOCUMENT')
+			self._parse_expression()
+			if self._match('ACCORDING'):
+				self._expect_sequence(['TO', 'XMLSCHEMA'])
+				self._parse_xml_schema_identification()
+				if self._match('NAMESPACE'):
+					self._expect(STRING)
+				elif self._match('NO'):
+					self._expect('NAMESPACE')
+				self._match_sequence(['ELEMENT', IDENTIFIER])
+		elif xmlfunc == 'XMLTABLE':
+			self._parse_expression()
+			if self._match(','):
+				self._expect(STRING)
+			if self._match('PASSING'):
+				self._match_sequence(['BY', 'REF'])
+				while True:
 					self._parse_expression()
-				else:
-					self._forget_state()
-				self._match_sequence(['AS', IDENTIFIER])
-			namespace = True
-			if not self._match(','):
-				break
+					self._expect_sequence(['AS', IDENTIFIER])
+					self._match_sequence(['BY', 'REF'])
+					if not self._match(','):
+						break
+			if self._match('COLUMNS'):
+				while True:
+					self._expect(IDENTIFIER)
+					if not self._match_sequence(['FOR', 'ORDINALITY']):
+						self._parse_datatype()
+						self._match_sequence(['BY', 'REF'])
+						if self._match('DEFAULT'):
+							self._parse_expression()
+						if self._match('PATH'):
+							self._expect(STRING)
+					if not self._match(','):
+						break
+		elif xmlfunc == 'XMLTRANSFORM':
+			self._parse_expression()
+			self._expect('USING')
+			self._parse_expression()
+			if self._match('WITH'):
+				self._parse_expression()
+			if self._match('AS'):
+				self._parse_datatype()
 		self._expect(')')
 
-	def _parse_xmlconcat(self):
-		"""Parses an XMLCONCAT value function"""
-		# XMLCONCAT already matched
-		self._expect('(')
-		while True:
-			self._parse_xml_value_function()
-			if not self._match(','):
-				break
-		self._expect(')')
-
-	def _parse_xmlnamespaces(self):
-		"""Parses an XMLNAMESPACES definition"""
-		# XMLNAMESPACES already matched
-		self._expect('(')
-		while True:
-			if self._match('DEFAULT'):
+	def _parse_xml_schema_identification(self):
+		"""Parses an identifier for an XML schema"""
+		# ACCORDING TO XMLSCHEMA already matched
+		if self._match('ID'):
+			self._parse_subschema_name()
+		else:
+			if self._match('URI'):
 				self._expect(STRING)
 			elif self._match('NO'):
-				self._expect_sequence(['DEFAULT', STRING])
+				self._expect('NAMESPACE')
 			else:
-				self._expect_sequence([STRING, 'AS', IDENTIFIER])
-			if not self._match(','):
-				break
-		self._expect(')')
+				self._expected_one_of(['ID', 'URI', 'NO'])
+			self._match_sequence(['LOCATION', STRING])
 
-	def _parse_xmlattributes(self):
-		"""Parses an XMLATTRIBUTES definition"""
-		# XMLATTRIBUTES already matched
-		self._expect('(')
-		while True:
-			self._parse_expression()
-			if self._match('AS'):
-				self._expect(IDENTIFIER)
-			if not self._match(','):
+	def _parse_xml_row_option(self, allowroot=False):
+		"""Parses an XML OPTION suffix for rows in certain XML function calls"""
+		# OPTION already matched
+		valid = set(['ROW', 'AS'])
+		if allowroot:
+			valid.add('ROOT')
+		while valid:
+			t = self._expect_one_of(valid)
+			if t:
+				t = t[1]
+				valid.remove(t)
+			else:
 				break
+			if t in ('ROW', 'ROOT'):
+				self._expect(IDENTIFIER)
+			elif t == 'AS':
+				self._expect('ATTRIBUTES')
+
+	def _parse_xml_value_option(self):
+		"""Parses an XML OPTION suffix for scalar values in certain XML function calls"""
+		# OPTION already matched
+		valid = set(['EMPTY', 'NULL', 'XMLBINARY'])
+		while valid:
+			t = self._expect_one_of(valid)
+			if t:
+				t = t[1]
+				valid.remove(t)
+			else:
+				break
+			if t == 'EMPTY':
+				valid.remove('NULL')
+				self._expect_sequence(['ON', 'NULL'])
+			elif t == 'NULL':
+				valid.remove('EMPTY')
+				self._expect_sequence(['ON', 'NULL'])
+			elif t == 'XMLBINARY':
+				self._match('USING')
+				self._expect_one_of(['BASE64', 'HEX'])
+
+	def _parse_sql_function_call(self):
+		"""Parses scalar function calls with abnormal internal syntax (usually as dictated by the SQL standard)"""
+		# Parse the optional SYSIBM schema prefix
+		self._match_sequence(['SYSIBM', '.'])
+		# Note that only the "special" syntax of functions is handled here.
+		# Most of these functions will also accept "normal" syntax. In that
+		# case, this method will raise a parse error and the caller will
+		# backtrack to handle the function as normal with
+		# _parse_scalar_function_call
+		sqlfunc = self._expect_one_of([
+			'CHAR_LENGTH',
+			'CHARACTER_LENGTH',
+			'OVERLAY',
+			'POSITION',
+			'SUBSTRING',
+			'TRIM',
+		])[1]
+		self._expect('(')
+		if sqlfunc in ('CHAR_LENGTH', 'CHARACTER_LENGTH'):
+			self._parse_expression()
+			if self._match('USING'):
+				self._expect_one_of(['CODEUNITS16', 'CODEUNITS32', 'OCTETS'])
+		elif sqlfunc == 'OVERLAY':
+			self._parse_expression()
+			self._expect('PLACING')
+			self._parse_expression()
+			self._expect('FROM')
+			self._parse_expression()
+			if self._match('FOR'):
+				self._parse_expression()
+			self._expect('USING')
+			self._expect_one_of(['CODEUNITS16', 'CODEUNITS32', 'OCTETS'])
+		elif sqlfunc == 'POSITION':
+			self._parse_expression()
+			self._expect('IN')
+			self._parse_expression()
+			self._expect('USING')
+			self._expect_one_of(['CODEUNITS16', 'CODEUNITS32', 'OCTETS'])
+		elif sqlfunc == 'SUBSTRING':
+			self._parse_expression()
+			self._expect('FROM')
+			self._parse_expression()
+			if self._match('FOR'):
+				self._parse_expression()
+			self._expect('USING')
+			self._expect_one_of(['CODEUNITS16', 'CODEUNITS32', 'OCTETS'])
+		elif sqlfunc == 'TRIM':
+			if self._match_one_of(['BOTH', 'B', 'LEADING', 'L', 'TRAILING', 'T']):
+				self._match(STRING)
+				self._expect('FROM')
+			self._parse_expression()
 		self._expect(')')
 
 	def _parse_scalar_function_call(self):
@@ -1498,9 +1785,6 @@ class SQLFormatter(BaseFormatter):
 		if not self._match(')'):
 			self._parse_expression_list()
 			self._expect(')')
-		# Parse an OLAP suffix if one exists
-		if self._match('OVER'):
-			self._parse_olap_function_call()
 
 	def _parse_olap_range(self, optional):
 		"""Parses a ROWS or RANGE specification in an OLAP-function call"""
@@ -1515,7 +1799,7 @@ class SQLFormatter(BaseFormatter):
 			return False
 		return True
 
-	def _parse_olap_function_call(self):
+	def _parse_olap_window_clause(self):
 		"""Parses the aggregation suffix in an OLAP-function call"""
 		# OVER already matched
 		self._expect('(')
@@ -1791,11 +2075,6 @@ class SQLFormatter(BaseFormatter):
 				self._parse_ident_list()
 				self._expect(')')
 
-	def _parse_table_function_call(self):
-		"""Parses a table function call with all its arguments"""
-		# Syntactically, this is identical to a scalar function call
-		self._parse_scalar_function_call()
-
 	def _parse_values_expression(self, allowdefault=False):
 		"""Parses a VALUES expression"""
 		# VALUES already matched
@@ -1813,11 +2092,13 @@ class SQLFormatter(BaseFormatter):
 
 	def _parse_join_expression(self):
 		"""Parses join operators in a table-reference"""
-		# This method can be extended to support CROSS JOIN if this is ever
-		# added to DB2 (see PostgreSQL and Oracle)
 		self._parse_table_ref()
 		while True:
-			if self._match('INNER'):
+			if self._match('CROSS'):
+				self._newline(-1)
+				self._expect('JOIN')
+				self._parse_table_ref()
+			elif self._match('INNER'):
 				self._newline(-1)
 				self._expect('JOIN')
 				self._parse_table_ref()
@@ -1868,9 +2149,9 @@ class SQLFormatter(BaseFormatter):
 					# Try and parse a full-select
 					self._parse_full_select()
 				except ParseError:
-					# If it fails, rewind and try a table function call instead
+					# If it fails, rewind and try a function call instead
 					self._restore_state()
-					self._parse_table_function_call()
+					self._parse_function_call()
 				else:
 					self._forget_state()
 				reraise = True
@@ -1897,7 +2178,15 @@ class SQLFormatter(BaseFormatter):
 				self._expect(')')
 				self._parse_table_correlation(optional=True)
 			else:
-				raise ParseBacktrack()
+				# Bizarrely, the XMLTABLE table function can be used outside a
+				# TABLE() reference...
+				self._save_state()
+				if self._match('XMLTABLE'):
+					self._restore_state()
+					self._parse_xml_function_call()
+				else:
+					self._forget_state()
+					raise ParseBacktrack()
 		except ParseError:
 			# If the above fails, rewind and try a simple table reference
 			self._restore_state()
@@ -2465,7 +2754,7 @@ class SQLFormatter(BaseFormatter):
 			self._match('PRIVILEGES')
 			self._expect('ON')
 			if self._match('VARIABLE'):
-				self._expect(IDENTIFIER)
+				self._parse_variable_name()
 			else:
 				self._match('TABLE')
 				self._parse_table_name()
@@ -2510,7 +2799,7 @@ class SQLFormatter(BaseFormatter):
 					break
 			self._expect('ON')
 			if self._match('VARIABLE'):
-				self._expect(IDENTIFIER)
+				self._parse_variable_name()
 			else:
 				self._match('TABLE')
 				self._parse_table_name()
@@ -2899,16 +3188,16 @@ class SQLFormatter(BaseFormatter):
 
 	def _parse_connection_attributes(self):
 		"""Parses connection attributes in a WORKLOAD"""
-		if self._match_one_of(['APPLNAME', 'SYSTEM_USER']):
+		if self._match_one_of([(REGISTER, 'APPLNAME'), (REGISTER, 'SYSTEM_USER')]):
 			pass
-		elif self._match('SESSION_USER'):
+		elif self._match((REGISTER, 'SESSION_USER')):
 			self._match('GROUP')
 		elif self._match('CURRENT'):
 			self._expect_one_of([
-				'CLIENT_USERID',
-				'CLIENT_APPLNAME',
-				'CLIENT_WRKSTNNAME',
-				'CLIENT_ACCTNG'
+				(REGISTER, 'CLIENT_USERID'),
+				(REGISTER, 'CLIENT_APPLNAME'),
+				(REGISTER, 'CLIENT_WRKSTNNAME'),
+				(REGISTER, 'CLIENT_ACCTNG')
 			])
 		else:
 			self._expected_one_of(['APPLNAME', 'SYSTEM_USER', 'SESSION_USER', 'CURRENT'])
@@ -5174,7 +5463,7 @@ class SQLFormatter(BaseFormatter):
 	def _parse_create_variable_statement(self):
 		"""Parses a CREATE VARIABLE statement"""
 		# CREATE VARIABLE already matched
-		self._expect(IDENTIFIER)
+		self._parse_variable_name()
 		self._parse_datatype()
 		if self._match('DEFAULT'):
 			self._parse_expression()
@@ -5397,8 +5686,8 @@ class SQLFormatter(BaseFormatter):
 	def _parse_drop_statement(self):
 		"""Parses a DROP statement"""
 		# DROP already matched
-		if self._match_one_of(['ALIAS', 'SYNONYM', 'TABLE', 'VIEW', 'NICKNAME']):
-			self._parse_relation_name()
+		if self._match_one_of(['ALIAS', 'SYNONYM', 'TABLE', 'VIEW', 'NICKNAME', 'VARIABLE']):
+			self._parse_subschema_name()
 		elif self._match_sequence(['FUNCTION', 'MAPPING']):
 			self._parse_function_name()
 		elif self._match_one_of(['FUNCTION', 'PROCEDURE']):
@@ -5445,7 +5734,6 @@ class SQLFormatter(BaseFormatter):
 			self._match('THRESHOLD') or
 			self._match('TRIGGER') or
 			self._match_sequence(['TRUSTED', 'CONTEXT']) or
-			self._match('VARIABLE') or
 			self._match_sequence(['WORK', 'ACTION', 'SET']) or
 			self._match_sequence(['WORK', 'CLASS', 'SET']) or
 			self._match('WORKLOAD') or
@@ -6266,8 +6554,8 @@ class SQLFormatter(BaseFormatter):
 		"""Parses a TRANSFER OWNERSHIP statement"""
 		# TRANSFER OWNERSHIP already matched
 		self._expect('OF')
-		if self._match_one_of(['ALIAS', 'TABLE', 'VIEW', 'NICKNAME']):
-			self._parse_relation_name()
+		if self._match_one_of(['ALIAS', 'TABLE', 'VIEW', 'NICKNAME', 'VARIABLE']):
+			self._parse_subschema_name()
 		elif self._match_sequence(['FUNCTION', 'MAPPING']):
 			self._parse_function_name()
 		elif self._match_one_of(['FUNCTION', 'PROCEDURE']):
@@ -6294,8 +6582,7 @@ class SQLFormatter(BaseFormatter):
 			self._match_sequence(['DATABASE', 'PARTITION', 'GROUP']) or
 			self._match('SCHEMA') or
 			self._match('TABLESPACE') or
-			self._match('TRIGGER') or
-			self._match('VARIABLE')):
+			self._match('TRIGGER')):
 			self._expect(IDENTIFIER)
 		else:
 			self._expected_one_of([
@@ -6321,7 +6608,11 @@ class SQLFormatter(BaseFormatter):
 		if self._match('USER'):
 			self._expect(IDENTIFIER)
 		else:
-			self._expect_one_of(['USER', 'SESSION_USER', 'SYSTEM_USER'])
+			self._expect_one_of([
+				(REGISTER, 'USER'),
+				(REGISTER, 'SESSION_USER'),
+				(REGISTER, 'SYSTEM_USER'
+			])
 		self._expect_sequence(['PERSERVE', 'PRIVILEGES'])
 
 	def _parse_update_statement(self):
