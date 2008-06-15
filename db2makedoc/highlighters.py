@@ -139,8 +139,11 @@ class SQLHighlighter(object):
 	def __init__(self):
 		"""Initializes an instance of the class"""
 		super(SQLHighlighter, self).__init__()
-		self.tokenizer = DB2UDBSQLTokenizer()
-		self.formatter = SQLFormatter()
+		# XXX At some point we need to implement a mechanism for the input
+		# plugin to inform this what tokenizer and formatter to use (although
+		# there's not much point until other formatters are developed ;-)
+		self.tokenizer = DB2LUWTokenizer()
+		self.formatter = DB2LUWFormatter()
 	
 	def format_line(self, index, line):
 		"""Stub handler for a line of tokens"""

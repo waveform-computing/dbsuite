@@ -18,6 +18,35 @@ import math
 from db2makedoc.sql.dialects import *
 from db2makedoc.sql.tokenizer import *
 
+__all__ = [
+	'EOF',
+	'ERROR',
+	'WHITESPACE',
+	'COMMENT',
+	'KEYWORD',
+	'IDENTIFIER',
+	'NUMBER',
+	'STRING',
+	'OPERATOR',
+	'LABEL',
+	'PARAMETER',
+	'TERMINATOR',
+	'DATATYPE',
+	'REGISTER',
+	'STATEMENT',
+	'INDENT',
+	'VALIGN',
+	'VAPPLY',
+	'Error',
+	'ParseError',
+	'ParseBacktrack',
+	'ParseTokenError',
+	'ParseExpectedOneOfError',
+	'ParseExpectedSequenceError',
+	'BaseFormatter',
+	'DB2LUWFormatter',
+]
+
 # Custom token types used by the formatter
 (
 	DATATYPE,  # Datatypes (e.g. VARCHAR) converted from KEYWORD or IDENTIFIER
@@ -67,7 +96,7 @@ def quote_str(s, qchar="'"):
 	else:
 		return '%s%s%s' % (qchar, s.replace(qchar, qchar*2), qchar)
 
-def format_ident(name, namechars=set(ibmdb2udb_namechars), qchar='"'):
+def format_ident(name, namechars=set(db2luw_namechars), qchar='"'):
 	"""Format an SQL identifier with quotes if required.
 
 	The name parameter provides the object name to format. The optional
@@ -723,8 +752,8 @@ class BaseFormatter(object):
 		self._parse_finish()
 		return self._output
 
-class SQLFormatter(BaseFormatter):
-	"""Reformatter which breaks up and re-indents SQL.
+class DB2LUWFormatter(BaseFormatter):
+	"""Reformatter which breaks up and re-indents DB2 for LUW's SQL dialect.
 
 	This class is, at its core, a full blown SQL language parser that
 	understands many common SQL DML and DDL commands (from the basic ones like
@@ -733,7 +762,7 @@ class SQLFormatter(BaseFormatter):
 	"""
 
 	def __init__(self):
-		super(SQLFormatter, self).__init__()
+		super(DB2LUWFormatter, self).__init__()
 
 	def _parse_top(self):
 		# Override _parse_top to make a 'statement' the top of the parse tree
@@ -3600,7 +3629,7 @@ class SQLFormatter(BaseFormatter):
 			elif self._match_one_of(['OVERRIDE', 'RESTRICT']):
 				self._expect_sequence(['NOT', 'AUTHORIZED', 'WRITE', 'SECURITY', 'LABEL'])
 			elif self._match_one_of(['USE', 'IGNORE']):
-				self._expect_one_of('GROUP', 'ROLE'])
+				self._expect_one_of(['GROUP', 'ROLE'])
 				self._expect('AUTHORIZATIONS')
 			else:
 				break
@@ -5513,12 +5542,13 @@ class SQLFormatter(BaseFormatter):
 			self._expected_one_of(['SERVICE', 'DATABASE'])
 		self._expect_sequence(['USING', 'WORK', 'CLASS', 'SET', IDENTIFIER])
 		if self._match('('):
-			self._expect_sequence(['WORK', 'ACTION', IDENTIFIER, 'ON', 'WORK', 'CLASS', IDENTIFIER])
-			self._parse_action_types_clause()
-			self._parse_histogram_template_clause()
-			self._match_one_of(['ENABLE', 'DISABLE'])
-			if not self._match(','):
-				break
+			while True:
+				self._expect_sequence(['WORK', 'ACTION', IDENTIFIER, 'ON', 'WORK', 'CLASS', IDENTIFIER])
+				self._parse_action_types_clause()
+				self._parse_histogram_template_clause()
+				self._match_one_of(['ENABLE', 'DISABLE'])
+				if not self._match(','):
+					break
 			self._expect(')')
 		self._match_one_of(['ENABLE', 'DISABLE'])
 
@@ -5531,7 +5561,7 @@ class SQLFormatter(BaseFormatter):
 				self._match_sequence(['WORK', 'CLASS'])
 				self._expect(IDENTIFIER)
 				self._parse_work_attributes()
-				self._match('POSITION'):
+				if self._match('POSITION'):
 					self._parse_position_clause()
 				if not self._match(','):
 					break
@@ -6611,7 +6641,7 @@ class SQLFormatter(BaseFormatter):
 			self._expect_one_of([
 				(REGISTER, 'USER'),
 				(REGISTER, 'SESSION_USER'),
-				(REGISTER, 'SYSTEM_USER'
+				(REGISTER, 'SYSTEM_USER'),
 			])
 		self._expect_sequence(['PERSERVE', 'PRIVILEGES'])
 

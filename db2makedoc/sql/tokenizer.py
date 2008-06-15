@@ -103,6 +103,7 @@ __all__ = [
 	'LABEL',
 	'PARAMETER',
 	'TERMINATOR',
+	'new_tokens',
 	'SQLTokenizerBase',
 	'SQL92Tokenizer',
 	'SQL99Tokenizer',
@@ -741,8 +742,8 @@ class DB2LUWTokenizer(DB2ZOSTokenizer):
 
 	def __init__(self):
 		super(DB2LUWTokenizer, self).__init__()
-		self.keywords = set(db2udb_keywords)
-		self.identchars = set(db2udb_identchars)
+		self.keywords = set(db2luw_keywords)
+		self.identchars = set(db2luw_identchars)
 		# Support for C-style /*..*/ comments add in DB2 UDB v8 FP9
 		self.c_comments = True
 
