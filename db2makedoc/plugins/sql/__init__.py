@@ -10,6 +10,7 @@ from db2makedoc.db import (
 	Schema, Datatype, Table, View, Alias, Constraint, Index, Trigger, Function,
 	Procedure, Tablespace
 )
+from string import Template
 
 
 # XXX Extend this to support unicode strings? Not much point for DB2 given that
@@ -40,7 +41,11 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 	def __init__(self):
 		super(OutputPlugin, self).__init__()
 		self.add_option('filename', default=None, convert=self.convert_path,
-			doc="""The filename for the SQL output file (mandatory)""")
+			doc="""The path and filename for the SQL output file. Use $db or
+			${db} to include the name of the database in the filename. The
+			$dblower and $dbupper substitutions are also available, for forced
+			lowercase and uppercase versions of the name respectively. To
+			include a literal $, use $$""")
 		self.add_option('encoding', default='UTF-8',
 			doc="""The character encoding to use for the SQL output file (optional)""")
 		self.add_option('blanks', default='false', convert=self.convert_bool,
@@ -59,6 +64,15 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 	
 	def execute(self, database):
 		super(OutputPlugin, self).execute(database)
+		# Translate any templates in the filename option now that we've got the
+		# database
+		if not 'filename_template' in self.options:
+			self.options['filename_template'] = Template(self.options['filename'])
+		self.options['filename'] = self.options['filename_template'].safe_substitute({
+			'db': database.name,
+			'dblower': database.name.lower(),
+			'dbupper': database.name.upper(),
+		})
 		# Construct a dictionary mapping database objects to XML elements
 		# representing those objects
 		logging.debug('Generating SQL')

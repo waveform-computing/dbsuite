@@ -356,23 +356,32 @@ def get_plugins(root, name=None):
 		for (n, m) in get_plugins(m, '%s.%s' % (name, d)):
 			yield (n, m)
 
+_plugin_cache = {}
 def load_plugin(name):
 	"""Given a name relative to the plugin root, load an input or output plugin."""
+	# Loaded modules are cached. Otherwise, we may wind up attempting to load
+	# the same module multiple times which leads to interest effects on class
+	# definitions!
+	global _plugin_cache
 	logging.info('Loading plugin "%s"' % name)
-	root = None
-	parts = db2makedoc.plugins.__name__.split('.') + name.split('.')
-	for p in parts:
-		(modfile, modpath, moddesc) = imp.find_module(p, root)
-		try:
-			module = imp.load_module(p, modfile, modpath, moddesc)
-			if hasattr(module, '__path__'):
-				root = module.__path__
-		finally:
-			# Caller is responsible for closing the file object returned by
-			# find_module()
-			if isinstance(modfile, file) and not modfile.closed:
-				modfile.close()
-	return module
+	try:
+		return _plugin_cache[name]
+	except KeyError:
+		root = None
+		parts = db2makedoc.plugins.__name__.split('.') + name.split('.')
+		for p in parts:
+			(modfile, modpath, moddesc) = imp.find_module(p, root)
+			try:
+				module = imp.load_module(p, modfile, modpath, moddesc)
+				if hasattr(module, '__path__'):
+					root = module.__path__
+			finally:
+				# Caller is responsible for closing the file object returned by
+				# find_module()
+				if isinstance(modfile, file) and not modfile.closed:
+					modfile.close()
+		_plugin_cache[name] = module
+		return module
 
 def get_plugin_desc(plugin, summary=False):
 	"""Retrieves the description of the plugin.

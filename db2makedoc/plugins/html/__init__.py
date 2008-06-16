@@ -16,6 +16,7 @@ import db2makedoc.db
 import db2makedoc.plugins
 from db2makedoc.plugins.html.document import WebSite, SQLCSSDocument
 from db2makedoc.graph import DEFAULT_CONVERTER
+from string import Template
 
 class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 	"""Abstract base class for HTML output plugins.
@@ -34,7 +35,10 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 		self.site_class = WebSite
 		self.add_option('path', default='.', convert=self.convert_path, 
 			doc="""The folder into which all files (HTML, CSS, SVG, etc.) will
-			be written""")
+			be written. Use $db or ${db} to include the name of the database in
+			the path. The $dblower and $dbupper substitutions are also
+			available, for forced lowercase and uppercase versions of the name
+			respectively. To include a literal $, use $$""")
 		self.add_option('top', default='index',
 			doc="""The base name (without path or extension) of the top-level
 			file in the output (i.e. the file documenting the database itself).
@@ -124,6 +128,15 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 		set self.site_class to a different class in descendent constructors.
 		"""
 		super(HTMLOutputPlugin, self).execute(database)
+		# Translate any templates in the path option now that we've got the
+		# database
+		if not 'path_template' in self.options:
+			self.options['path_template'] = Template(self.options['path'])
+		self.options['path'] = self.options['path_template'].safe_substitute({
+			'db': database.name,
+			'dblower': database.name.lower(),
+			'dbupper': database.name.upper(),
+		})
 		site = self.site_class(database, self.options)
 		self.create_documents(site)
 		logging.info('Writing output to "%s"' % self.options['path'])
