@@ -1330,7 +1330,22 @@ class W3GraphDocument(GraphObjectDocument):
 	def __init__(self, site, dbobject):
 		super(W3GraphDocument, self).__init__(site, dbobject)
 		(maxw, maxh) = self.site.max_graph_size
-		self.graph.ratio = str(float(maxh) / float(maxw))
+		ratio = float(maxh) / float(maxw)
+		self.graph.ratio = str(ratio)
+		# Define a maximum size to prevent using /ridiculous/ amounts of memory
+		# for stupidly huge schema diagrams. The maximum size is calculated as
+		# the lesser of five times the requested maximum size (so PIL still
+		# gets to do some nice resizing - or nicer than graphviz at any rate)
+		# and an image 5000 pixels on a side (which would require 75Mb of RAM
+		# in 24-bit colour)
+		if maxw > maxh:
+			maxw = min(maxw * 5, 5000)
+			maxh = maxw * ratio
+		else:
+			maxh = min(maxh * 5, 5000)
+			maxw = maxh / ratio
+		dpi = float(self.graph.dpi)
+		self.graph.size = '%f,%f' % (maxw / dpi, maxh / dpi)
 		self.written = False
 		if self.usemap:
 			s, ext = os.path.splitext(self.filename)
@@ -1359,7 +1374,9 @@ class W3GraphDocument(GraphObjectDocument):
 					# client side image map
 					self.scale = min(float(maxw) / w, float(maxh) / h)
 					logging.debug('Writing %s' % self.zoom_filename)
-					im.save(self.zoom_filename)
+					if os.path.exists(self.zoom_filename):
+						os.unlink(self.zoom_filename)
+					os.rename(self.filename, self.zoom_filename)
 					neww = int(round(w * self.scale))
 					newh = int(round(h * self.scale))
 					if w * h * 3 / 1024**2 < 500:
