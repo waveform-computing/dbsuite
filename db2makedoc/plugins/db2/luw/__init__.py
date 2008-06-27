@@ -31,9 +31,20 @@ def connect(dsn, username=None, password=None):
 		pass
 	else:
 		if username is not None:
-			return DB2.Connection(dsn, username, password)
+			return DB2.connect(dsn, username, password)
 		else:
-			return DB2.Connection(dsn)
+			return DB2.connect(dsn)
+	# Try the "official" IBM DB2 Python driver
+	try:
+		import ibm_db
+		import ibm_db_dbi
+	except ImportError:
+		pass
+	else:
+		if username is not None:
+			return ibm_db_dbi.connect(dsn, username, password)
+		else:
+			return ibm_db_dbi.connect(dsn)
 	# Try the pyodbc framework
 	try:
 		import pyodbc
