@@ -54,7 +54,8 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 			showing the date on which the page was generated""")
 		self.add_option('feedback_url', default='http://w3.ibm.com/feedback/',
 			doc="""The URL which the feedback link at the top right of each
-			page points to (defaults to the standard w3 feedback page)""")
+			page points to (defaults to the standard w3 feedback page).
+			Accepts $-prefixed substitutions (see path)""")
 		self.add_option('menu_items', default='', convert=self.convert_odict,
 			doc="""A comma-separated list of name=url values to appear in the
 			left-hand menu. The special URL # denotes the position of of the
@@ -62,11 +63,12 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 			Dictionary=#,Admin=/admin. If the special URL does not appear in
 			the list, the database document will be the last menu entry. Note
 			that the "home_title" and "home_url" values are implicitly included
-			at the top of this list""")
+			at the top of this list. Accepts $-prefixed substitutions (see
+			path)""")
 		self.add_option('related_items', default='', convert=self.convert_odict,
 			doc="""A comma-separated list of links to add after the left-hand
 			menu. Links are name=url values, see the "menu_items" description
-			for an example""")
+			for an example. Accepts $-prefixed substitutions (see path)""")
 		self.add_option('max_graph_size', default='600x800',
 			convert=lambda value: self.convert_list(value, separator='x',
 			subconvert=lambda value: self.convert_int(value.strip(), minvalue=100),
@@ -115,6 +117,9 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 					item.config_names[0],
 					', '.join(c.config_names[0] for c in graph_map.iterkeys()))
 				)
+
+	def substitute(self):
+		return super(OutputPlugin, self).substitute() + ('feedback_url', 'menu_items', 'related_items')
 
 	def create_documents(self, site):
 		# Add static documents (CSS, JavaScript, search if requested)

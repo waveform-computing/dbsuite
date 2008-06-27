@@ -57,21 +57,26 @@ __all__ = [
 	VAPPLY,    # Mark the end of a run of VALIGN tokens
 ) = new_tokens(6)
 
-# Token labels used for formatting error messages
+# Token labels used for formatting error messages and token dumps
 TOKEN_LABELS = {
 	EOF:        '<eof>',
+	ERROR:      'error',
 	WHITESPACE: '<space>',
-	KEYWORD:    'keyword',
-	LABEL:      'label',
-	OPERATOR:   'operator',
-	IDENTIFIER: 'identifier',
-	REGISTER:   'register',
-	DATATYPE:   'datatype',
 	COMMENT:    'comment',
+	KEYWORD:    'keyword',
+	IDENTIFIER: 'identifier',
 	NUMBER:     'number',
 	STRING:     'string',
+	OPERATOR:   'operator',
+	LABEL:      'label',
+	PARAMETER:  'parameter',
 	TERMINATOR: '<terminator>',
+	DATATYPE:   'datatype',
+	REGISTER:   'register',
 	STATEMENT:  '<statement-end>',
+	INDENT:     '<indent>',
+	VALIGN:     '<valign>',
+	VAPPLY:     '<vapply>',
 }
 
 # Standard size suffixes and multipliers
@@ -90,11 +95,20 @@ def quote_str(s, qchar="'"):
 	quoted as a hex-string (i.e. a string prefixed by X which contains bytes
 	encoded as two hex numbers).
 	"""
+	# XXX The ctrlchars set probably needs a better definition
 	ctrlchars = set(chr(c) for c in xrange(32))
 	if ctrlchars & set(s):
 		return 'X%s%s%s' % (qchar, ''.join('%.2X' % (ord(c),) for c in s), qchar)
 	else:
 		return '%s%s%s' % (qchar, s.replace(qchar, qchar*2), qchar)
+
+def dump(tokens):
+	"""Utility routine for debugging purposes: prints the tokens in a human readable format."""
+	print '\n'.join(format_token(token) for token in tokens)
+
+def format_token(token):
+	"""Formats a token for the dump routine above."""
+	return '%-16s %-20s %-20s' % (TOKEN_LABELS[token[0]], repr(token[1]), repr(token[2]))
 
 def format_ident(name, namechars=set(db2luw_namechars), qchar='"'):
 	"""Format an SQL identifier with quotes if required.
@@ -284,44 +298,333 @@ class BaseFormatter(object):
 	"""Base class for parsers.
 
 	Do not use this class directly. Instead use one of the descendent classes
-	SQLParser or CLPParser depending on your needs. Both "concrete" parsers
-	operate in the same manner (as they are derived from this base class),
-	described below:
-
+	(currently only DB2LUWFormatter) depending on your needs.
+	
 	The class accepts input from one of the tokenizers in the tokenizer unit,
-	in the form of a list of tokens, where tokens are tuples with the following
-	structure:
+	in the form of a list of tokens, where tokens are 5-element tuples with the
+	following structure:
 
-		(token_type, token_value, token_source, line, column)
+		(token_type, token_value, source, line, column)
 
 	To use the class simply pass such a list to the parse method. The method
 	will return a list of tokens (just like the list of tokens provided as
-	input, but reformatted).
+	input, but reformatted according to the properties detailed below).
 
 	The token_type element gives the general "family" of the token (such as
 	OPERATOR, IDENTIFIER, etc), while the token_value element provides the
 	specific type of the token (e.g. "=", "OR", "DISTINCT", etc). The code in
 	these classes typically uses "partial" tokens to match against "complete"
-	tokens in the source. For example, instead of trying to match on the
-	token_source element (which may vary in case), this class often matches
-	token on the first two elements:
+	tokens in the source. For example, instead of trying to match on the source
+	element (which may vary in case), this class often matches token on the
+	first two elements:
 
 		(KEYWORD, "OR", "or", 7, 13)[:2] == (KEYWORD, "OR")
 
 	A set of internal utility methods are used to simplify this further. See
-	the match and expect methods in particular. The numerous parseX methods in
-	the unit define the grammar of the SQL language being parsed.
+	the _match and _expect methods in particular. The numerous _parse_X methods
+	in each class define the grammar of the SQL language being parsed.
+	
+	The following options are available for customizing the reformatting performed
+	by the class:
+
+	reformat    A set of token types to undergo reformatting. By default this
+	            set includes all token types output by the parser.  See below
+	            for the specific types of reformatting performed by token type.
+	indent      If WHITESPACE is present in the reformat set, this is the
+	            indentation that should be used in the output. Defaults to 4
+	            spaces.
+	line_split  When False (the default), multi-line tokens (e.g. comments,
+	            whitespace) will be returned as a single token. When True,
+	            tokens will be forcibly split at line breaks to ensure every
+	            line has a token with column 1 (useful when performing per-line
+	            processing on the result).
+	statement   If STATEMENT is present in the reformat set, this defines
+	            the string used to terminate statements. Note: intra-statement
+	            terminators, such as the semi-colon used to terminate
+	            statements within a stored procedure definition are unaffected
+	            by this option; this option determines how statement
+	            terminators will be output. Defaults to semi-colon.
+	terminator  If TERMINATOR is present in the reformat set, this defines the
+	            string used to terminate statements within a compound SQL block
+	            (e.g. the body of a stored procedure or function definition).
+	            Defaults to semi-colon.
+	
+	The following list defines the type of reformatting performed on each token
+	type when it is present in the reformat set:
+
+	KEYWORD     All keywords will be folded to uppercase.
+	REGISTER    All special register keywords will be folded to uppercase.
+	IDENTIFIER  All identifiers capable of being represented unquoted (not
+	            containing lowercase characters, symbols, etc.) will be folded
+	            to uppercase.
+	DATATYPE    Same as IDENTIFIER.
+	LABEL       Same as IDENTIFIER, with a colon suffix.
+	PARAMETER   Same as IDENTIFIER, with a colon prefix for named parameters.
+	NUMBER      All numbers will be formatted without extraneous leading or
+	            trailing zeros (or decimal portions), and uppercase signed
+	            exponents (where the original had an exponent). Extraneous
+	            unary plus operators will be included where present in the
+	            original source.
+	STRING      All string literals will be formatted into a minimal safe
+	            representation, e.g. if a hexstring contains no control
+	            characters, it will be converted to an ordinary string literal
+	            (and vice versa).
+	STATEMENT   All inter-statement terminators will be changed to the string
+	            specified in the statement property.
+	TERMINATOR  All intra-statement terminators will be changed to the string
+	            specified in the terminator property.
+	WHITESPACE  All spacing in the original source will be discarded and
+	            replaced with spacing determined by an algorithm (e.g. spaces
+	            either side of all arithmetic operators, one space after
+	            commas, etc).
+	
+	If other token types are included in the set (e.g. EOF, TERMINATOR, etc.)
+	they will be ignored.
 	"""
 
 	def __init__(self):
-		"""Initializes an instance of the class"""
 		super(BaseFormatter, self).__init__()
-		self.indent = ' '*4 # Default indent is 4 spaces
-		self.reformat = True # Default to reformating the input
-		self.line_split = False # See Tokenizer class
-		self.debugging = 0
+		self.indent = ' ' * 4
+		self.reformat = set([
+			DATATYPE,
+			IDENTIFIER,
+			KEYWORD,
+			LABEL,
+			NUMBER,
+			PARAMETER,
+			REGISTER,
+			STATEMENT,
+			STRING,
+			TERMINATOR,
+			WHITESPACE,
+		])
+		self.line_split = False
+		self.statement = ';'
+		self.terminator = ';'
 
-	def _insert_output(self, token, index):
+	def parse(self, tokens):
+		"""Parses an arbitrary statement or script.
+		
+		This is the main public method of the parser. Given a list of tokens
+		(as generated by one of the tokenizers in the tokenizer module) it
+		parses the script represented by the tokens, reformatting the
+		whitespace and, where necessary, changing token types according to
+		context (e.g. the word DATE could be used as a function or column name,
+		or as a datatype, or as part of the special register CURRENT DATE).
+		"""
+		self._parse_init(tokens)
+		while True:
+			# Ignore leading whitespace and empty statements
+			while self._token(self._index)[0] in (COMMENT, WHITESPACE, TERMINATOR):
+				self._index += 1
+			# If not at EOF, parse a statement
+			if not self._match(EOF):
+				self._parse_top()
+				self._expect(STATEMENT) # STATEMENT converts TERMINATOR into STATEMENT
+				assert len(self._statestack) == 0
+				# Reset the indent level and leave a blank line
+				self._level = 0
+				self._newline()
+				self._newline(allowempty=True)
+			else:
+				break
+		self._parse_finish()
+		return self._output
+
+	def _parse_init(self, tokens):
+		"""Sets up the parser with the specified tokens as input."""
+		self._statestack = []
+		self._index = 0
+		self._output = []
+		self._level = 0
+		# If we're reformatting spaces, strip all WHITESPACE tokens from the
+		# input (no point parsing them if we're going to rewrite them all
+		# anyway)
+		if WHITESPACE in self.reformat:
+			self._tokens = [token for token in tokens if token[0] != WHITESPACE]
+		else:
+			self._tokens = tokens
+
+	def _parse_finish(self):
+		"""Cleans up and finalizes tokens in the output."""
+		# Firstly, handle translating INDENT tokens into ordinary WHITESPACE
+		# tokens, and reformatting other tokens according to the reformat set.
+		# Note this phase also strips location information from tokens
+		output = []
+		for token in self._output:
+			token = token[:3]
+			if token[0] == INDENT and WHITESPACE in self.reformat:
+				token = (WHITESPACE, None, '\n' + self.indent * token[1])
+			elif token[0] in self.reformat:
+				if token[0] in (KEYWORD, REGISTER):
+					token = (token[0], token[1], token[1])
+				elif token[0] in (IDENTIFIER, DATATYPE):
+					token = (token[0], token[1], format_ident(token[1]))
+				elif token[0] == NUMBER:
+					token = (NUMBER, token[1], str(token[1]))
+				elif token[0] == STRING:
+					token = (STRING, token[1], quote_str(token[1]))
+				elif token[0] == LABEL:
+					token = (LABEL, token[1], format_ident(token[1]) + ':')
+				elif token[0] == PARAMETER:
+					token = (PARAMETER, token[1], format_param(token[1]))
+				elif token[0] == COMMENT:
+					# XXX Need more intelligent comment handling
+					##token = (COMMENT, token[1], '/*%s*/' % (token[1]))
+					pass
+				elif token[0] == STATEMENT:
+					token = (STATEMENT, token[1], self.statement)
+				elif token[0] == TERMINATOR:
+					token = (TERMINATOR, token[1], self.terminator)
+			output.append(token)
+		self._output = output
+		# Next, VALIGN and VAPPLY tokens are converted. Multiple passes are
+		# used to convert the VALIGN tokens; each pass converts the first
+		# VALIGN token found on a contiguous set of lines into WHITESPACE
+		# tokens and removes the trailing VAPPLY token
+		if WHITESPACE in self.reformat:
+			indexes = []
+			found = True
+			while found:
+				found = False
+				# Recalculate the positions of all tokens; earlier phases may
+				# have altered them and we need accurate positions to calculate
+				# vertical alignment positions
+				self._recalc_positions()
+				aligncol = 0
+				i = 0
+				while i < len(self._output):
+					token = self._output[i]
+					if token[0] == VALIGN:
+						# Remember the position of the VALIGN token, adjust the
+						# alignment column if necessary, and skip to the next
+						# line to ignore any further VALIGN tokens on this line
+						found = True
+						indexes.append(i)
+						(line, col) = token[3:]
+						aligncol = max(aligncol, col)
+						while (self._output[i][3] == line) and (self._output[i][0] != VAPPLY):
+							i += 1
+					elif token[0] == VAPPLY:
+						# Convert all the remembered VALIGN tokens into
+						# WHITESPACE tokens with appropriate lengths for
+						# vertical alignment, remove the VAPPLY token, and
+						# immediately return to the outer loop (to avoid
+						# deleting any subsequent VAPPLY tokens)
+						found = True
+						#assert indexes
+						for j in indexes:
+							(line, col) = self._output[j][3:]
+							self._output[j] = (WHITESPACE, None, ' ' * (aligncol - col), 0, 0)
+						indexes = []
+						aligncol = 0
+						del self._output[i]
+						break
+					else:
+						i += 1
+				# If indexes isn't blank, then we encountered VALIGNs without a
+				# corresponding VAPPLY (parser bug)
+				assert not indexes
+		else:
+			# If we're not reformatting WHITESPACE tokens, just dump any
+			# VALIGN, VAPPLY or INDENT tokens in the output
+			self._output = [
+				token for token in self._output
+				if token[0] not in (VALIGN, VAPPLY, INDENT)
+			]
+		# If we're doing line splitting, break up any tokens that contain
+		# newlines so that every line has a token beginning at column 1
+		# Remove all tokens which have no source (likely to only be WHITESPACE
+		# tokens generated by the _match() postspace mechanism)
+		if self.line_split:
+			output = []
+			for token in self._output:
+				(type, value, source, line, column) = token
+				while '\n' in source:
+					if isinstance(value, basestring) and '\n' in value:
+						i = value.index('\n') + 1
+						newvalue = value[:i]
+						value = value[i:]
+					else:
+						newvalue = value
+					i = source.index('\n') + 1
+					newsource = source[:i]
+					source = source[i:]
+					output.append((type, newvalue, newsource, line, column))
+					line += 1
+					column = 1
+				output.append((type, value, source, line, column))
+			self._output = output
+		# Strip trailing whitespace / EOF tokens, then re-append a trailing EOF
+		# token (or simply make the output a solitary EOF token if nothing is
+		# left)
+		while self._output and (self._output[-1][0] in (WHITESPACE, EOF)):
+			del self._output[-1]
+		if self._output:
+			self._output.append((EOF, None, '') + self._output[-1][3:])
+		else:
+			self._output = [(EOF, None, '', 1, 1)]
+
+	def _parse_top(self):
+		"""Top level of the parser.
+		
+		Override this method in descendents to parse a statement (or whatever
+		is at the top of the parse tree).
+		"""
+		pass
+
+	def _recalc_positions(self):
+		"""Recalculates the line and col elements of all output tokens"""
+		line = 1
+		column = 1
+		newoutput = []
+		for token in self._output:
+			token = token[:3] + (line, column)
+			newoutput.append(token)
+			source = token[2]
+			while '\n' in source:
+				line += 1
+				column = 1
+				source = source[source.index('\n') + 1:]
+			column += len(source)
+		self._output = newoutput
+
+	def _newline(self, index=0, allowempty=False):
+		"""Adds an INDENT token to the output.
+
+		The _newline() method is called to start a new line in the output. It
+		does this by appending (or inserting, depending on the index parameter)
+		an INDENT token to the output list. Later, during _parse_finish, INDENT
+		tokens are converted into WHITESPACE tokens at the specified
+		indentation level.
+
+		See _insert_output for an explanation of allowempty.
+		"""
+		token = (INDENT, self._level, '')
+		self._insert_output(token, index, allowempty)
+
+	def _indent(self, index=0, allowempty=False):
+		"""Increments the indentation level and starts a new line."""
+		self._level += 1
+		self._newline(index, allowempty)
+
+	def _outdent(self, index=0, allowempty=False):
+		"""Decrements the indentation level and starts a new line."""
+		self._level -= 1
+		assert self._level >= 0
+		self._newline(index, allowempty)
+
+	def _valign(self, index=0):
+		"""Inserts a VALIGN token into the output."""
+		token = (VALIGN, None, '')
+		self._insert_output(token, index, True)
+
+	def _vapply(self, index=0):
+		"""Inserts a VAPPLY token into the output."""
+		token = (VAPPLY, None, '')
+		self._insert_output(token, index, True)
+
+	def _insert_output(self, token, index, allowempty):
 		"""Inserts the specified token into the output.
 
 		This utility routine is used by _newline() and other formatting routines
@@ -332,54 +635,31 @@ class BaseFormatter(object):
 
 		Note that the method takes care to preserve the invariants that the
 		state save/restore methods rely upon.
+
+		If allowempty is False, and the token to be inserted is an INDENT
+		(newline) token, the method will scan for an existing token of the same
+		time at the requested insert location. If an existing INDENT token is
+		found, it will be replaced by the new token. Otherwise, (if allowempty
+		is True) the new token will be inserted unconditionally. In other
+		words, this parameter allows or disallows the insertion of empty lines.
 		"""
-		if not index:
-			self._output.append(token)
-		else:
-			i = -1
-			while True:
+		if index == 0:
+			i = len(self._output)
+		elif index < 0:
+			i = len(self._output) - 1
+			while index < 0:
 				while self._output[i][0] in (COMMENT, WHITESPACE):
 					i -= 1
 				index += 1
-				if index >= 0:
-					break
-			# Check that the invariant is preserved (see _save_state())
-			assert (len(self._statestack) == 0) or (len(self._output) + i >= self._statestack[-1][2])
+		else:
+			assert False
+		# Check that the statestack invariant (see _save_state()) is preserved
+		assert (len(self._statestack) == 0) or (i >= self._statestack[-1][2])
+		# Check for duplicates - replace if we're about to duplicate the token
+		if not allowempty and self._output[i - 1][0] == token[0] and token[0] == INDENT:
+			self._output[i - 1] = token
+		else:
 			self._output.insert(i, token)
-
-	def _newline(self, index=0):
-		"""Adds an INDENT token to the output.
-
-		The _newline() method is called to start a new line in the output. It
-		does this by appending (or inserting, depending on the index parameter)
-		an INDENT token to the output list. Such a token starts a new line,
-		indented to the current indentation level.
-		"""
-		token = (INDENT, self._level, "\n" + self.indent * self._level)
-		self._insert_output(token, index)
-
-	def _indent(self, index=0):
-		"""Increments the indentation level and starts a new line."""
-		self._level += 1
-		self._newline(index)
-
-	def _outdent(self, index=0):
-		"""Decrements the indentation level and starts a new line."""
-		self._level -= 1
-		# Stop two or more consecutive outdent() calls from leaving blank lines
-		if self._output[-1][0] == INDENT:
-			del self._output[-1]
-		self._newline(index)
-
-	def _valign(self, index=0):
-		"""Inserts a VALIGN token into the output."""
-		token = (VALIGN, None, '')
-		self._insert_output(token, index)
-
-	def _vapply(self, index=0):
-		"""Inserts a VAPPLY token into the output."""
-		token = (VAPPLY, None, '')
-		self._insert_output(token, index)
 
 	def _save_state(self):
 		"""Saves the current state of the parser on a stack for later retrieval."""
@@ -388,11 +668,12 @@ class BaseFormatter(object):
 		# Hence, to be able to roll back to a prior state, we don't need to
 		# store the entire output list, merely its length will suffice.
 		#
-		# Note that the _newline() method does *insert* rather than append
-		# tokens (when called with a negative index).  However, provided the
-		# tokens are inserted *after* the position in the output list where the
-		# state was last saved, this also maintains the invariant (the
-		# _newline() method includes an assertion to ensure this is the case).
+		# Note that the _insert_output() method does *insert* rather than
+		# append tokens (when called with a negative index).  However, provided
+		# the tokens are inserted *after* the position in the output list where
+		# the state was last saved, this also maintains the invariant (the
+		# _insert_output() method includes an assertion to ensure this is the
+		# case).
 		self._statestack.append((self._index, self._level, len(self._output)))
 
 	def _restore_state(self):
@@ -493,7 +774,27 @@ class BaseFormatter(object):
 				return t
 		return None
 
-	def _match(self, template):
+	def _prespace_default(self, template):
+		"""Determines the default prespace setting for a _match() template."""
+		return template not in (
+			'.', ',', ')',
+			(OPERATOR, '.'),
+			(OPERATOR, ','),
+			(OPERATOR, ')'),
+			TERMINATOR,
+			STATEMENT,
+			EOF,
+		)
+
+	def _postspace_default(self, template):
+		"""Determines the default postspace setting for a _match() template."""
+		return template not in (
+			'.', '(',
+			(OPERATOR, '.'),
+			(OPERATOR, '('),
+		)
+
+	def _match(self, template, prespace=None, postspace=None):
 		"""Attempt to match the current token against a template token.
 
 		Matches the provided template token against the current token in the
@@ -501,18 +802,60 @@ class BaseFormatter(object):
 		forward to the next non-junk token, and the (potentially transformed)
 		matched token is returned. Otherwise, None is returned and the current
 		position is not moved.
+
+		The prespace and postspace parameters affect the insertion of
+		WHITESPACE tokens into the output when WHITESPACE is present in the
+		reformat set property, and a match is successful. If prespace is True,
+		a WHITESPACE token containing a single space is added to the output
+		prior to appending the matching token. However, if prespace is False,
+		no WHITESPACE token will be added, only the matching token.  If
+		postspace is False, it will override the prespace setting of the next
+		match (useful for suppressing space next to right-associative operators
+		like unary plus/minus).
+		
+		Note that a False value in either prespace or postspace always
+		overrides a True value, i.e. if a match sets postspace to False, the
+		value of prespace in the subsequent match is irrelevant; no space will
+		be added.  Likewise if a match sets postspace to True, a False prespace
+		value in a subsequent match will override this and prevent space from
+		being added.
+
+		By default prespace and postspace are None. In this case, the
+		_prespace_default() and _postspace_default() methods will be called to
+		determine the default based on the match template. These methods should
+		be overridden by descendents to deal with additional syntax introduced
+		by the dialect they represent. The default implementations in this
+		class suppress prespace in the case of dot, comma and close-parenthesis
+		operators and postspace in the case of dot and open-parenthesis.
 		"""
-		t = self._cmp_tokens(self._token(self._index), template)
-		if not t:
+		# Determine the prespace and postspace settings if necessary
+		if prespace is None:
+			prespace = self._prespace_default(template)
+		if postspace is None:
+			postspace = self._postspace_default(template)
+		# Compare the current token against the template. Note that the
+		# template may transform the token in order to match (see _cmp_tokens)
+		token = self._cmp_tokens(self._token(self._index), template)
+		if not token:
 			return None
-		self._output.append(t)
+		# If a match was found, add a leading space (if WHITESPACE is being
+		# reformatted)
+		if WHITESPACE in self.reformat and prespace:
+			if not (self._output and self._output[-1][0] in (INDENT, WHITESPACE)):
+				self._output.append((WHITESPACE, None, ' ', 0, 0))
+		self._output.append(token)
 		self._index += 1
 		while self._token(self._index)[0] in (COMMENT, WHITESPACE):
 			self._output.append(self._token(self._index))
 			self._index += 1
-		return t
+		# If postspace is False, prevent the next _match call from adding a
+		# leading space by adding an empty WHITESPACE token. The final phase of
+		# the parser removes empty tokens.
+		if not postspace:
+			self._output.append((WHITESPACE, None, '', 0, 0))
+		return token
 
-	def _match_sequence(self, templates):
+	def _match_sequence(self, templates, prespace=None, postspace=None, interspace=None):
 		"""Attempt to match the next sequence of tokens against a list of template tokens.
 
 		Matches the list of non-junk tokens (tokens which are not WHITESPACE or
@@ -524,83 +867,89 @@ class BaseFormatter(object):
 		If a match is found, the output list and current token position are
 		updated. Otherwise, no changes to the internal state are made
 		(regardless of the length of the list of tokens to match).
-		"""
-		r = []
-		i = self._index
-		for template in templates:
-			# Attempt to match the current token against the expected token
-			t = self._cmp_tokens(self._token(i), template)
-			if not t:
-				return None
-			# If it matched, append it to the output list
-			r.append(t)
-			i += 1
-			# Skip comments and whitespace (adding them to the output list too)
-			while self._token(i)[0] in (COMMENT, WHITESPACE):
-				r.append(self._token(i))
-				i += 1
-		# If we've completed the loop, we've got a match so update _output and
-		# _index with the new values
-		self._output.extend(r)
-		self._index = i
-		# Strip WHITESPACE and COMMENT tokens from the return list
-		return [t for t in r if t[0] not in (COMMENT, WHITESPACE)]
 
-	def _match_one_of(self, templates):
+		See _match() for a description of prespace and postspace. The optional
+		interspace parameter specifies the spacing rule between each template
+		in the sequence.
+		"""
+		self._save_state()
+		# Build lists of prespace and postspace settings for each template and
+		# zip them together in the loop
+		prespaces = [prespace] + [interspace for i in xrange(len(templates) - 1)]
+		postspaces = [interspace for i in xrange(len(templates) - 1)] + [postspace]
+		for (template, prespace, postspace) in zip(templates, prespaces, postspaces):
+			if not self._match(template, prespace, postspace):
+				self._restore_state()
+				return None
+		# If the loop completes, we've matched all templates in the sequence.
+		# Use the last entry on the state stack to determine all the tokens
+		# we've added to the output and strip out all the COMMENT and
+		# WHITESPACE tokens
+		result = [
+			token for token in self._output[self._statestack[-1][2]:]
+			if token[0] not in (COMMENT, WHITESPACE)
+		]
+		self._forget_state()
+		return result
+
+	def _match_one_of(self, templates, prespace=None, postspace=None):
 		"""Attempt to match the current token against one of several templates.
 
 		Matches the current token against one of several possible
 		partial tokens provided in a list. If a match is found, the method
 		returns the matched token, and moves the current position forward to
 		the next non-junk token. If no match is found, the method returns None.
+
+		See _match() for a description of prespace and postspace.
 		"""
 		for template in templates:
-			t = self._cmp_tokens(self._token(self._index), template)
-			if t:
-				# If a match is found, update _output, and skip to the next
-				# non-junk token
-				self._output.append(t)
-				self._index += 1
-				while self._token(self._index)[0] in [COMMENT, WHITESPACE]:
-					self._output.append(self._token(self._index))
-					self._index += 1
-				return t
+			token = self._match(template, prespace, postspace)
+			if token:
+				return token
 		return None
 
-	def _expect(self, template):
+	def _expect(self, template, prespace=None, postspace=None):
 		"""Match the current token against a template token, or raise an error.
 
 		The _expect() method is essentially the same as _match() except that if
 		a match is not found, a ParseError exception is raised stating that the
 		parser "expected" the specified token, but found something else.
+
+		See _match() for a description of prespace and postspace.
 		"""
-		result = self._match(template)
+		result = self._match(template, prespace, postspace)
 		if not result:
 			self._expected(template)
 		return result
 
-	def _expect_sequence(self, templates):
+	def _expect_sequence(self, templates, prespace=None, postspace=None, interspace=None):
 		"""Match the next sequence of tokens against a list of templates, or raise an error.
 
 		The _expect_sequence() method is equivalent to the _match_sequence()
 		method except that if a match is not found, a ParseError exception is
 		raised with a message indicating that a certain sequence was expected,
 		but something else was found.
+
+		See _match() for a description of prespace and postspace. The optional
+		interspace parameter specifies the spacing rule between each template
+		in the sequence.
 		"""
-		result = self._match_sequence(templates)
+		result = self._match_sequence(templates, prespace, postspace, interspace)
 		if not result:
 			self._expected_sequence(templates)
 		return result
 
-	def _expect_one_of(self, templates):
+	def _expect_one_of(self, templates, prespace=None, postspace=None):
 		"""Match the current token against one of several templates, or raise an error.
 
 		The _expect_one_of() method is equivalent to the _match_one_of() method
 		except that if a match is not found, a ParseError exception is raised
 		with a message indicating that one of several possibilities was
 		expected, but something else was found.
+
+		See _match() for a description of prespace and postspace.
 		"""
-		result = self._match_one_of(templates)
+		result = self._match_one_of(templates, prespace, postspace)
 		if not result:
 			self._expected_one_of(templates)
 		return result
@@ -626,131 +975,6 @@ class BaseFormatter(object):
 		"""Raises an error explaining one of several template tokens was expected."""
 		raise ParseExpectedOneOfError(self._tokens, self._token(self._index), templates)
 
-	def _format_token(self, t):
-		"""Reformats a token for output"""
-		# Override this method in descendent classes to transform the token
-		# in whatever manner you wish. Return the transformed token without
-		# the line and column elements (the last two) as these will be
-		# recalculated in _parse_finish. The default implementation here
-		# performs no transformation
-		return t[:3]
-
-	def _reformat_output(self):
-		"""Reformats all output tokens with _format_token()"""
-		newoutput = []
-		for token in self._output:
-			token = self._format_token(token)
-			if token:
-				if isinstance(token, list):
-					newoutput.extend(token)
-				else:
-					newoutput.append(token)
-		self._output = newoutput
-
-	def _convert_valign(self):
-		"""Converts the first VALIGN token on each line into a WHITESPACE token"""
-		result = False
-		indexes = []
-		aligncol = 0
-		i = 0
-		while i < len(self._output):
-			(tokentype, _, _, line, col) = self._output[i]
-			if tokentype == VALIGN:
-				indexes.append(i)
-				aligncol = max(aligncol, col)
-				# Skip to the next line (to ignore any further VALIGN tokens on
-				# this line)
-				while (self._output[i][3] == line) and (self._output[i][0] != VAPPLY):
-					i += 1
-			elif tokentype == VAPPLY:
-				if indexes:
-					result = True
-					for j in indexes:
-						# Convert each VALIGN token into an aligned WHITESPACE
-						# token
-						(_, _, _, line, col) = self._output[j]
-						self._output[j] = (WHITESPACE, None, ' '*(aligncol - col), line, col)
-					indexes = []
-					aligncol = 0
-					i += 1
-				else:
-					# No more VALIGN tokens found in the range, so remove the
-					# VAPPLY token (no need to increment i here)
-					del self._output[i]
-			else:
-				i += 1
-		return result
-
-	def _recalc_positions(self):
-		"""Recalculates the line and col elements of all output tokens"""
-		line = 1
-		column = 1
-		newoutput = []
-		for token in self._output:
-			token = token[:3] + (line, column)
-			newoutput.append(token)
-			source = token[2]
-			while '\n' in source:
-				line += 1
-				column = 1
-				source = source[source.index('\n') + 1:]
-			column += len(source)
-		self._output = newoutput
-
-	def _parse_init(self, tokens):
-		"""Sets up the parser with the specified tokens as input"""
-		self._statestack = list()
-		self._tokens = tokens
-		self._index = 0
-		self._output = []
-		self._level = 0
-
-	def _parse_finish(self):
-		"""Cleans up output tokens and recalculates line and column positions"""
-		self._reformat_output()
-		self._recalc_positions()
-		while self._convert_valign():
-			self._recalc_positions()
-		# Strip trailing whitespace / EOF / blank tokens
-		while self._output and (self._output[-1][0] in (WHITESPACE, EOF) or not self._output[-1][2]):
-			del self._output[-1]
-
-	def _parse_top(self):
-		"""Top level of the parser"""
-		# Override this method in descendents to parse a statement (or
-		# whatever is at the top of the parse tree)
-		pass
-
-	def parse(self, tokens):
-		"""Parses an arbitrary statement or script"""
-		self._parse_init(tokens)
-		while True:
-			# Ignore leading whitespace and empty statements
-			while self._token(self._index)[0] in (COMMENT, WHITESPACE, TERMINATOR):
-				self._index += 1
-			# If not at EOF, parse a statement
-			if not self._match(EOF):
-				# Output some debugging info (if debugging is set)
-				if self.debugging:
-					preview = ''.join([token[2] for token in self._tokens[self._index:self._index + 10]])
-					preview = re.sub(r'[\t\n ]+', ' ', preview).strip()
-					print 'Parsing top-level "%s..."' % (preview,)
-				self._parse_top()
-				# Check for terminator (use STATEMENT to mark any terminator
-				# found as a top-level statement terminator)
-				self._expect(STATEMENT)
-				# If the state stack has any entries something has gone wrong
-				# (some method has saved state but forgotten to clean it up
-				# before exiting)
-				assert len(self._statestack) == 0
-				# Reset the indent level and leave a blank line
-				self._level = 0
-				self._newline()
-				self._newline()
-			else:
-				break
-		self._parse_finish()
-		return self._output
 
 class DB2LUWFormatter(BaseFormatter):
 	"""Reformatter which breaks up and re-indents DB2 for LUW's SQL dialect.
@@ -761,64 +985,27 @@ class DB2LUWFormatter(BaseFormatter):
 	CREATE TABLESPACE, CREATE FUNCTION, and dynamic compound statements).
 	"""
 
-	def __init__(self):
-		super(DB2LUWFormatter, self).__init__()
-
 	def _parse_top(self):
 		# Override _parse_top to make a 'statement' the top of the parse tree
 		self._parse_statement()
 
-	def _format_token(self, t):
-		"""Reformats a token for output"""
+	def _prespace_default(self, template):
+		# Overridden to include array and set operators, and the specific
+		# intra-statement terminator used by func/proc definitions
+		return super(DB2LUWFormatter, self)._prespace_default(template) and template not in (
+			']', '}', ';',
+			(OPERATOR, ']'),
+			(OPERATOR, '}'),
+			(TERMINATOR, ';'),
+		)
 
-		# Override this method in descendent classes to transform the token in
-		# whatever manner you wish. Return the transformed token without the
-		# line and column elements (the last two) as these will be recalculated
-		# in _recalc_positions(). To remove a token from the output, return
-		# None.
-		if self.reformat:
-			if t[0] == IDENTIFIER:
-				return (t[0], t[1], format_ident(t[1]))
-			elif t[0] == LABEL:
-				return (t[0], t[1], format_ident(t[1]) + ':')
-			elif t[0] == REGISTER:
-				return (t[0], t[1], format_ident(t[1]))
-			elif t[0] == DATATYPE:
-				return (t[0], t[1], format_ident(t[1]))
-			elif t[0] == PARAMETER:
-				return (t[0], t[1], format_param(t[1]))
-			elif t[0] == KEYWORD:
-				return (t[0], t[1], t[1])
-			elif t[0] == WHITESPACE:
-				return (t[0], None, ' ')
-			elif t[0] == COMMENT:
-				# XXX Need much more intelligent comment handling
-				##return (t[0], t[1], '/*%s*/' % (t[1]))
-				return t[:3]
-			elif t[0] == NUMBER:
-				return (t[0], t[1], str(t[1]))
-			elif t[0] == STRING:
-				return (t[0], t[1], quote_str(t[1], "'"))
-			elif t[0] == TERMINATOR:
-				return (t[0], None, ';')
-			elif t[0] == STATEMENT:
-				return (t[0], None, '')
-			elif t[0] == INDENT:
-				if self.line_split:
-					return [
-						(WHITESPACE, None, '\n'),
-						(WHITESPACE, None, self.indent*t[1])
-					]
-				else:
-					return (WHITESPACE, None, '\n' + self.indent*t[1])
-			else:
-				return t[:3]
-		else:
-			# If we're not reformatting, just remove INDENT, VALIGN and VAPPLY tokens
-			if t[0] in (INDENT, VALIGN, VAPPLY):
-				return None
-			else:
-				return t[:3]
+	def _postspace_default(self, template):
+		# Overridden to include array and set operators
+		return super(DB2LUWFormatter, self)._postspace_default(template) and template not in (
+			'[', '{',
+			(OPERATOR, '['),
+			(OPERATOR, '{'),
+		)
 
 	# PATTERNS ###############################################################
 
@@ -887,10 +1074,10 @@ class DB2LUWFormatter(BaseFormatter):
 		M->1024**2, etc.)
 		"""
 		if optional:
-			if not self._match('('):
+			if not self._match('(', prespace=False):
 				return None
 		else:
-			self._expect('(')
+			self._expect('(', prespace=False)
 		size = self._expect(NUMBER)[1]
 		if suffix:
 			suf = self._match_one_of(suffix.keys())
@@ -1033,7 +1220,8 @@ class DB2LUWFormatter(BaseFormatter):
 			size = None
 			scale = None
 			# Match the optional SYSIBM prefix
-			self._match_sequence([(DATATYPE, 'SYSIBM'), '.'])
+			if self._match((DATATYPE, 'SYSIBM')):
+				self._expect('.')
 			if self._match((DATATYPE, 'SMALLINT')):
 				typename = 'SMALLINT'
 			elif self._match_one_of([(DATATYPE, 'INT'), (DATATYPE, 'INTEGER')]):
@@ -1052,19 +1240,17 @@ class DB2LUWFormatter(BaseFormatter):
 				self._match((DATATYPE, 'PRECISION'))
 				typename = 'DOUBLE'
 			elif self._match((DATATYPE, 'DECFLOAT')):
-				if self._match('('):
-					size = self._expect(NUMBER)[1]
-					self._expect(')')
+				self._parse_size(optional=True)
 			elif self._match_one_of([(DATATYPE, 'DEC'), (DATATYPE, 'DECIMAL')]):
 				typename = 'DECIMAL'
-				if self._match('('):
+				if self._match('(', prespace=False):
 					size = self._expect(NUMBER)[1]
 					if self._match(','):
 						scale = self._expect(NUMBER)[1]
 					self._expect(')')
 			elif self._match_one_of([(DATATYPE, 'NUM'), (DATATYPE, 'NUMERIC')]):
 				typename = 'NUMERIC'
-				if self._match('('):
+				if self._match('(', prespace=False):
 					size = self._expect(NUMBER)[1]
 					if self._match(','):
 						scale = self._expect(NUMBER)[1]
@@ -1231,7 +1417,7 @@ class DB2LUWFormatter(BaseFormatter):
 
 	# EXPRESSIONS and PREDICATES #############################################
 
-	def _parse_search_condition(self, linebreaks=True):
+	def _parse_search_condition(self, newlines=True):
 		"""Parse a search condition (as part of WHERE/HAVING/etc.)"""
 		while True:
 			self._match('NOT')
@@ -1241,7 +1427,7 @@ class DB2LUWFormatter(BaseFormatter):
 			try:
 				# Attempt to parse a parenthesized search condition
 				self._expect('(')
-				self._parse_search_condition(linebreaks)
+				self._parse_search_condition(newlines)
 				self._expect(')')
 			except ParseError:
 				# If that fails, rewind and parse a predicate instead (which
@@ -1253,7 +1439,8 @@ class DB2LUWFormatter(BaseFormatter):
 			else:
 				self._forget_state()
 			if self._match_one_of(['AND', 'OR']):
-				if linebreaks: self._newline(-1)
+				if newlines:
+					self._newline(-1)
 			else:
 				break
 
@@ -1371,7 +1558,7 @@ class DB2LUWFormatter(BaseFormatter):
 
 	def _parse_expression(self):
 		while True:
-			self._match_one_of(['+', '-']) # Unary +/-
+			self._match_one_of(['+', '-'], postspace=False) # Unary +/-
 			if self._match('('):
 				self._parse_tuple()
 				self._expect(')')
@@ -1413,7 +1600,7 @@ class DB2LUWFormatter(BaseFormatter):
 				else:
 					self._forget_state()
 			# Parse an optional array element suffix
-			if self._match('['):
+			if self._match('[', prespace=False):
 				self._parse_expression()
 				self._expect(']')
 			# Parse an optional interval suffix
@@ -1460,7 +1647,8 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_aggregate_function_call(self):
 		"""Parses an aggregate function with it's optional arg-prefix"""
 		# Parse the optional SYSIBM schema prefix
-		self._match_sequence(['SYSIBM', '.'])
+		if self._match('SYSIBM'):
+			self._expect('.')
 		# Although CORRELATION and GROUPING are aggregate functions they're not
 		# included here as their syntax is entirely compatible with "ordinary"
 		# functions so _parse_scalar_function_call will handle them
@@ -1475,7 +1663,7 @@ class DB2LUWFormatter(BaseFormatter):
 			'VARIANCE',
 			'VAR',
 		])[1]
-		self._expect('(')
+		self._expect('(', prespace=False)
 		if aggfunc in ('COUNT', 'COUNT_BIG') and self._match('*'):
 			# COUNT and COUNT_BIG can take '*' as a sole parameter
 			pass
@@ -1492,7 +1680,8 @@ class DB2LUWFormatter(BaseFormatter):
 
 	def _parse_olap_function_call(self):
 		"""Parses an OLAP function call (some of which have non-standard internal syntax)"""
-		self._match_sequence(['SYSIBM', '.'])
+		if self._match('SYSIBM'):
+			self._expect('.')
 		olapfunc = self._expect_one_of([
 			'ROW_NUMBER',
 			'RANK',
@@ -1502,7 +1691,7 @@ class DB2LUWFormatter(BaseFormatter):
 			'FIRST_VALUE',
 			'LAST_VALUE',
 		])[1]
-		self._expect('(')
+		self._expect('(', prespace=False)
 		if olapfunc in ('LAG', 'LEAD'):
 			self._parse_expression()
 			if self._match(','):
@@ -1522,7 +1711,8 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_xml_function_call(self):
 		"""Parses an XML function call (which has non-standard internal syntax)"""
 		# Parse the optional SYSIBM schema prefix
-		self._match_sequence(['SYSIBM', '.'])
+		if self._match('SYSIBM'):
+			self._expect('.')
 		# Note that XML2CLOB (compatibility), XMLCOMMENT, XMLCONCAT,
 		# XMLDOCUMENT, XMLTEXT, and XMLXSROBJECTID aren't handled by this
 		# method as their syntax is "normal" so _parse_scalar_function_call
@@ -1543,7 +1733,7 @@ class DB2LUWFormatter(BaseFormatter):
 			'XMLTABLE',
 			'XMLTRANSFORM',
 		])[1]
-		self._expect('(')
+		self._expect('(', prespace=False)
 		if xmlfunc == 'XMLAGG':
 			self._parse_expression()
 			if self._match_sequence(['ORDER', 'BY']):
@@ -1757,7 +1947,8 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_sql_function_call(self):
 		"""Parses scalar function calls with abnormal internal syntax (usually as dictated by the SQL standard)"""
 		# Parse the optional SYSIBM schema prefix
-		self._match_sequence(['SYSIBM', '.'])
+		if self._match('SYSIBM'):
+			self._expect('.')
 		# Note that only the "special" syntax of functions is handled here.
 		# Most of these functions will also accept "normal" syntax. In that
 		# case, this method will raise a parse error and the caller will
@@ -1771,7 +1962,7 @@ class DB2LUWFormatter(BaseFormatter):
 			'SUBSTRING',
 			'TRIM',
 		])[1]
-		self._expect('(')
+		self._expect('(', prespace=False)
 		if sqlfunc in ('CHAR_LENGTH', 'CHARACTER_LENGTH'):
 			self._parse_expression()
 			if self._match('USING'):
@@ -1810,7 +2001,7 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_scalar_function_call(self):
 		"""Parses a scalar function call with all its arguments"""
 		self._parse_function_name()
-		self._expect('(')
+		self._expect('(', prespace=False)
 		if not self._match(')'):
 			self._parse_expression_list()
 			self._expect(')')
@@ -1832,34 +2023,38 @@ class DB2LUWFormatter(BaseFormatter):
 		"""Parses the aggregation suffix in an OLAP-function call"""
 		# OVER already matched
 		self._expect('(')
-		if self._match('PARTITION'):
-			self._expect('BY')
-			self._parse_expression_list()
-		if self._match('ORDER'):
-			self._expect('BY')
-			while True:
-				if self._match('ORDER'):
-					self._expect('OF')
-					self._parse_table_name()
-				else:
-					self._parse_expression()
-					if self._match_one_of(['ASC', 'DESC']):
-						if self._match('NULLS'):
-							self._expect_one_of(['FIRST', 'LAST'])
-				if not self._match((OPERATOR, ',')):
-					break
-		if self._match_one_of(['ROWS', 'RANGE']):
-			if not self._parse_olap_range(True):
-				self._expect('BETWEEN')
-				self._parse_olap_range(False)
-				self._expect('AND')
-				self._parse_olap_range(False)
-		self._expect(')')
+		if not self._match(')'):
+			self._indent()
+			if self._match('PARTITION'):
+				self._expect('BY')
+				self._parse_expression_list()
+			if self._match('ORDER'):
+				self._newline(-1)
+				self._expect('BY')
+				while True:
+					if self._match('ORDER'):
+						self._expect('OF')
+						self._parse_table_name()
+					else:
+						self._parse_expression()
+						if self._match_one_of(['ASC', 'DESC']):
+							if self._match('NULLS'):
+								self._expect_one_of(['FIRST', 'LAST'])
+					if not self._match(','):
+						break
+			if self._match_one_of(['ROWS', 'RANGE']):
+				if not self._parse_olap_range(True):
+					self._expect('BETWEEN')
+					self._parse_olap_range(False)
+					self._expect('AND')
+					self._parse_olap_range(False)
+			self._outdent()
+			self._expect(')')
 
 	def _parse_cast_expression(self):
 		"""Parses a CAST() expression"""
 		# CAST already matched
-		self._expect('(')
+		self._expect('(', prespace=False)
 		self._parse_expression()
 		self._expect('AS')
 		self._parse_datatype()
@@ -1873,7 +2068,7 @@ class DB2LUWFormatter(BaseFormatter):
 		# Parse all WHEN cases
 		self._indent(-1)
 		while True:
-			self._parse_search_condition(linebreaks=False) # WHEN Search condition
+			self._parse_search_condition(newlines=False) # WHEN Search condition
 			self._expect('THEN')
 			self._parse_expression() # THEN Expression
 			if self._match('WHEN'):
@@ -2079,13 +2274,15 @@ class DB2LUWFormatter(BaseFormatter):
 			if self._match('AS'):
 				self._expect(IDENTIFIER)
 			# Ambiguity: Several KEYWORDs can legitimately appear in this
-			# position
+			# position. XXX This is horrible - there /must/ be a cleaner way of
+			# doing this with states and backtracking
 			elif not self._peek_one_of([
 					'DO',
 					'EXCEPT',
 					'FETCH',
 					'GROUP',
 					'HAVING',
+					'CROSS',
 					'LEFT',
 					'RIGHT',
 					'FULL',
@@ -2110,12 +2307,14 @@ class DB2LUWFormatter(BaseFormatter):
 		self._indent()
 		while True:
 			if self._match('('):
-				self._parse_expression_list(allowdefault, newlines=True)
+				self._parse_expression_list(allowdefault)
 				self._expect(')')
 			else:
 				if not (allowdefault and self._match('DEFAULT')):
 					self._parse_expression()
-			if not self._match(','):
+			if self._match(','):
+				self._newline()
+			else:
 				break
 		self._outdent()
 
@@ -2170,13 +2369,15 @@ class DB2LUWFormatter(BaseFormatter):
 				else:
 					self._forget_state()
 			elif self._match('TABLE'):
-				self._expect('(')
+				self._expect('(', prespace=False)
 				# Ambiguity: TABLE() can indicate a table-function call or a
 				# nested table expression
 				self._save_state()
 				try:
 					# Try and parse a full-select
+					self._indent()
 					self._parse_full_select()
+					self._outdent()
 				except ParseError:
 					# If it fails, rewind and try a function call instead
 					self._restore_state()
@@ -2188,34 +2389,34 @@ class DB2LUWFormatter(BaseFormatter):
 				self._parse_table_correlation(optional=False)
 			elif self._match_one_of(['FINAL', 'NEW']):
 				self._expect('TABLE')
-				self._expect('(')
+				self._expect('(', prespace=False)
+				self._indent()
 				if self._expect_one_of(['INSERT', 'UPDATE'])[1] == 'INSERT':
 					self._parse_insert_statement()
 				else:
 					self._parse_update_statement()
 				reraise = True
+				self._outdent()
 				self._expect(')')
 				self._parse_table_correlation(optional=True)
 			elif self._match('OLD'):
 				self._expect('TABLE')
-				self._expect('(')
+				self._expect('(', prespace=False)
+				self._indent()
 				if self._expect_one_of(['UPDATE', 'DELETE'])[1] == 'DELETE':
 					self._parse_delete_statement()
 				else:
 					self._parse_update_statement()
 				reraise = True
+				self._outdent()
 				self._expect(')')
 				self._parse_table_correlation(optional=True)
-			else:
+			elif self._peek('XMLTABLE'):
 				# Bizarrely, the XMLTABLE table function can be used outside a
 				# TABLE() reference...
-				self._save_state()
-				if self._match('XMLTABLE'):
-					self._restore_state()
-					self._parse_xml_function_call()
-				else:
-					self._forget_state()
-					raise ParseBacktrack()
+				self._parse_xml_function_call()
+			else:
+				raise ParseBacktrack()
 		except ParseError:
 			# If the above fails, rewind and try a simple table reference
 			self._restore_state()
@@ -2241,9 +2442,10 @@ class DB2LUWFormatter(BaseFormatter):
 		while True:
 			if self._match_one_of(['UNION', 'INTERSECT', 'EXCEPT']):
 				self._newline(-1)
+				self._newline(-1, allowempty=True)
 				self._match('ALL')
 				self._newline()
-				self._newline()
+				self._newline(allowempty=True)
 				# No need to include allowinto here (it's only permitted in a
 				# top-level subselect)
 				self._parse_relation(allowdefault)
@@ -2265,9 +2467,11 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_relation(self, allowdefault=False, allowinto=False):
 		"""Parses relation generators (high precedence) in a full-select expression"""
 		if self._match('('):
+			self._indent()
 			# No need to include allowinto here (it's only permitted in a
 			# top-level subselect)
 			self._parse_full_select(allowdefault)
+			self._outdent()
 			self._expect(')')
 		elif self._match('SELECT'):
 			self._parse_sub_select(allowinto)
@@ -2328,7 +2532,7 @@ class DB2LUWFormatter(BaseFormatter):
 					self._expect(']')
 				self._expect('=')
 				if self._match('ARRAY'):
-					self._expect('[')
+					self._expect('[', prespace=False)
 					# Ambiguity: Expression list vs. select-statement
 					self._save_state()
 					try:
@@ -2401,13 +2605,15 @@ class DB2LUWFormatter(BaseFormatter):
 				validno.remove(t)
 				valid.remove(t)
 
-	def _parse_column_definition(self, aligntypes=False, federated=False):
+	def _parse_column_definition(self, aligntypes=False, alignoptions=False, federated=False):
 		"""Parses a column definition in a CREATE TABLE statement"""
 		# Parse a column definition
 		self._expect(IDENTIFIER)
 		if aligntypes:
 			self._valign()
 		self._parse_datatype()
+		if alignoptions and not self._peek_one_of([',', ')']):
+			self._valign()
 		# Parse column options
 		while True:
 			if self._match('NOT'):
@@ -2482,7 +2688,7 @@ class DB2LUWFormatter(BaseFormatter):
 			pass
 		elif self._match('REFERENCES'):
 			self._parse_table_name()
-			if self._match('('):
+			if self._match('(', prespace=False):
 				self._expect(IDENTIFIER)
 				self._expect(')')
 			t = ['DELETE', 'UPDATE']
@@ -2556,7 +2762,7 @@ class DB2LUWFormatter(BaseFormatter):
 			self._expect(')')
 			self._expect('REFERENCES')
 			self._parse_subschema_name()
-			self._expect('(')
+			self._expect('(', prespace=False)
 			self._parse_ident_list()
 			self._expect(')')
 			t = ['DELETE', 'UPDATE']
@@ -2584,7 +2790,7 @@ class DB2LUWFormatter(BaseFormatter):
 			# functional dependency. Try the search condition first
 			self._save_state()
 			try:
-				self._parse_search_condition()
+				self._parse_search_condition(newlines=False)
 			except ParseError:
 				self._restore_state()
 				if self._match('('):
@@ -2610,7 +2816,7 @@ class DB2LUWFormatter(BaseFormatter):
 				'CHECK'
 			])
 
-	def _parse_table_definition(self, aligntypes=False, federated=False):
+	def _parse_table_definition(self, aligntypes=False, alignoptions=False, federated=False):
 		"""Parses a table definition (list of columns and constraints)"""
 		self._expect('(')
 		self._indent()
@@ -2622,15 +2828,18 @@ class DB2LUWFormatter(BaseFormatter):
 			except ParseError:
 				# If that fails, rewind and try and parse a column definition
 				self._restore_state()
-				self._parse_column_definition(aligntypes=aligntypes, federated=federated)
+				self._parse_column_definition(aligntypes=aligntypes, alignoptions=alignoptions, federated=federated)
 			else:
 				self._forget_state()
 			if not self._match(','):
 				break
 			else:
 				self._newline()
+		if aligntypes:
+			self._vapply()
+		if alignoptions:
+			self._vapply()
 		self._outdent()
-		self._vapply()
 		self._expect(')')
 
 	def _parse_constraint_alteration(self):
@@ -2794,7 +3003,7 @@ class DB2LUWFormatter(BaseFormatter):
 				# Ambiguity: Can use schema.* or schema.name(prototype) here
 				if not self._match('*') and not self._match_sequence([IDENTIFIER, '.', '*']):
 					self._parse_routine_name()
-					if self._match('('):
+					if self._match('(', prespace=False):
 						self._parse_datatype_list()
 						self._expect(')')
 			elif self._match('SPECIFIC'):
@@ -3471,7 +3680,7 @@ class DB2LUWFormatter(BaseFormatter):
 		"""Parses an ALTER FUNCTION statement"""
 		# ALTER [SPECIFIC] FUNCTION already matched
 		self._parse_function_name()
-		if not specific and self._match('('):
+		if not specific and self._match('(', prespace=False):
 			if not self._match(')'):
 				self._parse_datatype_list()
 				self._expect(')')
@@ -3564,7 +3773,7 @@ class DB2LUWFormatter(BaseFormatter):
 		"""Parses an ALTER PROCEDURE statement"""
 		# ALTER [SPECIFIC] PROCEDURE already matched
 		self._parse_procedure_name()
-		if not specific and self._match('('):
+		if not specific and self._match('(', prespace=False):
 			if not self._match(')'):
 				self._parse_datatype_list()
 				self._expect(')')
@@ -3741,16 +3950,22 @@ class DB2LUWFormatter(BaseFormatter):
 				elif self._match('MATERIALIZED'):
 					self._expect('QUERY')
 					self._expect('(')
+					self._indent()
 					self._parse_full_select()
+					self._outdent()
 					self._expect(')')
 					self._parse_refreshable_table_options(alter=True)
 				elif self._match('QUERY'):
 					self._expect('(')
+					self._indent()
 					self._parse_full_select()
+					self._outdent()
 					self._expect(')')
 					self._parse_refreshable_table_options(alter=True)
 				elif self._match('('):
+					self._indent()
 					self._parse_full_select()
+					self._outdent()
 					self._expect(')')
 					self._parse_refreshable_table_options(alter=True)
 				elif self._match('COLUMN'):
@@ -4261,7 +4476,7 @@ class DB2LUWFormatter(BaseFormatter):
 		"""Parses a CALL statement"""
 		# CALL already matched
 		self._parse_subschema_name()
-		if self._match('('):
+		if self._match('(', prespace=False):
 			self._parse_expression_list()
 			self._expect(')')
 
@@ -4336,11 +4551,18 @@ class DB2LUWFormatter(BaseFormatter):
 			# Try parsing an extended TABLE/VIEW comment first
 			self._parse_relation_name()
 			self._expect('(')
+			self._indent()
 			while True:
-				self._expect_sequence([IDENTIFIER, 'IS', STRING])
+				self._expect(IDENTIFIER)
+				self._valign()
+				self._expect_sequence(['IS', STRING])
 				reraise = True
-				if not self._match(','):
+				if self._match(','):
+					self._newline()
+				else:
 					break
+			self._vapply()
+			self._outdent()
 			self._expect(')')
 		except ParseError:
 			# If that fails, rewind and parse a single-object comment
@@ -4399,12 +4621,12 @@ class DB2LUWFormatter(BaseFormatter):
 					self._expect(IDENTIFIER)
 				else:
 					self._parse_routine_name()
-					if self._match('('):
+					if self._match('(', prespace=False):
 						self._parse_datatype_list()
 						self._expect(')')
 			elif self._match('PROCEDURE'):
 				self._parse_routine_name()
-				if self._match('('):
+				if self._match('(', prespace=False):
 					self._parse_datatype_list()
 					self._expect(')')
 			elif self._match('SPECIFIC'):
@@ -4535,10 +4757,9 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_create_function_statement(self):
 		"""Parses a CREATE FUNCTION statement"""
 		# CREATE FUNCTION already matched
-		# XXX Implement support for CREATE FUNCTION (external)
 		self._parse_function_name()
 		# Parse parameter list
-		self._expect('(')
+		self._expect('(', prespace=False)
 		if not self._match(')'):
 			while True:
 				self._save_state()
@@ -4714,7 +4935,7 @@ class DB2LUWFormatter(BaseFormatter):
 			self._expect_sequence([IDENTIFIER, 'FOR'])
 		if not self._match('SPECIFIC'):
 			self._parse_function_name()
-			self._expect('(')
+			self._expect('(', prespace=False)
 			self._parse_datatype_list()
 			self._expect(')')
 		else:
@@ -4802,7 +5023,7 @@ class DB2LUWFormatter(BaseFormatter):
 		if self._match('FOR'):
 			self._parse_remote_object_name()
 		else:
-			self._parse_table_definition(aligntypes=True, federated=True)
+			self._parse_table_definition(aligntypes=True, alignoptions=True, federated=True)
 			self._expect_sequence(['FOR', 'SERVER', IDENTIFIER])
 		if self._match('OPTIONS'):
 			self._parse_federated_options()
@@ -4813,14 +5034,14 @@ class DB2LUWFormatter(BaseFormatter):
 		self._parse_procedure_name()
 		if self._match('SOURCE'):
 			self._parse_source_object_name()
-			if self._match('('):
+			if self._match('(', prespace=False):
 				self._expect(')')
 			elif self._match('NUMBER'):
 				self._expect_sequence(['OF', 'PARAMETERS', NUMBER])
 			if self._match('UNIQUE'):
 				self._expect(STRING)
 			self.expect_sequence(['FOR', 'SERVER', IDENTIFIER])
-		elif self._match('('):
+		elif self._match('(', prespace=False):
 			if not self._match(')'):
 				while True:
 					self._match_one_of(['IN', 'OUT', 'INOUT'])
@@ -4985,21 +5206,21 @@ class DB2LUWFormatter(BaseFormatter):
 		# CREATE SECURITY LABEL COMPONENT already matched
 		self._expect(IDENTIFIER)
 		if self._match('ARRAY'):
-			self._expect('[')
+			self._expect('[', prespace=False)
 			while True:
 				self._expect(STRING)
 				if not self._match(','):
 					break
 			self._expect(']')
 		elif self._match('SET'):
-			self._expect('{')
+			self._expect('{', prespace=False)
 			while True:
 				self._expect(STRING)
 				if not self._match(','):
 					break
 			self._expect('}')
 		elif self._match('TREE'):
-			self._expect_sequence(['(', STRING, 'ROOT'])
+			self._expect_sequence(['(', STRING, 'ROOT'], prespace=False)
 			while self._match(','):
 				self._expect_sequence([STRING, 'UNDER', STRING])
 			self._expect(')')
@@ -5108,7 +5329,7 @@ class DB2LUWFormatter(BaseFormatter):
 				# If that fails, rewind and parse other CREATE TABLE forms
 				self._restore_state()
 				if reraise: raise
-				self._parse_table_definition(aligntypes=True, federated=False)
+				self._parse_table_definition(aligntypes=True, alignoptions=True, federated=False)
 			else:
 				self._forget_state()
 		# Parse table option suffixes. Not all of these are valid with
@@ -5187,7 +5408,7 @@ class DB2LUWFormatter(BaseFormatter):
 					pass
 				else:
 					self._match('HASH')
-					self._expect('(')
+					self._expect('(', prespace=False)
 					self._parse_ident_list()
 					self._expect(')')
 			elif t == 'PARTITION':
@@ -5441,7 +5662,7 @@ class DB2LUWFormatter(BaseFormatter):
 		self._expect('AS')
 		self._parse_datatype()
 		if self._match('ARRAY'):
-			self._expect('[')
+			self._expect('[', prespace=False)
 			self._match(NUMBER)
 			self._expect(']')
 		else:
@@ -5463,15 +5684,15 @@ class DB2LUWFormatter(BaseFormatter):
 		self._parse_type_name()
 		if self._match('FOR'):
 			self._expect_sequence(['BIT', 'DATA'])
-		elif self._match('('):
+		elif self._match('(', prespace=False):
 			if self._match('['):
-				self._expect_sequence([NUMBER, '..', NUMBER])
+				self._expect_sequence([NUMBER, '..', NUMBER], interspace=False)
 				self._expect(']')
 			else:
 				self._expect(NUMBER)
 			if self._match(','):
 				if self._match('['):
-					self._expect_sequence([NUMBER, '..', NUMBER])
+					self._expect_sequence([NUMBER, '..', NUMBER], interspace=False)
 					self._expect(']')
 				else:
 					self._expect(NUMBER)
@@ -5542,13 +5763,17 @@ class DB2LUWFormatter(BaseFormatter):
 			self._expected_one_of(['SERVICE', 'DATABASE'])
 		self._expect_sequence(['USING', 'WORK', 'CLASS', 'SET', IDENTIFIER])
 		if self._match('('):
+			self._indent()
 			while True:
 				self._expect_sequence(['WORK', 'ACTION', IDENTIFIER, 'ON', 'WORK', 'CLASS', IDENTIFIER])
 				self._parse_action_types_clause()
 				self._parse_histogram_template_clause()
 				self._match_one_of(['ENABLE', 'DISABLE'])
-				if not self._match(','):
+				if self._match(','):
+					self._newline()
+				else:
 					break
+			self._outdent()
 			self._expect(')')
 		self._match_one_of(['ENABLE', 'DISABLE'])
 
@@ -5557,14 +5782,18 @@ class DB2LUWFormatter(BaseFormatter):
 		# CREATE WORK CLASS SET already matched
 		self._expect(IDENTIFIER)
 		if self._match('('):
+			self._indent()
 			while True:
 				self._match_sequence(['WORK', 'CLASS'])
 				self._expect(IDENTIFIER)
 				self._parse_work_attributes()
 				if self._match('POSITION'):
 					self._parse_position_clause()
-				if not self._match(','):
+				if self._match(','):
+					self._newline()
+				else:
 					break
+			self._outdent()
 			self._expect(')')
 
 	def _parse_create_workload_statement(self):
@@ -5624,7 +5853,7 @@ class DB2LUWFormatter(BaseFormatter):
 			self._expect_sequence(['DEFINITION', 'ONLY'])
 			self._parse_copy_options()
 		else:
-			self._parse_table_definition(aligntypes=True, federated=False)
+			self._parse_table_definition(aligntypes=True, alignoptions=False, federated=False)
 		valid = set(['ON', 'NOT', 'WITH', 'IN', 'PARTITIONING'])
 		while valid:
 			t = self._match_one_of(valid)
@@ -5722,7 +5951,7 @@ class DB2LUWFormatter(BaseFormatter):
 			self._parse_function_name()
 		elif self._match_one_of(['FUNCTION', 'PROCEDURE']):
 			self._parse_routine_name()
-			if self._match('('):
+			if self._match('(', prespace=False):
 				self._parse_datatype_list()
 				self._expect(')')
 		elif self._match('SPECIFIC'):
@@ -5937,7 +6166,7 @@ class DB2LUWFormatter(BaseFormatter):
 		t = 'IF'
 		while True:
 			if t in ('IF', 'ELSEIF'):
-				self._parse_search_condition(linebreaks=False)
+				self._parse_search_condition(newlines=False)
 				self._expect('THEN')
 				self._indent()
 				while True:
@@ -6702,7 +6931,7 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_while_statement(self, inproc, label=None):
 		"""Parses a WHILE-loop in a dynamic compound statement"""
 		# WHILE already matched
-		self._parse_search_condition(linebreaks=False)
+		self._parse_search_condition(newlines=False)
 		self._newline()
 		self._expect('DO')
 		self._indent()
@@ -6807,6 +7036,7 @@ class DB2LUWFormatter(BaseFormatter):
 		# XXX Should PREPARE be supported here?
 		try:
 			label = self._expect(LABEL)[1]
+			self._newline()
 		except ParseError:
 			label = None
 		# Procedure specific statements
@@ -6930,7 +7160,7 @@ class DB2LUWFormatter(BaseFormatter):
 				if self._match('SQLSTATE'):
 					reraise = True
 					self._expect_one_of(['CHAR', 'CHARACTER'])
-					self._expect_sequence(['(', (NUMBER, 5), ')'])
+					self._expect_sequence(['(', (NUMBER, 5), ')'], prespace=False)
 					self._match_sequence(['DEFAULT', STRING])
 				elif self._match('SQLCODE'):
 					reraise = True
@@ -7058,6 +7288,10 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_statement(self):
 		"""Parses a top-level statement in an SQL script"""
 		# XXX CREATE EVENT MONITOR
+		# If we're reformatting WHITESPACE, add a blank WHITESPACE token to the
+		# output - this will suppress leading whitespace in front of the first
+		# word of the statement
+		self._output.append((WHITESPACE, None, '', 0, 0))
 		if self._match('ALTER'):
 			if self._match('TABLE'):
 				self._parse_alter_table_statement()
@@ -7330,7 +7564,7 @@ class DB2LUWFormatter(BaseFormatter):
 			self._index += 1
 		self._parse_function_name()
 		# Parenthesized parameter list is mandatory
-		self._expect('(')
+		self._expect('(', prespace=False)
 		if not self._match(')'):
 			while True:
 				self._match_one_of(['IN', 'OUT', 'INOUT'])

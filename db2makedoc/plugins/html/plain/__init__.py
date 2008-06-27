@@ -48,7 +48,8 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 			the footer""")
 		self.add_option('stylesheets', default='', convert=self.convert_list,
 			doc="""A comma separated list of additional stylesheet URLs which
-			each generated HTML page will link to""")
+			each generated HTML page will link to. Accepts $-prefixed
+			substitutions (see path)""")
 		self.add_option('max_graph_size', default='600x800',
 			convert=lambda value: self.convert_list(value, separator='x',
 			subconvert=lambda value: self.convert_int(value, minvalue=100),
@@ -97,6 +98,9 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 					item.config_names[0],
 					', '.join(c.config_names[0] for c in graph_map.iterkeys()))
 				)
+
+	def substitute(self):
+		return super(OutputPlugin, self).substitute() + ('stylesheets',)
 
 	def create_documents(self, site):
 		# Overridden to add static documents (CSS, PHP, etc.)

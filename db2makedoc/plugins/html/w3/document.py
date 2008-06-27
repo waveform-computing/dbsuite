@@ -878,6 +878,12 @@ class W3CSSDocument(CSSDocument):
 td.limiter { display: none; }
 """
 		return doc + u"""
+/* Extend the w3 styles for tables */
+th.nowrap,
+td.nowrap {
+	white-space: nowrap;
+}
+
 /* Override some w3 styles for SQL syntax highlighting */
 ol.sql li {
 	line-height: 1em;
@@ -885,7 +891,7 @@ ol.sql li {
 	margin-bottom: 0;
 }
 
-/* Styles for search results (the w3v8 search.css is unusable) */
+/* Styles for search results (the w3v8 search.css is too broken) */
 .limit-search {
 	background-color: #eee;
 	border-bottom: 1px solid #ccc;

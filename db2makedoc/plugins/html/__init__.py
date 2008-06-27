@@ -36,34 +36,47 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 		self.add_option('path', default='.', convert=self.convert_path, 
 			doc="""The folder into which all files (HTML, CSS, SVG, etc.) will
 			be written. Use $db or ${db} to include the name of the database in
-			the path. The $dblower and $dbupper substitutions are also
-			available, for forced lowercase and uppercase versions of the name
-			respectively. To include a literal $, use $$""")
+			the path. The $dblower, $dbupper, and $dbtitle substitutions are
+			also available, for forced lowercase, UPPERCASE, and Titlecase
+			versions of the name respectively. You may also refer to
+			environment variables with $-prefixed substitutions. To include a
+			literal $, use $$.""")
 		self.add_option('top', default='index',
 			doc="""The base name (without path or extension) of the top-level
 			file in the output (i.e. the file documenting the database itself).
 			The default "index" results in the top-level file being named
 			"index.html". Change this if you wish to have a separate index.html
-			file which is not touched by db2makedoc""")
+			file which is not touched by db2makedoc. Accepts $-prefixed
+			substitutions (see path)""")
 		self.add_option('encoding', default='UTF-8',
 			doc="""The character encoding to use for all text-based files
 			(HTML, JavaScript, CSS, SVG, etc.)""")
 		self.add_option('home_title', default='Home',
-			doc="""The title of the homepage link included in all documents""")
+			doc="""The title of the homepage link included in all documents.
+			Accepts $-prefixed substitutions (see path)""")
 		self.add_option('home_url', default='/',
 			doc="""The URL of the homepage link included in all documents.
 			This can point anywhere; it does not have to be a link to one of
-			the documents output by the plugin""")
+			the documents output by the plugin. Accepts $-prefixed
+			substitutions (see path)""")
+		self.add_option('icon_url', default='/favicon.ico',
+			doc="""The location of the icon (aka "favicon") for the generated
+			pages. Defaults to the standard /favicon.ico location. Accepts
+			$-prefixed substitutions (see path)""")
+		self.add_option('icon_type', default='image/x-icon',
+			doc="""The MIME type of the icon referenced by the icon_url option.
+			Defaults to the Microsoft icon format (image/x-icon).""")
 		self.add_option('author_name', default='',
 			doc="""The name of the author of the generated documents""")
 		self.add_option('author_email', default='',
 			doc="""The e-mail address of the author of the generated documents""")
 		self.add_option('copyright', default='',
 			doc="""The copyright message to embed in the generated documents""")
-		self.add_option('site_title', default=None,
-			doc="""The title of the site as a whole. Defaults to "dbname
+		self.add_option('site_title', default='$db Documentation',
+			doc="""The title of the site as a whole. Defaults to "$db
 			Documentation" where dbname is the name of the database for which
-			documentation is being generated""")
+			documentation is being generated. Accepts $-prefixed substitutions
+			(see path)""")
 		self.add_option('search', default='false', convert=self.convert_bool,
 			doc="""If True, a full-text-search database will be generated and
 			a small PHP script will be included with the output for searching
@@ -120,23 +133,35 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 			if not found:
 				raise db2makedoc.plugins.PluginConfigurationError('Diagrams requested, but the GraphViz utility (%s) was not found in the PATH' % gvexe)
 
+	def substitute(self):
+		"""Returns the list of options which can accept $-prefixed substitutions."""
+		# Override this in descendents if additional string options are introduced
+		return ('path', 'top', 'home_title', 'home_url', 'site_title', 'icon_url')
+
 	def execute(self, database):
 		"""Invokes the plugin to produce documentation.
 		
 		Descendent classes should NOT override this method, but instead
-		override the methods of the website class. To customize the class,
+		override the methods of the Website class. To customize the class,
 		set self.site_class to a different class in descendent constructors.
 		"""
 		super(HTMLOutputPlugin, self).execute(database)
-		# Translate any templates in the path option now that we've got the
-		# database
-		if not 'path_template' in self.options:
-			self.options['path_template'] = Template(self.options['path'])
-		self.options['path'] = self.options['path_template'].safe_substitute({
+		# Take a copy of the options if we haven't already
+		if not hasattr(self, 'options_templates'):
+			self.options_templates = dict(self.options)
+		# Build the dictionary of substitutions for $-prefixed variable
+		# references in all substitutable options (path et al.)
+		values = dict(os.environ)
+		values.update({
 			'db': database.name,
 			'dblower': database.name.lower(),
 			'dbupper': database.name.upper(),
+			'dbtitle': database.name.title(),
 		})
+		self.options = dict(self.options_templates)
+		for option in self.substitute():
+			if isinstance(self.options[option], basestring):
+				self.options[option] = Template(self.options[option]).safe_substitute(values)
 		site = self.site_class(database, self.options)
 		self.create_documents(site)
 		logging.info('Writing output to "%s"' % self.options['path'])

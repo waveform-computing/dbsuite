@@ -111,8 +111,8 @@ class W3TableDocument(W3ObjectDocument):
 					tag.tbody((
 						tag.tr(
 							tag.td(field.position + 1),
-							tag.td(field.name),
-							tag.td(field.datatype_str),
+							tag.td(field.name, class_='nowrap'),
+							tag.td(field.datatype_str, class_='nowrap'),
 							tag.td(field.nullable),
 							tag.td(_inc_index(field.key_index)), # XXX For Py2.5: field.key_index + 1 if field.key_index is not None else None,
 							tag.td(field.cardinality),

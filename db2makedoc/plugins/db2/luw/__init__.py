@@ -786,7 +786,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 					ELSE 'N'
 				END                                AS GENERATED,
 				COALESCE(CASE C.GENERATED
-					WHEN 'N' THEN C.DEFAULT
+					WHEN '' THEN C.DEFAULT
 					ELSE C.TEXT
 				END, '')                           AS DEFAULT,
 				C.REMARKS                          AS DESCRIPTION

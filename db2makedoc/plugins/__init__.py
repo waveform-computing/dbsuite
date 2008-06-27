@@ -136,7 +136,7 @@ class Plugin(object):
 
 	def convert_path(self, value):
 		"""Conversion handler for configuration values containing paths."""
-		return os.path.expanduser(os.path.expandvars(value))
+		return os.path.expanduser(value)
 
 	def convert_file(self, value, mode='rU'):
 		"""Conversion handler for configuration values containing filenames.
@@ -150,7 +150,7 @@ class Plugin(object):
 		
 		Ths default is to opening the file for reading in univeral line-break mode.
 		"""
-		return open(convert_path(value), mode)
+		return open(self.convert_path(value), mode)
 
 	def convert_int(self, value, minvalue=None, maxvalue=None):
 		"""Conversion handler for configuration values containing an integer."""

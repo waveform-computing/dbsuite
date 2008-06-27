@@ -79,8 +79,8 @@ class W3ViewDocument(W3ObjectDocument):
 					tag.tbody((
 						tag.tr(
 							tag.td(field.position + 1),
-							tag.td(field.name),
-							tag.td(field.datatype_str),
+							tag.td(field.name, class_='nowrap'),
+							tag.td(field.datatype_str, class_='nowrap'),
 							tag.td(field.nullable),
 							tag.td(self.format_comment(field.description, summary=True))
 						) for field in fields

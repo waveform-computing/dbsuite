@@ -1320,7 +1320,7 @@ class Table(Relation):
 				] + [
 					constraint.prototype
 					for constraint in self.constraints.itervalues()
-					if not isinstance(constraint, Check) or not constraint.system
+					if not (isinstance(constraint, Check) and constraint.system)
 				]),
 			'tbspace': format_ident(self.tablespace.name),
 		})
@@ -1906,7 +1906,7 @@ class Field(RelationObject):
 			items.append('NOT NULL')
 		if self.default:
 			if self.generated == 'N':
-				items.append('WITH DEFAULT %s' % (self.default))
+				items.append('DEFAULT %s' % (self.default))
 			else:
 				items.append('GENERATED %s AS %s' % (
 					{'A': 'ALWAYS', 'D': 'BY DEFAULT'}[self.generated],

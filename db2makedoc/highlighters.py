@@ -151,8 +151,7 @@ class SQLHighlighter(object):
 
 	def format_token(self, token):
 		"""Stub handler for a token"""
-		(_, _, source, _, _) = token
-		return source
+		return token[2]
 	
 	def parse(self, sql, terminator=';', line_split=False):
 		"""Converts the provided SQL into another markup language.
@@ -176,9 +175,8 @@ class SQLHighlighter(object):
 				excerpt = tokens
 			return ''.join(token[2] for token in excerpt)
 
-		self.tokenizer.line_split = line_split
 		self.formatter.line_split = line_split
-		tokens = self.tokenizer.parse(sql, terminator)
+		tokens = self.tokenizer.parse(sql, terminator, line_split)
 		# Check for errors in the tokens
 		errors = [token for token in tokens if token[0] == ERROR]
 		if errors:
@@ -196,7 +194,9 @@ class SQLHighlighter(object):
 			except ParseTokenError, e:
 				logging.warning('While formatting %s' % excerpt(tokens))
 				logging.warning('error %s found at line %d, column %d' % (e.message, e.line, e.col))
-		if tokens:
+		# Both the tokenizer and formatter always return at least one token (an
+		# EOF token). Hence, if the first token is EOF, the source is blank
+		if tokens[0][0] != EOF:
 			if line_split:
 				return (
 					self.format_line(line + 1, (token for token in tokens if token[3] == line + 1))

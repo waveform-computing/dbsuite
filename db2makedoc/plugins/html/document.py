@@ -328,16 +328,7 @@ class HTMLCommentHighlighter(CommentHighlighter):
 		# a column), scan upwards in the hierarchy until we find a document
 		# and return a link to that document with the in between objects added
 		# as normal text suffixes
-		suffixes = []
-		while self.site.object_document(target) is None:
-			suffixes.insert(0, target.name)
-			target = target.parent
-			if isinstance(target, Database):
-				return '.'.join(suffixes)
-		return [
-			self.site.link_to(target, qualifiedname=True),
-			''.join(['.' + s for s in suffixes]),
-		]
+		return self.site.link_to(target, parent=True)
 
 	def find_target(self, name):
 		"""Searches the site's associated database for the named object."""
@@ -416,6 +407,8 @@ class WebSite(object):
 		self.base_path = options['path']
 		self.home_url = options['home_url']
 		self.home_title = options['home_title']
+		self.icon_url = options['icon_url']
+		self.icon_type = options['icon_type']
 		self.keywords = [self.database.name]
 		self.author_name = options['author_name']
 		self.author_email = options['author_email']
@@ -897,6 +890,8 @@ class HTMLDocument(WebSiteDocument):
 		self.keywords = []
 		self.author_name = site.author_name
 		self.author_email = site.author_email
+		self.icon_url = site.icon_url
+		self.icon_type = site.icon_type
 		self.date = site.date
 		self.lang = site.lang
 		self.sublang = site.sublang
@@ -1088,6 +1083,10 @@ class HTMLDocument(WebSiteDocument):
 			content.append(tag.link(rel='last', href=self.last.url))
 		if self.parent:
 			content.append(tag.link(rel='up', href=self.parent.url))
+		# Add <link> elements for the favicon
+		if self.icon_url:
+			content.append(tag.link(rel='icon', href=self.icon_url, type=self.icon_type))
+			content.append(tag.link(rel='shortcut icon', href=self.icon_url, type=self.icon_type))
 		# Add the title
 		if self.title is not None:
 			content.append(tag.title('%s - %s' % (self.site.title, self.title)))
