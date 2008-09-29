@@ -24,33 +24,24 @@ def connect(dsn, username=None, password=None):
 	and TIMESTAMP fields are CAST to CHAR in the queries below).
 	"""
 	logging.info('Connecting to database "%s"' % dsn)
-	# Try the PyDB2 framework
+	# Try the PyDB2 driver
 	try:
 		import DB2
 	except ImportError:
 		pass
 	else:
+		logging.info('Using PyDB2 driver')
 		if username is not None:
 			return DB2.connect(dsn, username, password)
 		else:
 			return DB2.connect(dsn)
-	# Try the "official" IBM DB2 Python driver
-	try:
-		import ibm_db
-		import ibm_db_dbi
-	except ImportError:
-		pass
-	else:
-		if username is not None:
-			return ibm_db_dbi.connect(dsn, username, password)
-		else:
-			return ibm_db_dbi.connect(dsn)
-	# Try the pyodbc framework
+	# Try the pyodbc driver
 	try:
 		import pyodbc
 	except ImportError:
 		pass
 	else:
+		logging.info('Using pyodbc driver')
 		# XXX Check whether escaping/quoting is required
 		# XXX Should there be a way to specify the driver name? Given that on
 		# unixODBC the driver alias is specified in odbcinst.ini, and on
@@ -60,12 +51,27 @@ def connect(dsn, username=None, password=None):
 			return pyodbc.connect('driver=IBM DB2 ODBC DRIVER;dsn=%s;uid=%s;pwd=%s' % (dsn, username, password))
 		else:
 			return pyodbc.connect('driver=IBM DB2 ODBC DRIVER;dsn=%s' % dsn)
-	# Try the mxODBC framework
+	# Try the "official" IBM DB2 Python driver (but avoid it if possible)
+	try:
+		import ibm_db
+		import ibm_db_dbi
+		# XXX Shut the "official" driver up (stupid warnings)
+		ibm_db_dbi.logger.setLevel(logging.ERROR)
+	except ImportError:
+		pass
+	else:
+		logging.info('Using IBM DB2 Python driver')
+		if username is not None:
+			return ibm_db_dbi.connect(dsn, username, password)
+		else:
+			return ibm_db_dbi.connect(dsn)
+	# Try the mxODBC driver
 	try:
 		import mx.ODBC
 	except ImportError:
 		pass
 	else:
+		logging.info('Using mxODBC driver')
 		# XXX Check whether escaping/quoting is required
 		# XXX See discussion about driver names above
 		if username is not None:
@@ -78,19 +84,20 @@ def connect(dsn, username=None, password=None):
 		else:
 			import mx.ODBC.iODBC
 			return mx.ODBC.iODBC.DriverConnect(connectstr)
-	# Try the PythonWin ODBC framework
+	# Try the PythonWin ODBC driver
 	try:
 		import dbi
 		import odbc
 	except ImportError:
 		pass
 	else:
+		logging.info('Using PyWin32 odbc driver')
 		if username is not None:
 			# XXX Check whether escaping/quoting is required
 			return odbc.odbc("%s/%s/%s" % (dsn, username, password))
 		else:
 			return odbc.odbc(dsn)
-	raise ImportError('Unable to find a suitable connection framework; please install PyDB2, pyodbc, PythonWin, or mxODBC')
+	raise ImportError('Unable to find a suitable connection framework; please install PyDB2, pyodbc, PyWin32, or mxODBC')
 
 def make_datetime(value):
 	"""Converts a date-time value from a database query to a datetime object.
@@ -180,31 +187,56 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			FROM SYSCAT.SCHEMATA
 			WHERE SCHEMANAME = 'DOCCAT'
 			WITH UR""")
-		self.doccat = bool(cursor.fetchall()[0][0])
+		doccat = bool(cursor.fetchall()[0][0])
 		logging.info([
 			'DOCCAT extension schema not found, using SYSCAT',
 			'DOCCAT extension schema found, using DOCCAT instead of SYSCAT'
-		][self.doccat])
-		# Test which version of the system catalog is installed
+		][doccat])
+		# Test which version of the system catalog is installed. The following
+		# progression is used to determine version:
+		#
+		# Base level (70)
+		# SYSCAT.ROUTINES introduced in v8 (80)
+		# SYSCAT.TABLES.OWNER introduced in v9 (90)
+		# SYSCAT.VARIABLES introduced in v9.5 (95)
 		cursor = self.connection.cursor()
+		schemaver = 70
 		cursor.execute("""
 			SELECT COUNT(*)
-			FROM %(schema)s.COLUMNS
-			WHERE TABSCHEMA = '%(schema)s'
-			AND TABNAME = 'TABLES'
-			AND COLNAME = 'OWNER'
-			WITH UR""" % {
-			'schema': ['SYSCAT', 'DOCCAT'][self.doccat]
-		})
-		self.v9 = bool(cursor.fetchall()[0][0])
-		logging.info([
-			'Did not detect IBM DB2 9 catalog layout, defaulting to IBM DB2 8 layout',
-			'Detected IBM DB2 9 catalog layout'
-		][self.v9])
+			FROM SYSCAT.TABLES
+			WHERE TABSCHEMA = 'SYSCAT'
+			AND TABNAME = 'ROUTINES'
+			WITH UR""")
+		if bool(cursor.fetchall()[0][0]):
+			schemaver = 80
+			cursor.execute("""
+				SELECT COUNT(*) FROM SYSCAT.COLUMNS
+				WHERE TABSCHEMA = 'SYSCAT'
+				AND TABNAME = 'TABLES'
+				AND COLNAME = 'OWNER'
+				WITH UR""")
+			if bool(cursor.fetchall()[0][0]):
+				schemaver = 90
+				cursor.execute("""
+					SELECT COUNT(*)
+					FROM SYSCAT.TABLES
+					WHERE TABSCHEMA = 'SYSCAT'
+					AND TABNAME = 'VARIABLES'
+					WITH UR""")
+				if bool(cursor.fetchall()[0][0]):
+					schemaver = 95
+		logging.info({
+			70: 'Detected v7 (or below) catalog layout',
+			80: 'Detected v8.2 catalog layout',
+			90: 'Detected v9.1 catalog layout',
+			95: 'Detected v9.5 (or above) catalog layout',
+		}[schemaver])
+		if schemaver < 80:
+			raise db2makedoc.plugins.PluginError('DB2 server must be v8.2 or above')
 		# Set up a generic query substitution dictionary
 		self.query_subst = {
-			'schema': ['SYSCAT', 'DOCCAT'][self.doccat],
-			'owner': ['DEFINER', 'OWNER'][self.v9],
+			'schema': ['SYSCAT', 'DOCCAT'][doccat],
+			'owner': ['DEFINER', 'OWNER'][schemaver >= 90],
 		}
 	
 	def close(self):
