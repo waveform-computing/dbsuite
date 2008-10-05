@@ -176,8 +176,6 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		size*          -- The length of the type for character based types or
 		                  the maximum precision for decimal types
 		scale*         -- The maximum scale for decimal types
-		codepage*      -- The codepage for character based types
-		final*         -- True if the type cannot be derived from (boolean)
 		description*   -- Descriptive text
 
 		* Optional (can be None)
@@ -199,8 +197,6 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 					usertype and source.attrib['name'],
 					usertype and datatype.attrib.get('size'),
 					usertype and datatype.attrib.get('scale'),
-					usertype and datatype.attrib.get('codepage'),
-					usertype and bool(datatype.attrib.get('final')),
 					text(datatype.find('description')),
 				))
 		return result

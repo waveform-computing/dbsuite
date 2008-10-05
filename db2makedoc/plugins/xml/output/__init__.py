@@ -152,10 +152,6 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 				result.attrib['size'] = str(datatype.size)
 				if datatype.source.variable_scale:
 					result.attrib['scale'] = str(datatype.scale)
-			if datatype.codepage:
-				result.attrib['codepage'] = str(datatype.codepage)
-			if datatype.final:
-				result.attrib['final'] = 'final'
 		if datatype.description:
 			SubElement(result, 'description').text = datatype.description
 		return result
