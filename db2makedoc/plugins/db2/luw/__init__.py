@@ -179,8 +179,6 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		size*          -- The length of the type for character based types or
 		                  the maximum precision for decimal types
 		scale*         -- The maximum scale for decimal types
-		codepage*      -- The codepage for character based types
-		final*         -- True if the type cannot be derived from (boolean)
 		description*   -- Descriptive text
 
 		* Optional (can be None)
@@ -201,8 +199,6 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				RTRIM(SOURCENAME)   AS SOURCENAME,
 				LENGTH              AS SIZE,
 				SCALE               AS SCALE,
-				CODEPAGE            AS CODEPAGE,
-				FINAL               AS FINAL,
 				REMARKS             AS DESCRIPTION
 			FROM
 				%(schema)s.DATATYPES
@@ -218,8 +214,6 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				source_name,
 				size,
 				scale,
-				codepage,
-				final,
 				desc
 			) in cursor.fetchall():
 			system = make_bool(system)
@@ -235,8 +229,6 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				source_name,
 				size or None,
 				scale or None, # XXX Not necessarily unknown (0 is a valid scale)
-				codepage or None,
-				final,
 				desc
 			))
 		return result
@@ -375,7 +367,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				owner,
 				make_bool(system),
 				make_datetime(created),
-				readonly,
+				make_bool(readonly),
 				str(sql),
 				desc
 			))
@@ -683,7 +675,10 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				RTRIM(C.COLNAME)                   AS COLNAME,
 				RTRIM(C.TYPESCHEMA)                AS TYPESCHEMA,
 				RTRIM(C.TYPENAME)                  AS TYPENAME,
-				C.IDENTITY                         AS IDENTITY,
+				CASE C.IDENTITY
+					WHEN 'Y' THEN 'Y'
+					ELSE 'N'
+				END                                AS IDENTITY,
 				C.LENGTH                           AS SIZE,
 				C.SCALE                            AS SCALE,
 				C.CODEPAGE                         AS CODEPAGE,
