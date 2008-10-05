@@ -1816,8 +1816,6 @@ class Datatype(SchemaObject):
 			self._source_name,
 			self.size,
 			self.scale,
-			self.codepage,
-			self.final,
 			desc
 		) = row
 		super(Datatype, self).__init__(schema, name, system, desc)
