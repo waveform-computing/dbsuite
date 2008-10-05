@@ -65,6 +65,9 @@ $(SRCZIP): $(SRCS) $(DOCS)
 MANIFEST: MANIFEST.in setup.py $(DOCS)
 	$(PYTHON) $(PYFLAGS) setup.py sdist --manifest-only
 
+tags: FORCE
+	ctags -R --exclude="build/*"
+
 README.txt: FORCE
 	echo "Generated from the db2makedoc wiki at:" > README.txt
 	echo "http://faust.hursley.uk.ibm.com/trac/db2makedoc/wiki/" >> README.txt
