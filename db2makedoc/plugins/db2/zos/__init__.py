@@ -12,9 +12,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 	"""Input plugin for IBM DB2 for z/OS.
 
 	This input plugin supports extracting documentation information from IBM
-	DB2 for z/OS version 8 or above. If the DOCCAT schema (see the
-	doccat_create.sql script in the contrib/db2/zos directory) is present, it
-	will be used to source documentation data instead of SYSIBM.
+	DB2 for z/OS version 8 or above.
 	"""
 
 	def __init__(self):
@@ -1580,4 +1578,439 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				desc
 			))
 		return result
-	
+
+	def get_procedures(self):
+		"""Retrieves the details of stored procedures in the database.
+
+		Override this function to return a list of tuples containing details of
+		the procedures defined in the database (including system procedures).
+		The tuples contain the following details in the order specified:
+
+		schema         -- The schema of the procedure
+		specname       -- The unique name of the procedure in the schema
+		name           -- The (potentially overloaded) name of the procedure
+		owner*         -- The name of the user who owns the procedure
+		system         -- True if the procedure is system maintained (boolean)
+		created*       -- When the procedure was created (datetime)
+		deterministic* -- True if the procedure is deterministic
+		extaction*     -- True if the procedure has an external action (affects
+		                  things outside the database)
+		nullcall*      -- True if the procedure is called on NULL input
+		access*        -- 'N' if the procedure contains no SQL
+		                  'C' if the procedure contains database independent SQL
+		                  'R' if the procedure contains SQL that reads the db
+		                  'M' if the procedure contains SQL that modifies the db
+		sql*           -- The SQL statement/query that defined the procedure
+		description*   -- Descriptive text
+
+		* Optional (can be None)
+		"""
+		result = super(InputPlugin, self).get_procedures()
+		cursor = self.connection.cursor()
+		cursor.execute("""
+			SELECT
+				SCHEMA                       AS PROCSCHEMA,
+				SPECIFICNAME                 AS PROCSPECNAME,
+				NAME                         AS PROCNAME,
+				OWNER                        AS OWNER,
+				CASE
+					WHEN SCHEMA LIKE 'SYS%' THEN 'Y'
+					WHEN ORIGIN = 'S' THEN 'Y'
+					ELSE 'N'
+				END                          AS SYSTEM,
+				CHAR(CREATEDTS)              AS CREATED,
+				DETERMINISTIC                AS DETERMINISTIC,
+				EXTERNAL_ACTION              AS EXTACTION,
+				CASE ORIGIN
+					WHEN 'Q' THEN 'Y'
+					ELSE NULL_CALL
+				END                          AS NULLCALL,
+				NULLIF(SQL_DATA_ACCESS, ' ') AS ACCESS,
+				CAST(NULL AS VARCHAR(10))    AS SQL,
+				REMARKS                      AS DESCRIPTION
+			FROM
+				SYSIBM.SYSROUTINES
+			WHERE
+				ROUTINETYPE = 'P'
+			WITH UR
+		""")
+		for (
+				schema,
+				specname,
+				name,
+				owner,
+				system,
+				created,
+				deterministic,
+				extaction,
+				nullcall,
+				access,
+				sql,
+				desc
+			) in cursor.fetchall():
+			result.append((
+				schema,
+				specname,
+				name,
+				owner,
+				make_bool(system),
+				make_datetime(created),
+				make_bool(deterministic),
+				make_bool(extaction, true_value='E'),
+				make_bool(nullcall),
+				access,
+				str(sql),
+				desc
+			))
+		return result
+
+	def get_procedure_params(self):
+		"""Retrieves the list of parameters belonging to procedures.
+
+		Override this function to return a list of tuples detailing the
+		parameters that are associated with each procedure in the database.
+		The tuples contain the following details in the order specified:
+
+		schema         -- The schema of the procedure
+		specname       -- The unique name of the procedure in the schema
+		parmname       -- The name of the parameter
+		parmtype       -- 'I' = Input parameter
+		                  'O' = Output parameter
+		                  'B' = Input+Output parameter
+		                  'R' = Return value/column
+		typeschema     -- The schema of the parameter's datatype
+		typename       -- The name of the parameter's datatype
+		size*          -- The length of the parameter for character types, or
+		                  the numeric precision for decimal types (None if not
+		                  a character or decimal type)
+		scale*         -- The maximum scale for decimal types (None if not a
+		                  decimal type)
+		codepage*      -- The codepage of the parameter for character types
+		                  (None if not a character type)
+		description*   -- Descriptive text
+
+		Note that the each tuple details one parameter belonging to a
+		procedure.  It is important that the list of tuples is in the order
+		that each parameter is declared in the procedure.
+
+		This is slightly complicated by the fact that the return column(s) of a
+		procedure are also considered parameters (see the parmtype field
+		above).  It does not matter if parameters and return columns are
+		interspersed in the result provided that, taken separately, each set of
+		parameters or columns is in the correct order.
+
+		* Optional (can be None)
+		"""
+		result = super(InputPlugin, self).get_procedure_params()
+		cursor = self.connection.cursor()
+		cursor.execute("""
+			SELECT
+				SCHEMA                          AS PROCSCHEMA,
+				SPECIFICNAME                    AS PROCSPECNAME,
+				PARMNAME                        AS PARMNAME,
+				CASE ROWTYPE
+					WHEN 'S' THEN 'I'
+					WHEN 'P' THEN 'I'
+					ELSE ROWTYPE
+				END                             AS PARMTYPE,
+				CASE SOURCETYPEID
+					WHEN 0 THEN 'SYSIBM'
+					ELSE TYPESCHEMA
+				END                             AS TYPESCHEMA,
+				CASE SOURCETYPEID
+					WHEN 0 THEN
+						CASE TYPENAME
+							WHEN 'LONGVAR'  THEN 'LONG VARCHAR'
+							WHEN 'CHAR'     THEN 'CHARACTER'
+							WHEN 'VARG'     THEN 'VARGRAPHIC'
+							WHEN 'LONGVARG' THEN 'LONG VARGRAPHIC'
+							WHEN 'TIMESTMP' THEN 'TIMESTAMP'
+							WHEN 'FLOAT'    THEN
+								CASE LENGTH
+									WHEN 4 THEN 'REAL'
+									WHEN 8 THEN 'DOUBLE'
+								END
+							ELSE TYPENAME
+						END
+					ELSE TYPENAME
+				END                             AS TYPENAME,
+				LENGTH                          AS SIZE,
+				SCALE                           AS SCALE,
+				CCSID                           AS CODEPAGE,
+				CAST(NULL AS VARCHAR(762))      AS DESCRIPTION
+			FROM
+				SYSIBM.SYSPARMS
+			WHERE
+				ROUTINETYPE = 'P'
+				AND ROWTYPE <> 'X'
+			ORDER BY
+				SCHEMA,
+				SPECIFICNAME,
+				ORDINAL
+			WITH UR
+		""")
+		for (
+				schema,
+				specname,
+				parmname,
+				parmtype,
+				typeschema,
+				typename,
+				size,
+				scale,
+				codepage,
+				desc
+			) in cursor.fetchall():
+			result.append((
+				schema,
+				specname,
+				parmname,
+				parmtype,
+				typeschema,
+				typename,
+				size or None,
+				scale or None, # XXX Not necessarily unknown (0 is a valid scale)
+				codepage or None,
+				desc
+			))
+		return result
+
+	def get_triggers(self):
+		"""Retrieves the details of table triggers in the database.
+
+		Override this function to return a list of tuples containing details of
+		the triggers defined in the database (including system triggers).  The
+		tuples contain the following details in the order specified:
+
+		schema         -- The schema of the trigger
+		name           -- The unique name of the trigger in the schema
+		owner*         -- The name of the user who owns the trigger
+		system         -- True if the trigger is system maintained (boolean)
+		created*       -- When the trigger was created (datetime)
+		tabschema      -- The schema of the table that activates the trigger
+		tabname        -- The name of the table that activates the trigger
+		trigtime       -- When the trigger is fired:
+		                  'A' = The trigger fires after the statement
+		                  'B' = The trigger fires before the statement
+		                  'I' = The trigger fires instead of the statement
+		trigevent      -- What statement fires the trigger:
+		                  'I' = The trigger fires on INSERT
+		                  'U' = The trigger fires on UPDATE
+		                  'D' = The trigger fires on DELETE
+		granularity    -- The granularity of trigger executions:
+		                  'R' = The trigger fires for each row affected
+		                  'S' = The trigger fires once per activating statement
+		sql*           -- The SQL statement/query that defined the trigger
+		description*   -- Descriptive text
+
+		* Optional (can be None)
+		"""
+		result = super(InputPlugin, self).get_triggers()
+		cursor = self.connection.cursor()
+		cursor.execute("""
+			SELECT
+				SCHEMA             AS TRIGSCHEMA,
+				NAME               AS TRIGNAME,
+				OWNER              AS OWNER,
+				CASE
+					WHEN SCHEMA LIKE 'SYS%%' THEN 'Y'
+					ELSE 'N'
+				END                AS SYSTEM,
+				CHAR(CREATEDTS)    AS CREATED,
+				TBOWNER            AS TABSCHEMA,
+				TBNAME             AS TABNAME,
+				TRIGTIME           AS TRIGTIME,
+				TRIGEVENT          AS TRIGEVENT,
+				GRANULARITY        AS GRANULARITY,
+				TEXT               AS SQL,
+				REMARKS            AS DESCRIPTION
+			FROM
+				SYSIBM.SYSTRIGGERS
+			ORDER BY
+				SCHEMA,
+				NAME,
+				SEQNO
+			WITH UR
+		""")
+		last_trig = ('', '')
+		sql = ''
+		for (
+				schema,
+				name,
+				owner,
+				system,
+				created,
+				tabschema,
+				tabname,
+				trigtime,
+				trigevent,
+				granularity,
+				sqlchunk,
+				desc
+			) in cursor.fetchall():
+			if last_trig != (schema, name):
+				if last_trig[0]:
+					result.append((
+						schema,
+						name,
+						owner,
+						make_bool(system),
+						make_datetime(created),
+						tabschema,
+						tabname,
+						trigtime,
+						trigevent,
+						granularity,
+						str(sql),
+						desc
+					))
+				last_trig = (schema, name)
+				sql = sqlchunk
+			else:
+				sql += sqlchunk
+		if last_trig[0]:
+			result.append((
+				schema,
+				name,
+				owner,
+				make_bool(system),
+				make_datetime(created),
+				tabschema,
+				tabname,
+				trigtime,
+				trigevent,
+				granularity,
+				str(sql),
+				desc
+			))
+		return result
+
+	def get_trigger_dependencies(self):
+		"""Retrieves the details of trigger dependencies.
+
+		Override this function to return a list of tuples containing details of
+		the relations upon which triggers depend (the tables that a trigger
+		references in its body).  The tuples contain the following details in
+		the order specified:
+
+		schema       -- The schema of the trigger
+		name         -- The name of the trigger
+		dep_schema   -- The schema of the relation upon which the trigger depends
+		dep_name     -- The name of the relation upon which the trigger depends
+		"""
+		result = super(InputPlugin, self).get_trigger_dependencies()
+		cursor = self.connection.cursor()
+		cursor.execute("""
+			SELECT
+				T.SCHEMA      AS TRIGSCHEMA,
+				T.NAME        AS TRIGNAME,
+				D.BQUALIFIER  AS DEPSCHEMA,
+				D.BNAME       AS DEPNAME
+			FROM
+				SYSIBM.SYSTRIGGERS T
+				INNER JOIN SYSIBM.SYSPACKDEP D
+					ON T.SCHEMA = D.DCOLLID
+					AND T.NAME = D.DNAME
+					AND T.SEQNO = 1
+					AND D.DTYPE = 'T'
+			WHERE
+				D.BTYPE IN ('A', 'M', 'S', 'T', 'V')
+				AND NOT (D.BQUALIFIER = T.TBOWNER AND D.BNAME = T.TBNAME)
+			WITH UR
+		""")
+		for (
+				schema,
+				name,
+				depschema,
+				depname
+			) in cursor.fetchall():
+			result.append((
+				schema,
+				name,
+				depschema,
+				depname
+			))
+		return result
+
+	def get_tablespaces(self):
+		"""Retrieves the details of the tablespaces in the database.
+
+		Override this function to return a list of tuples containing details of
+		the tablespaces defined in the database (including system tablespaces).
+		The tuples contain the following details in the order specified:
+
+		tbspace       -- The tablespace name
+		owner*        -- The name of the user who owns the tablespace
+		system        -- True if the tablespace is system maintained (boolean)
+		created*      -- When the tablespace was created (datetime)
+		type*         -- The type of the tablespace (regular, temporary, system
+		              -- or database managed, etc) as free text
+		description*  -- Descriptive text
+
+		* Optional (can be None)
+		"""
+		result = super(InputPlugin, self).get_tablespaces()
+		cursor = self.connection.cursor()
+		cursor.execute("""
+			SELECT
+				NAME                       AS TBSPACE,
+				CREATOR                    AS OWNER,
+				CASE
+					WHEN NAME LIKE 'SYS%' THEN 'Y'
+					ELSE 'N'
+				END                        AS SYSTEM,
+				CHAR(CREATEDTS)            AS CREATED,
+				CASE
+					WHEN PARTITIONS = 0 THEN 'Non-partitioned'
+					ELSE 'Partitioned'
+				END ||
+				' ' ||
+				CASE TYPE
+					WHEN ' ' THEN 'regular'
+					WHEN 'L' THEN 'large'
+					WHEN 'O' THEN 'LOB'
+					WHEN 'I' THEN 'member cluster'
+					WHEN 'K' THEN 'member cluster'
+				END ||
+				' ' ||
+				CASE ENCODING_SCHEME
+					WHEN ' ' THEN 'temporary/work-file'
+					WHEN 'A' THEN 'ASCII'
+					WHEN 'E' THEN 'EBCDIC'
+					WHEN 'U' THEN 'Unicode'
+				END ||
+				' tablespace with ' ||
+				RTRIM(CHAR(PGSIZE)) ||
+				'k page size and ' ||
+				CASE LOCKRULE
+					WHEN 'A' THEN 'any size'
+					WHEN 'L' THEN 'LOB'
+					WHEN 'P' THEN 'page'
+					WHEN 'R' THEN 'row'
+					WHEN 'S' THEN 'tablespace'
+					WHEN 'T' THEN 'table'
+				END ||
+				' locks'                   AS TYPE,
+				CAST(NULL AS VARCHAR(762)) AS DESCRIPTION
+			FROM
+				SYSIBM.SYSTABLESPACE
+			WITH UR
+		""")
+		for (
+				tbspace,
+				owner,
+				system,
+				created,
+				tstype,
+				desc
+			) in cursor.fetchall():
+			result.append((
+				tbspace,
+				owner,
+				make_bool(system),
+				make_datetime(created),
+				tstype,
+				desc
+			))
+		return result
+
