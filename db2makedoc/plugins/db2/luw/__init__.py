@@ -27,7 +27,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		self.add_option('password', default=None,
 			doc="""The password associated with the user given by the username
 			option (mandatory if username is supplied)""")
-	
+
 	def configure(self, config):
 		"""Loads the plugin configuration."""
 		super(InputPlugin, self).configure(config)
@@ -699,7 +699,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				%(schema)s.COLUMNS C
 				INNER JOIN %(schema)s.TABLES T
 					ON C.TABSCHEMA = T.TABSCHEMA
-					AND C.TABNAME = T.TABNAME 
+					AND C.TABNAME = T.TABNAME
 			WHERE
 				C.HIDDEN <> 'S'
 				AND T.TYPE IN ('A', 'N', 'T', 'V')
@@ -1288,7 +1288,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				desc
 			))
 		return result
-	
+
 	def get_procedures(self):
 		"""Retrieves the details of stored procedures in the database.
 
@@ -1372,7 +1372,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				desc
 			))
 		return result
-	
+
 	def get_procedure_params(self):
 		"""Retrieves the list of parameters belonging to procedures.
 
@@ -1421,7 +1421,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 					WHEN 'P' THEN 'I'
 					WHEN 'C' THEN 'R'
 					ELSE RP.ROWTYPE
-				END                             AS PARMTYPE,
+				END                              AS PARMTYPE,
 				RTRIM(RP.TYPESCHEMA)             AS TYPESCHEMA,
 				RTRIM(RP.TYPENAME)               AS TYPENAME,
 				RP.LENGTH                        AS SIZE,
@@ -1466,7 +1466,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				desc
 			))
 		return result
-	
+
 	def get_triggers(self):
 		"""Retrieves the details of table triggers in the database.
 
@@ -1632,23 +1632,25 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 					WHEN 'L' THEN 'Long'
 					WHEN 'T' THEN 'System temporary'
 					WHEN 'U' THEN 'User temporary'
+					ELSE 'Unknown'
 				END ||
 				' ' ||
 				CASE TBSPACETYPE
 					WHEN 'D' THEN 'DMS'
 					WHEN 'S' THEN 'SMS'
+					ELSE 'unknown'
 				END ||
 				' tablespace with ' ||
 				RTRIM(CHAR(PAGESIZE / 1024)) ||
 				'k page size' ||
 				CASE DROP_RECOVERY
 					WHEN 'Y' THEN ' and drop recovery'
-					WHEN 'N' THEN ''
+					ELSE ''
 				END               AS TYPE,
 				REMARKS           AS DESCRIPTION
 			FROM
 				%(schema)s.TABLESPACES
-			
+
 			UNION ALL
 
 			SELECT
