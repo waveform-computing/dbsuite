@@ -38,7 +38,7 @@ test:
 
 clean:
 	$(PYTHON) $(PYFLAGS) setup.py clean
-	rm -f $(DOCS) MANIFEST
+	rm -f $(DOCS) MANIFEST tags
 	rm -fr build/
 
 cleanall: clean
