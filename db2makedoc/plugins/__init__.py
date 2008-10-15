@@ -15,23 +15,15 @@ import sys
 import logging
 import datetime
 import re
-from fnmatch import fnmatchcase as fnmatch
 import db2makedoc.db
+from fnmatch import fnmatchcase as fnmatch
+from itertools import chain, groupby, ifilter
+from db2makedoc.util import *
+from db2makedoc.tuples import (
+	ConstraintRef, IndexRef, RelationDep, RelationRef, RoutineRef, TableRef,
+	TablespaceRef, TriggerDep, TriggerRef
+)
 
-if sys.hexversion < 0x02050000:
-	# Define the any() and all() functions for backward compatibility with
-	# Python 2.4
-	def all(iterable):
-		for element in iterable:
-			if not element:
-				return False
-		return True
-
-	def any(iterable):
-		for element in iterable:
-			if element:
-				return True
-		return False
 
 class PluginError(Exception):
 	"""Base exception class for plugin related errors."""
@@ -40,7 +32,7 @@ class PluginError(Exception):
 
 class PluginLoadError(PluginError):
 	"""Exception class for plugin loading errors.
-	
+
 	The main program converts any ImportError exceptions raised by a plugin
 	into this exception. Generally, plugins should not use this error directly
 	(unless they have a non-import related loading error, which is likely to be
@@ -51,7 +43,7 @@ class PluginLoadError(PluginError):
 
 class PluginConfigurationError(PluginError):
 	"""Exception class for plugin configuration errors.
-	
+
 	This exception should only be raised during the configure() method of a
 	plugin."""
 	pass
@@ -59,7 +51,7 @@ class PluginConfigurationError(PluginError):
 
 class Plugin(object):
 	"""Abstract base class for plugins.
-	
+
 	Do not derive plugins directly from this class. Use either the InputPlugin
 	or OutputPlugin classes defined below. This class contains methods common
 	to both InputPlugin and OutputPlugin (some of which developers may wish to
@@ -147,7 +139,7 @@ class Plugin(object):
 		this function in a lambda function like so:
 
 			lambda self, value: self.convert_file(value, mode='w')
-		
+
 		Ths default is to opening the file for reading in univeral line-break mode.
 		"""
 		return open(self.convert_path(value), mode)
@@ -185,7 +177,7 @@ class Plugin(object):
 	convert_date_re = re.compile(r'(\d{4})[-/.](\d{2})[-/.](\d{2})([T -.](\d{2})[:.](\d{2})([:.](\d{2})(\.(\d{6})\d*)?)?)?')
 	def convert_date(self, value):
 		"""Conversion handler for configuration values containing a date/time.
-		
+
 		The value must contain a string containing a date and optionally time
 		in ISO8601 format (although some variation in field separators is
 		permitted.
@@ -204,18 +196,18 @@ class Plugin(object):
 			return [item.strip() for item in value.split(separator)]
 		else:
 			return [subconvert(item.strip()) for item in value.split(separator)]
-	
+
 	def convert_list(self, value, separator=',', subconvert=None, minvalues=0,
 		maxvalues=None):
 		"""Conversion handler for configuration values containing a list.
-		
+
 		Use this method within a lambda function if you wish to specify values
 		for the optional separator or subconverter parameters. For example, if
 		you want to convert a comma separated list of integers:
 
 			lambda value: self.convert_list(value,
 		        subconvert=self.convert_int)
-		
+
 		The defaults for separator and subconverter handle converting a comma
 		separated list of strings. Note that no escaping mechanism is provided
 		for handling commas within elements of the list.
@@ -225,8 +217,8 @@ class Plugin(object):
 			raise PluginConfigurationError('"%s" must contain at least %d elements' % (value, minvalues))
 		if maxvalues is not None and len(result) > maxvalues:
 			raise PluginConfigurationError('"%s" must contain less than %d elements' % (value, maxvalues))
-		return result 
-	
+		return result
+
 	def convert_set(self, value, separator=",", subconvert=None, minvalues=0,
 		maxvalues=None):
 		"""Conversion handler for configuration values containing a set.
@@ -238,7 +230,7 @@ class Plugin(object):
 			raise PluginConfigurationError('"%s" must contain at least %d unique elements' % (value, minvalues))
 		if maxvalues is not None and len(result) > maxvalues:
 			raise PluginConfigurationError('"%s" must contain less than %d unique elements' % (value, maxvalues))
-		return result 
+		return result
 
 	def convert_dict(self, value, listsep=',', mapsep='=', subconvert=None,
 		minvalues=0, maxvalues=None):
@@ -325,7 +317,7 @@ class Plugin(object):
 				for parent in value
 				for child in self.__abstracts.get(parent, [parent])
 			)
-	
+
 	def configure(self, config):
 		"""Loads the plugin configuration.
 
@@ -345,7 +337,7 @@ class Plugin(object):
 				except Exception, e:
 					raise PluginConfigurationError('Error reading value for "%s": %s' % (name, str(e)))
 			self.options[name] = value
-	
+
 
 class OutputPlugin(Plugin):
 	"""Abstract base class for output plugins.
@@ -398,40 +390,6 @@ class InputPlugin(Plugin):
 			themselves, just to objects within schemas excluding datatypes.
 			This ensures that, if system schemas are excluded, all objects with
 			built-in datatypes do not also disappear""")
-		self.__schemas = None
-		self.__datatypes = None
-		self.__tables = None
-		self.__views = None
-		self.__aliases = None
-		self.__view_dependencies = None
-		self.__relation_dependencies = None
-		self.__relation_dependents = None
-		self.__indexes = None
-		self.__index_cols = None
-		self.__table_indexes = None
-		self.__relation_cols = None
-		self.__unique_keys = None
-		self.__unique_keys_list = None
-		self.__unique_key_cols = None
-		self.__foreign_keys = None
-		self.__foreign_keys_list = None
-		self.__foreign_key_cols = None
-		self.__parent_keys = None
-		self.__checks = None
-		self.__checks_list = None
-		self.__check_cols = None
-		self.__functions = None
-		self.__function_params = None
-		self.__procedures = None
-		self.__procedure_params = None
-		self.__triggers = None
-		self.__trigger_dependencies = None
-		self.__trigger_dependents = None
-		self.__trigger_relations = None
-		self.__relation_triggers = None
-		self.__tablespaces = None
-		self.__tablespace_tables = None
-		self.__tablespace_indexes = None
 
 	def configure(self, config):
 		"""Loads the plugin configuration."""
@@ -454,7 +412,7 @@ class InputPlugin(Plugin):
 		this.
 		"""
 		pass
-	
+
 	def close(self):
 		"""Closes the database connection and cleans up any resources.
 
@@ -470,13 +428,13 @@ class InputPlugin(Plugin):
 	def get_schemas(self):
 		"""Retrieves the details of schemas stored in the database.
 
-		Override this function to return a list of tuples containing details of
-		the schemas defined in the database. The tuples contain the following
-		details in the order specified:
+		Override this function to return a list of Schema tuples containing
+		details of the schemas defined in the database. Schema tuples have the
+		following named fields:
 
 		name         -- The name of the schema
 		owner*       -- The name of the user who owns the schema
-		system       -- True if the schema is system maintained (boolean)
+		system       -- True if the schema is system maintained (bool)
 		created*     -- When the schema was created (datetime)
 		description* -- Descriptive text
 
@@ -488,23 +446,23 @@ class InputPlugin(Plugin):
 	def get_datatypes(self):
 		"""Retrieves the details of datatypes stored in the database.
 
-		Override this function to return a list of tuples containing details of
-		the datatypes defined in the database (including system types). The
-		tuples contain the following details in the order specified:
+		Override this function to return a list of Datatype tuples containing
+		details of the datatypes defined in the database (including system
+		types). Datatype tuples have the following named fields:
 
 		schema         -- The schema of the datatype
 		name           -- The name of the datatype
 		owner*         -- The name of the user who owns the datatype
-		system         -- True if the type is system maintained (boolean)
+		system         -- True if the type is system maintained (bool)
 		created*       -- When the type was created (datetime)
-		var_size       -- True if the type has a variable length (e.g. VARCHAR)
-		var_scale      -- True if the type has a variable scale (e.g. DECIMAL)
+		description*   -- Descriptive text
+		variable_size  -- True if the type has a variable length (e.g. VARCHAR)
+		variable_scale -- True if the type has a variable scale (e.g. DECIMAL)
 		source_schema* -- The schema of the base system type of the datatype
 		source_name*   -- The name of the base system type of the datatype
 		size*          -- The length of the type for character based types or
 		                  the maximum precision for decimal types
 		scale*         -- The maximum scale for decimal types
-		description*   -- Descriptive text
 
 		* Optional (can be None)
 		"""
@@ -514,21 +472,20 @@ class InputPlugin(Plugin):
 	def get_tables(self):
 		"""Retrieves the details of tables stored in the database.
 
-		Override this function to return a list of tuples containing details of
-		the tables (NOT views) defined in the database (including system
-		tables). The tuples contain the following details in the order
-		specified:
+		Override this function to return a list of Table tuples containing
+		details of the tables (NOT views) defined in the database (including
+		system tables). Table tuples contain the following named fields:
 
 		schema        -- The schema of the table
 		name          -- The name of the table
 		owner*        -- The name of the user who owns the table
-		system        -- True if the table is system maintained (boolean)
+		system        -- True if the table is system maintained (bool)
 		created*      -- When the table was created (datetime)
-		laststats*    -- When the table's statistics were last calculated (datetime)
+		description*  -- Descriptive text
+		tbspace       -- The name of the primary tablespace containing the table
+		last_stats*   -- When the table's statistics were last calculated (datetime)
 		cardinality*  -- The approximate number of rows in the table
 		size*         -- The approximate size in bytes of the table
-		tbspace       -- The name of the primary tablespace containing the table
-		description*  -- Descriptive text
 
 		* Optional (can be None)
 		"""
@@ -538,18 +495,18 @@ class InputPlugin(Plugin):
 	def get_views(self):
 		"""Retrieves the details of views stored in the database.
 
-		Override this function to return a list of tuples containing details of
-		the views defined in the database (including system views). The tuples
-		contain the following details in the order specified:
+		Override this function to return a list of View tuples containing
+		details of the views defined in the database (including system views).
+		View tuples contain the following named fields:
 
 		schema        -- The schema of the view
 		name          -- The name of the view
 		owner*        -- The name of the user who owns the view
-		system        -- True if the view is system maintained (boolean)
+		system        -- True if the view is system maintained (bool)
 		created*      -- When the view was created (datetime)
-		readonly*     -- True if the view is not updateable (boolean)
-		sql*          -- The SQL statement/query that defined the view
 		description*  -- Descriptive text
+		read_only*    -- True if the view is not updateable (bool)
+		sql*          -- The SQL statement that defined the view
 
 		* Optional (can be None)
 		"""
@@ -559,19 +516,19 @@ class InputPlugin(Plugin):
 	def get_aliases(self):
 		"""Retrieves the details of aliases stored in the database.
 
-		Override this function to return a list of tuples containing details of
-		the aliases (also known as synonyms in some systems) defined in the
-		database (including system aliases). The tuples contain the following
-		details in the order specified:
+		Override this function to return a list of Alias tuples containing
+		details of the aliases (also known as synonyms in some systems) defined
+		in the database (including system aliases). Alias tuples contain the
+		following named fields:
 
 		schema        -- The schema of the alias
 		name          -- The name of the alias
 		owner*        -- The name of the user who owns the alias
-		system        -- True if the alias is system maintained (boolean)
+		system        -- True if the alias is system maintained (bool)
 		created*      -- When the alias was created (datetime)
+		description*  -- Descriptive text
 		base_schema   -- The schema of the target relation
 		base_table    -- The name of the target relation
-		description*  -- Descriptive text
 
 		* Optional (can be None)
 		"""
@@ -581,10 +538,10 @@ class InputPlugin(Plugin):
 	def get_view_dependencies(self):
 		"""Retrieves the details of view dependencies.
 
-		Override this function to return a list of tuples containing details of
-		the relations upon which views depend (the tables and views that a view
-		references in its query).  The tuples contain the following details in
-		the order specified:
+		Override this function to return a list of RelationDep tuples
+		containing details of the relations upon which views depend (the tables
+		and views that a view references in its query). RelationDep tuples
+		contain the following named fields:
 
 		schema       -- The schema of the view
 		name         -- The name of the view
@@ -597,23 +554,23 @@ class InputPlugin(Plugin):
 	def get_indexes(self):
 		"""Retrieves the details of indexes stored in the database.
 
-		Override this function to return a list of tuples containing details of
-		the indexes defined in the database (including system indexes). The
-		tuples contain the following details in the order specified:
+		Override this function to return a list of Index tuples containing
+		details of the indexes defined in the database (including system
+		indexes). Index tuples contain the following named fields:
 
 		schema        -- The schema of the index
 		name          -- The name of the index
-		tabschema     -- The schema of the table the index belongs to
-		tabname       -- The name of the table the index belongs to
 		owner*        -- The name of the user who owns the index
-		system        -- True if the index is system maintained (boolean)
+		system        -- True if the index is system maintained (bool)
 		created*      -- When the index was created (datetime)
-		laststats*    -- When the index statistics were last updated (datetime)
+		description*  -- Descriptive text
+		table_schema  -- The schema of the table the index belongs to
+		table_name    -- The name of the table the index belongs to
+		tbspace       -- The name of the tablespace which contains the index
+		last_stats*   -- When the index statistics were last updated (datetime)
 		cardinality*  -- The approximate number of values in the index
 		size*         -- The approximate size in bytes of the index
-		unique        -- True if the index contains only unique values (boolean)
-		tbspace       -- The name of the tablespace which contains the index
-		description*  -- Descriptive text
+		unique        -- True if the index contains only unique values (bool)
 
 		* Optional (can be None)
 		"""
@@ -623,17 +580,17 @@ class InputPlugin(Plugin):
 	def get_index_cols(self):
 		"""Retrieves the list of columns belonging to indexes.
 
-		Override this function to return a list of tuples detailing the columns
-		that belong to each index in the database (including system indexes).
-		The tuples contain the following details in the order specified:
+		Override this function to return a list of IndexCol tuples detailing
+		the columns that belong to each index in the database (including system
+		indexes).  IndexCol tuples contain the following named fields:
 
-		schema       -- The schema of the index
-		name         -- The name of the index
-		colname      -- The name of the column
-		colorder     -- The ordering of the column in the index:
-		                'A'=Ascending
-		                'D'=Descending
-		                'I'=Include (not an index key)
+		index_schema -- The schema of the index
+		index_name   -- The name of the index
+		name         -- The name of the column
+		order        -- The ordering of the column in the index:
+		                'A' = Ascending
+		                'D' = Descending
+		                'I' = Include (not an index key)
 
 		Note that the each tuple details one column belonging to an index. It
 		is important that the list of tuples is in the order that each column
@@ -645,35 +602,35 @@ class InputPlugin(Plugin):
 	def get_relation_cols(self):
 		"""Retrieves the list of columns belonging to relations.
 
-		Override this function to return a list of tuples detailing the columns
-		that belong to each relation (table, view, etc.) in the database
-		(including system relations).  The tuples contain the following details
-		in the order specified:
+		Override this function to return a list of RelationCol tuples detailing
+		the columns that belong to each relation (table, view, etc.) in the
+		database (including system relations). RelationCol tuples contain the
+		following named fields:
 
-		schema        -- The schema of the table
-		name          -- The name of the table
-		colname       -- The name of the column
-		typeschema    -- The schema of the column's datatype
-		typename      -- The name of the column's datatype
-		identity*     -- True if the column is an identity column (boolean)
-		size*         -- The length of the column for character types, or the
-		                 numeric precision for decimal types (None if not a
-		                 character or decimal type)
-		scale*        -- The maximum scale for decimal types (None if not a
-		                 decimal type)
-		codepage*     -- The codepage of the column for character types (None
-		                 if not a character type)
-		nullable*     -- True if the column can store NULL (boolean)
-		cardinality*  -- The approximate number of unique values in the column
-		nullcard*     -- The approximate number of NULLs in the column
-		generated     -- 'A' if the column is always generated
-		                 'D' if the column is generated by default
-		                 'N' if the column is not generated
-		default*      -- If generated is 'N', the default value of the column
-		                 (expressed as SQL). Otherwise, the SQL expression that
-		                 generates the column's value (or default value). None
-		                 if the column has no default
-		description*  -- Descriptive text
+		relation_schema  -- The schema of the table
+		relation_name    -- The name of the table
+		name             -- The name of the column
+		type_schema      -- The schema of the column's datatype
+		type_name        -- The name of the column's datatype
+		size*            -- The length of the column for character types, or the
+		                    numeric precision for decimal types (None if not a
+		                    character or decimal type)
+		scale*           -- The maximum scale for decimal types (None if not a
+		                    decimal type)
+		codepage*        -- The codepage of the column for character types (None
+		                    if not a character type)
+		identity*        -- True if the column is an identity column (bool)
+		nullable*        -- True if the column can store NULL (bool)
+		cardinality*     -- The approximate number of unique values in the column
+		null_card*       -- The approximate number of NULLs in the column
+		generated        -- 'A' = Column is always generated
+		                    'D' = Column is generated by default
+		                    'N' = Column is not generated
+		default*         -- If generated is 'N', the default value of the column
+		                    (expressed as SQL). Otherwise, the SQL expression that
+		                    generates the column's value (or default value). None
+		                    if the column has no default
+		description*     -- Descriptive text
 
 		Note that each tuple details one column belonging to a relation. It is
 		important that the list of tuples is in the order that each column is
@@ -687,18 +644,18 @@ class InputPlugin(Plugin):
 	def get_unique_keys(self):
 		"""Retrieves the details of unique keys stored in the database.
 
-		Override this function to return a list of tuples containing details of
-		the unique keys defined in the database. The tuples contain the
-		following details in the order specified:
+		Override this function to return a list of UniqueKey tuples containing
+		details of the unique keys defined in the database. UniqueKey tuples
+		contain the following named fields:
 
-		schema        -- The schema of the table containing the key
-		name          -- The name of the table containing the key
-		keyname       -- The name of the key
+		table_schema  -- The schema of the table containing the key
+		table_name    -- The name of the table containing the key
+		name          -- The name of the key
 		owner*        -- The name of the user who owns the key
-		system        -- True if the key is system maintained (boolean)
+		system        -- True if the key is system maintained (bool)
 		created*      -- When the key was created (datetime)
-		primary       -- True if the unique key is also a primary key
 		description*  -- Descriptive text
+		primary       -- True if the unique key is also a primary key (bool)
 
 		* Optional (can be None)
 		"""
@@ -708,14 +665,14 @@ class InputPlugin(Plugin):
 	def get_unique_key_cols(self):
 		"""Retrieves the list of columns belonging to unique keys.
 
-		Override this function to return a list of tuples detailing the columns
-		that belong to each unique key in the database.  The tuples contain the
-		following details in the order specified:
+		Override this function to return a list of UniqueKeyCol tuples
+		detailing the columns that belong to each unique key in the database.
+		The tuples contain the following named fields:
 
-		schema       -- The schema of the table containing the key
-		name         -- The name of the table containing the key
-		keyname      -- The name of the key
-		colname      -- The name of the column
+		const_schema -- The schema of the table containing the key
+		const_table  -- The name of the table containing the key
+		const_name   -- The name of the key
+		name         -- The name of the column
 		"""
 		logging.debug('Retrieving unique key columns')
 		return []
@@ -723,30 +680,30 @@ class InputPlugin(Plugin):
 	def get_foreign_keys(self):
 		"""Retrieves the details of foreign keys stored in the database.
 
-		Override this function to return a list of tuples containing details of
-		the foreign keys defined in the database. The tuples contain the
-		following details in the order specified:
+		Override this function to return a list of ForeignKey tuples containing
+		details of the foreign keys defined in the database. ForeignKey tuples
+		contain the following named fields:
 
-		schema        -- The schema of the table containing the key
-		name          -- The name of the table containing the key
-		keyname       -- The name of the key
-		owner*        -- The name of the user who owns the key
-		system        -- True if the key is system maintained (boolean)
-		created*      -- When the key was created (datetime)
-		refschema     -- The schema of the table the key references
-		refname       -- The name of the table the key references
-		refkeyname    -- The name of the unique key that the key references
-		deleterule    -- The action to take on deletion of a parent key
-		                 'A' = No action
-		                 'C' = Cascade
-		                 'N' = Set NULL
-		                 'R' = Restrict
-		updaterule    -- The action to take on update of a parent key
-		                 'A' = No action
-		                 'C' = Cascade
-		                 'N' = Set NULL
-		                 'R' = Restrict
-		description*  -- Descriptive text
+		table_schema      -- The schema of the table containing the key
+		table_name        -- The name of the table containing the key
+		name              -- The name of the key
+		owner*            -- The name of the user who owns the key
+		system            -- True if the key is system maintained (bool)
+		created*          -- When the key was created (datetime)
+		description*      -- Descriptive text
+		const_schema      -- The schema of the table the key references
+		const_table       -- The name of the table the key references
+		const_name        -- The name of the unique key that the key references
+		delete_rule       -- The action to take on deletion of a parent key:
+		                     'A' = No action
+		                     'C' = Cascade
+		                     'N' = Set NULL
+		                     'R' = Restrict
+		update_rule       -- The action to take on update of a parent key:
+		                     'A' = No action
+		                     'C' = Cascade
+		                     'N' = Set NULL
+		                     'R' = Restrict
 
 		* Optional (can be None)
 		"""
@@ -756,16 +713,16 @@ class InputPlugin(Plugin):
 	def get_foreign_key_cols(self):
 		"""Retrieves the list of columns belonging to foreign keys.
 
-		Override this function to return a list of tuples detailing the columns
-		that belong to each foreign key in the database.  The tuples contain
-		the following details in the order specified:
+		Override this function to return a list of ForeignKeyCol tuples
+		detailing the columns that belong to each foreign key in the database.
+		ForeignKeyCol tuples contain the following named fields:
 
-		schema       -- The schema of the table containing the key
-		name         -- The name of the table containing the key
-		keyname      -- The name of the key
-		colname      -- The name of the column
-		refcolname   -- The name of the column that this column references in
-		                the referenced table
+		const_schema -- The schema of the table containing the key
+		const_table  -- The name of the table containing the key
+		const_name   -- The name of the key
+		name         -- The name of the column in the key
+		ref_name     -- The name of the column that this column references in
+		                the referenced key
 		"""
 		logging.debug('Retrieving foreign key columns')
 		return []
@@ -773,18 +730,18 @@ class InputPlugin(Plugin):
 	def get_checks(self):
 		"""Retrieves the details of checks stored in the database.
 
-		Override this function to return a list of tuples containing details of
-		the checks defined in the database. The tuples contain the following
-		details in the order specified:
+		Override this function to return a list of Check tuples containing
+		details of the checks defined in the database. Check tuples contain the
+		following named fields:
 
-		schema        -- The schema of the table containing the check
-		name          -- The name of the table containing the check
-		checkname     -- The name of the check
+		table_schema  -- The schema of the table containing the check
+		table_name    -- The name of the table containing the check
+		name          -- The name of the check
 		owner*        -- The name of the user who owns the check
-		system        -- True if the check is system maintained (boolean)
+		system        -- True if the check is system maintained (bool)
 		created*      -- When the check was created (datetime)
-		sql*          -- The SQL statement/query that defined the check
 		description*  -- Descriptive text
+		sql*          -- The SQL expression that the check enforces
 
 		* Optional (can be None)
 		"""
@@ -794,14 +751,14 @@ class InputPlugin(Plugin):
 	def get_check_cols(self):
 		"""Retrieves the list of columns belonging to checks.
 
-		Override this function to return a list of tuples detailing the columns
-		that are referenced by each check in the database.  The tuples contain
-		the following details in the order specified:
+		Override this function to return a list of CheckCol tuples detailing
+		the columns that are referenced by each check in the database. CheckCol
+		tuples contain the following named fields:
 
-		schema       -- The schema of the table containing the check
-		name         -- The name of the table containing the check
-		checkname    -- The name of the check
-		colname      -- The name of the column
+		const_schema -- The schema of the table containing the check
+		const_table  -- The name of the table containing the check
+		const_name   -- The name of the check
+		name         -- The name of the column
 		"""
 		logging.debug('Retrieving check constraint columns')
 		return []
@@ -809,172 +766,133 @@ class InputPlugin(Plugin):
 	def get_functions(self):
 		"""Retrieves the details of functions stored in the database.
 
-		Override this function to return a list of tuples containing details of
-		the functions defined in the database (including system functions). The
-		tuples contain the following details in the order specified:
+		Override this function to return a list of Function tuples containing
+		details of the functions defined in the database (including system
+		functions). Function tuples contain the following named fields:
 
 		schema         -- The schema of the function
-		specname       -- The unique name of the function in the schema
+		specific       -- The unique name of the function in the schema
 		name           -- The (potentially overloaded) name of the function
 		owner*         -- The name of the user who owns the function
-		system         -- True if the function is system maintained (boolean)
+		system         -- True if the function is system maintained (bool)
 		created*       -- When the function was created (datetime)
-		functype       -- 'C' if the function is a column/aggregate function
-		                  'R' if the function returns a row
-		                  'T' if the function returns a table
-		                  'S' if the function is scalar
-		deterministic* -- True if the function is deterministic
-		extaction*     -- True if the function has an external action (affects
-		                  things outside the database)
-		nullcall*      -- True if the function is called on NULL input
+		description*   -- Descriptive text
+		deterministic* -- True if the function is deterministic (bool)
+		ext_action*    -- True if the function has an external action (affects
+		                  things outside the database) (bool)
+		null_call*     -- True if the function is called on NULL input (bool)
 		access*        -- 'N' if the function contains no SQL
 		                  'C' if the function contains database independent SQL
 		                  'R' if the function contains SQL that reads the db
 		                  'M' if the function contains SQL that modifies the db
-		sql*           -- The SQL statement/query that defined the function
-		description*   -- Descriptive text
+		sql*           -- The SQL statement that defined the function
+		func_type      -- The type of the function:
+		                  'C' = Column/aggregate function
+		                  'R' = Row function
+		                  'T' = Table function
+		                  'S' = Scalar function
 
 		* Optional (can be None)
 		"""
 		logging.debug('Retrieving functions')
 		return []
 
-	def get_function_params(self):
-		"""Retrieves the list of parameters belonging to functions.
-
-		Override this function to return a list of tuples detailing the
-		parameters that are associated with each function in the database.  The
-		tuples contain the following details in the order specified:
-
-		schema         -- The schema of the function
-		specname       -- The unique name of the function in the schema
-		parmname       -- The name of the parameter
-		parmtype       -- 'I' = Input parameter
-		                  'O' = Output parameter
-		                  'B' = Input+Output parameter
-		                  'R' = Return value/column
-		typeschema     -- The schema of the parameter's datatype
-		typename       -- The name of the parameter's datatype
-		size*          -- The length of the parameter for character types, or
-		                  the numeric precision for decimal types (None if not
-		                  a character or decimal type)
-		scale*         -- The maximum scale for decimal types (None if not a
-		                  decimal type)
-		codepage*      -- The codepage of the parameter for character types
-		                  (None if not a character type)
-		description*   -- Descriptive text
-
-		Note that the each tuple details one parameter belonging to a function.
-		It is important that the list of tuples is in the order that each
-		parameter is declared in the function.
-
-		This is slightly complicated by the fact that the return column(s) of a
-		function are also considered parameters (see the parmtype field above).
-		It does not matter if parameters and return columns are interspersed in
-		the result provided that, taken separately, each set of parameters or
-		columns is in the correct order.
-
-		* Optional (can be None)
-		"""
-		logging.debug('Retrieving function parameters')
-		return []
-
 	def get_procedures(self):
 		"""Retrieves the details of stored procedures in the database.
 
-		Override this function to return a list of tuples containing details of
-		the procedures defined in the database (including system procedures).
-		The tuples contain the following details in the order specified:
+		Override this function to return a list of Procedure tuples containing
+		details of the procedures defined in the database (including system
+		procedures). Procedure tuples contain the following named fields:
 
 		schema         -- The schema of the procedure
-		specname       -- The unique name of the procedure in the schema
+		specific       -- The unique name of the procedure in the schema
 		name           -- The (potentially overloaded) name of the procedure
 		owner*         -- The name of the user who owns the procedure
-		system         -- True if the procedure is system maintained (boolean)
+		system         -- True if the procedure is system maintained (bool)
 		created*       -- When the procedure was created (datetime)
-		deterministic* -- True if the procedure is deterministic
-		extaction*     -- True if the procedure has an external action (affects
-		                  things outside the database)
-		nullcall*      -- True if the procedure is called on NULL input
+		description*   -- Descriptive text
+		deterministic* -- True if the procedure is deterministic (bool)
+		ext_action*    -- True if the procedure has an external action (affects
+		                  things outside the database) (bool)
+		null_call*     -- True if the procedure is called on NULL input
 		access*        -- 'N' if the procedure contains no SQL
 		                  'C' if the procedure contains database independent SQL
 		                  'R' if the procedure contains SQL that reads the db
 		                  'M' if the procedure contains SQL that modifies the db
-		sql*           -- The SQL statement/query that defined the procedure
-		description*   -- Descriptive text
+		sql*           -- The SQL statement that defined the procedure
 
 		* Optional (can be None)
 		"""
 		logging.debug('Retrieving procedures')
 		return []
 
-	def get_procedure_params(self):
-		"""Retrieves the list of parameters belonging to procedures.
+	def get_routine_params(self):
+		"""Retrieves the list of parameters belonging to routines.
 
-		Override this function to return a list of tuples detailing the
-		parameters that are associated with each procedure in the database.
-		The tuples contain the following details in the order specified:
+		Override this function to return a list of RoutineParam tuples
+		detailing the parameters that are associated with each routine in the
+		database. RoutineParam tuples contain the following named fields:
 
-		schema         -- The schema of the procedure
-		specname       -- The unique name of the procedure in the schema
-		parmname       -- The name of the parameter
-		parmtype       -- 'I' = Input parameter
-		                  'O' = Output parameter
-		                  'B' = Input+Output parameter
-		                  'R' = Return value/column
-		typeschema     -- The schema of the parameter's datatype
-		typename       -- The name of the parameter's datatype
-		size*          -- The length of the parameter for character types, or
-		                  the numeric precision for decimal types (None if not
-		                  a character or decimal type)
-		scale*         -- The maximum scale for decimal types (None if not a
-		                  decimal type)
-		codepage*      -- The codepage of the parameter for character types
-		                  (None if not a character type)
-		description*   -- Descriptive text
+		routine_schema   -- The schema of the routine
+		routine_specific -- The unique name of the routine in the schema
+		param_name       -- The name of the parameter
+		type_schema      -- The schema of the parameter's datatype
+		type_name        -- The name of the parameter's datatype
+		size*            -- The length of the parameter for character types, or
+		                    the numeric precision for decimal types (None if not
+		                    a character or decimal type)
+		scale*           -- The maximum scale for decimal types (None if not a
+		                    decimal type)
+		codepage*        -- The codepage of the parameter for character types
+		                    (None if not a character type)
+		direction        -- 'I' = Input parameter
+		                    'O' = Output parameter
+		                    'B' = Input & output parameter
+		                    'R' = Return value/column
+		description*     -- Descriptive text
 
-		Note that the each tuple details one parameter belonging to a
-		procedure.  It is important that the list of tuples is in the order
-		that each parameter is declared in the procedure.
+		Note that the each tuple details one parameter belonging to a routine.
+		It is important that the list of tuples is in the order that each
+		parameter is declared in the routine.
 
 		This is slightly complicated by the fact that the return column(s) of a
-		procedure are also considered parameters (see the parmtype field
-		above).  It does not matter if parameters and return columns are
-		interspersed in the result provided that, taken separately, each set of
-		parameters or columns is in the correct order.
+		routine are also considered parameters (see the direction field above).
+		It does not matter if parameters and return columns are interspersed in
+		the result provided that, taken separately, each set of parameters or
+		columns is in the correct order.
 
 		* Optional (can be None)
 		"""
-		logging.debug('Retrieving procedure parameters')
+		logging.debug('Retrieving routine parameters')
 		return []
 
 	def get_triggers(self):
 		"""Retrieves the details of table triggers in the database.
 
-		Override this function to return a list of tuples containing details of
-		the triggers defined in the database (including system triggers).  The
-		tuples contain the following details in the order specified:
+		Override this function to return a list of Trigger tuples containing
+		details of the triggers defined in the database (including system
+		triggers). Trigger tuples contain the following named fields:
 
-		schema         -- The schema of the trigger
-		name           -- The unique name of the trigger in the schema
-		owner*         -- The name of the user who owns the trigger
-		system         -- True if the trigger is system maintained (boolean)
-		created*       -- When the trigger was created (datetime)
-		tabschema      -- The schema of the table that activates the trigger
-		tabname        -- The name of the table that activates the trigger
-		trigtime       -- When the trigger is fired:
-		                  'A' = The trigger fires after the statement
-		                  'B' = The trigger fires before the statement
-		                  'I' = The trigger fires instead of the statement
-		trigevent      -- What statement fires the trigger:
-		                  'I' = The trigger fires on INSERT
-		                  'U' = The trigger fires on UPDATE
-		                  'D' = The trigger fires on DELETE
-		granularity    -- The granularity of trigger executions:
-		                  'R' = The trigger fires for each row affected
-		                  'S' = The trigger fires once per activating statement
-		sql*           -- The SQL statement/query that defined the trigger
-		description*   -- Descriptive text
+		schema          -- The schema of the trigger
+		name            -- The unique name of the trigger in the schema
+		owner*          -- The name of the user who owns the trigger
+		system          -- True if the trigger is system maintained (bool)
+		created*        -- When the trigger was created (datetime)
+		description*    -- Descriptive text
+		relation_schema -- The schema of the relation that activates the trigger
+		relation_name   -- The name of the relation that activates the trigger
+		when            -- When the trigger is fired:
+		                   'A' = After the event
+		                   'B' = Before the event
+		                   'I' = Instead of the event
+		event           -- What statement fires the trigger:
+		                   'I' = The trigger fires on INSERT
+		                   'U' = The trigger fires on UPDATE
+		                   'D' = The trigger fires on DELETE
+		granularity     -- The granularity of trigger executions:
+		                   'R' = The trigger fires for each row affected
+		                   'S' = The trigger fires once per activating statement
+		sql*            -- The SQL statement that defined the trigger
 
 		* Optional (can be None)
 		"""
@@ -984,13 +902,13 @@ class InputPlugin(Plugin):
 	def get_trigger_dependencies(self):
 		"""Retrieves the details of trigger dependencies.
 
-		Override this function to return a list of tuples containing details of
-		the relations upon which triggers depend (the tables that a trigger
-		references in its body).  The tuples contain the following details in
-		the order specified:
+		Override this function to return a list of TriggerDep tuples containing
+		details of the relations upon which triggers depend (the tables that a
+		trigger references in its body). TriggerDep tuples contain the
+		following named fields:
 
-		schema       -- The schema of the trigger
-		name         -- The name of the trigger
+		trig_schema  -- The schema of the trigger
+		trig_name    -- The name of the trigger
 		dep_schema   -- The schema of the relation upon which the trigger depends
 		dep_name     -- The name of the relation upon which the trigger depends
 		"""
@@ -1000,403 +918,278 @@ class InputPlugin(Plugin):
 	def get_tablespaces(self):
 		"""Retrieves the details of the tablespaces in the database.
 
-		Override this function to return a list of tuples containing details of
-		the tablespaces defined in the database (including system tablespaces).
-		The tuples contain the following details in the order specified:
+		Override this function to return a list of Tablespace tuples containing
+		details of the tablespaces defined in the database (including system
+		tablespaces). Tablespace tuples contain the following named fields:
 
 		tbspace       -- The tablespace name
 		owner*        -- The name of the user who owns the tablespace
-		system        -- True if the tablespace is system maintained (boolean)
+		system        -- True if the tablespace is system maintained (bool)
 		created*      -- When the tablespace was created (datetime)
-		type*         -- The type of the tablespace (regular, temporary, system
-		              -- or database managed, etc) as free text
 		description*  -- Descriptive text
+		type*         -- The type of the tablespace as free text
 
 		* Optional (can be None)
 		"""
 		logging.debug('Retrieving tablespaces')
 		return []
 
-	def _filter(self, items, *elements):
-		"""Filters the items list of tuples  on the specified elements.
+	def filter(self, items, key=None):
+		"""Filters the iterable on the specified key.
 
-		This method returns the list of tuples from elements which match one or
-		more filters in the "include" list specified in the configuration (or
-		all tuples if the "include" list is empty), and which do not match any
-		of the filters in the "exclude" list. The elements iterable specifies
-		the numeric indices of the element(s) in each tuple that should be
-		compared to the filter lists.
+		This method filters the iterable items against this instance's
+		"include" and "exclude" lists of wildcards. The key parameter, if
+		specified, provides a function used to extract the string which will be
+		matched against the lists. Only elements (or the key of elements) which
+		match one or more filters in the "include" list (or all elements if the
+		"include" list is empty), and which do not match any of the filters in
+		the "exclude" list will be present in the output.
+
+		The method returns a generator.
 		"""
-		assert len(elements) > 0
-		for element in elements:
-			items = [
-				item for item in items
-				if (len(self.include) == 0 or any([
-					fnmatch(item[element], pattern)
-					for pattern in self.include
-				]))
-				and not any([
-					fnmatch(item[element], pattern)
-					for pattern in self.exclude
-				])
-			]
-		return items
+		if key is None:
+			key = lambda x: x
+		result = items
+		if self.include:
+			def include_predicate(item):
+				return any(fnmatch(key(item), pattern) for pattern in self.include)
+			result = ifilter(include_predicate, result)
+		if self.exclude:
+			def exclude_predicate(item):
+				return not any(fnmatch(key(item), pattern) for pattern in self.exclude)
+			result = ifilter(exclude_predicate, result)
+		return result
 
-	def _get_schemas(self):
-		if self.__schemas is None:
-			# Note: schemas themselves are not filtered
-			self.__schemas = self.get_schemas()
-		return self.__schemas
+	def fetch_some(self, cursor, count=1000):
+		"""Efficient and flexible retrieval from a database cursor.
 
-	def _get_datatypes(self):
-		if self.__datatypes is None:
-			self.__datatypes = self.get_datatypes()
-		return self.__datatypes
+		This generator method retrieves rows from the specified cursor in a
+		flexible but efficient manner by utilizing the fetchmany() method where
+		possible, or fetchall() otherwise. As a generator method, individual
+		rows are yielded.
+		"""
+		if hasattr(cursor, 'fetchmany'):
+			while True:
+				rows = cursor.fetchmany(count)
+				if not rows:
+					break
+				for row in rows:
+					yield row
+		else:
+			# Some interfaces don't implement fetchmany (although they should -
+			# it's not optional). In this case, favour speed of retrieval over
+			# memory usage (memory is cheap - bandwidth ain't)
+			for row in cursor.fetchall():
+				yield row
 
-	def _get_tables(self):
-		if self.__tables is None:
-			self.__tables = self._filter(self.get_tables(), 0)
-		return self.__tables
 
-	def _get_views(self):
-		if self.__views is None:
-			self.__views = self._filter(self.get_views(), 0)
-		return self.__views
+	@cached
+	def schemas(self):
+		# Note: schemas themselves are not filtered because datatypes are not
+		# filtered (if a system schema got excluded, system datatypes would be
+		# excluded and the object hierarchy would break horribly)
+		return sorted(self.get_schemas(), key=attrgetter('name'))
 
-	def _get_aliases(self):
-		if self.__aliases is None:
-			self.__aliases = self._filter(self.get_aliases(), 0, 5)
-		return self.__aliases
+	@cached
+	def datatypes(self):
+		return sorted(self.get_datatypes(), key=attrgetter('schema', 'name'))
 
-	def _get_relations(self):
-		for i in self.tables:
-			yield i[:5]
-		for i in self.views:
-			yield i[:5]
-		for i in self.aliases:
-			yield i[:5]
+	@cached
+	def tables(self):
+		result = self.filter(self.get_tables(), key=attrgetter('schema'))
+		return sorted(result, key=attrgetter('schema', 'name'))
 
-	def _get_relation_dependencies(self):
-		if self.__relation_dependencies is None:
-			if self.__view_dependencies is None:
-				self.__view_dependencies = self._filter(self.get_view_dependencies(), 0, 2)
-			self.__relation_dependencies = dict([
-				(relation[:2], [dep[2:4]
-					for dep in self.__view_dependencies
-					if relation[:2] == dep[:2]
-				])
-				for relation in self.relations
-			])
-		return self.__relation_dependencies
+	@cached
+	def views(self):
+		result = self.filter(self.get_views(), key=attrgetter('schema'))
+		return sorted(result, key=attrgetter('schema', 'name'))
 
-	def _get_relation_dependents(self):
-		if self.__relation_dependents is None:
-			if self.__view_dependencies is None:
-				self.__view_dependencies = self._filter(self.get_view_dependencies(), 0, 2)
-			if self.__aliases is None:
-				self.__aliases = self._filter(self.get_aliases(), 0, 5)
-			self.__relation_dependents = dict([
-				(relation[:2], [dep[:2]
-					for dep in self.__view_dependencies + [
-						(alias_schema, alias_name, base_schema, base_name)
-						for (alias_schema, alias_name, _, _, _, base_schema, base_name, _) in self.__aliases
-					]
-					if relation[:2] == dep[2:4]
-				])
-				for relation in self.relations
-			])
-		return self.__relation_dependents
+	@cached
+	def aliases(self):
+		result = self.filter(self.get_aliases(), key=attrgetter('schema'))
+		result = self.filter(result, key=attrgetter('base_schema'))
+		return sorted(result, key=attrgetter('schema', 'name'))
 
-	def _get_indexes(self):
-		if self.__indexes is None:
-			self.__indexes = self._filter(self.get_indexes(), 0, 2)
-		return self.__indexes
+	@cached
+	def relations(self):
+		result = (
+			namedslice(Relation, relation)
+			for relation in chain(self.tables, self.views, self.aliases)
+		)
+		return sorted(result, key=attrgetter('schema', 'name'))
 
-	def _get_index_cols(self):
-		if self.__index_cols is None:
-			indexcols = self._filter(self.get_index_cols(), 0)
-			self.__index_cols = dict([
-				(index[:2], [indexcol[2:]
-					for indexcol in indexcols
-					if index[:2] == indexcol[:2]
-				])
-				for index in self.indexes
-			])
-		return self.__index_cols
+	@cached
+	def relation_dependencies(self):
+		result = self.filter(self.get_view_dependencies(), key=attrgetter('view_schema'))
+		result = self.filter(result, key=attrgetter('dep_schema'))
+		result = sorted(result, key=attrgetter('schema', 'name', 'dep_schema', 'dep_name'))
+		result = groupby(result, key=attrgetter('schema', 'name'))
+		return dict(
+			(RelationRef(*view), [RelationRef(d.dep_schema, d.dep_name) for d in deps])
+			for (view, deps) in result
+		)
 
-	def _get_table_indexes(self):
-		if self.__table_indexes is None:
-			self.__table_indexes = dict([
-				(table[:2], [index[:2]
-					for index in self.indexes
-					if table[:2] == index[2:4]
-				])
-				for table in self.tables
-			])
-		return self.__table_indexes
-
-	def _get_relation_cols(self):
-		if self.__relation_cols is None:
-			relationcols = self._filter(self.get_relation_cols(), 0)
-			self.__relation_cols = dict([
-				(relation[:2], [relationcol[2:]
-					for relationcol in relationcols
-					if relation[:2] == relationcol[:2]
-				])
-				for relation in self.tables + self.views + self.aliases
-			])
-		return self.__relation_cols
-
-	def _get_unique_keys(self):
-		if self.__unique_keys is None:
-			ukeys = self._filter(self.get_unique_keys(), 0)
-			self.__unique_keys = dict([
-				(table[:2], [ukey[2:]
-					for ukey in ukeys
-					if table[:2] == ukey[:2]
-				])
-				for table in self.tables
-			])
-		return self.__unique_keys
-
-	def _get_unique_keys_list(self):
-		if self.__unique_keys_list is None:
-			self.__unique_keys_list = reduce(lambda a,b: a+b,
-				[
-					[(schema, name) + key for key in keys]
-					for ((schema, name), keys) in self.unique_keys.iteritems()
-					if len(keys) > 0
-				], []
+	@cached
+	def relation_dependents(self):
+		result = chain(
+			(
+				RelationDep(*(relation + dep))
+				for (relation, deps) in self.relation_dependencies.iteritems()
+				for dep in deps
+			),
+			(
+				RelationDep(a.schema, a.name, a.base_schema, a.base_name)
+				for a in self.aliases
 			)
-		return self.__unique_keys_list
+		)
+		result = sorted(result, key=attrgetter('dep_schema', 'dep_name', 'schema', 'name'))
+		result = groupby(result, key=attrgetter('dep_schema', 'dep_name'))
+		return dict(
+			(RelationRef(*relation), [RelationRef(d.schema, d.name) for d in deps])
+			for (relation, deps) in result
+		)
 
-	def _get_unique_key_cols(self):
-		if self.__unique_key_cols is None:
-			ukeycols = self._filter(self.get_unique_key_cols(), 0)
-			self.__unique_key_cols = dict([
-				(ukey[:3], [ukeycol[3]
-					for ukeycol in ukeycols
-					if ukey[:3] == ukeycol[:3]
-				])
-				for ukey in self.unique_keys_list
-			])
-		return self.__unique_key_cols
+	@cached
+	def indexes(self):
+		result = self.filter(self.get_indexes(), key=attrgetter('schema'))
+		result = self.filter(result, key=attrgetter('table_schema'))
+		return sorted(result, key=attrgetter('schema', 'name'))
 
-	def _get_foreign_keys(self):
-		if self.__foreign_keys is None:
-			fkeys = self._filter(self.get_foreign_keys(), 0, 6)
-			self.__foreign_keys = dict([
-				(table[:2], [fkey[2:]
-					for fkey in fkeys
-					if table[:2] == fkey[:2]
-				])
-				for table in self.tables
-			])
-		return self.__foreign_keys
+	@cached
+	def index_cols(self):
+		result = self.filter(self.get_index_cols(), key=attrgetter('index_schema'))
+		result = groupby(result, key=attrgetter('index_schema', 'index_name'))
+		return dict((IndexRef(*index), list(cols)) for (index, cols) in result)
 
-	def _get_foreign_keys_list(self):
-		if self.__foreign_keys_list is None:
-			self.__foreign_keys_list = reduce(lambda a,b: a+b,
-				[
-					[(schema, name) + key for key in keys]
-					for ((schema, name), keys) in self.foreign_keys.iteritems()
-					if len(keys) > 0
-				], []
-			)
-		return self.__foreign_keys_list
+	@cached
+	def table_indexes(self):
+		result = sorted(self.indexes, key=attrgetter('table_schema', 'table_name', 'schema', 'name'))
+		result = groupby(result, key=attrgetter('table_schema', 'table_name'))
+		return dict((TableRef(*table), list(indexes)) for (table, indexes) in result)
 
-	def _get_foreign_key_cols(self):
-		if self.__foreign_key_cols is None:
-			fkeycols = self._filter(self.get_foreign_key_cols(), 0)
-			self.__foreign_key_cols = dict([
-				(fkey[:3], [fkeycol[3:]
-					for fkeycol in fkeycols
-					if fkey[:3] == fkeycol[:3]
-				])
-				for fkey in self.foreign_keys_list
-			])
-		return self.__foreign_key_cols
+	@cached
+	def relation_cols(self):
+		result = self.filter(self.get_relation_cols(), key=attrgetter('relation_schema'))
+		result = sorted(result, key=attrgetter('relation_schema', 'relation_name'))
+		result = groupby(result, key=attrgetter('relation_schema', 'relation_name'))
+		return dict((RelationRef(*relation), list(cols)) for (relation, cols) in result)
 
-	def _get_parent_keys(self):
-		if self.__parent_keys is None:
-			self.__parent_keys = dict([
-				(ukey[:3], [fkey[:3]
-					for fkey in self.foreign_keys_list
-					if ukey[:3] == fkey[6:9]
-				])
-				for ukey in self.unique_keys_list
-			])
-		return self.__parent_keys
+	@cached
+	def unique_keys(self):
+		result = self.filter(self.get_unique_keys(), key=attrgetter('table_schema'))
+		result = sorted(result, key=attrgetter('table_schema', 'table_name', 'name'))
+		result = groupby(result, key=attrgetter('table_schema', 'table_name'))
+		return dict((TableRef(*table), list(keys)) for (table, keys) in result)
 
-	def _get_checks(self):
-		if self.__checks is None:
-			checks = self._filter(self.get_checks(), 0)
-			self.__checks = dict([
-				(table[:2], [check[2:]
-					for check in checks
-					if table[:2] == check[:2]
-				])
-				for table in self.tables
-			])
-		return self.__checks
+	@cached
+	def unique_key_cols(self):
+		result = self.filter(self.get_unique_key_cols(), key=attrgetter('const_schema'))
+		result = sorted(result, key=attrgetter('const_schema', 'const_table', 'const_name'))
+		result = groupby(result, key=attrgetter('const_schema', 'const_table', 'const_name'))
+		return dict((ConstraintRef(*key), list(cols)) for (key, cols) in result)
 
-	def _get_checks_list(self):
-		if self.__checks_list is None:
-			self.__checks_list = reduce(lambda a,b: a+b,
-				[
-					[(schema, name) + check for check in checks]
-					for ((schema, name), checks) in self.checks.iteritems()
-					if len(checks) > 0
-				], []
-			)
-		return self.__checks_list
+	@cached
+	def foreign_keys(self):
+		result = self.filter(self.get_foreign_keys(), key=attrgetter('table_schema'))
+		result = self.filter(result, key=attrgetter('const_schema'))
+		result = sorted(result, key=attrgetter('table_schema', 'table_name', 'name'))
+		result = groupby(result, key=attrgetter('table_schema', 'table_name'))
+		return dict((TableRef(*table), list(keys)) for (table, keys) in result)
 
-	def _get_check_cols(self):
-		if self.__check_cols is None:
-			checkcols = self._filter(self.get_check_cols(), 0)
-			self.__check_cols = dict([
-				(check[:3], [checkcol[3]
-					for checkcol in checkcols
-					if check[:3] == checkcol[:3]
-				])
-				for check in self.checks_list
-			])
-		return self.__check_cols
+	@cached
+	def foreign_key_cols(self):
+		result = self.filter(self.get_foreign_key_cols(), key=attrgetter('const_schema'))
+		result = sorted(result, key=attrgetter('const_schema', 'const_table', 'const_name'))
+		result = groupby(result, key=attrgetter('const_schema', 'const_table', 'const_name'))
+		return dict((ConstraintRef(*key), list(cols)) for (key, cols) in result)
 
-	def _get_functions(self):
-		if self.__functions is None:
-			self.__functions = self._filter(self.get_functions(), 0)
-		return self.__functions
+	@cached
+	def parent_keys(self):
+		result = (key for (table, keys) in self.foreign_keys.iteritems() for key in keys)
+		result = sorted(result, key=attrgetter('const_schema', 'const_table', 'const_name'))
+		result = groupby(result, key=attrgetter('const_schema', 'const_table', 'const_name'))
+		return dict((ConstraintRef(*ukey), list(fkeys)) for (ukey, fkeys) in result)
 
-	def _get_function_params(self):
-		if self.__function_params is None:
-			params = self._filter(self.get_function_params(), 0)
-			self.__function_params = dict([
-				(function[:2], [param[2:]
-					for param in params
-					if function[:2] == param[:2]
-				])
-				for function in self.functions
-			])
-		return self.__function_params
+	@cached
+	def checks(self):
+		result = self.filter(self.get_checks(), key=attrgetter('table_schema'))
+		result = sorted(result, key=attrgetter('table_schema', 'table_name', 'name'))
+		result = groupby(result, key=attrgetter('table_schema', 'table_name'))
+		return dict((TableRef(*table), list(checks)) for (table, checks) in result)
 
-	def _get_procedures(self):
-		if self.__procedures is None:
-			self.__procedures = self._filter(self.get_procedures(), 0)
-		return self.__procedures
+	@cached
+	def check_cols(self):
+		result = self.filter(self.get_check_cols(), key=attrgetter('const_schema'))
+		result = sorted(result, key=attrgetter('const_schema', 'const_table', 'const_name'))
+		result = groupby(result, key=attrgetter('const_schema', 'const_table', 'const_name'))
+		return dict((ConstraintRef(*key), list(cols)) for (key, cols) in result)
 
-	def _get_procedure_params(self):
-		if self.__procedure_params is None:
-			params = self._filter(self.get_procedure_params(), 0)
-			self.__procedure_params = dict([
-				(procedure[:2], [param[2:]
-					for param in params
-					if procedure[:2] == param[:2]
-				])
-				for procedure in self.procedures
-			])
-		return self.__procedure_params
+	@cached
+	def functions(self):
+		result = self.filter(self.get_functions(), key=attrgetter('schema'))
+		return sorted(result, key=attrgetter('schema', 'specific'))
 
-	def _get_triggers(self):
-		if self.__triggers is None:
-			self.__triggers = self._filter(self.get_triggers(), 0, 5)
-		return self.__triggers
+	@cached
+	def procedures(self):
+		result = self.filter(self.get_procedures(), key=attrgetter('schema'))
+		return sorted(result, key=attrgetter('schema', 'specific'))
 
-	def _get_trigger_dependencies(self):
-		if self.__trigger_dependencies is None:
-			if self.__trigger_relations is None:
-				self.__trigger_relations = self._filter(self.get_trigger_dependencies(), 0, 2)
-			self.__trigger_dependencies = dict([
-				(trigger[:2], [trigdep[2:4]
-					for trigdep in self.__trigger_relations
-					if trigger[:2] == trigdep[:2]
-				])
-				for trigger in self.triggers
-			])
-		return self.__trigger_dependencies
+	@cached
+	def routine_params(self):
+		result = self.filter(self.get_routine_params(), key=attrgetter('routine_schema'))
+		result = sorted(result, key=attrgetter('routine_schema', 'routine_specific'))
+		result = groupby(result, key=attrgetter('routine_schema', 'routine_specific'))
+		return dict((RoutineRef(*routine), list(params)) for (routine, params) in result)
 
-	def _get_trigger_dependents(self):
-		if self.__trigger_dependents is None:
-			if self.__trigger_relations is None:
-				self.__trigger_relations = self._filter(self.get_trigger_dependencies(), 0, 2)
-			self.__trigger_dependents = dict([
-				(relation[:2], [dep[:2]
-					for dep in self.__trigger_relations
-					if relation[:2] == dep[2:4]
-				])
-				for relation in self.relations
-			])
-		return self.__trigger_dependents
+	@cached
+	def triggers(self):
+		result = self.filter(self.get_triggers(), key=attrgetter('schema'))
+		return sorted(result, key=attrgetter('schema', 'name'))
 
-	def _get_relation_triggers(self):
-		if self.__relation_triggers is None:
-			self.__relation_triggers = dict([
-				(relation[:2], [trigger[:2]
-					for trigger in self.triggers
-					if relation[:2] == trigger[5:7]
-				])
-				for relation in self.relations
-			])
-		return self.__relation_triggers
+	@cached
+	def trigger_dependencies(self):
+		result = self.filter(self.get_trigger_dependencies(), key=attrgetter('schema'))
+		result = self.filter(result, key=attrgetter('table_schema'))
+		result = sorted(result, key=attrgetter('trig_schema', 'trig_name', 'dep_schema', 'dep_name'))
+		result = groupby(result, key=attrgetter('trig_schema', 'trig_name'))
+		return dict(
+			(TriggerRef(*trigger), [RelationRef(d.dep_schema, d.dep_name) for d in deps])
+			for (trigger, deps) in result
+		)
 
-	def _get_tablespaces(self):
-		if self.__tablespaces is None:
-			self.__tablespaces = self.get_tablespaces()
-		return self.__tablespaces
+	@cached
+	def trigger_dependents(self):
+		result = (
+			TriggerDep(*(trigger + dep))
+			for (trigger, deps) in self.trigger_dependencies.iteritems()
+			for dep in deps
+		)
+		result = sorted(result, key=attrgetter('dep_schema', 'dep_name', 'trig_schema', 'trig_name'))
+		result = groupby(result, key=attrgetter('dep_schema', 'dep_name'))
+		return dict(
+			(RelationRef(*relation), [TriggerRef(d.trig_schema, d.trig_name) for d in deps])
+			for (relation, deps) in result
+		)
 
-	def _get_tablespace_tables(self):
-		if self.__tablespace_tables is None:
-			self.__tablespace_tables = dict([
-				(tbspace[0], [table[:2]
-					for table in self.tables
-					if tbspace[0] == table[8]
-				])
-				for tbspace in self.tablespaces
-			])
-		return self.__tablespace_tables
+	@cached
+	def relation_triggers(self):
+		result = sorted(self.triggers, key=attrgetter('relation_schema', 'relation_name', 'schema', 'name'))
+		result = groupby(result, key=attrgetter('relation_schema', 'relation_name'))
+		return dict((RelationRef(*relation), list(triggers)) for (relation, triggers) in result)
 
-	def _get_tablespace_indexes(self):
-		if self.__tablespace_indexes is None:
-			self.__tablespace_indexes = dict([
-				(tbspace[0], [index[:2]
-					for index in self.indexes
-					if tbspace[0] == index[11]
-				])
-				for tbspace in self.tablespaces
-			])
-		return self.__tablespace_indexes
+	@cached
+	def tablespaces(self):
+		return sorted(self.get_tablespaces(), key=attrgetter('name'))
 
-	schemas = property(lambda self: self._get_schemas())
-	datatypes = property(lambda self: self._get_datatypes())
-	tables = property(lambda self: self._get_tables())
-	table_indexes = property(lambda self: self._get_table_indexes())
-	views = property(lambda self: self._get_views())
-	aliases = property(lambda self: self._get_aliases())
-	relations = property(lambda self: self._get_relations())
-	relation_dependencies = property(lambda self: self._get_relation_dependencies())
-	relation_dependents = property(lambda self: self._get_relation_dependents())
-	indexes = property(lambda self: self._get_indexes())
-	index_cols = property(lambda self: self._get_index_cols())
-	relation_cols = property(lambda self: self._get_relation_cols())
-	unique_keys = property(lambda self: self._get_unique_keys())
-	unique_keys_list = property(lambda self: self._get_unique_keys_list())
-	unique_key_cols = property(lambda self: self._get_unique_key_cols())
-	foreign_keys = property(lambda self: self._get_foreign_keys())
-	foreign_keys_list = property(lambda self: self._get_foreign_keys_list())
-	foreign_key_cols = property(lambda self: self._get_foreign_key_cols())
-	parent_keys = property(lambda self: self._get_parent_keys())
-	checks = property(lambda self: self._get_checks())
-	checks_list = property(lambda self: self._get_checks_list())
-	check_cols = property(lambda self: self._get_check_cols())
-	functions = property(lambda self: self._get_functions())
-	function_params = property(lambda self: self._get_function_params())
-	procedures = property(lambda self: self._get_procedures())
-	procedure_params = property(lambda self: self._get_procedure_params())
-	triggers = property(lambda self: self._get_triggers())
-	trigger_dependencies = property(lambda self: self._get_trigger_dependencies())
-	trigger_dependents = property(lambda self: self._get_trigger_dependents())
-	relation_triggers = property(lambda self: self._get_relation_triggers())
-	tablespaces = property(lambda self: self._get_tablespaces())
-	tablespace_tables = property(lambda self: self._get_tablespace_tables())
-	tablespace_indexes = property(lambda self: self._get_tablespace_indexes())
+	@cached
+	def tablespace_tables(self):
+		result = sorted(self.tables, key=attrgetter('tbspace', 'schema', 'name'))
+		result = groupby(result, key=attrgetter('tbspace'))
+		return dict((TablespaceRef(tbspace), list(tables)) for (tbspace, tables) in result)
+
+	@cached
+	def tablespace_indexes(self):
+		result = sorted(self.indexes, key=attrgetter('tbspace', 'schema', 'name'))
+		result = groupby(result, key=attrgetter('tbspace'))
+		return dict((TablespaceRef(tbspace), list(indexes)) for (tbspace, indexes) in result)
 
