@@ -7,7 +7,7 @@ import re
 import db2makedoc.plugins
 from itertools import groupby
 from db2makedoc.util import *
-from db2makedoc.plugins.db2 import connect, make_datetime, make_bool
+from db2makedoc.plugins.db2 import connect, make_datetime, make_bool, amke_int
 from db2makedoc.tuples import (
 	Schema, Datatype, Table, View, Alias, RelationDep, Index, IndexCol,
 	RelationCol, UniqueKey, UniqueKeyCol, ForeignKey, ForeignKeyCol, Check,
@@ -346,8 +346,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				desc,
 				tbspace,
 				make_datetime(laststats),
-				cardinality,
-				size
+				make_int(cardinality),
+				make_int(size)
 			)
 
 	def get_views(self):
@@ -622,8 +622,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				tabname,
 				tbspace,
 				make_datetime(laststats),
-				card,
-				size,
+				make_int(card),
+				make_int(size),
 				make_bool(unique)
 			)
 
@@ -874,8 +874,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				codepage or None,
 				make_bool(identity),
 				make_bool(nullable),
-				cardinality,
-				nullcard,
+				make_int(cardinality),
+				make_int(nullcard),
 				generated,
 				default,
 				desc

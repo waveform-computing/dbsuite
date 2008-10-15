@@ -98,6 +98,19 @@ def connect(dsn, username=None, password=None):
 			return odbc.odbc(dsn)
 	raise ImportError('Unable to find a suitable connection framework; please install PyDB2, pyodbc, PyWin32, or mxODBC')
 
+def make_int(value):
+	"""Converts a numeric value into an integer / long.
+
+	If value is None, returns None. If the value is a string, refuse to convert
+	it. Otherwise performs a straight int() conversion on value.
+	"""
+	if value is None:
+		return None
+	elif isinstance(value, basestring):
+		raise ValueError('Cannot convert string to integer')
+	else:
+		return int(value)
+
 def make_datetime(value):
 	"""Converts a date-time value from a database query to a datetime object.
 
