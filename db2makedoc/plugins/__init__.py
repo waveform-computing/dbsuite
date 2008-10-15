@@ -960,7 +960,7 @@ class InputPlugin(Plugin):
 			result = ifilter(exclude_predicate, result)
 		return result
 
-	def fetch_some(self, cursor, count=1000):
+	def fetch_some(self, cursor, count=10):
 		"""Efficient and flexible retrieval from a database cursor.
 
 		This generator method retrieves rows from the specified cursor in a
@@ -968,19 +968,23 @@ class InputPlugin(Plugin):
 		possible, or fetchall() otherwise. As a generator method, individual
 		rows are yielded.
 		"""
-		if hasattr(cursor, 'fetchmany'):
-			while True:
-				rows = cursor.fetchmany(count)
-				if not rows:
-					break
-				for row in rows:
-					yield row
-		else:
-			# Some interfaces don't implement fetchmany (although they should -
-			# it's not optional). In this case, favour speed of retrieval over
-			# memory usage (memory is cheap - bandwidth ain't)
-			for row in cursor.fetchall():
-				yield row
+		# XXX The following can be activated when a) PyDB2 supports fetchmany
+		# without crashing or b) ibm_db starts to fetch in a vaguely reasonable
+		# time
+		#
+		#if hasattr(cursor, 'fetchmany'):
+		#	while True:
+		#		rows = cursor.fetchmany(count)
+		#		if not rows:
+		#			break
+		#		for row in rows:
+		#			yield row
+		#else:
+		#	# Some interfaces don't implement fetchmany (although they should -
+		#	# it's not optional). In this case, favour speed of retrieval over
+		#	# memory usage (memory is cheap - bandwidth ain't)
+		for row in cursor.fetchall():
+			yield row
 
 
 	@cached
