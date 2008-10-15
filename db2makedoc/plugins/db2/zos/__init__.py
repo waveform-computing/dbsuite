@@ -135,7 +135,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				GROUP BY SCHEMA
 			)
 			SELECT
-				S.SCHEMA                 AS NAME,
+				RTRIM(S.SCHEMA)          AS NAME,
 				MIN(O.CREATEDBY)         AS OWNER,
 				CASE
 					WHEN S.SCHEMA LIKE 'SYS%' THEN 'Y'
@@ -195,65 +195,61 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			yield row
 		cursor = self.connection.cursor()
 		cursor.execute("""
-			WITH SYSTEM_TYPES AS (
-				SELECT DISTINCT
-					CAST('SYSIBM' AS VARCHAR(128))    AS TYPESCHEMA,
-					CASE COLTYPE
-						WHEN 'LONGVAR'  THEN 'LONG VARCHAR'
-						WHEN 'CHAR'     THEN 'CHARACTER'
-						WHEN 'VARG'     THEN 'VARGRAPHIC'
-						WHEN 'LONGVARG' THEN 'LONG VARGRAPHIC'
-						WHEN 'TIMESTMP' THEN 'TIMESTAMP'
-						WHEN 'FLOAT'    THEN
-							CASE LENGTH
-								WHEN 4 THEN 'REAL'
-								WHEN 8 THEN 'DOUBLE'
-							END
-						ELSE COLTYPE
-					END                               AS TYPENAME,
-					'SYSIBM'                          AS OWNER,
-					CHAR('Y')                         AS SYSTEM,
-					CHAR(TIMESTAMP('19850401000000')) AS CREATED,
-					CAST(NULL AS VARCHAR(762))        AS DESCRIPTION,
-					CAST(NULL AS VARCHAR(128))        AS SOURCESCHEMA,
-					CAST(NULL AS VARCHAR(128))        AS SOURCENAME,
-					CAST(CASE COLTYPE
-						WHEN 'CHAR'     THEN 0
-						WHEN 'VARCHAR'  THEN 0
-						WHEN 'LONGVAR'  THEN 0
-						WHEN 'DECIMAL'  THEN 0
-						WHEN 'GRAPHIC'  THEN 0
-						WHEN 'VARG'     THEN 0
-						WHEN 'LONGVARG' THEN 0
-						WHEN 'BLOB'     THEN 0
-						WHEN 'CLOB'     THEN 0
-						WHEN 'DBCLOB'   THEN 0
-						ELSE LENGTH
-					END AS SMALLINT)                  AS SIZE,
-					CAST(0 AS SMALLINT)               AS SCALE
-				FROM
-					SYSIBM.SYSCOLUMNS
-				WHERE
-					SOURCETYPEID = 0
-			),
-			USER_TYPES AS (
-				SELECT
-					SCHEMA          AS TYPESCHEMA,
-					NAME            AS TYPENAME,
-					OWNER           AS OWNER,
-					CHAR('N')       AS SYSTEM,
-					CHAR(CREATEDTS) AS CREATED,
-					REMARKS         AS DESCRIPTION,
-					SOURCESCHEMA    AS SOURCESCHEMA,
-					SOURCETYPE      AS SOURCENAME,
-					LENGTH          AS SIZE,
-					SCALE           AS SCALE
-				FROM
-					SYSIBM.SYSDATATYPES
-			)
-			SELECT * FROM SYSTEM_TYPES
+			SELECT DISTINCT
+				CAST('SYSIBM' AS VARCHAR(128))    AS TYPESCHEMA,
+				CASE COLTYPE
+					WHEN 'LONGVAR'  THEN 'LONG VARCHAR'
+					WHEN 'CHAR'     THEN 'CHARACTER'
+					WHEN 'VARG'     THEN 'VARGRAPHIC'
+					WHEN 'LONGVARG' THEN 'LONG VARGRAPHIC'
+					WHEN 'TIMESTMP' THEN 'TIMESTAMP'
+					WHEN 'FLOAT'    THEN
+						CASE LENGTH
+							WHEN 4 THEN 'REAL'
+							WHEN 8 THEN 'DOUBLE'
+						END
+					ELSE RTRIM(COLTYPE)
+				END                               AS TYPENAME,
+				'SYSIBM'                          AS OWNER,
+				CHAR('Y')                         AS SYSTEM,
+				CHAR(TIMESTAMP('19850401000000')) AS CREATED,
+				CAST(NULL AS VARCHAR(762))        AS DESCRIPTION,
+				CAST(NULL AS VARCHAR(128))        AS SOURCESCHEMA,
+				CAST(NULL AS VARCHAR(128))        AS SOURCENAME,
+				CAST(CASE COLTYPE
+					WHEN 'CHAR'     THEN 0
+					WHEN 'VARCHAR'  THEN 0
+					WHEN 'LONGVAR'  THEN 0
+					WHEN 'DECIMAL'  THEN 0
+					WHEN 'GRAPHIC'  THEN 0
+					WHEN 'VARG'     THEN 0
+					WHEN 'LONGVARG' THEN 0
+					WHEN 'BLOB'     THEN 0
+					WHEN 'CLOB'     THEN 0
+					WHEN 'DBCLOB'   THEN 0
+					ELSE LENGTH
+				END AS SMALLINT)                  AS SIZE,
+				CAST(0 AS SMALLINT)               AS SCALE
+			FROM
+				SYSIBM.SYSCOLUMNS
+			WHERE
+				RTRIM(TYPESCHEMA) = 'SYSIBM'
+
 			UNION ALL
-			SELECT * FROM USER_TYPES
+
+			SELECT
+				RTRIM(SCHEMA)       AS TYPESCHEMA,
+				RTRIM(NAME)         AS TYPENAME,
+				OWNER               AS OWNER,
+				CHAR('N')           AS SYSTEM,
+				CHAR(CREATEDTS)     AS CREATED,
+				REMARKS             AS DESCRIPTION,
+				RTRIM(SOURCESCHEMA) AS SOURCESCHEMA,
+				RTRIM(SOURCETYPE)   AS SOURCENAME,
+				LENGTH              AS SIZE,
+				SCALE               AS SCALE
+			FROM
+				SYSIBM.SYSDATATYPES
 			WITH UR
 		""")
 		for (
@@ -309,8 +305,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				CREATOR                            AS TABSCHEMA,
-				NAME                               AS TABNAME,
+				RTRIM(CREATOR)                     AS TABSCHEMA,
+				RTRIM(NAME)                        AS TABNAME,
 				CREATEDBY                          AS OWNER,
 				CASE
 					WHEN CREATOR LIKE 'SYS%' THEN 'Y'
@@ -318,7 +314,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				END                                AS SYSTEM,
 				CHAR(CREATEDTS)                    AS CREATED,
 				REMARKS                            AS DESCRIPTION,
-				TSNAME                             AS TBSPACE,
+				RTRIM(TSNAME)                      AS TBSPACE,
 				CHAR(STATSTIME)                    AS LASTSTATS,
 				NULLIF(DECIMAL(CARDF), -1)         AS CARDINALITY,
 				NULLIF(DECIMAL(SPACEF), -1) * 1024 AS SIZE
@@ -377,8 +373,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				V.CREATOR             AS VIEWSCHEMA,
-				V.NAME                AS VIEWNAME,
+				RTRIM(V.CREATOR)      AS VIEWSCHEMA,
+				RTRIM(V.NAME)         AS VIEWNAME,
 				T.CREATEDBY           AS OWNER,
 				CASE
 					WHEN V.CREATOR LIKE 'SYS%' THEN 'Y'
@@ -448,8 +444,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				CREATOR          AS ALIASSCHEMA,
-				NAME             AS ALIASNAME,
+				RTRIM(CREATOR)   AS ALIASSCHEMA,
+				RTRIM(NAME)      AS ALIASNAME,
 				CREATEDBY        AS OWNER,
 				CASE
 					WHEN CREATOR LIKE 'SYS%' THEN 'Y'
@@ -457,8 +453,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				END              AS SYSTEM,
 				CHAR(CREATEDTS)  AS CREATED,
 				REMARKS          AS DESCRIPTION,
-				TBCREATOR        AS BASESCHEMA,
-				TBNAME           AS BASETABLE
+				RTRIM(TBCREATOR) AS BASESCHEMA,
+				RTRIM(TBNAME)    AS BASETABLE
 			FROM
 				SYSIBM.SYSTABLES
 			WHERE
@@ -467,8 +463,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			UNION ALL
 
 			SELECT
-				CREATOR          AS ALIASSCHEMA,
-				NAME             AS ALIASNAME,
+				RTRIM(CREATOR)   AS ALIASSCHEMA,
+				RTRIM(NAME)      AS ALIASNAME,
 				CREATEDBY        AS OWNER,
 				CASE
 					WHEN CREATOR LIKE 'SYS%' THEN 'Y'
@@ -476,8 +472,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				END              AS SYSTEM,
 				CHAR(CREATEDTS)  AS CREATED,
 				CAST(NULL AS VARCHAR(762)) AS DESCRIPTION,
-				TBCREATOR        AS BASESCHEMA,
-				TBNAME           AS BASETABLE
+				RTRIM(TBCREATOR) AS BASESCHEMA,
+				RTRIM(TBNAME)    AS BASETABLE
 			FROM
 				SYSIBM.SYSSYNONYMS
 			WITH UR
@@ -521,10 +517,10 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				DCREATOR AS VIEWSCHEMA,
-				DNAME    AS VIEWNAME,
-				BCREATOR AS DEPSCHEMA,
-				BNAME    AS DEPNAME
+				RTRIM(DCREATOR) AS VIEWSCHEMA,
+				RTRIM(DNAME)    AS VIEWNAME,
+				RTRIM(BCREATOR) AS DEPSCHEMA,
+				RTRIM(BNAME)    AS DEPNAME
 			FROM
 				SYSIBM.SYSVIEWDEP
 			WHERE
@@ -572,8 +568,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				I.CREATOR                            AS INDSCHEMA,
-				I.NAME                               AS INDNAME,
+				RTRIM(I.CREATOR)                     AS INDSCHEMA,
+				RTRIM(I.NAME)                        AS INDNAME,
 				I.CREATEDBY                          AS OWNER,
 				CASE
 					WHEN I.CREATOR LIKE 'SYS%' THEN 'Y'
@@ -581,9 +577,9 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				END                                  AS SYSTEM,
 				CHAR(I.CREATEDTS)                    AS CREATED,
 				I.REMARKS                            AS DESCRIPTION,
-				I.TBCREATOR                          AS TABSCHEMA,
-				I.NAME                               AS TABNAME,
-				I.INDEXSPACE                         AS TBSPACE,
+				RTRIM(I.TBCREATOR)                   AS TABSCHEMA,
+				RTRIM(I.TBNAME)                      AS TABNAME,
+				RTRIM(T.TSNAME)                      AS TBSPACE,
 				CHAR(I.STATSTIME)                    AS LASTSTATS,
 				NULLIF(DECIMAL(I.FULLKEYCARDF), -1)  AS CARD,
 				NULLIF(DECIMAL(I.SPACEF), -1) * 1024 AS SIZE,
@@ -655,10 +651,10 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				K.IXCREATOR AS INDSCHEMA,
-				K.IXNAME    AS INDNAME,
-				K.COLNAME   AS COLNAME,
-				K.ORDERING  AS COLORDER
+				RTRIM(K.IXCREATOR) AS INDSCHEMA,
+				RTRIM(K.IXNAME)    AS INDNAME,
+				K.COLNAME          AS COLNAME,
+				K.ORDERING         AS COLORDER
 			FROM
 				SYSIBM.SYSKEYS K
 				INNER JOIN SYSIBM.SYSINDEXES I
@@ -732,15 +728,12 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				C.TBCREATOR                                    AS TABSCHEMA,
-				C.TBNAME                                       AS TABNAME,
+				RTRIM(C.TBCREATOR)                             AS TABSCHEMA,
+				RTRIM(C.TBNAME)                                AS TABNAME,
 				C.NAME                                         AS COLNAME,
-				CASE C.SOURCETYPEID
-					WHEN 0 THEN 'SYSIBM'
-					ELSE C.TYPESCHEMA
-				END                                            AS TYPESCHEMA,
-				CASE C.SOURCETYPEID
-					WHEN 0 THEN
+				RTRIM(C.TYPESCHEMA)                            AS TYPESCHEMA,
+				CASE RTRIM(C.TYPESCHEMA)
+					WHEN 'SYSIBM' THEN
 						CASE C.COLTYPE
 							WHEN 'LONGVAR'  THEN 'LONG VARCHAR'
 							WHEN 'CHAR'     THEN 'CHARACTER'
@@ -752,9 +745,9 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 									WHEN 4 THEN 'REAL'
 									WHEN 8 THEN 'DOUBLE'
 								END
-							ELSE C.COLTYPE
+							ELSE RTRIM(C.COLTYPE)
 						END
-					ELSE C.TYPENAME
+					ELSE RTRIM(C.TYPENAME)
 				END                                            AS TYPENAME,
 				C.LENGTH                                       AS SIZE,
 				C.SCALE                                        AS SCALE,
@@ -911,9 +904,9 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				C.TBCREATOR                  AS TABSCHEMA,
-				C.TBNAME                     AS TABNAME,
-				C.CONSTNAME                  AS KEYNAME,
+				RTRIM(C.TBCREATOR)           AS TABSCHEMA,
+				RTRIM(C.TBNAME)              AS TABNAME,
+				RTRIM(C.CONSTNAME)           AS KEYNAME,
 				C.CREATOR                    AS OWNER,
 				CASE
 					WHEN C.TBCREATOR LIKE 'SYS%' THEN 'Y'
@@ -936,9 +929,9 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			UNION ALL
 
 			SELECT
-				I.TBCREATOR                  AS TABSCHEMA,
-				I.TBNAME                     AS TABNAME,
-				'IX:' || I.NAME              AS KEYNAME,
+				RTRIM(I.TBCREATOR)           AS TABSCHEMA,
+				RTRIM(I.TBNAME)              AS TABNAME,
+				RTRIM('IX:' || I.NAME)       AS KEYNAME,
 				I.CREATEDBY                  AS OWNER,
 				CASE
 					WHEN I.TBCREATOR LIKE 'SYS%' THEN 'Y'
@@ -1022,10 +1015,10 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 					(I.TBCREATOR, I.TBNAME) NOT IN (SELECT TBCREATOR, TBNAME FROM SYSIBM.SYSTABCONST)
 			)
 			SELECT
-				TABSCHEMA,
-				TABNAME,
-				KEYNAME,
-				COLNAME
+				RTRIM(TABSCHEMA) AS TABSCHEMA,
+				RTRIM(TABNAME)   AS TABNAME,
+				RTRIM(KEYNAME)   AS KEYNAME,
+				COLNAME          AS COLNAME
 			FROM
 				COLS
 			ORDER BY
@@ -1083,9 +1076,9 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				R.CREATOR                  AS TABSCHEMA,
-				R.TBNAME                   AS TABNAME,
-				R.RELNAME                  AS KEYNAME,
+				RTRIM(R.CREATOR)           AS TABSCHEMA,
+				RTRIM(R.TBNAME)            AS TABNAME,
+				RTRIM(R.RELNAME)           AS KEYNAME,
 				T.CREATEDBY                AS OWNER,
 				CASE
 					WHEN R.CREATOR LIKE 'SYS%' THEN 'Y'
@@ -1093,9 +1086,9 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				END                        AS SYSTEM,
 				CHAR(R.TIMESTAMP)          AS CREATED,
 				CAST(NULL AS VARCHAR(762)) AS DESCRIPTION,
-				R.REFTBCREATOR             AS REFTABSCHEMA,
-				R.REFTBNAME                AS REFTABNAME,
-				C.CONSTNAME                AS REFKEYNAME,
+				RTRIM(R.REFTBCREATOR)      AS REFTABSCHEMA,
+				RTRIM(R.REFTBNAME)         AS REFTABNAME,
+				RTRIM(C.CONSTNAME)         AS REFKEYNAME,
 				R.DELETERULE               AS DELETERULE,
 				CAST('A' AS CHAR(1))       AS UPDATERULE
 			FROM
@@ -1115,9 +1108,9 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			UNION ALL
 
 			SELECT
-				R.CREATOR                  AS TABSCHEMA,
-				R.TBNAME                   AS TABNAME,
-				R.RELNAME                  AS KEYNAME,
+				RTRIM(R.CREATOR)           AS TABSCHEMA,
+				RTRIM(R.TBNAME)            AS TABNAME,
+				RTRIM(R.RELNAME)           AS KEYNAME,
 				T.CREATEDBY                AS OWNER,
 				CASE
 					WHEN R.CREATOR LIKE 'SYS%' THEN 'Y'
@@ -1125,9 +1118,9 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				END                        AS SYSTEM,
 				CHAR(R.TIMESTAMP)          AS CREATED,
 				CAST(NULL AS VARCHAR(762)) AS DESCRIPTION,
-				R.REFTBCREATOR             AS REFTABSCHEMA,
-				R.REFTBNAME                AS REFTABNAME,
-				COALESCE(C.CONSTNAME, 'IX:' || I.NAME) AS REFKEYNAME,
+				RTRIM(R.REFTBCREATOR)      AS REFTABSCHEMA,
+				RTRIM(R.REFTBNAME)         AS REFTABNAME,
+				RTRIM(COALESCE(C.CONSTNAME, 'IX:' || I.NAME)) AS REFKEYNAME,
 				R.DELETERULE               AS DELETERULE,
 				CAST('A' AS CHAR(1))       AS UPDATERULE
 			FROM
@@ -1259,11 +1252,11 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 					T.STATUS IN ('X', ' ')
 			)
 			SELECT
-				TABSCHEMA,
-				TABNAME,
-				KEYNAME,
-				COLNAME,
-				REFCOLNAME
+				RTRIM(TABSCHEMA) AS TABSCHEMA,
+				RTRIM(TABNAME)   AS TABNAME,
+				RTRIM(KEYNAME)   AS KEYNAME,
+				COLNAME          AS COLNAME,
+				REFCOLNAME       AS REFCOLNAME
 			FROM
 				COLS
 			ORDER BY
@@ -1311,9 +1304,9 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				C.TBOWNER                  AS TABSCHEMA,
-				C.TBNAME                   AS TABNAME,
-				C.CHECKNAME                AS CHECKNAME,
+				RTRIM(C.TBOWNER)           AS TABSCHEMA,
+				RTRIM(C.TBNAME)            AS TABNAME,
+				RTRIM(C.CHECKNAME)         AS CHECKNAME,
 				C.CREATOR                  AS OWNER,
 				CASE
 					WHEN C.TBOWNER LIKE 'SYS%' THEN 'Y'
@@ -1403,9 +1396,9 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				SCHEMA                       AS FUNCSCHEMA,
-				SPECIFICNAME                 AS FUNCSPECNAME,
-				NAME                         AS FUNCNAME,
+				RTRIM(SCHEMA)                AS FUNCSCHEMA,
+				RTRIM(SPECIFICNAME)          AS FUNCSPECNAME,
+				RTRIM(NAME)                  AS FUNCNAME,
 				OWNER                        AS OWNER,
 				CASE
 					WHEN SCHEMA LIKE 'SYS%' THEN 'Y'
@@ -1491,9 +1484,9 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				SCHEMA                       AS PROCSCHEMA,
-				SPECIFICNAME                 AS PROCSPECNAME,
-				NAME                         AS PROCNAME,
+				RTRIM(SCHEMA)                AS PROCSCHEMA,
+				RTRIM(SPECIFICNAME)          AS PROCSPECNAME,
+				RTRIM(NAME)                  AS PROCNAME,
 				OWNER                        AS OWNER,
 				CASE
 					WHEN SCHEMA LIKE 'SYS%' THEN 'Y'
@@ -1587,15 +1580,12 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				SCHEMA                          AS ROUTINESCHEMA,
-				SPECIFICNAME                    AS ROUTINESPECNAME,
+				RTRIM(SCHEMA)                   AS ROUTINESCHEMA,
+				RTRIM(SPECIFICNAME)             AS ROUTINESPECNAME,
 				PARMNAME                        AS PARMNAME,
-				CASE SOURCETYPEID
-					WHEN 0 THEN 'SYSIBM'
-					ELSE TYPESCHEMA
-				END                             AS TYPESCHEMA,
-				CASE SOURCETYPEID
-					WHEN 0 THEN
+				RTRIM(TYPESCHEMA)               AS TYPESCHEMA,
+				CASE RTRIM(TYPESCHEMA)
+					WHEN 'SYSIBM' THEN
 						CASE TYPENAME
 							WHEN 'LONGVAR'  THEN 'LONG VARCHAR'
 							WHEN 'CHAR'     THEN 'CHARACTER'
@@ -1607,9 +1597,9 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 									WHEN 4 THEN 'REAL'
 									WHEN 8 THEN 'DOUBLE'
 								END
-							ELSE TYPENAME
+							ELSE RTRIM(TYPENAME)
 						END
-					ELSE TYPENAME
+					ELSE RTRIM(TYPENAME)
 				END                             AS TYPENAME,
 				LENGTH                          AS SIZE,
 				SCALE                           AS SCALE,
@@ -1692,8 +1682,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				SCHEMA             AS TRIGSCHEMA,
-				NAME               AS TRIGNAME,
+				RTRIM(SCHEMA)      AS TRIGSCHEMA,
+				RTRIM(NAME)        AS TRIGNAME,
 				OWNER              AS OWNER,
 				CASE
 					WHEN SCHEMA LIKE 'SYS%%' THEN 'Y'
@@ -1701,8 +1691,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				END                AS SYSTEM,
 				CHAR(CREATEDTS)    AS CREATED,
 				REMARKS            AS DESCRIPTION,
-				TBOWNER            AS TABSCHEMA,
-				TBNAME             AS TABNAME,
+				RTRIM(TBOWNER)     AS TABSCHEMA,
+				RTRIM(TBNAME)      AS TABNAME,
 				TRIGTIME           AS TRIGTIME,
 				TRIGEVENT          AS TRIGEVENT,
 				GRANULARITY        AS GRANULARITY,
@@ -1738,13 +1728,13 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				owner,
 				make_bool(system),
 				make_datetime(created),
+				desc,
 				tabschema,
 				tabname,
 				trigtime,
 				trigevent,
 				granularity,
-				str(sql),
-				desc
+				str(sql)
 			)
 
 	def get_trigger_dependencies(self):
@@ -1765,10 +1755,10 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				T.SCHEMA      AS TRIGSCHEMA,
-				T.NAME        AS TRIGNAME,
-				D.BQUALIFIER  AS DEPSCHEMA,
-				D.BNAME       AS DEPNAME
+				RTRIM(T.SCHEMA)     AS TRIGSCHEMA,
+				RTRIM(T.NAME)       AS TRIGNAME,
+				RTRIM(D.BQUALIFIER) AS DEPSCHEMA,
+				RTRIM(D.BNAME)      AS DEPNAME
 			FROM
 				SYSIBM.SYSTRIGGERS T
 				INNER JOIN SYSIBM.SYSPACKDEP D
@@ -1815,7 +1805,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				NAME                       AS TBSPACE,
+				RTRIM(NAME)                AS TBSPACE,
 				CREATOR                    AS OWNER,
 				CASE
 					WHEN NAME LIKE 'SYS%' THEN 'Y'
