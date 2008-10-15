@@ -756,15 +756,15 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 						END
 					ELSE C.TYPENAME
 				END                                            AS TYPENAME,
+				C.LENGTH                                       AS SIZE,
+				C.SCALE                                        AS SCALE,
+				C.CCSID                                        AS CODEPAGE,
 				CASE C.DEFAULT
 					WHEN 'A' THEN 'Y'
 					WHEN 'D' THEN 'Y'
 					WHEN 'I' THEN 'Y'
 					WHEN 'J' THEN 'Y'
 					ELSE 'N'
-				C.LENGTH                                       AS SIZE,
-				C.SCALE                                        AS SCALE,
-				C.CCSID                                        AS CODEPAGE,
 				END                                            AS IDENTITY,
 				C.NULLS                                        AS NULLABLE,
 				NULLIF(NULLIF(DECIMAL(C.COLCARD, 20), -1), -2) AS CARDINALITY,
@@ -870,7 +870,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			) in self.fetch_some(cursor):
 			if generated != 'N':
 				default = re.sub(r'^\s*AS\s*', '', str(default))
-			yield Table(
+			yield RelationCol(
 				schema,
 				name,
 				colname,
@@ -1582,7 +1582,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 
 		* Optional (can be None)
 		"""
-		for row in super(InputPlugin, self).get_procedure_params():
+		for row in super(InputPlugin, self).get_routine_params():
 			yield row
 		cursor = self.connection.cursor()
 		cursor.execute("""
