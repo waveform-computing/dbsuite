@@ -14,9 +14,10 @@ plugins (along with the configuration information for the plugin).
 
 import re
 import logging
-from string import (Template,)
-from UserDict import (DictMixin,)
-from db2makedoc.sql.formatter import (format_size, format_ident)
+from itertools import chain, groupby
+from UserDict import DictMixin
+from db2makedoc.sql.formatter import format_size, format_ident
+from db2makedoc.util import *
 
 
 __all__ = [
@@ -49,16 +50,39 @@ __all__ = [
 # PRIVATE PROXY CLASSES #######################################################
 
 # XXX Many of these could be made direct subclasses of list, tuple, etc.
+# XXX These should be replaced with the new ABCs in Python 2.6's collections package
 
-class RelationsDict(object, DictMixin):
-	"""Presents a dictionary of relations"""
-	
-	def __init__(self, database, relations):
-		"""Initializes the dict from a list of (schema_name, relation_name) tuples"""
-		assert isinstance(database, Database)
-		assert isinstance(relations, list)
-		self._database = database
-		self._keys = relations
+class DictProxy(object, DictMixin):
+	"""Presents a dictionary of objects from a list of identifiers.
+
+	This abstract class acts like a read-only dictionary of objects from the
+	database hierarchy. It is initialized from a list of identifiers which are
+	used to lookup the actual objects from the hierarchy. This class is
+	overridden below to implement dictionaries of relations, indexes, etc.
+	"""
+
+	def __init__(self, items, key=None):
+		"""Initializes the dict from a list of tuples.
+		
+		If key is not specified, items must be a list of tuples which uniquely
+		identify an object in the database hierarchy (e.g. if the dictionary
+		represents relations then the tuples must be of the form (schema,
+		name)). Otherwise, key is a function which must convert an element of
+		items to the necessary form.
+		"""
+		super(DictProxy, self).__init__()
+		if key is None:
+			key = lambda x: x
+		self._keys = set((key(i) for i in items))
+		
+	def _convert(self, item):
+		"""Converts the tuple into a "real" database object.
+
+		Override this method in descendents to convert the tuple of identifers
+		stored in the object into a "real" object from the database object
+		hierarchy. The default implementation raises an exception.
+		"""
+		raise NotImplementedError
 		
 	def keys(self):
 		return self._keys
@@ -70,9 +94,9 @@ class RelationsDict(object, DictMixin):
 		return len(self._keys)
 	
 	def __getitem__(self, key):
-		assert isinstance(key, tuple)
-		(schema_name, relation_name) = key
-		return self._database.schemas[schema_name].relations[relation_name]
+		if not key in self._keys:
+			raise KeyError(key)
+		return self._convert(key)
 	
 	def __iter__(self):
 		for k in self._keys:
@@ -82,352 +106,196 @@ class RelationsDict(object, DictMixin):
 		return key in self._keys
 
 
-class RelationsList(object):
-	"""Presents a list of relations"""
+class ListProxy(object):
+	"""Presents a list of objects from a list of identifiers.
+
+	This abstract class acts like a read-only list of objects from the database
+	hierarchy. It is initialized from a list of identifiers which are used to
+	lookup the actual objects from the hierarchy. This class is overridden
+	below to implement lists of relations, indexes, etc.  """
 	
-	def __init__(self, database, relations):
-		"""Initializes the list from a list of (schema_name, relation_name) tuples"""
-		assert isinstance(database, Database)
-		assert isinstance(relations, list)
-		self._database = database
-		self._items = relations
+	def __init__(self, items, key=None):
+		"""Initializes the list from a list of tuples.
+		
+		If key is not specified, items must be a list of tuples which uniquely
+		identify an object in the database hierarchy (e.g. if the list proxy
+		represents relations then the tuples must be of the form (schema,
+		name)). Otherwise, key is a function which must convert an element of
+		items to the necessary form.
+		"""
+		super(ListProxy, self).__init__()
+		if key is None:
+			key = lambda x: x
+		self._items = [key(i) for i in items]
+
+	def _convert(self, item):
+		"""Converts the tuple into a "real" database object.
+
+		Override this method in descendents to convert the tuple of identifers
+		stored in the object into a "real" object from the database object
+		hierarchy. The default implementation raises an exception.
+		"""
+		raise NotImplementedError
 		
 	def __len__(self):
 		return len(self._items)
 	
 	def __getitem__(self, key):
-		assert isinstance(key, int)
-		(schema_name, relation_name) = self._items[key]
-		return self._database.schemas[schema_name].relations[relation_name]
+		return self._convert(self._items[key])
 	
-	def __iter__(self):
-		for (schema_name, relation_name) in self._items:
-			yield self._database.schemas[schema_name].relations[relation_name]
-
-	def __contains__(self, key):
-		for i in self:
-			if i == key:
-				return True
-		return False
-
-
-class IndexesDict(object, DictMixin):
-	"""Presents a dictionary of indexes"""
-	
-	def __init__(self, database, indexes):
-		"""Initializes the dict from a list of (schema_name, index_name) tuples"""
-		assert isinstance(database, Database)
-		assert isinstance(indexes, list)
-		self._database = database
-		self._keys = indexes
-
-	def keys(self):
-		return self._keys
-	
-	def has_key(self, key):
-		return key in self._keys
-	
-	def __len__(self):
-		return len(self._keys)
-	
-	def __getitem__(self, key):
-		assert isinstance(key, tuple)
-		(schema_name, index_name) = key
-		return self._database.schemas[schema_name].indexes[index_name]
-	
-	def __iter__(self):
-		for k in self._keys:
-			yield k
-			
-	def __contains__(self, key):
-		return key in self._keys
-
-
-class IndexesList(object):
-	"""Presents a list of indexes"""
-	
-	def __init__(self, database, indexes):
-		"""Initializes the list from a list of (schema_name, index_name) tuples"""
-		assert isinstance(database, Database)
-		assert isinstance(indexes, list)
-		self._database = database
-		self._items = indexes
-	
-	def __len__(self):
-		return len(self._items)
-	
-	def __getitem__(self, key):
-		assert isinstance(key, int)
-		(schema_name, index_name) = self._items[key]
-		return self._database.schemas[schema_name].indexes[index_name]
-	
-	def __iter__(self):
-		for (schema_name, index_name) in self._items:
-			yield self._database.schemas[schema_name].indexes[index_name]
-			
-	def __contains__(self, key):
-		for i in self:
-			if i == key:
-				return True
-		return False
-
-
-class ConstraintsDict(object, DictMixin):
-	"""Presents a dictionary of constraints"""
-	
-	def __init__(self, database, constraints):
-		"""Initializes the dict from a list of (schema_name, table_name, constraint_name) tuples"""
-		assert isinstance(database, Database)
-		assert isinstance(constraints, list)
-		self._database = database
-		self._keys = constraints
-		
-	def keys(self):
-		return self._keys
-	
-	def has_key(self, key):
-		return key in self._keys
-	
-	def __len__(self):
-		return len(self._keys)
-	
-	def __getitem__(self, key):
-		assert isinstance(key, tuple)
-		(schema_name, table_name, constraint_name) = key
-		return self._database.schemas[schema_name].tables[table_name].constraints[constraint_name]
-	
-	def __iter__(self):
-		for k in self._keys:
-			yield k
-			
-	def __contains__(self, key):
-		return key in self._keys
-
-
-class ConstraintsList(object):
-	"""Presents a list of constraints"""
-	
-	def __init__(self, database, constraints):
-		"""Initializes the list from a list of (schema_name, table_name, constraint_name) tuples"""
-		assert isinstance(database, Database)
-		assert isinstance(constraints, list)
-		self._database = database
-		self._items = constraints
-		
-	def __len__(self):
-		return len(self._items)
-	
-	def __getitem__(self, key):
-		assert isinstance(key, int)
-		(schema_name, table_name, constraint_name) = self._items[key]
-		return self._database.schemas[schema_name].tables[table_name].constraints[constraint_name]
-	
-	def __iter__(self):
-		for (schema_name, table_name, constraint_name) in self._items:
-			yield self._database.schemas[schema_name].tables[table_name].constraints[constraint_name]
-
-	def __contains__(self, key):
-		for i in self:
-			if i == key:
-				return True
-		return False
-
-
-class TriggersDict(object, DictMixin):
-	"""Presents a dictionary of triggers"""
-	
-	def __init__(self, database, triggers):
-		"""Initializes the dict from a list of (schema_name, trigger_name) tuples"""
-		assert isinstance(database, Database)
-		assert isinstance(triggers, list)
-		self._database = database
-		self._keys = triggers
-
-	def keys(self):
-		return self._keys
-	
-	def has_key(self, key):
-		return key in self._keys
-	
-	def __len__(self):
-		return len(self._keys)
-	
-	def __getitem__(self, key):
-		assert isinstance(key, tuple)
-		(schema_name, trigger_name) = key
-		return self._database.schemas[schema_name].triggers[trigger_name]
-	
-	def __iter__(self):
-		for k in self._keys:
-			yield k
-			
-	def __contains__(self, key):
-		return key in self._keys
-
-
-class TriggersList(object):
-	"""Presents a list of triggers"""
-	
-	def __init__(self, database, triggers):
-		"""Initializes the list from a list of (schema_name, trigger_name) tuples"""
-		assert isinstance(database, Database)
-		assert isinstance(triggers, list)
-		self._database = database
-		self._items = triggers
-	
-	def __len__(self):
-		return len(self._items)
-	
-	def __getitem__(self, key):
-		assert isinstance(key, int)
-		(schema_name, trigger_name) = self._items[key]
-		return self._database.schemas[schema_name].triggers[trigger_name]
-	
-	def __iter__(self):
-		for (schema_name, trigger_name) in self._items:
-			yield self._database.schemas[schema_name].triggers[trigger_name]
-			
-	def __contains__(self, key):
-		for i in self:
-			if i == key:
-				return True
-		return False
-
-
-class IndexFieldsDict(object):
-	"""Presents a dictionary of (field, index_order) tuples keyed by field_name"""
-
-	def __init__(self, database, schema_name, table_name, fields):
-		"""Initializes the dict from a list of (field_name, index_order) tuples"""
-		assert isinstance(database, Database)
-		assert isinstance(fields, list)
-		self._database = database
-		self._schema_name = schema_name
-		self._table_name = table_name
-		self._keys = [field_name for (field_name, index_order) in fields]
-		self._items = {}
-		for (field_name, index_order) in fields:
-			self._items[field_name] = index_order
-
-	def keys(self):
-		return self._keys
-
-	def has_key(self, key):
-		return key in self._keys
-
-	def __len__(self):
-		return len(self._keys)
-
-	def __getitem__(self, key):
-		return (self._database.schemas[self._schema_name].tables[self._table_name].fields[key], self._items[key])
-
-	def __iter__(self):
-		for k in self._keys:
-			yield k
-
-	def __contains__(self, key):
-		return key in self._keys
-
-
-class IndexFieldsList(object):
-	"""Presents a list of (field, index_order) tuples"""
-
-	def __init__(self, database, schema_name, table_name, fields):
-		"""Initializes the list from a list of (field_name, index_order) tuples"""
-		assert isinstance(database, Database)
-		assert isinstance(fields, list)
-		self._database = database
-		self._schema_name = schema_name
-		self._table_name = table_name
-		self._items = fields
-
-	def __len__(self):
-		return len(self._items)
-
-	def __getitem__(self, key):
-		assert type(key) == int
-		(field_name, index_order) = self._items[key]
-		return (self._database.schemas[self._schema_name].tables[self._table_name].fields[field_name], index_order)
-
-	def __iter__(self):
-		for (field_name, index_order) in self._items:
-			yield (self._database.schemas[self._schema_name].tables[self._table_name].fields[field_name], index_order)
-
-	def __contains__(self, key):
-		for i in self:
-			if i == key:
-				return True
-		return False
-
-
-class ConstraintFieldsList(object):
-	"""Presents a list of fields referenced by a constraint"""
-
-	def __init__(self, table, fields):
-		"""Initializes the list from a list of field names"""
-		assert isinstance(table, Table)
-		assert isinstance(fields, list)
-		self._table = table
-		self._items = fields
-
-	def __len__(self):
-		return len(self._items)
-
-	def __getitem__(self, key):
-		assert type(key) == int
-		return self._table.fields[self._items[key]]
-
 	def __iter__(self):
 		for i in self._items:
-			yield self._table.fields[i]
+			yield self._convert(i)
 
 	def __contains__(self, key):
-		for i in self:
-			if i is key:
-				return True
-		return False
+		return any(i == key for i in self)
 
 	def index(self, x, i=0, j=None):
-		result = i
-		for k in self._items[i:j]:
-			if self._table.fields[k] is x:
+		if j is None:
+			j = len(self)
+		for result in xrange(i, j):
+			if self[result] is x:
 				return result
-			result += 1
 		raise ValueError("%s not found in list" % repr(x))
 
 
-class ForeignKeyFieldsList(object):
-	"""Presents a list of (field, parent_field) tuples in a foreign key"""
+class RelationsDict(DictProxy):
+	def __init__(self, database, items, key=None):
+		super(RelationsDict, self).__init__(items, key)
+		assert isinstance(database, Database)
+		self._database = database
 
-	def __init__(self, table, ref_schema_name, ref_table_name, fields):
-		"""Initializes the list from a list of (field, parent_field) name tuples"""
+	def _convert(self, item):
+		(schema, relation) = item
+		return self._database.schemas[schema].relations[relation]
+
+
+class RelationsList(ListProxy):
+	def __init__(self, database, items, key=None):
+		super(RelationsList, self).__init__(items, key)
+		assert isinstance(database, Database)
+		self._database = database
+
+	def _convert(self, item):
+		(schema, relation) = item
+		return self._database.schemas[schema].relations[relation]
+
+
+class IndexesDict(DictProxy):
+	def __init__(self, database, items, key=None):
+		super(IndexesDict, self).__init__(items, key)
+		assert isinstance(database, Database)
+		self._database = database
+
+	def _convert(self, item):
+		(schema, index) = item
+		return self._database.schemas[schema].indexes[index]
+
+
+class IndexesList(ListProxy):
+	def __init__(self, database, items, key=None):
+		super(IndexesList, self).__init__(items, key)
+		assert isinstance(database, Database)
+		self._database = database
+
+	def _convert(self, item):
+		(schema, index) = item
+		return self._database.schemas[schema].indexes[index]
+
+
+class ConstraintsDict(DictProxy):
+	def __init__(self, database, items, key=None):
+		super(ConstraintsDict, self).__init__(items, key)
+		assert isinstance(database, Database)
+		self._database = database
+
+	def _convert(self, item):
+		(schema, table, constraint) = item
+		return self._database.schemas[schema].tables[table].constraints[constraint]
+
+
+class ConstraintsList(ListProxy):
+	def __init__(self, database, items, key=None):
+		super(ConstraintsList, self).__init__(items, key)
+		assert isinstance(database, Database)
+		self._database = database
+
+	def _convert(self, item):
+		(schema, table, constraint) = item
+		return self._database.schemas[schema].tables[table].constraints[constraint]
+
+
+class TriggersDict(DictProxy):
+	def __init__(self, database, items, key=None):
+		super(TriggersDict, self).__init__(items, key)
+		assert isinstance(database, Database)
+		self._database = database
+
+	def _convert(self, item):
+		(schema, trigger) = item
+		return self._database.schemas[schema].triggers[trigger]
+
+
+class TriggersList(ListProxy):
+	def __init__(self, database, items, key=None):
+		super(TriggersList, self).__init__(items, key)
+		assert isinstance(database, Database)
+		self._database = database
+
+	def _convert(self, item):
+		(schema, trigger) = item
+		return self._database.schemas[schema].triggers[trigger]
+
+
+class IndexFieldsDict(DictProxy):
+	def __init__(self, database, schema, table, fields):
+		super(IndexFieldsDict, self).__init__(fields, key=attrgetter('name'))
+		assert isinstance(database, Database)
+		self._database = database
+		self._schema = schema
+		self._table = table
+		self._order = dict((f.name, f.order) for f in fields)
+
+	def _convert(self, item):
+		return (self._database.schemas[self._schema].tables[self._table].fields[item], self._order[item])
+
+
+class IndexFieldsList(ListProxy):
+	def __init__(self, database, schema, table, fields):
+		super(IndexFieldsList, self).__init__(fields, key=attrgetter('name', 'order'))
+		assert isinstance(database, Database)
+		self._database = database
+		self._schema = schema
+		self._table = table
+
+	def _convert(self, item):
+		(name, order) = item
+		return (self._database.schemas[self._schema].tables[self._table].fields[name], order)
+
+
+class ConstraintFieldsList(ListProxy):
+	def __init__(self, table, fields):
+		super(ConstraintFieldsList, self).__init__(fields, key=attrgetter('name'))
 		assert isinstance(table, Table)
-		assert isinstance(fields, list)
+		self._table = table
+
+	def _convert(self, item):
+		return self._table.fields[item]
+
+
+class ForeignKeyFieldsList(ListProxy):
+	def __init__(self, table, ref_schema, ref_table, fields):
+		super(ForeignKeyFieldsList, self).__init__(fields, key=attrgetter('name', 'ref_name'))
+		assert isinstance(table, Table)
 		self._table = table
 		self._database = table.database
-		self._ref_schema_name = ref_schema_name
-		self._ref_table_name = ref_table_name
-		self._items = fields
+		self._ref_schema = ref_schema
+		self._ref_table = ref_table
 
-	def __len__(self):
-		return len(self._items)
-
-	def __getitem__(self, key):
-		assert type(key) == int
-		(field_name, parent_name) = self._items[key]
-		parent_table = self._database.schemas[self._ref_schema_name].tables[self._ref_table_name]
-		return (self._table.fields[field_name], parent_table.fields[parent_name])
-
-	def __iter__(self):
-		parent_table = self._database.schemas[self._ref_schema_name].tables[self._ref_table_name]
-		for (field_name, parent_name) in self._items:
-			yield (self._table.fields[field_name], parent_table.fields[parent_name])
-
-	def __contains__(self, key):
-		for i in self:
-			if i == key:
-				return True
-		return False
+	def _convert(self, item):
+		(field, parent) = item
+		parent_table = self._database.schemas[self._ref_schema].tables[self._ref_table]
+		return (self._table.fields[field], parent_table.fields[parent])
 
 
 # ABSTRACT BASE CLASSES #######################################################
@@ -439,7 +307,7 @@ class DatabaseObject(object):
 
 	def __init__(self, parent, name, system=False, description=None):
 		"""Initializes an instance of the class.
-		
+
 		The parent parameter specifies the parent object that "owns" this
 		object. For example, in the case of a table this would be the table's
 		schema. The name parameter specifies the local (unqualified) name of
@@ -834,22 +702,20 @@ class Constraint(RelationObject):
 		TABLE or CREATE TABLE statement.
 		"""
 		raise NotImplementedError
-	
+
 	def _get_create_sql(self):
-		sql = Template('ALTER TABLE $schema.$table ADD $constdef')
-		return sql.substitute({
-			'schema': format_ident(self.table.schema.name),
-			'table': format_ident(self.table.name),
-			'constdef': self.prototype
-		})
-	
+		return 'ALTER TABLE %s.%s ADD %s' % (
+			format_ident(self.table.schema.name),
+			format_ident(self.table.name),
+			self.prototype
+		)
+
 	def _get_drop_sql(self):
-		sql = Template('ALTER TABLE $schema.$table DROP CONSTRAINT $const')
-		return sql.substitute({
-			'schema': format_ident(self.table.schema.name),
-			'table': format_ident(self.table.name),
-			'const': format_ident(self.name)
-		})
+		return 'ALTER TABLE %s.%s DROP CONSTRAINT %s' % (
+			format_ident(self.table.schema.name),
+			format_ident(self.table.name),
+			format_ident(self.name)
+		)
 	
 	def _get_parent_list(self):
 		return self.table.constraint_list
@@ -869,33 +735,21 @@ class Database(DatabaseObject):
 	def __init__(self, input):
 		"""Initializes an instance of the class"""
 		super(Database, self).__init__(None, input.name)
-		self.tablespace_list = sorted([
-			Tablespace(self, input, *item)
-			for item in input.tablespaces
-		], key=lambda item:item.name)
-		self.tablespaces = dict([
-			(tbspace.name, tbspace)
-			for tbspace in self.tablespace_list
-		])
-		self.schema_list = sorted([
-			Schema(self, input, *item)
-			for item in input.schemas
-		], key=lambda item:item.name)
+		self.tablespace_list = [Tablespace(self, input, t) for t in input.tablespaces]
+		self.tablespaces = dict((t.name, t) for t in self.tablespace_list)
+		self.schema_list = [Schema(self, input, s) for s in input.schemas]
 		# Prune completely empty schemas
 		self.schema_list = [
-			schema for schema in self.schema_list
+			s for s in self.schema_list
 			if sum([
-				len(schema.relation_list),
-				len(schema.routine_list),
-				len(schema.trigger_list),
-				len(schema.index_list),
-				len(schema.datatype_list)
+				len(s.relation_list),
+				len(s.routine_list),
+				len(s.trigger_list),
+				len(s.index_list),
+				len(s.datatype_list)
 			]) > 0
 		]
-		self.schemas = dict([
-			(schema.name, schema)
-			for schema in self.schema_list
-		])
+		self.schemas = dict((s.name, s) for s in self.schema_list)
 
 	def find(self, qualified_name):
 		"""Find an object in the hierarchy by its qualified name.
@@ -1003,36 +857,31 @@ class Tablespace(DatabaseObject):
 
 	config_names = ['tablespace', 'tablespaces']
 
-	def __init__(self, database, input, *row):
+	def __init__(self, database, input, row):
 		"""Initializes an instance of the class from a input row"""
-		(
-			name,
-			self.owner,
-			system,
-			self.created,
-			self.type,
-			desc
-		) = row
-		super(Tablespace, self).__init__(database, name, system, desc)
+		super(Tablespace, self).__init__(database, row.name, row.system, row.description)
+		self.owner = row.owner
+		self.created = row.created
+		self.type = row.type
 		self.table_list = RelationsList(
-			self.database,
-			sorted(input.tablespace_tables[self.name])
+			self.database, input.tablespace_tables.get((self.name,), []),
+			key=attrgetter('schema', 'name')
 		)
 		self.tables = RelationsDict(
-			self.database,
-			input.tablespace_tables[self.name]
+			self.database, input.tablespace_tables.get((self.name,), []),
+			key=attrgetter('schema', 'name')
 		)
 		self.index_list = IndexesList(
-			self.database,
-			sorted(input.tablespace_indexes[self.name])
+			self.database, input.tablespace_indexes.get((self.name,), []),
+			key=attrgetter('schema', 'name')
 		)
 		self.indexes = IndexesDict(
-			self.database,
-			input.tablespace_indexes[self.name]
+			self.database, input.tablespace_indexes.get((self.name,), []),
+			key=attrgetter('schema', 'name')
 		)
 
 	def _get_identifier(self):
-		return "tbspace_%s" % (self.name)
+		return "tbspace_%s" % self.name
 
 	def _get_qualified_name(self):
 		return self.name
@@ -1049,123 +898,79 @@ class Schema(DatabaseObject):
 
 	config_names = ['schema', 'schemas']
 
-	def __init__(self, database, input, *row):
+	def __init__(self, database, input, row):
 		"""Initializes an instance of the class from a input row"""
-		assert isinstance(database, Database)
-		(
-			name,
-			self.owner,
-			system,
-			self.created,
-			desc
-		) = row
-		super(Schema, self).__init__(database, name, system, desc)
-		self.datatype_list = sorted([
-			Datatype(self, input, *item)
-			for item in input.datatypes
-			if item[0] == self.name
-		], key=lambda item:item.name)
-		self.datatypes = dict([
-			(datatype.name, datatype)
-			for datatype in self.datatype_list
-		])
-		self.table_list = sorted([
-			Table(self, input, *item)
-			for item in input.tables
-			if item[0] == self.name
-		], key=lambda item:item.name)
-		self.tables = dict([
-			(table.name, table)
-			for table in self.table_list
-		])
-		self.view_list = sorted([
-			View(self, input, *item)
-			for item in input.views
-			if item[0] == self.name
-		], key=lambda item:item.name)
-		self.views = dict([
-			(view.name, view)
-			for view in self.view_list
-		])
-		self.alias_list = sorted([
-			Alias(self, input, *item)
-			for item in input.aliases
-			if item[0] == self.name
-		], key=lambda item:item.name)
-		self.aliases = dict([
-			(alias.name, alias)
-			for alias in self.alias_list
-		])
+		super(Schema, self).__init__(database, row.name, row.system, row.description)
+		self.owner = row.owner
+		self.created = row.created
+		self.datatype_list = [
+			Datatype(self, input, i)
+			for i in input.datatypes
+			if i.schema == self.name
+		]
+		self.datatypes = dict((i.name, i) for i in self.datatype_list)
+		self.table_list = [
+			Table(self, input, i)
+			for i in input.tables
+			if i.schema == self.name
+		]
+		self.tables = dict((i.name, i) for i in self.table_list)
+		self.view_list = [
+			View(self, input, i)
+			for i in input.views
+			if i.schema == self.name
+		]
+		self.views = dict((i.name, i) for i in self.view_list)
+		self.alias_list = [
+			Alias(self, input, i)
+			for i in input.aliases
+			if i.schema == self.name
+		]
+		self.aliases = dict((i.name, i) for i in self.alias_list)
 		self.relation_list = sorted(
-			self.table_list + self.view_list + self.alias_list,
-			key=lambda item:item.name
+			chain(self.table_list, self.view_list, self.alias_list),
+			key=attrgetter('name')
 		)
-		self.relations = dict([
-			(relation.name, relation)
-			for relation in self.relation_list
-		])
-		self.index_list = sorted([
-			Index(self, input, *item)
-			for item in input.indexes
-			if item[0] == self.name
-		], key=lambda item:item.name)
-		self.indexes = dict([
-			(index.name, index)
-			for index in self.index_list
-		])
-		self.function_list = sorted([
-			Function(self, input, *item)
-			for item in input.functions
-			if item[0] == self.name
-		], key=lambda item:item.name)
-		self.functions = {}
-		for function in self.function_list:
-			if function.name in self.functions:
-				self.functions[function.name].append(function)
-			else:
-				self.functions[function.name] = [function]
-		self.specific_functions = dict([
-			(function.specific_name, function)
-			for function in self.function_list
-		])
-		self.procedure_list = sorted([
-			Procedure(self, input, *item)
-			for item in input.procedures
-			if item[0] == self.name
-		], key=lambda item:item.name)
-		self.procedures = {}
-		for procedure in self.procedure_list:
-			if procedure.name in self.procedures:
-				self.procedures[procedure.name].append(procedure)
-			else:
-				self.procedures[procedure.name] = [procedure]
-		self.specific_procedures = dict([
-			(procedure.specific_name, procedure)
-			for procedure in self.procedure_list
-		])
+		self.relations = dict((i.name, i) for i in self.relation_list)
+		self.index_list = [
+			Index(self, input, i)
+			for i in input.indexes
+			if i.schema == self.name
+		]
+		self.indexes = dict((i.name, i) for i in self.index_list)
+		self.function_list = [
+			Function(self, input, i)
+			for i in input.functions
+			if i.schema == self.name
+		]
+		self.functions = sorted(self.function_list, key=attrgetter('name', 'specific_name'))
+		self.functions = groupby(self.functions, key=attrgetter('name'))
+		self.functions = dict((name, list(funcs)) for (name, funcs) in self.functions)
+		self.specific_functions = dict((i.specific_name, i) for i in self.function_list)
+		self.procedure_list = [
+			Procedure(self, input, i)
+			for i in input.procedures
+			if i.schema == self.name
+		]
+		self.procedures = sorted(self.procedure_list, key=attrgetter('name', 'specific_name'))
+		self.procedures = groupby(self.procedures, key=attrgetter('name'))
+		self.procedures = dict((name, list(procs)) for (name, procs) in self.procedures)
+		self.specific_procedures = dict((i.specific_name, i) for i in self.procedure_list)
 		self.routine_list = sorted(
-			self.function_list + self.procedure_list,
-			key=lambda item:item.name
+			chain(self.function_list, self.procedure_list),
+			key=attrgetter('specific_name')
 		)
-		self.routines = dict([
-			(routine.name, routine)
-			for routine in self.routine_list
-		])
-		self.specific_routines = dict([
-			(routine.specific_name, routine)
-			for routine in self.routine_list
-		])
-		# XXX Add support for methods
+		self.routines = sorted(self.routine_list, key=attrgetter('name', 'specific_name'))
+		self.routines = groupby(self.routines, key=attrgetter('name'))
+		self.routines = dict((name, list(routines)) for (name, routines) in self.routines)
+		self.specific_routines = dict((i.specific_name, i) for i in self.routine_list)
 		# XXX Add support for sequences
-		self.trigger_list = sorted([
-			Trigger(self, input, *item)
-			for item in input.triggers
-			if item[0] == self.name
-		], key=lambda item:item.name)
-		self.triggers = dict([
-			(trigger.name, trigger)
-			for trigger in self.trigger_list
-		])
+		self.trigger_list = [
+			Trigger(self, input, i)
+			for i in input.triggers
+			if i.schema == self.name
+		]
+		self.triggers = dict((i.name, i) for i in self.trigger_list)
 
 	def _get_identifier(self):
 		return "schema_%s" % (self.name)
@@ -1186,112 +991,91 @@ class Table(Relation):
 
 	config_names = ['table', 'tables']
 
-	def __init__(self, schema, input, *row):
+	def __init__(self, schema, input, row):
 		"""Initializes an instance of the class from a input row"""
-		(
-			_, # schema_name
-			name,
-			self.owner,
-			system,
-			self.created,
-			self.last_stats,
-			self.cardinality,
-			self.size,
-			self._tablespace,
-			desc
-		) = row
-		super(Table, self).__init__(schema, name, system, desc)
+		super(Table, self).__init__(schema, row.name, row.system, row.description)
+		self.owner = row.owner
+		self.created = row.created
+		self.last_stats = row.last_stats
+		self.cardinality = row.cardinality
+		self.size = row.size
+		self._tablespace = row.tbspace
 		self._field_list = [
-			Field(self, input, position, *item)
-			for (position, item) in enumerate(input.relation_cols[(schema.name, self.name)])
+			Field(self, input, pos, i)
+			for (pos, i) in enumerate(input.relation_cols.get((schema.name, self.name), []))
 		]
-		self._fields = dict([
-			(field.name, field)
-			for field in self._field_list
-		])
+		self._fields = dict((i.name, i) for i in self._field_list)
 		self._dependents = RelationsDict(
 			self.database,
-			input.relation_dependents[(schema.name, self.name)]
+			input.relation_dependents.get((schema.name, self.name), [])
 		)
 		self._dependent_list = RelationsList(
 			self.database,
-			input.relation_dependents[(schema.name, self.name)]
+			input.relation_dependents.get((schema.name, self.name), [])
 		)
 		self.indexes = IndexesDict(
 			self.database,
-			input.table_indexes[(schema.name, self.name)]
+			input.table_indexes.get((schema.name, self.name), []),
+			key=attrgetter('schema', 'name')
 		)
 		self.index_list = IndexesList(
 			self.database,
-			input.table_indexes[(schema.name, self.name)]
+			input.table_indexes.get((schema.name, self.name), []),
+			key=attrgetter('schema', 'name')
 		)
 		self.triggers = TriggersDict(
 			self.database,
-			input.relation_triggers[(schema.name, self.name)]
+			input.relation_triggers.get((schema.name, self.name), []),
+			key=attrgetter('schema', 'name')
 		)
 		self.trigger_list = TriggersList(
 			self.database,
-			input.relation_triggers[(schema.name, self.name)]
+			input.relation_triggers.get((schema.name, self.name), []),
+			key=attrgetter('schema', 'name')
 		)
 		self.trigger_dependents = TriggersDict(
 			self.database,
-			input.trigger_dependents[(schema.name, self.name)]
+			input.trigger_dependents.get((schema.name, self.name), [])
 		)
 		self.trigger_dependent_list = TriggersList(
 			self.database,
-			input.trigger_dependents[(schema.name, self.name)]
+			input.trigger_dependents.get((schema.name, self.name), [])
 		)
 		self.unique_key_list = [
-			UniqueKey(self, input, *item)
-			for item in input.unique_keys[(schema.name, self.name)]
-			if not item[-2]
+			UniqueKey(self, input, i)
+			for i in input.unique_keys.get((schema.name, self.name), [])
+			if not i.primary
 		]
-		pitem = [
-			PrimaryKey(self, input, *item)
-			for item in input.unique_keys[(schema.name, self.name)]
-			if item[-2]
+		primary_keys = [
+			PrimaryKey(self, input, i)
+			for i in input.unique_keys.get((schema.name, self.name), [])
+			if i.primary
 		]
-		if len(pitem) == 0:
+		if len(primary_keys) == 0:
 			self.primary_key = None
-		elif len(pitem) == 1:
-			self.primary_key = pitem[0]
+		elif len(primary_keys) == 1:
+			self.primary_key = primary_keys[0]
 			self.unique_key_list.append(self.primary_key)
 		else:
 			# Something's gone horribly wrong in the input plugin - got more
 			# than one primary key for the table!
 			assert False
-		self.unique_key_list = sorted(
-			self.unique_key_list,
-			key=lambda item:item.name
-		)
-		self.unique_keys = dict([
-			(unique_key.name, unique_key)
-			for unique_key in self.unique_key_list
-		])
-		self.foreign_key_list = sorted([
-			ForeignKey(self, input, *item)
-			for item in input.foreign_keys[(schema.name, self.name)]
-		], key=lambda item:item.name)
-		self.foreign_keys = dict([
-			(foreign_key.name, foreign_key)
-			for foreign_key in self.foreign_key_list
-		])
-		self.check_list = sorted([
-			Check(self, input, *item)
-			for item in input.checks[(schema.name, self.name)]
-		], key=lambda item:item.name)
-		self.checks = dict([
-			(check.name, check)
-			for check in self.check_list
-		])
+		self.unique_keys = dict((i.name, i) for i in self.unique_key_list)
+		self.foreign_key_list = [
+			ForeignKey(self, input, i)
+			for i in input.foreign_keys.get((schema.name, self.name), [])
+		]
+		self.foreign_keys = dict((i.name, i) for i in self.foreign_key_list)
+		self.check_list = [
+			Check(self, input, i)
+			for i in input.checks.get((schema.name, self.name), [])
+		]
+		self.checks = dict((i.name, i) for i in self.check_list)
 		self.constraint_list = sorted(
-			self.unique_key_list + self.foreign_key_list + self.check_list,
-			key=lambda item:item.name
+			chain(self.unique_key_list, self.foreign_key_list, self.check_list),
+			key=attrgetter('name')
 		)
-		self.constraints = dict([
-			(constraint.name, constraint)
-			for constraint in self.constraint_list
-		])
+		self.constraints = dict((i.name, i) for i in self.constraint_list)
 	
 	def _get_size_str(self):
 		"""Returns the size of the table in a human-readable form"""
@@ -1310,27 +1094,22 @@ class Table(Relation):
 		return self._dependent_list
 
 	def _get_create_sql(self):
-		sql = Template('CREATE TABLE $schema.$table ($elements) IN $tbspace')
-		return sql.substitute({
-			'schema': format_ident(self.schema.name),
-			'table': format_ident(self.name),	
-			'elements': ',\n'.join([
-					field.prototype
-					for field in self.field_list
-				] + [
-					constraint.prototype
-					for constraint in self.constraints.itervalues()
-					if not (isinstance(constraint, Check) and constraint.system)
-				]),
-			'tbspace': format_ident(self.tablespace.name),
-		})
+		return 'CREATE TABLE %s.%s (%s) IN %s' % (
+			format_ident(self.schema.name),
+			format_ident(self.name),	
+			',\n'.join(chain(
+				(field.prototype for field in self.field_list),
+				(const.prototype for const in self.constraints.itervalues()
+					if not (isinstance(const, Check) and const.system))
+			)),
+			format_ident(self.tablespace.name),
+		)
 	
 	def _get_drop_sql(self):
-		sql = Template('DROP TABLE $schema.$table')
-		return sql.substitute({
-			'schema': format_ident(self.schema.name),
-			'table': format_ident(self.name)
-		})
+		return 'DROP TABLE %s.%s' % (
+			format_ident(self.schema.name),
+			format_ident(self.name)
+		)
 	
 	def _get_tablespace(self):
 		"""Returns the tablespace in which the table's data is stored"""
@@ -1345,50 +1124,43 @@ class View(Relation):
 
 	config_names = ['view', 'views']
 	
-	def __init__(self, schema, input, *row):
+	def __init__(self, schema, input, row):
 		"""Initializes an instance of the class from a input row"""
-		(
-			_, # schema_name
-			name,
-			self.owner,
-			system,
-			self.created,
-			self.read_only,
-			self.sql,
-			desc
-		) = row
-		super(View, self).__init__(schema, name, system, desc)
+		super(View, self).__init__(schema, row.name, row.system, row.description)
+		self.owner = row.owner
+		self.created = row.created
+		self.read_only = row.read_only
+		self.sql = row.sql
 		self._field_list = [
-			Field(self, input, position, *item)
-			for (position, item) in enumerate(input.relation_cols[(schema.name, self.name)])
+			Field(self, input, pos, i)
+			for (pos, i) in enumerate(input.relation_cols.get((schema.name, self.name), []))
 		]
-		self._fields = dict([
-			(field.name, field)
-			for field in self._field_list
-		])
+		self._fields = dict((i.name, i) for i in self._field_list)
 		self._dependents = RelationsDict(
 			self.database,
-			input.relation_dependents[(schema.name, self.name)]
+			input.relation_dependents.get((schema.name, self.name), [])
 		)
 		self._dependent_list = RelationsList(
 			self.database,
-			input.relation_dependents[(schema.name, self.name)]
+			input.relation_dependents.get((schema.name, self.name), [])
 		)
 		self.dependencies = RelationsDict(
 			self.database,
-			input.relation_dependencies[(schema.name, self.name)]
+			input.relation_dependencies.get((schema.name, self.name), [])
 		)
 		self.dependency_list = RelationsList(
 			self.database,
-			input.relation_dependencies[(schema.name, self.name)]
+			input.relation_dependencies.get((schema.name, self.name), [])
 		)
 		self.triggers = TriggersDict(
 			self.database,
-			input.relation_triggers[(schema.name, self.name)]
+			input.relation_triggers.get((schema.name, self.name), []),
+			key=attrgetter('schema', 'name')
 		)
 		self.trigger_list = TriggersList(
 			self.database,
-			input.relation_triggers[(schema.name, self.name)]
+			input.relation_triggers.get((schema.name, self.name), []),
+			key=attrgetter('schema', 'name')
 		)
 
 	def _get_dependents(self):
@@ -1407,11 +1179,10 @@ class View(Relation):
 		return self.sql
 	
 	def _get_drop_sql(self):
-		sql = Template('DROP VIEW $schema.$view')
-		return sql.substitute({
-			'schema': format_ident(self.schema.name),
-			'view': format_ident(self.name),
-		})
+		return 'DROP VIEW %s.%s' % (
+			format_ident(self.schema.name),
+			format_ident(self.name),
+		)
 
 
 class Alias(Relation):
@@ -1419,27 +1190,21 @@ class Alias(Relation):
 
 	config_names = ['alias', 'aliases']
 	
-	def __init__(self, schema, input, *row):
+	def __init__(self, schema, input, row):
 		"""Initializes an instance of the class from a input row"""
-		(
-			_, # schema_name
-			name,
-			self.owner,
-			system,
-			self.created,
-			self._relation_schema,
-			self._relation_name,
-			desc
-		) = row
-		super(Alias, self).__init__(schema, name, system, desc)
+		super(Alias, self).__init__(schema, row.name, row.system, row.description)
+		self.owner = row.owner
+		self.created = row.created
+		self._relation_schema = row.base_schema
+		self._relation_name = row.base_name
 		# XXX An alias should have its own Field objects
 		self._dependents = RelationsDict(
 			self.database,
-			input.relation_dependents[(schema.name, self.name)]
+			input.relation_dependents.get((schema.name, self.name), [])
 		)
 		self._dependent_list = RelationsList(
 			self.database,
-			input.relation_dependents[(schema.name, self.name)]
+			input.relation_dependents.get((schema.name, self.name), [])
 		)
 
 	def _get_fields(self):
@@ -1455,20 +1220,18 @@ class Alias(Relation):
 		return self._dependent_list
 
 	def _get_create_sql(self):
-		sql = Template('CREATE ALIAS $schema.$alias FOR $baseschema.$baserelation')
-		return sql.substitute({
-			'schema': format_ident(self.schema.name),
-			'alias': format_ident(self.name),
-			'baseschema': format_ident(self.relation.schema.name),
-			'baserelation': format_ident(self.relation.name)
-		})
+		return 'CREATE ALIAS %s.%s FOR %s.%s' % (
+			format_ident(self.schema.name),
+			format_ident(self.name),
+			format_ident(self.relation.schema.name),
+			format_ident(self.relation.name)
+		)
 	
 	def _get_drop_sql(self):
-		sql = Template('DROP ALIAS $schema.$alias')
-		return sql.substitute({
-			'schema': format_ident(self.schema.name),
-			'alias': format_ident(self.name)
-		})
+		return 'DROP ALIAS %s.%s' % (
+			format_ident(self.schema.name),
+			format_ident(self.name)
+		)
 	
 	def _get_relation(self):
 		"""Returns the relation the alias is for.
@@ -1484,7 +1247,7 @@ class Alias(Relation):
 		This property returns the view or table that the alias ultimately
 		points to by resolving any aliases in between.
 		"""
-		result = self
+		result = self.relation
 		while isinstance(result, Alias):
 			result = result.relation
 		return result
@@ -1498,35 +1261,25 @@ class Index(SchemaObject):
 
 	config_names = ['index', 'indexes', 'indices']
 
-	def __init__(self, schema, input, *row):
+	def __init__(self, schema, input, row):
 		"""Initializes an instance of the class from a input row"""
-		(
-			_, # schema_name
-			name,
-			self._table_schema,
-			self._table_name,
-			self.owner,
-			system,
-			self.created,
-			self.last_stats,
-			self.cardinality,
-			self.size,
-			self.unique,
-			self._tablespace,
-			desc
-		) = row
-		super(Index, self).__init__(schema, name, system, desc)
+		super(Index, self).__init__(schema, row.name, row.system, row.description)
+		self._table_schema = row.table_schema
+		self._table_name = row.table_name
+		self.owner = row.owner
+		self.created = row.created
+		self.last_stats = row.last_stats
+		self.cardinality = row.cardinality
+		self.size = row.size
+		self.unique = row.unique
+		self._tablespace = row.tbspace
 		self.fields = IndexFieldsDict(
-			self.database,
-			self._table_schema,
-			self._table_name,
-			input.index_cols[(schema.name, self.name)]
+			self.database, self._table_schema, self._table_name,
+			input.index_cols.get((schema.name, self.name), [])
 		)
 		self.field_list = IndexFieldsList(
-			self.database,
-			self._table_schema,
-			self._table_name,
-			input.index_cols[(schema.name, self.name)]
+			self.database, self._table_schema, self._table_name,
+			input.index_cols.get((schema.name, self.name), [])
 		)
 
 	def _get_identifier(self):
@@ -1536,35 +1289,38 @@ class Index(SchemaObject):
 		return self.schema.index_list
 
 	def _get_create_sql(self):
-		sql = 'CREATE $type $schema.$index ON $tbschema.$tbname ($fields)'
-		values = {
-			'type': {False: 'INDEX', True: 'UNIQUE INDEX'}[self.unique],
-			'schema': format_ident(self.schema.name),
-			'index': format_ident(self.name),
-			'tbschema': format_ident(self.table.schema.name),
-			'tbname': format_ident(self.table.name),
-			'fields': ', '.join(['%s%s' % (format_ident(field.name), {
-				'A': '',
-				'D': ' DESC'
-			}[order]) for (field, order) in self.field_list if order != 'I'])
+		ordering = {
+			'A': '',
+			'D': ' DESC',
 		}
+		fields = ', '.join((
+			'%s%s' % (format_ident(field.name), ordering[order])
+			for (field, order) in self.field_list
+			if order != 'I'
+		))
+		sql = [
+			'CREATE',
+			['INDEX', 'UNIQUE INDEX'][self.unique],
+			'%s.%s' % (format_ident(self.schema.name), format_ident(self.name)),
+			'ON',
+			'%s.%s' % (format_ident(self.table.schema.name), format_ident(self.table.name)),
+			'(%s)' % fields
+		]
 		if self.unique:
-			incfields = [
-				field
+			incfields = ', '.join((
+				format_ident(field.name)
 				for (field, order) in self.field_list
 				if order == 'I'
-			]
-			if len(incfields) > 0:
-				sql += '\nINCLUDE ($incfields)'
-				values['incfields'] = ', '.join([format_ident(field.name) for field in incfields])
-		return Template(sql).substitute(values)
+			))
+			if incfields:
+				sql.append('INCLUDE (%s)' % incfields)
+		return ' '.join(sql)
 
 	def _get_drop_sql(self):
-		sql = Template('DROP INDEX $schema.$index')
-		return sql.substitute({
-			'schema': format_ident(self.schema.name),
-			'index': format_ident(self.name)
-		})
+		return 'DROP INDEX %s.%s' % (
+			format_ident(self.schema.name),
+			format_ident(self.name)
+		)
 
 	def _get_table(self):
 		"""Returns the table that index is defined against"""
@@ -1583,30 +1339,24 @@ class Trigger(SchemaObject):
 
 	config_names = ['trigger', 'triggers']
 
-	def __init__(self, schema, input, *row):
+	def __init__(self, schema, input, row):
 		"""Initializes an instance of the class from a input row"""
-		(
-			_, # schema_name
-			name,
-			self.owner,
-			system,
-			self.created,
-			self._relation_schema,
-			self._relation_name,
-			self.trigger_time,
-			self.trigger_event,
-			self.granularity,
-			self.sql,
-			desc
-		) = row
-		super(Trigger, self).__init__(schema, name, system, desc)
+		super(Trigger, self).__init__(schema, row.name, row.system, row.description)
+		self.owner = row.owner
+		self.created = row.created
+		self._relation_schema = row.relation_schema
+		self._relation_name = row.relation_name
+		self.trigger_time = row.when
+		self.trigger_event = row.event
+		self.granularity = row.granularity
+		self.sql = row.sql
 		self.dependencies = RelationsDict(
 			self.database,
-			input.trigger_dependencies[(schema.name, self.name)]
+			input.trigger_dependencies.get((schema.name, self.name), [])
 		)
 		self.dependency_list = RelationsList(
 			self.database,
-			input.trigger_dependencies[(schema.name, self.name)]
+			input.trigger_dependencies.get((schema.name, self.name), [])
 		)
 
 	def _get_identifier(self):
@@ -1619,11 +1369,10 @@ class Trigger(SchemaObject):
 		return self.sql or ''
 
 	def _get_drop_sql(self):
-		sql = Template('DROP TRIGGER $schema.$trigger')
-		return sql.substitute({
-			'schema': format_ident(self.schema.name),
-			'trigger': format_ident(self.name),
-		})
+		return 'DROP TRIGGER %s.%s' % (
+			format_ident(self.schema.name),
+			format_ident(self.name),
+		)
 
 	def _get_relation(self):
 		"""Returns the relation that the trigger applies to"""
@@ -1637,44 +1386,29 @@ class Function(Routine):
 
 	config_names = ['function', 'functions', 'func', 'funcs']
 	
-	def __init__(self, schema, input, *row):
+	def __init__(self, schema, input, row):
 		"""Initializes an instance of the class from a input row"""
-		(
-			_, # schema_name
-			specific_name,
-			name,
-			self.owner,
-			system,
-			self.created,
-			self.type,
-			self.deterministic,
-			self.external_action,
-			self.null_call,
-			self.sql_access,
-			self.sql,
-			desc
-		) = row
-		super(Function, self).__init__(schema, name, specific_name, system, desc)
+		super(Function, self).__init__(schema, row.name, row.specific, row.system, row.description)
+		self.owner = row.owner
+		self.created = row.created
+		self.type = row.func_type
+		self.deterministic = row.deterministic
+		self.external_action = row.ext_action
+		self.null_call = row.null_call
+		self.sql_access = row.access
+		self.sql = row.sql
 		self._param_list = [
-			Param(self, input, position, *item)
-			for (position, item) in enumerate(input.function_params[(schema.name, self.specific_name)])
-			if item[1] != 'R'
+			Param(self, input, pos, i)
+			for (pos, i) in enumerate(input.routine_params.get((schema.name, self.specific_name), []))
+			if i.direction != 'R'
 		]
-		self._params = dict([
-			(param.name, param)
-			for param in self._param_list
-		])
+		self._params = dict((i.name, i) for i in self._param_list)
 		self._return_list = [
-			Param(self, input, position, *item)
-			for (position, item) in enumerate(input.function_params[(schema.name, self.specific_name)])
-			if item[1] == 'R'
+			Param(self, input, pos, i)
+			for (pos, i) in enumerate(input.routine_params.get((schema.name, self.specific_name), []))
+			if i.direction == 'R'
 		]
-		self._returns = dict([
-			(param.name, param)
-			for param in self._return_list
-		])
-		self._params = {}
-		self._returns = {}
+		self._returns = dict((i.name, i) for i in self._return_list)
 
 	def _get_parent_list(self):
 		return self.schema.function_list
@@ -1694,35 +1428,34 @@ class Function(Routine):
 	def _get_prototype(self):
 		
 		def format_params(params):
-			return ', '.join(['%s %s' % (format_ident(param.name), param.datatype_str) for param in params])
+			return ', '.join(('%s %s' % (format_ident(param.name), param.datatype_str) for param in params))
 
 		def format_returns():
 			if len(self.return_list) == 0:
 				return ''
 			elif self.type == 'R':
-				return ' RETURNS ROW(%s)' % (format_params(self.return_list))
+				return ' RETURNS ROW(%s)' % format_params(self.return_list)
 			elif self.type == 'T':
-				return ' RETURNS TABLE(%s)' % (format_params(self.return_list))
+				return ' RETURNS TABLE(%s)' % format_params(self.return_list)
 			else:
-				return ' RETURNS %s' % (self.return_list[0].datatype_str)
+				return ' RETURNS %s' % self.return_list[0].datatype_str
 
-		sql = Template('$schema.$function($params)$returns')
-		return sql.substitute({
-			'schema': format_ident(self.schema.name),
-			'function': format_ident(self.name),
-			'params': format_params(self.param_list),
-			'returns': format_returns()
-		})
+		return '%s.%s(%s)%s' % (
+			format_ident(self.schema.name),
+			format_ident(self.name),
+			format_params(self.param_list),
+			format_returns()
+		)
 	
 	def _get_create_sql(self):
+		# XXX Something more sophisticated here?
 		return self.sql or ''
 	
 	def _get_drop_sql(self):
-		sql = Template('DROP SPECIFIC FUNCTION $schema.$specific')
-		return sql.substitute({
-			'schema': format_ident(self.schema.name),
-			'specific': format_ident(self.specific_name)
-		})
+		return 'DROP SPECIFIC FUNCTION %s.%s' % (
+			format_ident(self.schema.name),
+			format_ident(self.specific_name)
+		)
 
 
 class Procedure(Routine):
@@ -1730,32 +1463,22 @@ class Procedure(Routine):
 
 	config_names = ['procedure', 'procedures', 'proc', 'procs']
 	
-	def __init__(self, schema, input, *row):
+	def __init__(self, schema, input, row):
 		"""Initializes an instance of the class from a input row"""
-		(
-			_, # schema_name
-			specific_name,
-			name,
-			self.owner,
-			system,
-			self.created,
-			self.deterministic,
-			self.external_action,
-			self.null_call,
-			self.sql_access,
-			self.sql,
-			desc
-		) = row
-		super(Procedure, self).__init__(schema, name, specific_name, system, desc)
+		super(Procedure, self).__init__(schema, row.name, row.specific, row.system, row.description)
+		self.owner = row.owner
+		self.created = row.created
+		self.deterministic = row.deterministic
+		self.external_action = row.ext_action
+		self.null_call = row.null_call
+		self.sql_access = row.access
+		self.sql = row.sql
 		self._param_list = [
-			Param(self, input, position, *item)
-			for (position, item) in enumerate(input.procedure_params[(schema.name, self.specific_name)])
-			if item[1] != 'R'
+			Param(self, input, pos, i)
+			for (pos, i) in enumerate(input.routine_params.get((schema.name, self.specific_name), []))
+			if i.direction != 'R'
 		]
-		self._params = dict([
-			(param.name, param)
-			for param in self._param_list
-		])
+		self._params = dict((i.name, i) for i in self._param_list)
 
 	def _get_parent_list(self):
 		return self.schema.procedure_list
@@ -1774,27 +1497,26 @@ class Procedure(Routine):
 				'O': 'OUT',
 				'B': 'INOUT',
 			}
-			return ', '.join([
+			return ', '.join((
 				'%s %s %s' % (parmtype[param.type], param.name, param.datatype_str)
 				for param in params
-			])
+			))
 
-		sql = Template('$schema.$proc($params)')
-		return sql.substitute({
-			'schema': format_ident(self.schema.name),
-			'proc': format_ident(self.name),
-			'params': format_params(self.param_list)
-		})
+		return '%s.%s(%s)' % (
+			format_ident(self.schema.name),
+			format_ident(self.name),
+			format_params(self.param_list)
+		)
 	
 	def _get_create_sql(self):
+		# XXX Something more sophisticated here?
 		return self.sql or ''
 	
 	def _get_drop_sql(self):
-		sql = Template('DROP SPECIFIC PROCEDURE $schema.$specific')
-		return sql.substitute({
-			'schema': format_ident(self.schema.name),
-			'specific': format_ident(self.specific_name)
-		})
+		return 'DROP SPECIFIC PROCEDURE %s.%s' % (
+			format_ident(self.schema.name),
+			format_ident(self.specific_name)
+		)
 
 
 class Datatype(SchemaObject):
@@ -1802,23 +1524,17 @@ class Datatype(SchemaObject):
 
 	config_names = ['datatype', 'datatypes', 'type', 'types']
 	
-	def __init__(self, schema, input, *row):
+	def __init__(self, schema, input, row):
 		"""Initializes an instance of the class from a input row"""
-		(
-			_,
-			name,
-			self.owner,
-			system,
-			self.created,
-			self.variable_size,
-			self.variable_scale,
-			self._source_schema,
-			self._source_name,
-			self.size,
-			self.scale,
-			desc
-		) = row
-		super(Datatype, self).__init__(schema, name, system, desc)
+		super(Datatype, self).__init__(schema, row.name, row.system, row.description)
+		self.owner = row.owner
+		self.created = row.created
+		self.variable_size = row.variable_size
+		self.variable_scale = row.variable_scale
+		self._source_schema = row.source_schema
+		self._source_name = row.source_name
+		self.size = row.size
+		self.scale = row.scale
 
 	def _get_identifier(self):
 		return "datatype_%s_%s" % (self.schema.name, self.name)
@@ -1842,25 +1558,21 @@ class Field(RelationObject):
 
 	config_names = ['field', 'fields', 'column', 'columns', 'col', 'cols']
 
-	def __init__(self, relation, input, position, *row):
+	def __init__(self, relation, input, position, row):
 		"""Initializes an instance of the class from a input row"""
 		# XXX DB2 specific assumption: some databases have system columns (e.g. OID)
-		(
-			name,
-			self._datatype_schema,
-			self._datatype_name,
-			self.identity,
-			self._size,
-			self._scale,
-			self.codepage,
-			self.nullable,
-			self.cardinality,
-			self.null_cardinality,
-			self.generated,
-			self.default,
-			desc
-		) = row
-		super(Field, self).__init__(relation, name, False, desc)
+		super(Field, self).__init__(relation, row.name, False, row.description)
+		self._datatype_schema = row.type_schema
+		self._datatype_name = row.type_name
+		self.identity = row.identity
+		self._size = row.size
+		self._scale = row.scale
+		self.codepage = row.codepage
+		self.nullable = row.nullable
+		self.cardinality = row.cardinality
+		self.null_cardinality = row.null_card
+		self.generated = row.generated
+		self.default = row.default
 		self.position = position
 
 	def _get_identifier(self):
@@ -1871,23 +1583,21 @@ class Field(RelationObject):
 
 	def _get_create_sql(self):
 		if isinstance(self.relation, Table):
-			sql = Template('ALTER TABLE $schema.$table ADD COLUMN $fielddef')
-			return sql.substitute({
-				'schema': format_ident(self.relation.schema.name),
-				'table': format_ident(self.relation.name),
-				'fielddef': self.prototype
-			})
+			return 'ALTER TABLE %s.%s ADD COLUMN %s' % (
+				format_ident(self.relation.schema.name),
+				format_ident(self.relation.name),
+				self.prototype
+			)
 		else:
 			return ''
 	
 	def _get_drop_sql(self):
 		if isinstance(self.relation, Table):
-			sql = Template('ALTER TABLE $schema.$table DROP COLUMN $field')
-			return sql.substitute({
-				'schema': format_ident(self.relation.schema.name),
-				'table': format_ident(self.relation.name),
-				'field': format_ident(self.name)
-			})
+			return 'ALTER TABLE %s.%s DROP COLUMN %s' % (
+				format_ident(self.relation.schema.name),
+				format_ident(self.relation.name),
+				format_ident(self.name)
+			)
 		else:
 			return ''
 	
@@ -1980,30 +1690,24 @@ class UniqueKey(Constraint):
 	config_names = ['unique_key', 'unique_keys', 'uniquekey', 'uniquekeys',
 		'unique', 'uniques']
 
-	def __init__(self, table, input, *row):
+	def __init__(self, table, input, row):
 		"""Initializes an instance of the class from a input row"""
-		(
-			name,
-			self.owner,
-			system,
-			self.created,
-			_, # primary
-			desc
-		) = row
-		super(UniqueKey, self).__init__(table, name, system, desc)
+		super(UniqueKey, self).__init__(table, row.name, row.system, row.description)
+		self.owner = row.owner
+		self.created = row.created
 		# XXX DB2 specific: should be provided by input plugin
 		self._anonymous = re.match('^SQL\d{15}$', self.name)
 		self._fields = ConstraintFieldsList(
 			table,
-			input.unique_key_cols[(table.schema.name, table.name, self.name)]
+			input.unique_key_cols.get((table.schema.name, table.name, self.name), [])
 		)
 		self.dependents = ConstraintsDict(
 			self.database,
-			input.parent_keys[(table.schema.name, table.name, self.name)]
+			input.parent_keys.get((table.schema.name, table.name, self.name), [])
 		)
 		self.dependent_list = ConstraintsList(
 			self.database,
-			input.parent_keys[(table.schema.name, table.name, self.name)]
+			input.parent_keys.get((table.schema.name, table.name, self.name), [])
 		)
 
 	def _get_fields(self):
@@ -2035,26 +1739,21 @@ class ForeignKey(Constraint):
 	config_names = ['foreign_key', 'foreign_keys', 'foreignkey', 'foreignkeys',
 		'reference', 'references', 'fk', 'fks']
 
-	def __init__(self, table, input, *row):
+	def __init__(self, table, input, row):
 		"""Initializes an instance of the class from a input row"""
-		(
-			name,
-			self.owner,
-			system,
-			self.created,
-			self._ref_table_schema,
-			self._ref_table_name,
-			self._ref_key_name,
-			self.delete_rule,
-			self.update_rule,
-			desc
-		) = row
-		super(ForeignKey, self).__init__(table, name, system, desc)
+		super(ForeignKey, self).__init__(table, row.name, row.system, row.description)
+		self.owner = row.owner
+		self.created = row.created
+		self._ref_table_schema = row.const_schema
+		self._ref_table_name = row.const_table
+		self._ref_key_name = row.const_name
+		self.delete_rule = row.delete_rule
+		self.update_rule = row.update_rule
 		# XXX DB2 specific: should be provided by input plugin
 		self._anonymous = re.match('^SQL\d{15}$', self.name)
 		self._fields = ForeignKeyFieldsList(
 			table, self._ref_table_schema, self._ref_table_name,
-			input.foreign_key_cols[(table.schema.name, table.name, self.name)]
+			input.foreign_key_cols.get((table.schema.name, table.name, self.name), [])
 		)
 
 	def _get_fields(self):
@@ -2098,22 +1797,17 @@ class Check(Constraint):
 
 	config_names = ['check', 'checks', 'ck', 'cks']
 
-	def __init__(self, table, input, *row):
+	def __init__(self, table, input, row):
 		"""Initializes an instance of the class from a input row"""
-		(
-			name,
-			self.owner,
-			system,
-			self.created,
-			self.expression,
-			desc
-		) = row
-		super(Check, self).__init__(table, name, system, desc)
+		super(Check, self).__init__(table, row.name, row.system, row.description)
+		self.owner = row.owner
+		self.created = row.created
+		self.expression = row.sql
 		# XXX DB2 specific: should be provided by input plugin
 		self._anonymous = re.match('^SQL\d{15}$', self.name)
 		self._fields = ConstraintFieldsList(
 			table,
-			input.check_cols[(table.schema.name, table.name, self.name)]
+			input.check_cols.get((table.schema.name, table.name, self.name), [])
 		)
 
 	def _get_fields(self):
@@ -2132,26 +1826,19 @@ class Param(RoutineObject):
 	config_names = ['parameter', 'parameters', 'param', 'parameters',
 		'parm', 'parms']
 
-	def __init__(self, routine, input, position, *row):
+	def __init__(self, routine, input, position, row):
 		"""Initializes an instance of the class from a input row"""
-		(
-			name,
-			self.type,
-			self._datatype_schema,
-			self._datatype_name,
-			self.size,
-			self.scale,
-			self.codepage,
-			desc
-		) = row
 		# If the parameter is unnamed, make up a name based on the parameter's
 		# position
-		if name:
-			# XXX DB2 assumption? Is there such a thing as a "system-maintained
-			# parameter" in any RDBMS?
-			super(Param, self).__init__(routine, name, False, desc)
-		else:
-			super(Param, self).__init__(routine, 'P%d' % position, False, desc)
+		# XXX DB2 assumption? Is there such a thing as a "system-maintained
+		# parameter" in any RDBMS?
+		super(Param, self).__init__(routine, row.name or ('P%d' % position), False, row.description)
+		self.type = row.direction
+		self._datatype_schema = row.type_schema
+		self._datatype_name = row.type_name
+		self.size = row.size
+		self.scale = row.scale
+		self.codepage = row.codepage
 		self.position = position
 
 	def _get_identifier(self):
