@@ -2,7 +2,7 @@
 
 """Output plugin for XML metadata storage."""
 
-import codecs
+import re
 import logging
 import db2makedoc.plugins
 from db2makedoc.etree import fromstring, tostring, indent, Element, SubElement
@@ -44,7 +44,7 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 	def configure(self, config):
 		super(OutputPlugin, self).configure(config)
 		# Ensure we can find the specified encoding
-		codecs.lookup(self.options['encoding'])
+		u''.encode(self.options['encoding'])
 		# Ensure the filename was specified
 		if not self.options['filename']:
 			raise db2makedoc.plugins.PluginConfigurationError('The filename option must be specified')
@@ -72,19 +72,18 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 				parent = self.elements[db_object.parent]
 				parent.append(element)
 		# Find the root document element, convert the document to a string with
-		# an appropriate XML PI and the specific encoding
+		# an appropriate XML PI
 		logging.debug('Converting output')
 		root = self.elements[database]
 		if self.options['indent']:
 			indent(root)
 		s = unicode(tostring(root))
-		s = u'''\
-<?xml version="1.0" encoding="%(encoding)s"?>
-%(content)s''' % {
-			'encoding': self.options['encoding'],
-			'content': s,
-		}
-		s = codecs.getencoder(self.options['encoding'])(s)[0]
+		s = u'<?xml version="1.0" encoding="%s"?>\n%s' % (self.options['encoding'], s)
+		# Check there aren't any silly characters (control characters / binary)
+		# lurking in the unicode version. Most codecs will blindly pass these
+		# through but they're invalid in XML
+		s = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F]+', lambda m: '?'*len(m.group()), s)
+		s = s.encode(self.options['encoding'])
 		# Finally, write the document to disk
 		logging.info('Writing output to "%s"' % self.options['filename'])
 		f = open(self.options['filename'], 'w')
