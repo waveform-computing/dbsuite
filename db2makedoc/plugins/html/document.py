@@ -202,11 +202,17 @@ class ElementFactory(object):
 			# Format times as ISO8601
 			return content.strftime('%H:%M:%S')
 		elif isinstance(content, datetime.date):
-			# Format dates as ISO8601
-			return content.strftime('%Y-%m-%d')
+			# Format dates as ISO8601 (dates < 1970 can't be formatted, so treat them as None)
+			if content.year < 1970:
+				return self._format(None)
+			else:
+				return content.strftime('%Y-%m-%d')
 		elif isinstance(content, datetime.datetime):
-			# Format timestamps as ISO8601
-			return content.strftime('%Y-%m-%d %H:%M:%S')
+			# Format timestamps as ISO8601 (dates < 1970 can't be formatted, so treat them as None)
+			if content.year < 1970:
+				return self._format(None)
+			else:
+				return content.strftime('%Y-%m-%d %H:%M:%S')
 		elif isinstance(content, bool):
 			# Format booleans as Yes/No
 			return ['No', 'Yes'][content]
@@ -1148,7 +1154,9 @@ class HTMLIndexDocument(HTMLDocument):
 		# in case the character is either illegal for the underlying FS (e.g.
 		# backslash on Windows), or the FS doesn't support Unicode (e.g. some
 		# older UNIX FSs)
-		if re.match('[a-zA-Z0-9]', letter):
+		if letter == '':
+			url = 'indexof_%s_empty.html' % dbclass.config_names[0]
+		elif re.match('[a-zA-Z0-9]', letter):
 			url = 'indexof_%s_%s.html' % (dbclass.config_names[0], letter)
 		else:
 			url = 'indexof_%s_%s.html' % (dbclass.config_names[0], hex(ord(letter)))
