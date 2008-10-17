@@ -746,10 +746,19 @@ class Database(DatabaseObject):
 				len(s.routine_list),
 				len(s.trigger_list),
 				len(s.index_list),
-				len(s.datatype_list)
+				len(s.datatype_list),
 			]) > 0
 		]
 		self.schemas = dict((s.name, s) for s in self.schema_list)
+		# Prune completely empty tablespaces
+		self.tablespace_list = [
+			t for t in self.tablespace_list
+			if sum([
+				len(t.table_list),
+				len(t.index_list),
+			]) > 0
+		]
+		self.tablespaces = dict((t.name, t) for t in self.tablespace_list)
 
 	def find(self, qualified_name):
 		"""Find an object in the hierarchy by its qualified name.
@@ -1670,7 +1679,7 @@ class Field(RelationObject):
 
 	def _get_key(self):
 		"""Returns the primary key that this field is a member of (if any)"""
-		if self.relation.primary_key and (self in self.relation.primary_key.fields):
+		if isinstance(self.relation, Table) and self.relation.primary_key and (self in self.relation.primary_key.fields):
 			return self.relation.primary_key
 		else:
 			return None
@@ -1703,11 +1712,17 @@ class UniqueKey(Constraint):
 		)
 		self.dependents = ConstraintsDict(
 			self.database,
-			input.parent_keys.get((table.schema.name, table.name, self.name), [])
+			[
+				(fk.table_schema, fk.table_name, fk.name)
+				for fk in input.parent_keys.get((table.schema.name, table.name, self.name), [])
+			]
 		)
 		self.dependent_list = ConstraintsList(
 			self.database,
-			input.parent_keys.get((table.schema.name, table.name, self.name), [])
+			[
+				(fk.table_schema, fk.table_name, fk.name)
+				for fk in input.parent_keys.get((table.schema.name, table.name, self.name), [])
+			]
 		)
 
 	def _get_fields(self):
