@@ -1369,7 +1369,17 @@ class W3GraphDocument(GraphObjectDocument):
 			super(W3GraphDocument, self).write()
 			self.written = True
 			if self.usemap:
-				im = Image.open(self.filename)
+				try:
+					im = Image.open(self.filename)
+				except IOError, e:
+					logging.warning('Failed to open image "%s" for resizing: %s' % (self.filename, e))
+					if os.path.exists(self.filename):
+						newname = '%s.broken' % self.filename
+						logging.warning('Moving potentially corrupt image file "%s"' % self.filename)
+						if os.path.exists(newname):
+							os.unlink(newname)
+						os.rename(self.filename, newname)
+					return
 				(maxw, maxh) = self.site.max_graph_size
 				(w, h) = im.size
 				if w > maxw or h > maxh:

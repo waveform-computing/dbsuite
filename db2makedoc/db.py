@@ -1729,9 +1729,9 @@ class UniqueKey(Constraint):
 		return self._fields
 
 	def _get_prototype(self):
-		sql = 'UNIQUE (%s)' % ', '.join([format_ident(field.name) for field in self.fields])
+		sql = 'UNIQUE (%s)' % ', '.join(format_ident(field.name) for field in self.fields)
 		if not self._anonymous:
-			sql = 'CONSTRAINT %s %s' % (self.name, sql)
+			sql = 'CONSTRAINT %s %s' % (format_ident(self.name), sql)
 		return sql
 
 
@@ -1742,9 +1742,9 @@ class PrimaryKey(UniqueKey):
 		'primary', 'primaries', 'key', 'keys', 'pk', 'pks']
 
 	def _get_prototype(self):
-		sql = 'PRIMARY KEY (%s)' % ', '.join([format_ident(field.name) for field in self.fields])
+		sql = 'PRIMARY KEY (%s)' % ', '.join(format_ident(field.name) for field in self.fields)
 		if not self._anonymous:
-			sql = 'CONSTRAINT %s %s' % (self.name, sql)
+			sql = 'CONSTRAINT %s %s' % (format_ident(self.name), sql)
 		return sql
 
 
@@ -1776,10 +1776,10 @@ class ForeignKey(Constraint):
 
 	def _get_prototype(self):
 		sql = 'FOREIGN KEY (%s) REFERENCES %s.%s(%s)' % (
-			', '.join([format_ident(myfield.name) for (myfield, reffield) in self.fields]),
+			', '.join(format_ident(myfield.name) for (myfield, reffield) in self.fields),
 			format_ident(self.ref_table.schema.name),
 			format_ident(self.ref_table.name),
-			', '.join([format_ident(reffield.name) for (myfield, reffield) in self.fields])
+			', '.join(format_ident(reffield.name) for (myfield, reffield) in self.fields)
 		)
 		rules = {
 			'A': 'NO ACTION',
@@ -1792,7 +1792,7 @@ class ForeignKey(Constraint):
 		if self.update_rule:
 			sql += ' ON UPDATE ' + rules[self.update_rule]
 		if not self._anonymous:
-			sql = 'CONSTRAINT %s %s' % (self.name, sql)
+			sql = 'CONSTRAINT %s %s' % (format_ident(self.name), sql)
 		return sql
 
 	def _get_ref_table(self):
@@ -1831,7 +1831,7 @@ class Check(Constraint):
 	def _get_prototype(self):
 		sql = 'CHECK (%s)' % self.expression
 		if not self._anonymous:
-			sql = 'CONSTRAINT %s %s' % (self.name, sql)
+			sql = 'CONSTRAINT %s %s' % (format_ident(self.name), sql)
 		return sql
 
 

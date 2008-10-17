@@ -507,7 +507,17 @@ class PlainGraphDocument(GraphObjectDocument):
 			super(PlainGraphDocument, self).write()
 			self.written = True
 			if self.usemap:
-				im = Image.open(self.filename)
+				try:
+					im = Image.open(self.filename)
+				except IOError, e:
+					logging.warning('Failed to open image "%s" for resizing: %s' % (self.filename, e))
+					if os.path.exists(self.filename):
+						logging.warning('Removing potentially corrupt image file "%s"' % self.filename)
+						newname = '%s.broken' % self.filename
+						if os.path.exists(newname):
+							os.unlink(newname)
+						os.rename(self.filename, newname)
+					return
 				(maxw, maxh) = self.site.max_graph_size
 				(w, h) = im.size
 				if w > maxw or h > maxh:

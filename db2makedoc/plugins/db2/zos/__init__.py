@@ -417,7 +417,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				make_datetime(created),
 				desc,
 				make_bool(readonly),
-				str(sql),
+				sql
 			)
 
 	def get_aliases(self):
@@ -1342,7 +1342,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				make_bool(system),
 				make_datetime(created),
 				desc,
-				str(sql)
+				sql
 			)
 
 	def get_check_cols(self):
@@ -1449,7 +1449,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				make_bool(extaction, true_value='E'),
 				make_bool(nullcall),
 				access,
-				str(sql),
+				sql,
 				functype
 			)
 
@@ -1535,7 +1535,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				make_bool(extaction, true_value='E'),
 				make_bool(nullcall),
 				access,
-				str(sql),
+				sql
 			)
 
 	def get_routine_params(self):
@@ -1582,7 +1582,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			SELECT
 				RTRIM(SCHEMA)                   AS ROUTINESCHEMA,
 				RTRIM(SPECIFICNAME)             AS ROUTINESPECNAME,
-				PARMNAME                        AS PARMNAME,
+				RTRIM(PARMNAME)                 AS PARMNAME,
 				RTRIM(TYPESCHEMA)               AS TYPESCHEMA,
 				CASE RTRIM(TYPESCHEMA)
 					WHEN 'SYSIBM' THEN
@@ -1734,7 +1734,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				trigtime,
 				trigevent,
 				granularity,
-				str(sql)
+				sql
 			)
 
 	def get_trigger_dependencies(self):

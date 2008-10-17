@@ -100,12 +100,13 @@ class W3AliasDocument(W3ObjectDocument):
 				'diagram', 'Diagram',
 				self.site.img_of(self.dbobject)
 			))
-		result.append((
-			'sql', 'SQL Definition', [
-				tag.p(tag.a('Line #s On/Off', href='#', onclick='javascript:return toggleLineNums("sqldef");', class_='zoom')),
-				self.format_sql(self.dbobject.create_sql, number_lines=True, id='sqldef')
-			]
-		))
+		if self.dbobject.create_sql:
+			result.append((
+				'sql', 'SQL Definition', [
+					tag.p(tag.a('Line #s On/Off', href='#', onclick='javascript:return toggleLineNums("sqldef");', class_='zoom')),
+					self.format_sql(self.dbobject.create_sql, number_lines=True, id='sqldef')
+				]
+			))
 		return result
 
 class W3AliasGraph(W3GraphDocument):

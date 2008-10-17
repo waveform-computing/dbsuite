@@ -78,9 +78,10 @@ class PlainForeignKeyDocument(PlainObjectDocument):
 					))
 				)
 			))
-		result.append((
-			'sql', 'SQL Definition',
-			self.format_sql(self.dbobject.create_sql, number_lines=True)
-		))
+		if self.dbobject.create_sql:
+			result.append((
+				'sql', 'SQL Definition',
+				self.format_sql(self.dbobject.create_sql, number_lines=True)
+			))
 		return result
 

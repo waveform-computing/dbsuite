@@ -220,14 +220,16 @@ class PlainTableDocument(PlainObjectDocument):
 					))
 				)
 			))
-		result.append((
-			'diagram', 'Diagram',
-			self.site.img_of(self.dbobject)
-		))
-		result.append((
-			'sql', 'SQL Definition',
-			self.format_sql(self.dbobject.create_sql, number_lines=True)
-		))
+		if self.site.object_graph(self.dbobject):
+			result.append((
+				'diagram', 'Diagram',
+				self.site.img_of(self.dbobject)
+			))
+		if self.dbobject.create_sql:
+			result.append((
+				'sql', 'SQL Definition',
+				self.format_sql(self.dbobject.create_sql, number_lines=True)
+			))
 		return result
 
 class PlainTableGraph(PlainGraphDocument):
