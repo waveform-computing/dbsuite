@@ -7,7 +7,7 @@ import re
 import db2makedoc.plugins
 from itertools import groupby
 from db2makedoc.util import *
-from db2makedoc.plugins.db2 import connect, make_datetime, make_bool, amke_int
+from db2makedoc.plugins.db2 import connect, make_datetime, make_bool, make_int
 from db2makedoc.tuples import (
 	Schema, Datatype, Table, View, Alias, RelationDep, Index, IndexCol,
 	RelationCol, UniqueKey, UniqueKeyCol, ForeignKey, ForeignKeyCol, Check,
