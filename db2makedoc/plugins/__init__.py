@@ -1024,7 +1024,7 @@ class InputPlugin(Plugin):
 
 	@cached
 	def relation_dependencies(self):
-		result = self.filter(self.get_view_dependencies(), key=attrgetter('view_schema'))
+		result = self.filter(self.get_view_dependencies(), key=attrgetter('schema'))
 		result = self.filter(result, key=attrgetter('dep_schema'))
 		result = sorted(result, key=attrgetter('schema', 'name', 'dep_schema', 'dep_name'))
 		result = groupby(result, key=attrgetter('schema', 'name'))
@@ -1152,8 +1152,8 @@ class InputPlugin(Plugin):
 
 	@cached
 	def trigger_dependencies(self):
-		result = self.filter(self.get_trigger_dependencies(), key=attrgetter('schema'))
-		result = self.filter(result, key=attrgetter('table_schema'))
+		result = self.filter(self.get_trigger_dependencies(), key=attrgetter('trig_schema'))
+		result = self.filter(result, key=attrgetter('dep_schema'))
 		result = sorted(result, key=attrgetter('trig_schema', 'trig_name', 'dep_schema', 'dep_name'))
 		result = groupby(result, key=attrgetter('trig_schema', 'trig_name'))
 		return dict(
