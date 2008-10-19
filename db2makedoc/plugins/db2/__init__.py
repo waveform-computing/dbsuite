@@ -4,10 +4,13 @@
 
 import sys
 mswindows = sys.platform.startswith('win')
+import locale
+import codecs
 import logging
 import datetime
 import re
 
+__all__ = ['connect', 'make_str', 'make_int', 'make_bool', 'make_datetime']
 
 def connect(dsn, username=None, password=None):
 	"""Create a connection to the specified database.
@@ -98,6 +101,27 @@ def connect(dsn, username=None, password=None):
 			return odbc.odbc(dsn)
 	raise ImportError('Unable to find a suitable connection framework; please install PyDB2, pyodbc, PyWin32, or mxODBC')
 
+decoder = codecs.getdecoder(locale.getpreferredencoding(False))
+def make_str(value):
+	"""Converts a string into a unicode object.
+
+	If value is None, returns None. If the value is a string, uses the encoding
+	obtained from the current locale to decode the string into a Unicode
+	object.  This is because the DB2 driver defaults to using the locale
+	according to the LANG environment variable, regardless of the application's
+	locale, while Python always defaults to decoding ASCII regardless of locale
+	resulting in problems with non-ASCII characters occuring in output from by
+	DB2.
+	"""
+	if value is None:
+		return None
+	elif isinstance(value, unicode):
+		return value
+	elif isinstance(value, basestring):
+		return decoder(value)[0]
+	else:
+		raise ValueError('Invalid string value %s' % repr(value))
+
 def make_int(value):
 	"""Converts a numeric value into an integer / long.
 
@@ -107,7 +131,7 @@ def make_int(value):
 	if value is None:
 		return None
 	elif isinstance(value, basestring):
-		raise ValueError('Cannot convert string to integer')
+		raise ValueError('Invalid integer value %s' % repr(value))
 	else:
 		return int(value)
 
@@ -123,18 +147,18 @@ def make_datetime(value):
 	Basically this routine exists to convert a database framework-specific
 	representation of a datetime value into a standard Python datetime value.
 	"""
-	if isinstance(value, datetime.datetime):
+	if value is None:
+		return None
+	elif isinstance(value, datetime.datetime):
 		return value
 	elif isinstance(value, datetime.date):
 		return datetime.datetime.combine(value, datetime.time.min)
-	elif (value is None) or (value == ''):
-		return None
 	elif isinstance(value, basestring):
 		return datetime.datetime(*([int(x) for x in re.match(r'(\d{4})-(\d{2})-(\d{2})[T -](\d{2})[:.](\d{2})[:.](\d{2})\.(\d{6})\d*', value).groups()]))
 	elif hasattr(value, 'value') and isinstance(value.value, int):
 		return datetime.datetime.fromtimestamp(value.value)
 	else:
-		raise ValueError('Unable to convert date-time value "%s"' % str(value))
+		raise ValueError('Invalid date-time value %s' % repr(value))
 
 def make_bool(value, true_value='Y', false_value='N', none_value=' ', unknown_error=False, unknown_result=None):
 	"""Converts a character-based value into a boolean value.
@@ -148,7 +172,7 @@ def make_bool(value, true_value='Y', false_value='N', none_value=' ', unknown_er
 		return {true_value: True, false_value: False, none_value: None}[value]
 	except KeyError:
 		if unknown_error:
-			raise ValueError('Invalid boolean value "%s"' % str(value))
+			raise ValueError('Invalid boolean value %s' % repr(value))
 		else:
 			return unknown_result
 

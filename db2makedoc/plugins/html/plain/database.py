@@ -39,7 +39,7 @@ class PlainDatabaseDocument(PlainObjectDocument):
 					)
 				]
 			))
-		if len(tbspaces) > 0:
+		if self.site.tbspace_list and len(tbspaces) > 0:
 			result.append((
 				'tbspaces', 'Tablespaces', [
 					tag.p("""The following table contains all tablespaces

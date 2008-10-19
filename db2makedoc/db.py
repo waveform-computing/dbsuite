@@ -694,6 +694,10 @@ class Constraint(RelationObject):
 	def _get_fields(self):
 		"""Returns a list of the fields constrained by this constraint"""
 		raise NotImplementedError
+
+	def _get_system(self):
+		# Don't inherit system attribute from the parent
+		return self._system
 	
 	def _get_prototype(self):
 		"""Returns the prototype SQL of the constraint.
@@ -1107,9 +1111,8 @@ class Table(Relation):
 			format_ident(self.schema.name),
 			format_ident(self.name),	
 			',\n'.join(chain(
-				(field.prototype for field in self.field_list),
-				(const.prototype for const in self.constraints.itervalues()
-					if not (isinstance(const, Check) and const.system))
+				(field.prototype for field in self.field_list if not field.system),
+				(const.prototype for const in self.constraint_list if not const.system)
 			)),
 			format_ident(self.tablespace.name),
 		)
@@ -1587,6 +1590,10 @@ class Field(RelationObject):
 	def _get_identifier(self):
 		return "field_%s_%s_%s" % (self.schema.name, self.relation.name, self.name)
 
+	def _get_system(self):
+		# Don't inherit the system property from the parent
+		return self._system
+
 	def _get_parent_list(self):
 		return self.relation.field_list
 
@@ -1858,6 +1865,10 @@ class Param(RoutineObject):
 
 	def _get_identifier(self):
 		return "param_%s_%s_%d" % (self.parent.parent.name, self.parent.specific_name, self.position)
+
+	def _get_system(self):
+		# Don't inherit the system property from the parent
+		return self._system
 
 	def _get_datatype(self):
 		"""Returns the object representing the parameter's datatype"""

@@ -7,7 +7,9 @@ import re
 import db2makedoc.plugins
 from itertools import groupby
 from db2makedoc.util import *
-from db2makedoc.plugins.db2 import connect, make_datetime, make_bool, make_int
+from db2makedoc.plugins.db2 import (
+	connect, make_datetime, make_bool, make_int, make_str
+)
 from db2makedoc.tuples import (
 	Schema, Datatype, Table, View, Alias, RelationDep, Index, IndexCol,
 	RelationCol, UniqueKey, UniqueKeyCol, ForeignKey, ForeignKeyCol, Check,
@@ -136,7 +138,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			)
 			SELECT
 				RTRIM(S.SCHEMA)          AS NAME,
-				MIN(O.CREATEDBY)         AS OWNER,
+				MIN(RTRIM(O.CREATEDBY))  AS OWNER,
 				CASE
 					WHEN S.SCHEMA LIKE 'SYS%' THEN 'Y'
 					ELSE 'N'
@@ -158,14 +160,14 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				owner,
 				system,
 				created,
-				desc
+				desc,
 			) in self.fetch_some(cursor):
 			yield Schema(
-				name,
-				owner,
+				make_str(name),
+				make_str(owner),
 				make_bool(system),
 				make_datetime(created),
-				desc
+				make_str(desc),
 			)
 
 	def get_datatypes(self):
@@ -198,10 +200,10 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			SELECT DISTINCT
 				CAST('SYSIBM' AS VARCHAR(128))    AS TYPESCHEMA,
 				CASE COLTYPE
-					WHEN 'LONGVAR'  THEN 'LONG VARCHAR'
+					WHEN 'LONGVAR'  THEN 'VARCHAR'
 					WHEN 'CHAR'     THEN 'CHARACTER'
 					WHEN 'VARG'     THEN 'VARGRAPHIC'
-					WHEN 'LONGVARG' THEN 'LONG VARGRAPHIC'
+					WHEN 'LONGVARG' THEN 'VARGRAPHIC'
 					WHEN 'TIMESTMP' THEN 'TIMESTAMP'
 					WHEN 'FLOAT'    THEN
 						CASE LENGTH
@@ -216,7 +218,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				CAST(NULL AS VARCHAR(762))        AS DESCRIPTION,
 				CAST(NULL AS VARCHAR(128))        AS SOURCESCHEMA,
 				CAST(NULL AS VARCHAR(128))        AS SOURCENAME,
-				CAST(CASE COLTYPE
+				NULLIF(CAST(CASE COLTYPE
 					WHEN 'CHAR'     THEN 0
 					WHEN 'VARCHAR'  THEN 0
 					WHEN 'LONGVAR'  THEN 0
@@ -228,8 +230,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 					WHEN 'CLOB'     THEN 0
 					WHEN 'DBCLOB'   THEN 0
 					ELSE LENGTH
-				END AS SMALLINT)                  AS SIZE,
-				CAST(0 AS SMALLINT)               AS SCALE
+				END AS SMALLINT), 0)              AS SIZE,
+				CAST(NULL AS SMALLINT)            AS SCALE
 			FROM
 				SYSIBM.SYSCOLUMNS
 			WHERE
@@ -240,13 +242,13 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			SELECT
 				RTRIM(SCHEMA)       AS TYPESCHEMA,
 				RTRIM(NAME)         AS TYPENAME,
-				OWNER               AS OWNER,
+				RTRIM(OWNER)        AS OWNER,
 				CHAR('N')           AS SYSTEM,
 				CHAR(CREATEDTS)     AS CREATED,
 				REMARKS             AS DESCRIPTION,
 				RTRIM(SOURCESCHEMA) AS SOURCESCHEMA,
 				RTRIM(SOURCETYPE)   AS SOURCENAME,
-				LENGTH              AS SIZE,
+				NULLIF(LENGTH, 0)   AS SIZE,
 				SCALE               AS SCALE
 			FROM
 				SYSIBM.SYSDATATYPES
@@ -266,18 +268,18 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			) in self.fetch_some(cursor):
 			system = make_bool(system)
 			yield Datatype(
-				schema,
-				name,
-				owner,
+				make_str(schema),
+				make_str(name),
+				make_str(owner),
 				system,
 				make_datetime(created),
-				desc,
+				make_str(desc),
 				system and not size and (name not in ('XML', 'REFERENCE')),
 				system and (name == 'DECIMAL'),
-				source_schema,
-				source_name,
-				size or None,
-				scale or None # XXX Not necessarily unknown (0 is a valid scale)
+				make_str(source_schema),
+				make_str(source_name),
+				make_int(size),
+				make_int(scale),
 			)
 
 	def get_tables(self):
@@ -307,11 +309,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			SELECT
 				RTRIM(CREATOR)                     AS TABSCHEMA,
 				RTRIM(NAME)                        AS TABNAME,
-				CREATEDBY                          AS OWNER,
-				CASE
-					WHEN CREATOR LIKE 'SYS%' THEN 'Y'
-					ELSE 'N'
-				END                                AS SYSTEM,
+				RTRIM(CREATEDBY)                   AS OWNER,
+				CHAR('N')                          AS SYSTEM,
 				CHAR(CREATEDTS)                    AS CREATED,
 				REMARKS                            AS DESCRIPTION,
 				RTRIM(TSNAME)                      AS TBSPACE,
@@ -338,16 +337,16 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				size,
 			) in self.fetch_some(cursor):
 			yield Table(
-				schema,
-				name,
-				owner,
+				make_str(schema),
+				make_str(name),
+				make_str(owner),
 				make_bool(system),
 				make_datetime(created),
-				desc,
-				tbspace,
+				make_str(desc),
+				make_str(tbspace),
 				make_datetime(laststats),
 				make_int(cardinality),
-				make_int(size)
+				make_int(size),
 			)
 
 	def get_views(self):
@@ -375,11 +374,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			SELECT
 				RTRIM(V.CREATOR)      AS VIEWSCHEMA,
 				RTRIM(V.NAME)         AS VIEWNAME,
-				T.CREATEDBY           AS OWNER,
-				CASE
-					WHEN V.CREATOR LIKE 'SYS%' THEN 'Y'
-					ELSE 'N'
-				END                   AS SYSTEM,
+				RTRIM(T.CREATEDBY)    AS OWNER,
+				CHAR('N')             AS SYSTEM,
 				CHAR(T.CREATEDTS)     AS CREATED,
 				T.REMARKS             AS DESCRIPTION,
 				CAST(NULL AS CHAR(1)) AS READONLY,
@@ -410,14 +406,14 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			) = v[0]
 			sql = ''.join(i[-1] for i in v)
 			yield View(
-				schema,
-				name,
-				owner,
+				make_str(schema),
+				make_str(name),
+				make_str(owner),
 				make_bool(system),
 				make_datetime(created),
-				desc,
+				make_str(desc),
 				make_bool(readonly),
-				sql
+				make_str(sql),
 			)
 
 	def get_aliases(self):
@@ -446,11 +442,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			SELECT
 				RTRIM(CREATOR)   AS ALIASSCHEMA,
 				RTRIM(NAME)      AS ALIASNAME,
-				CREATEDBY        AS OWNER,
-				CASE
-					WHEN CREATOR LIKE 'SYS%' THEN 'Y'
-					ELSE 'N'
-				END              AS SYSTEM,
+				RTRIM(CREATEDBY) AS OWNER,
+				CHAR('N')        AS SYSTEM,
 				CHAR(CREATEDTS)  AS CREATED,
 				REMARKS          AS DESCRIPTION,
 				RTRIM(TBCREATOR) AS BASESCHEMA,
@@ -465,11 +458,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			SELECT
 				RTRIM(CREATOR)   AS ALIASSCHEMA,
 				RTRIM(NAME)      AS ALIASNAME,
-				CREATEDBY        AS OWNER,
-				CASE
-					WHEN CREATOR LIKE 'SYS%' THEN 'Y'
-					ELSE 'N'
-				END              AS SYSTEM,
+				RTRIM(CREATEDBY) AS OWNER,
+				CHAR('N')        AS SYSTEM,
 				CHAR(CREATEDTS)  AS CREATED,
 				CAST(NULL AS VARCHAR(762)) AS DESCRIPTION,
 				RTRIM(TBCREATOR) AS BASESCHEMA,
@@ -489,14 +479,14 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				base_table,
 			) in self.fetch_some(cursor):
 			yield Alias(
-				schema,
-				name,
-				owner,
+				make_str(schema),
+				make_str(name),
+				make_str(owner),
 				make_bool(system),
 				make_datetime(created),
-				desc,
-				base_schema,
-				base_table
+				make_str(desc),
+				make_str(base_schema),
+				make_str(base_table),
 			)
 
 	def get_view_dependencies(self):
@@ -531,13 +521,13 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				schema,
 				name,
 				depschema,
-				depname
+				depname,
 			) in self.fetch_some(cursor):
 			yield RelationDep(
-				schema,
-				name,
-				depschema,
-				depname
+				make_str(schema),
+				make_str(name),
+				make_str(depschema),
+				make_str(depname),
 			)
 
 	def get_indexes(self):
@@ -570,11 +560,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			SELECT
 				RTRIM(I.CREATOR)                     AS INDSCHEMA,
 				RTRIM(I.NAME)                        AS INDNAME,
-				I.CREATEDBY                          AS OWNER,
-				CASE
-					WHEN I.CREATOR LIKE 'SYS%' THEN 'Y'
-					ELSE 'N'
-				END                                  AS SYSTEM,
+				RTRIM(I.CREATEDBY)                   AS OWNER,
+				CHAR('N')                            AS SYSTEM,
 				CHAR(I.CREATEDTS)                    AS CREATED,
 				I.REMARKS                            AS DESCRIPTION,
 				RTRIM(I.TBCREATOR)                   AS TABSCHEMA,
@@ -612,19 +599,19 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				unique,
 			) in self.fetch_some(cursor):
 			yield Index(
-				schema,
-				name,
-				owner,
+				make_str(schema),
+				make_str(name),
+				make_str(owner),
 				make_bool(system),
 				make_datetime(created),
-				desc,
-				tabschema,
-				tabname,
-				tbspace,
+				make_str(desc),
+				make_str(tabschema),
+				make_str(tabname),
+				make_str(tbspace),
 				make_datetime(laststats),
 				make_int(card),
 				make_int(size),
-				make_bool(unique)
+				make_bool(unique),
 			)
 
 	def get_index_cols(self):
@@ -675,13 +662,13 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				schema,
 				name,
 				colname,
-				colorder
+				colorder,
 			) in self.fetch_some(cursor):
 			yield IndexCol(
-				schema,
-				name,
-				colname,
-				colorder
+				make_str(schema),
+				make_str(name),
+				make_str(colname),
+				make_str(colorder),
 			)
 
 	def get_relation_cols(self):
@@ -735,10 +722,10 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				CASE RTRIM(C.TYPESCHEMA)
 					WHEN 'SYSIBM' THEN
 						CASE C.COLTYPE
-							WHEN 'LONGVAR'  THEN 'LONG VARCHAR'
+							WHEN 'LONGVAR'  THEN 'VARCHAR'
 							WHEN 'CHAR'     THEN 'CHARACTER'
 							WHEN 'VARG'     THEN 'VARGRAPHIC'
-							WHEN 'LONGVARG' THEN 'LONG VARGRAPHIC'
+							WHEN 'LONGVARG' THEN 'VARGRAPHIC'
 							WHEN 'TIMESTMP' THEN 'TIMESTAMP'
 							WHEN 'FLOAT'    THEN
 								CASE C.LENGTH
@@ -749,9 +736,9 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 						END
 					ELSE RTRIM(C.TYPENAME)
 				END                                            AS TYPENAME,
-				C.LENGTH                                       AS SIZE,
-				C.SCALE                                        AS SCALE,
-				C.CCSID                                        AS CODEPAGE,
+				NULLIF(C.LENGTH, 0)                            AS SIZE,
+				SCALE                                          AS SCALE,
+				NULLIF(C.CCSID, 0)                             AS CODEPAGE,
 				CASE C.DEFAULT
 					WHEN 'A' THEN 'Y'
 					WHEN 'D' THEN 'Y'
@@ -767,8 +754,6 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 					WHEN 'D' THEN 'D'
 					WHEN 'I' THEN 'A'
 					WHEN 'J' THEN 'D'
-					WHEN 'S' THEN 'D'
-					WHEN 'U' THEN 'D'
 					ELSE 'N'
 				END                                            AS GENERATED,
 				CASE C.DEFAULT
@@ -859,26 +844,26 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				nullcard,
 				generated,
 				default,
-				desc
+				desc,
 			) in self.fetch_some(cursor):
 			if generated != 'N':
 				default = re.sub(r'^\s*AS\s*', '', str(default))
 			yield RelationCol(
-				schema,
-				name,
-				colname,
-				typeschema,
-				typename,
-				size,
-				scale,
-				codepage or None,
+				make_str(schema),
+				make_str(name),
+				make_str(colname),
+				make_str(typeschema),
+				make_str(typename),
+				make_int(size),
+				make_int(scale),
+				make_int(codepage),
 				make_bool(identity),
 				make_bool(nullable),
 				make_int(cardinality),
 				make_int(nullcard),
-				generated,
-				default,
-				desc
+				make_str(generated),
+				make_str(default),
+				make_str(desc),
 			)
 
 	def get_unique_keys(self):
@@ -907,11 +892,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				RTRIM(C.TBCREATOR)           AS TABSCHEMA,
 				RTRIM(C.TBNAME)              AS TABNAME,
 				RTRIM(C.CONSTNAME)           AS KEYNAME,
-				C.CREATOR                    AS OWNER,
-				CASE
-					WHEN C.TBCREATOR LIKE 'SYS%' THEN 'Y'
-					ELSE 'N'
-				END                          AS SYSTEM,
+				RTRIM(C.CREATOR)             AS OWNER,
+				CHAR('N')                    AS SYSTEM,
 				CHAR(C.CREATEDTS)            AS CREATED,
 				CAST(NULL AS VARCHAR(762))   AS DESCRIPTION,
 				CASE C.TYPE
@@ -933,10 +915,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				RTRIM(I.TBNAME)              AS TABNAME,
 				RTRIM('IX:' || I.NAME)       AS KEYNAME,
 				I.CREATEDBY                  AS OWNER,
-				CASE
-					WHEN I.TBCREATOR LIKE 'SYS%' THEN 'Y'
-					ELSE 'N'
-				END                          AS SYSTEM,
+				CHAR('N')                    AS SYSTEM,
 				CHAR(I.CREATEDTS)            AS CREATED,
 				I.REMARKS                    AS DESCRIPTION,
 				CHAR('Y')                    AS PRIMARY
@@ -962,14 +941,14 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				primary,
 			) in self.fetch_some(cursor):
 			yield UniqueKey(
-				schema,
-				name,
-				keyname,
-				owner,
+				make_str(schema),
+				make_str(name),
+				make_str(keyname),
+				make_str(owner),
 				make_bool(system),
 				make_datetime(created),
-				desc,
-				make_bool(primary)
+				make_str(desc),
+				make_bool(primary),
 			)
 
 	def get_unique_key_cols(self):
@@ -1032,13 +1011,13 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				schema,
 				name,
 				keyname,
-				colname
+				colname,
 			) in self.fetch_some(cursor):
 			yield UniqueKeyCol(
-				schema,
-				name,
-				keyname,
-				colname
+				make_str(schema),
+				make_str(name),
+				make_str(keyname),
+				make_str(colname),
 			)
 
 	def get_foreign_keys(self):
@@ -1079,11 +1058,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				RTRIM(R.CREATOR)           AS TABSCHEMA,
 				RTRIM(R.TBNAME)            AS TABNAME,
 				RTRIM(R.RELNAME)           AS KEYNAME,
-				T.CREATEDBY                AS OWNER,
-				CASE
-					WHEN R.CREATOR LIKE 'SYS%' THEN 'Y'
-					ELSE 'N'
-				END                        AS SYSTEM,
+				RTRIM(T.CREATEDBY)         AS OWNER,
+				CHAR('N')                  AS SYSTEM,
 				CHAR(R.TIMESTAMP)          AS CREATED,
 				CAST(NULL AS VARCHAR(762)) AS DESCRIPTION,
 				RTRIM(R.REFTBCREATOR)      AS REFTABSCHEMA,
@@ -1111,11 +1087,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				RTRIM(R.CREATOR)           AS TABSCHEMA,
 				RTRIM(R.TBNAME)            AS TABNAME,
 				RTRIM(R.RELNAME)           AS KEYNAME,
-				T.CREATEDBY                AS OWNER,
-				CASE
-					WHEN R.CREATOR LIKE 'SYS%' THEN 'Y'
-					ELSE 'N'
-				END                        AS SYSTEM,
+				RTRIM(T.CREATEDBY)         AS OWNER,
+				CHAR('N')                  AS SYSTEM,
 				CHAR(R.TIMESTAMP)          AS CREATED,
 				CAST(NULL AS VARCHAR(762)) AS DESCRIPTION,
 				RTRIM(R.REFTBCREATOR)      AS REFTABSCHEMA,
@@ -1157,18 +1130,18 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				updaterule,
 			) in self.fetch_some(cursor):
 			yield ForeignKey(
-				schema,
-				name,
-				keyname,
-				owner,
+				make_str(schema),
+				make_str(name),
+				make_str(keyname),
+				make_str(owner),
 				make_bool(system),
 				make_datetime(created),
-				desc,
-				refschema,
-				refname,
-				refkeyname,
-				deleterule,
-				updaterule
+				make_str(desc),
+				make_str(refschema),
+				make_str(refname),
+				make_str(refkeyname),
+				make_str(deleterule),
+				make_str(updaterule),
 			)
 
 	def get_foreign_key_cols(self):
@@ -1271,14 +1244,14 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				name,
 				keyname,
 				colname,
-				refcolname
+				refcolname,
 			) in self.fetch_some(cursor):
 			yield ForeignKeyCol(
-				schema,
-				name,
-				keyname,
-				colname,
-				refcolname
+				make_str(schema),
+				make_str(name),
+				make_str(keyname),
+				make_str(colname),
+				make_str(refcolname),
 			)
 
 	def get_checks(self):
@@ -1307,11 +1280,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				RTRIM(C.TBOWNER)           AS TABSCHEMA,
 				RTRIM(C.TBNAME)            AS TABNAME,
 				RTRIM(C.CHECKNAME)         AS CHECKNAME,
-				C.CREATOR                  AS OWNER,
-				CASE
-					WHEN C.TBOWNER LIKE 'SYS%' THEN 'Y'
-					ELSE 'N'
-				END                        AS SYSTEM,
+				RTRIM(C.CREATOR)           AS OWNER,
+				CHAR('N')                  AS SYSTEM,
 				CHAR(C.TIMESTAMP)          AS CREATED,
 				CAST(NULL AS VARCHAR(762)) AS DESCRIPTION,
 				C.CHECKCONDITION           AS SQL
@@ -1335,14 +1305,14 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				sql,
 			) in self.fetch_some(cursor):
 			yield Check(
-				schema,
-				name,
-				checkname,
-				owner,
+				make_str(schema),
+				make_str(name),
+				make_str(checkname),
+				make_str(owner),
 				make_bool(system),
 				make_datetime(created),
-				desc,
-				sql
+				make_str(desc),
+				make_str(sql),
 			)
 
 	def get_check_cols(self):
@@ -1399,9 +1369,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				RTRIM(SCHEMA)                AS FUNCSCHEMA,
 				RTRIM(SPECIFICNAME)          AS FUNCSPECNAME,
 				RTRIM(NAME)                  AS FUNCNAME,
-				OWNER                        AS OWNER,
+				RTRIM(OWNER)                 AS OWNER,
 				CASE
-					WHEN SCHEMA LIKE 'SYS%' THEN 'Y'
 					WHEN ORIGIN = 'S' THEN 'Y'
 					ELSE 'N'
 				END                          AS SYSTEM,
@@ -1438,19 +1407,19 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				functype,
 			) in self.fetch_some(cursor):
 			yield Function(
-				schema,
-				specname,
-				name,
-				owner,
+				make_str(schema),
+				make_str(specname),
+				make_str(name),
+				make_str(owner),
 				make_bool(system),
 				make_datetime(created),
-				desc,
+				make_str(desc),
 				make_bool(deterministic),
 				make_bool(extaction, true_value='E'),
 				make_bool(nullcall),
-				access,
-				sql,
-				functype
+				make_str(access),
+				make_str(sql),
+				make_str(functype),
 			)
 
 	def get_procedures(self):
@@ -1487,9 +1456,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				RTRIM(SCHEMA)                AS PROCSCHEMA,
 				RTRIM(SPECIFICNAME)          AS PROCSPECNAME,
 				RTRIM(NAME)                  AS PROCNAME,
-				OWNER                        AS OWNER,
+				RTRIM(OWNER)                 AS OWNER,
 				CASE
-					WHEN SCHEMA LIKE 'SYS%' THEN 'Y'
 					WHEN ORIGIN = 'S' THEN 'Y'
 					ELSE 'N'
 				END                          AS SYSTEM,
@@ -1524,18 +1492,18 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				sql,
 			) in self.fetch_some(cursor):
 			yield Procedure(
-				schema,
-				specname,
-				name,
-				owner,
+				make_str(schema),
+				make_str(specname),
+				make_str(name),
+				make_str(owner),
 				make_bool(system),
 				make_datetime(created),
-				desc,
+				make_str(desc),
 				make_bool(deterministic),
 				make_bool(extaction, true_value='E'),
 				make_bool(nullcall),
-				access,
-				sql
+				make_str(access),
+				make_str(sql),
 			)
 
 	def get_routine_params(self):
@@ -1587,10 +1555,10 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				CASE RTRIM(TYPESCHEMA)
 					WHEN 'SYSIBM' THEN
 						CASE TYPENAME
-							WHEN 'LONGVAR'  THEN 'LONG VARCHAR'
+							WHEN 'LONGVAR'  THEN 'VARCHAR'
 							WHEN 'CHAR'     THEN 'CHARACTER'
 							WHEN 'VARG'     THEN 'VARGRAPHIC'
-							WHEN 'LONGVARG' THEN 'LONG VARGRAPHIC'
+							WHEN 'LONGVARG' THEN 'VARGRAPHIC'
 							WHEN 'TIMESTMP' THEN 'TIMESTAMP'
 							WHEN 'FLOAT'    THEN
 								CASE LENGTH
@@ -1601,9 +1569,9 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 						END
 					ELSE RTRIM(TYPENAME)
 				END                             AS TYPENAME,
-				LENGTH                          AS SIZE,
+				NULLIF(LENGTH, 0)               AS SIZE,
 				SCALE                           AS SCALE,
-				CCSID                           AS CODEPAGE,
+				NULLIF(CCSID, 0)                AS CODEPAGE,
 				CASE ROWTYPE
 					WHEN 'S' THEN 'I'
 					WHEN 'P' THEN 'I'
@@ -1635,16 +1603,16 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				desc
 			) in self.fetch_some(cursor):
 			yield RoutineParam(
-				schema,
-				specname,
-				parmname,
-				typeschema,
-				typename,
-				size or None,
-				scale or None, # XXX Not necessarily unknown (0 is a valid scale)
-				codepage or None,
-				direction,
-				desc
+				make_str(schema),
+				make_str(specname),
+				make_str(parmname),
+				make_str(typeschema),
+				make_str(typename),
+				make_int(size),
+				make_int(scale),
+				make_int(codepage),
+				make_str(direction),
+				make_str(desc),
 			)
 
 	def get_triggers(self):
@@ -1684,11 +1652,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			SELECT
 				RTRIM(SCHEMA)      AS TRIGSCHEMA,
 				RTRIM(NAME)        AS TRIGNAME,
-				OWNER              AS OWNER,
-				CASE
-					WHEN SCHEMA LIKE 'SYS%%' THEN 'Y'
-					ELSE 'N'
-				END                AS SYSTEM,
+				RTRIM(OWNER)       AS OWNER,
+				CHAR('N')          AS SYSTEM,
 				CHAR(CREATEDTS)    AS CREATED,
 				REMARKS            AS DESCRIPTION,
 				RTRIM(TBOWNER)     AS TABSCHEMA,
@@ -1723,18 +1688,18 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			) = v[0]
 			sql = ''.join(i[-1] for i in v)
 			yield Trigger(
-				schema,
-				name,
-				owner,
+				make_str(schema),
+				make_str(name),
+				make_str(owner),
 				make_bool(system),
 				make_datetime(created),
-				desc,
-				tabschema,
-				tabname,
-				trigtime,
-				trigevent,
-				granularity,
-				sql
+				make_str(desc),
+				make_str(tabschema),
+				make_str(tabname),
+				make_str(trigtime),
+				make_str(trigevent),
+				make_str(granularity),
+				make_str(sql),
 			)
 
 	def get_trigger_dependencies(self):
@@ -1775,13 +1740,13 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				schema,
 				name,
 				depschema,
-				depname
+				depname,
 			) in self.fetch_some(cursor):
 			yield TriggerDep(
-				schema,
-				name,
-				depschema,
-				depname
+				make_str(schema),
+				make_str(name),
+				make_str(depschema),
+				make_str(depname),
 			)
 
 	def get_tablespaces(self):
@@ -1806,7 +1771,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor.execute("""
 			SELECT
 				RTRIM(NAME)                AS TBSPACE,
-				CREATOR                    AS OWNER,
+				RTRIM(CREATOR)             AS OWNER,
 				CASE
 					WHEN NAME LIKE 'SYS%' THEN 'Y'
 					ELSE 'N'
@@ -1857,11 +1822,11 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				tstype,
 			) in self.fetch_some(cursor):
 			yield Tablespace(
-				tbspace,
-				owner,
+				make_str(tbspace),
+				make_str(owner),
 				make_bool(system),
 				make_datetime(created),
-				desc,
-				tstype
+				make_str(desc),
+				make_str(tstype),
 			)
 

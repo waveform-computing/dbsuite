@@ -755,6 +755,7 @@ class DB2ZOSTokenizer(SQLTokenizerBase):
 		self._jump['g'] = self._handle_unistring
 		self._jump['G'] = self._handle_unistring
 		# XXX What about the hook character here ... how to encode?
+		self._jump[u'\xac'] = self._handle_not
 
 
 class DB2LUWTokenizer(DB2ZOSTokenizer):
@@ -846,5 +847,4 @@ class DB2LUWTokenizer(DB2ZOSTokenizer):
 		self._jump['}'] = self._handle_close_brace
 		self._jump['u'] = self._handle_utf8string
 		self._jump['U'] = self._handle_utf8string
-		# XXX What about the hook character here ... how to encode?
 

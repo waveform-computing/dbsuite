@@ -458,6 +458,7 @@ class WebSite(object):
 		self.scripts = []
 		self.object_docs = {}
 		self.object_graphs = {}
+		self.tbspace_list = options['tbspace_list']
 		# If indexes are requested, build the sorted object lists now (and set
 		# up the first level of the index_docs mapping)
 		self.first_index = None
@@ -792,11 +793,29 @@ class WebSite(object):
 				db.cancel_transaction()
 				raise
 
+	def reset_progress(self, total):
+		self.start_progress = datetime.datetime.now()
+		self.total_remaining = total
+		self.last_progress = self.start_progress
+		logging.info('%d documents remaining' % total)
+
+	def write_progress(self, remaining):
+		interval = 60
+		if (datetime.datetime.now() - self.last_progress).seconds >= interval:
+			elapsed = (datetime.datetime.now() - self.start_progress).seconds
+			rate = (self.total_remaining - remaining) / float(elapsed)
+			eta = datetime.timedelta(seconds=int(remaining / rate))
+			logging.info('%d documents remaining, ETA %s @ %.2f docs/sec' % (remaining, eta, rate))
+			self.last_progress = datetime.datetime.now()
+
 	def write_single(self, docs):
 		"""Single-threaded document writer method."""
-		logging.debug("Single-threaded writer")
-		for doc in set(docs):
-			doc.write()
+		logging.debug('Single-threaded writer')
+		docs = set(docs)
+		self.reset_progress(len(docs))
+		while docs:
+			self.write_progress(len(docs))
+			docs.pop().write()
 
 	def write_multi(self, docs):
 		"""Multi-threaded document writer method.
@@ -808,21 +827,24 @@ class WebSite(object):
 		written. The number of parallel threads is controlled by the "threads"
 		configuration value.
 		"""
-		logging.debug("Multi-threaded writer with %d threads" % self.threads)
+		logging.debug('Multi-threaded writer with %d threads' % self.threads)
 		self._documents_set = set(docs)
+		self.reset_progress(len(self._documents_set))
 		# Create and start all the writing threads
 		threads = [
 			(i, threading.Thread(target=self.__thread_write, args=()))
 			for i in range(self.threads)
 		]
 		for (i, thread) in threads:
-			logging.debug("Starting writer thread #%d" % i)
+			logging.debug('Starting writer thread #%d' % i)
 			thread.start()
 		# Join (wait on termination of) all writing threads
 		while threads:
 			(i, thread) = threads.pop()
-			thread.join()
-			logging.debug("Writer thread #%d finished" % i)
+			while thread.is_alive():
+				self.write_progress(len(self._documents_set))
+				thread.join(10.0)
+			logging.debug('Writer thread #%d finished' % i)
 
 	def __thread_write(self):
 		"""Sub-routine for writing documents.

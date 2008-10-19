@@ -18,7 +18,6 @@ class W3ProcedureDocument(W3ObjectDocument):
 	
 	def generate_sections(self):
 		result = super(W3ProcedureDocument, self).generate_sections()
-		overloads = self.dbobject.schema.procedures[self.dbobject.name]
 		result.append((
 			'description', 'Description', [
 				tag.p(self.format_prototype(self.dbobject.prototype)),
@@ -67,7 +66,7 @@ class W3ProcedureDocument(W3ObjectDocument):
 				)
 			)
 		))
-		if len(overloads) > 1:
+		if len(self.dbobject.schema.procedures[self.dbobject.name]) > 1:
 			result.append((
 				'overloads', 'Overloaded Versions',
 				tag.table(
@@ -81,7 +80,9 @@ class W3ProcedureDocument(W3ObjectDocument):
 						tag.tr(
 							tag.td(self.format_prototype(overload.prototype)),
 							tag.td(tag.a(overload.specific_name, href=self.site.object_document(overload).url))
-						) for overload in overloads if overload != self.dbobject
+						)
+						for overload in self.dbobject.schema.procedures[self.dbobject.name]
+						if overload != self.dbobject
 					))
 				)
 			))

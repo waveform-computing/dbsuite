@@ -10,8 +10,6 @@ class W3IndexDocument(W3ObjectDocument):
 
 	def generate_sections(self):
 		result = super(W3IndexDocument, self).generate_sections()
-		fields = [(field, ordering, position) for (position, (field, ordering)) in enumerate(self.dbobject.field_list)]
-		fields = sorted(fields, key=lambda (field, ordering, position): field.name)
 		result.append((
 			'description', 'Description',
 			tag.p(self.format_comment(self.dbobject.description))
@@ -44,7 +42,7 @@ class W3IndexDocument(W3ObjectDocument):
 						tag.td(self.site.url_document('createdby.html').link()),
 						tag.td(self.dbobject.owner),
 						tag.td(self.site.url_document('colcount.html').link()),
-						tag.td(len(fields))
+						tag.td(len(self.dbobject.field_list))
 					),
 					tag.tr(
 						tag.td(self.site.url_document('unique.html').link()),
@@ -57,7 +55,7 @@ class W3IndexDocument(W3ObjectDocument):
 				)
 			)
 		))
-		if len(fields) > 0:
+		if len(self.dbobject.field_list) > 0:
 			result.append((
 				'fields', 'Fields',
 				tag.table(
@@ -75,7 +73,7 @@ class W3IndexDocument(W3ObjectDocument):
 							tag.td(field.name),
 							tag.td(ordering),
 							tag.td(self.format_comment(field.description, summary=True))
-						) for (field, ordering, position) in fields
+						) for (position, (field, ordering)) in enumerate(self.dbobject.field_list)
 					))
 				)
 			))

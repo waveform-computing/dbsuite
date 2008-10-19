@@ -16,7 +16,6 @@ from db2makedoc.tuples import (
 )
 
 
-
 _timestamp_re = re.compile(r'^(\d{4})-(\d{2})-(\d{2})([T -](\d{2})[:.](\d{2})[:.](\d{2})(\.(\d+))?)?$')
 def timestamp(value):
 	"""Utility routine for converting a value into a datetime object.
@@ -162,7 +161,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				schema.attrib.get('owner'),
 				bool(schema.attrib.get('system')),
 				timestamp(schema.attrib.get('created')),
-				text(schema.find('description'))
+				text(schema.find('description')),
 			)
 
 	def get_datatypes(self):
@@ -206,7 +205,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 					usertype and self.parents[source].attrib['name'],
 					usertype and source.attrib['name'],
 					usertype and datatype.attrib.get('size'),
-					usertype and datatype.attrib.get('scale')
+					usertype and datatype.attrib.get('scale'),
 				)
 
 	def get_tables(self):
@@ -244,7 +243,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 					tbspace.attrib['name'],
 					timestamp(table.attrib.get('laststats')),
 					integer(table.attrib.get('cardinality')),
-					integer(table.attrib.get('size'))
+					integer(table.attrib.get('size')),
 				)
 
 	def get_views(self):
@@ -269,7 +268,6 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			yield row
 		for schema in self.doc.findall('schema'):
 			for view in schema.findall('view'):
-				sql = view.find('sql')
 				yield View(
 					schema.attrib['name'],
 					view.attrib['name'],
@@ -278,7 +276,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 					timestamp(view.attrib.get('created')),
 					text(view.find('description')),
 					bool(view.attrib.get('readonly')),
-					sql and sql.text,
+					text(view.find('sql')),
 				)
 
 	def get_aliases(self):
@@ -313,7 +311,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 					timestamp(alias.attrib.get('created')),
 					text(alias.find('description')),
 					self.parents[base].attrib['name'],
-					base.attrib['name']
+					base.attrib['name'],
 				)
 
 	def get_view_dependencies(self):
@@ -384,7 +382,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 					timestamp(index.attrib.get('laststats')),
 					integer(index.attrib.get('cardinality')),
 					integer(index.attrib.get('size')),
-					bool(index.attrib.get('unique'))
+					bool(index.attrib.get('unique')),
 				)
 
 	def get_index_cols(self):
@@ -515,7 +513,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 						bool(key.attrib.get('system')),
 						timestamp(key.attrib.get('created')),
 						text(key.find('description')),
-						key.tag == 'primarykey'
+						key.tag == 'primarykey',
 					)
 
 	def get_unique_key_cols(self):
@@ -593,7 +591,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 						self.parents[ref].attrib['name'],
 						ref.attrib['name'],
 						lookup[key.attrib['ondelete']],
-						lookup[key.attrib['onupdate']]
+						lookup[key.attrib['onupdate']],
 					)
 
 	def get_foreign_key_cols(self):
@@ -657,7 +655,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 						bool(check.attrib.get('system')),
 						timestamp(check.attrib.get('created')),
 						text(check.find('description')),
-						text(check.find('expression'))
+						text(check.find('expression')),
 					)
 
 	def get_check_cols(self):
@@ -736,7 +734,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 					bool(function.attrib.get('nullcall')), # XXX Optional
 					lookup_access.get(function.attrib['access']),
 					text(function.find('sql')),
-					lookup_type[function.attrib['type']]
+					lookup_type[function.attrib['type']],
 				)
 
 	def get_procedures(self):
@@ -782,7 +780,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 					bool(procedure.attrib.get('externalaction')), # XXX Optional
 					bool(procedure.attrib.get('nullcall')), # XXX Optional
 					lookup_access.get(procedure.attrib['access']),
-					text(procedure.find('sql'))
+					text(procedure.find('sql')),
 				)
 	
 	def get_routine_params(self):
@@ -839,7 +837,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 						integer(param.attrib.get('scale')),
 						param.attrib.get('codepage'),
 						lookup[param.attrib['type']],
-						text(param.find('description'))
+						text(param.find('description')),
 					)
 	
 	def get_triggers(self):
@@ -892,7 +890,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 					lookup_time[trigger.attrib['time']],
 					lookup_event[trigger.attrib['event']],
 					lookup_granularity[trigger.attrib['granularity']],
-					text(trigger.find('sql'))
+					text(trigger.find('sql')),
 				)
 
 	def get_trigger_dependencies(self):
@@ -918,7 +916,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 						schema.attrib['name'],
 						trigger.attrib['name'],
 						self.parents[ref].attrib['name'],
-						ref.attrib['name']
+						ref.attrib['name'],
 					)
 
 	def get_tablespaces(self):
@@ -946,6 +944,6 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				bool(tbspace.attrib.get('system')),
 				timestamp(tbspace.attrib.get('created')),
 				text(tbspace.find('description')),
-				tbspace.attrib.get('type')
+				tbspace.attrib.get('type'),
 			)
 

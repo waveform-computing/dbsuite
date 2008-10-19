@@ -17,8 +17,6 @@ class W3ForeignKeyDocument(W3ObjectDocument):
 	
 	def generate_sections(self):
 		result = super(W3ForeignKeyDocument, self).generate_sections()
-		fields = [(field1, field2, index) for (index, (field1, field2)) in enumerate(self.dbobject.fields)]
-		fields = sorted(fields, key=lambda(field1, field2, position): field1.name)
 		result.append((
 			'description', 'Description',
 			tag.p(self.format_comment(self.dbobject.description))
@@ -56,7 +54,7 @@ class W3ForeignKeyDocument(W3ObjectDocument):
 				)
 			)
 		))
-		if len(fields) > 0:
+		if len(self.dbobject.fields) > 0:
 			result.append((
 				'fields', 'Fields',
 				tag.table(
@@ -74,7 +72,7 @@ class W3ForeignKeyDocument(W3ObjectDocument):
 							tag.td(field1.name),
 							tag.td(field2.name),
 							tag.td(self.format_comment(field1.description, summary=True))
-						) for (field1, field2, index) in fields
+						) for (index, (field1, field2)) in enumerate(self.dbobject.fields)
 					))
 				)
 			))

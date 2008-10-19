@@ -24,22 +24,38 @@ class W3FunctionDocument(W3ObjectDocument):
 	
 	def generate_sections(self):
 		result = super(W3FunctionDocument, self).generate_sections()
-		overloads = self.dbobject.schema.functions[self.dbobject.name]
-		params = list(self.dbobject.param_list) # Take a copy of the parameter list
-		if self.dbobject.type in ['R', 'T']:
-			# Extend the list with return parameters if the function is a ROW
-			# or TABLE function (and hence, returns multiple named params)
-			params.extend(self.dbobject.return_list)
 		result.append((
 			'description', 'Description', [
 				tag.p(self.format_prototype(self.dbobject.prototype)),
 				tag.p(self.format_comment(self.dbobject.description)),
 				tag.dl((
 					(tag.dt(param.name), tag.dd(self.format_comment(param.description)))
-					for param in params
+					for param in self.dbobject.param_list
 				))
 			]
 		))
+		if self.dbobject.type in ('R', 'T'):
+			result.append((
+				'returns', 'Returns',
+				tag.table(
+					tag.thead(
+						tag.tr(
+							tag.th('#'),
+							tag.th('Name'),
+							tag.th('Type'),
+							tag.th('Description')
+						)
+					),
+					tag.tbody(
+						tag.tr(
+							tag.td(param.position + 1),
+							tag.td(param.name, class_='nowrap'),
+							tag.td(param.datatype_str, class_='nowrap'),
+							tag.td(param.description)
+						) for param in self.dbobject.return_list
+					)
+				)
+			))
 		result.append((
 			'attributes', 'Attributes',
 			tag.table(
@@ -79,7 +95,7 @@ class W3FunctionDocument(W3ObjectDocument):
 				)
 			)
 		))
-		if len(overloads) > 1:
+		if len(self.dbobject.schema.functions[self.dbobject.name]) > 1:
 			result.append((
 				'overloads', 'Overloaded Versions',
 				tag.table(
@@ -93,7 +109,9 @@ class W3FunctionDocument(W3ObjectDocument):
 						tag.tr(
 							tag.td(self.format_prototype(overload.prototype)),
 							tag.td(tag.a(overload.specific_name, href=self.site.object_document(overload).url))
-						) for overload in overloads if overload != self.dbobject
+						)
+						for overload in self.dbobject.schema.functions[self.dbobject.name]
+						if overload != self.dbobject
 					))
 				)
 			))

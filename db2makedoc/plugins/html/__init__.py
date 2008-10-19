@@ -77,6 +77,10 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 			Documentation" where dbname is the name of the database for which
 			documentation is being generated. Accepts $-prefixed substitutions
 			(see path)""")
+		self.add_option('tbspace_list', default='true', convert=self.convert_bool,
+			doc="""If True, include a list of all tablespaces in the top level
+			document. For some database architectures (e.g. DB2 for z/OS) this
+			list tends to be inordinately long and relatively useless""")
 		self.add_option('search', default='false', convert=self.convert_bool,
 			doc="""If True, a full-text-search database will be generated and
 			a small PHP script will be included with the output for searching

@@ -10,7 +10,6 @@ class W3CheckDocument(W3ObjectDocument):
 
 	def generate_sections(self):
 		result = super(W3CheckDocument, self).generate_sections()
-		fields = sorted(list(self.dbobject.fields), key=lambda field: field.name)
 		result.append((
 			'description', 'Description',
 			tag.p(self.format_comment(self.dbobject.description))
@@ -36,7 +35,7 @@ class W3CheckDocument(W3ObjectDocument):
 				)
 			)
 		))
-		if len(fields) > 0:
+		if len(self.dbobject.fields) > 0:
 			result.append((
 				'fields', 'Fields',
 				tag.table(
@@ -50,7 +49,7 @@ class W3CheckDocument(W3ObjectDocument):
 						tag.tr(
 							tag.td(field.name),
 							tag.td(self.format_comment(field.description, summary=True))
-						) for field in fields
+						) for field in self.dbobject.fields
 					))
 				)
 			))

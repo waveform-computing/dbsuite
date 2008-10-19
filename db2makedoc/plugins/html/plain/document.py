@@ -512,8 +512,8 @@ class PlainGraphDocument(GraphObjectDocument):
 				except IOError, e:
 					logging.warning('Failed to open image "%s" for resizing: %s' % (self.filename, e))
 					if os.path.exists(self.filename):
-						logging.warning('Removing potentially corrupt image file "%s"' % self.filename)
 						newname = '%s.broken' % self.filename
+						logging.warning('Removing potentially corrupt image file "%s" to "%s"' % (self.filename, newname))
 						if os.path.exists(newname):
 							os.unlink(newname)
 						os.rename(self.filename, newname)

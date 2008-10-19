@@ -21,10 +21,6 @@ class W3ViewDocument(W3ObjectDocument):
 	
 	def generate_sections(self):
 		result = super(W3ViewDocument, self).generate_sections()
-		fields = [obj for (name, obj) in sorted(self.dbobject.fields.items(), key=lambda (name, obj): name)]
-		triggers = [obj for (name, obj) in sorted(self.dbobject.triggers.items(), key=lambda (name, obj): name)]
-		dependencies = [obj for (name, obj) in sorted(self.dbobject.dependencies.items(), key=lambda (name, obj): name)]
-		dependents = [obj for (name, obj) in sorted(self.dbobject.dependents.items(), key=lambda (name, obj): name)]
 		result.append((
 			'description', 'Description',
 			tag.p(self.format_comment(self.dbobject.description))
@@ -49,7 +45,7 @@ class W3ViewDocument(W3ObjectDocument):
 					),
 					tag.tr(
 						tag.td(self.site.url_document('colcount.html').link()),
-						tag.td(len(fields)),
+						tag.td(len(self.dbobject.field_list)),
 						tag.td(self.site.url_document('readonly.html').link()),
 						tag.td(self.dbobject.read_only)
 					),
@@ -63,7 +59,7 @@ class W3ViewDocument(W3ObjectDocument):
 				)
 			)
 		))
-		if len(fields) > 0:
+		if len(self.dbobject.field_list) > 0:
 			result.append((
 				'fields', 'Fields',
 				tag.table(
@@ -83,11 +79,11 @@ class W3ViewDocument(W3ObjectDocument):
 							tag.td(field.datatype_str, class_='nowrap'),
 							tag.td(field.nullable),
 							tag.td(self.format_comment(field.description, summary=True))
-						) for field in fields
+						) for field in self.dbobject.field_list
 					))
 				)
 			))
-		if len(triggers) > 0:
+		if len(self.dbobject.trigger_list) > 0:
 			result.append((
 				'triggers', 'Triggers',
 				tag.table(
@@ -105,11 +101,11 @@ class W3ViewDocument(W3ObjectDocument):
 							tag.td(times[trigger.trigger_time]),
 							tag.td(events[trigger.trigger_event]),
 							tag.td(self.format_comment(trigger.description, summary=True))
-						) for trigger in triggers
+						) for trigger in self.dbobject.trigger_list
 					))
 				)
 			))
-		if len(dependents) > 0:
+		if len(self.dbobject.dependent_list) > 0:
 			result.append((
 				'dependents', 'Dependent Relations',
 				tag.table(
@@ -125,11 +121,11 @@ class W3ViewDocument(W3ObjectDocument):
 							tag.td(self.site.link_to(dep)),
 							tag.td(self.site.type_names[dep.__class__]),
 							tag.td(self.format_comment(dep.description, summary=True))
-						) for dep in dependents
+						) for dep in self.dbobject.dependent_list
 					))
 				)
 			))
-		if len(dependencies) > 0:
+		if len(self.dbobject.dependency_list) > 0:
 			result.append((
 				'dependencies', 'Dependencies',
 				tag.table(
@@ -145,7 +141,7 @@ class W3ViewDocument(W3ObjectDocument):
 							tag.td(self.site.link_to(dep)),
 							tag.td(self.site.type_names[dep.__class__]),
 							tag.td(self.format_comment(dep.description, summary=True))
-						) for dep in dependencies
+						) for dep in self.dbobject.dependency_list
 					))
 				)
 			))

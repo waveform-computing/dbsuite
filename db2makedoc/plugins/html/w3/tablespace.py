@@ -10,8 +10,6 @@ class W3TablespaceDocument(W3ObjectDocument):
 
 	def generate_sections(self):
 		result = super(W3TablespaceDocument, self).generate_sections()
-		tables = [obj for (name, obj) in sorted(self.dbobject.tables.items(), key=lambda (name, obj): name)]
-		indexes = [obj for (name, obj) in sorted(self.dbobject.indexes.items(), key=lambda (name, obj): name)]
 		result.append((
 			'description', 'Description',
 			tag.p(self.format_comment(self.dbobject.description))
@@ -32,13 +30,13 @@ class W3TablespaceDocument(W3ObjectDocument):
 						tag.td(self.site.url_document('created.html').link()),
 						tag.td(self.dbobject.created),
 						tag.td(self.site.url_document('tables.html').link()),
-						tag.td(len(tables))
+						tag.td(len(self.dbobject.table_list))
 					),
 					tag.tr(
 						tag.td(self.site.url_document('createdby.html').link()),
 						tag.td(self.dbobject.owner),
 						tag.td(self.site.url_document('indexes.html').link()),
-						tag.td(len(indexes))
+						tag.td(len(self.dbobject.index_list))
 					),
 					tag.tr(
 						tag.td(self.site.url_document('tbspacetype.html').link()),
@@ -47,7 +45,7 @@ class W3TablespaceDocument(W3ObjectDocument):
 				)
 			)
 		))
-		if len(tables) > 0:
+		if len(self.dbobject.table_list) > 0:
 			result.append((
 				'tables', 'Tables',
 				tag.table(
@@ -61,11 +59,11 @@ class W3TablespaceDocument(W3ObjectDocument):
 						tag.tr(
 							tag.td(self.site.link_to(table)),
 							tag.td(self.format_comment(table.description, summary=True))
-						) for table in tables
+						) for table in self.dbobject.table_list
 					))
 				)
 			))
-		if len(indexes) > 0:
+		if len(self.dbobject.index_list) > 0:
 			result.append((
 				'indexes', 'Indexes',
 				tag.table(
@@ -81,7 +79,7 @@ class W3TablespaceDocument(W3ObjectDocument):
 							tag.td(self.site.link_to(index)),
 							tag.td(self.site.link_to(index.table)),
 							tag.td(self.format_comment(index.description, summary=True))
-						) for index in indexes
+						) for index in self.dbobject.index_list
 					))
 				)
 			))

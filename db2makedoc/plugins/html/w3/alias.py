@@ -16,8 +16,6 @@ class W3AliasDocument(W3ObjectDocument):
 
 	def generate_sections(self):
 		result = super(W3AliasDocument, self).generate_sections()
-		fields = [obj for (name, obj) in sorted(self.dbobject.fields.iteritems(), key=lambda (name, obj): name)]
-		dependents = [obj for (name, obj) in sorted(self.dbobject.dependents.iteritems(), key=lambda (name, obj): name)]
 		result.append((
 			'description', 'Description',
 			tag.p(self.format_comment(self.dbobject.description))
@@ -47,7 +45,7 @@ class W3AliasDocument(W3ObjectDocument):
 				)
 			)
 		))
-		if len(fields) > 0:
+		if len(self.dbobject.field_list) > 0:
 			result.append((
 				'fields', 'Fields',
 				tag.table(
@@ -71,11 +69,11 @@ class W3AliasDocument(W3ObjectDocument):
 							tag.td(_inc_index(field.key_index)), # XXX For Py2.5: field.key_index + 1 if field.key_index is not None else None,
 							tag.td(field.cardinality),
 							tag.td(self.format_comment(field.description, summary=True))
-						) for field in fields
+						) for field in self.dbobject.field_list
 					))
 				)
 			))
-		if len(dependents) > 0:
+		if len(self.dbobject.dependent_list) > 0:
 			result.append((
 				'dependents', 'Dependent Relations',
 				tag.table(
@@ -91,7 +89,7 @@ class W3AliasDocument(W3ObjectDocument):
 							tag.td(self.site.link_to(dep)),
 							tag.td(self.site.type_names[dep.__class__]),
 							tag.td(self.format_comment(dep.description, summary=True))
-						) for dep in dependents
+						) for dep in self.dbobject.dependent_list
 					))
 				)
 			))

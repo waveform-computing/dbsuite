@@ -1,5 +1,6 @@
 # vim: set noet sw=4 ts=4:
 
+from itertools import chain
 from db2makedoc.db import Alias, Table, View, ForeignKey, PrimaryKey, UniqueKey, Check
 from db2makedoc.plugins.html.w3.document import W3ObjectDocument, W3GraphDocument, tag
 
@@ -32,27 +33,15 @@ class W3TableDocument(W3ObjectDocument):
 
 	def generate_sections(self):
 		result = super(W3TableDocument, self).generate_sections()
-		fields = [obj for (name, obj) in sorted(self.dbobject.fields.items(), key=lambda (name, obj): name)]
-		indexes = [obj for (name, obj) in sorted(self.dbobject.indexes.items(), key=lambda (name, obj): name)]
-		constraints = [obj for (name, obj) in sorted(self.dbobject.constraints.items(), key=lambda (name, obj): name)]
-		triggers = [obj for (name, obj) in sorted(self.dbobject.triggers.items(), key=lambda (name, obj): name)]
-		dependents = [obj for (name, obj) in sorted(self.dbobject.dependents.items(), key=lambda (name, obj): name)]
-		dependents += reduce(lambda a,b: a+b, 
-			[
-				[fkey.relation for fkey in ukey.dependent_list]
-				for ukey in self.dbobject.unique_key_list
-				if len(ukey.dependent_list) > 0
-			], []
-		)
-		if self.dbobject.primary_key is None:
-			key_count = 0
-		else:
-			key_count = len(self.dbobject.primary_key.fields)
-		olstyle = 'list-style-type: none; padding: 0; margin: 0;'
 		result.append((
 			'description', 'Description',
 			tag.p(self.format_comment(self.dbobject.description))
 		))
+		olstyle = 'list-style-type: none; padding: 0; margin: 0;'
+		if self.dbobject.primary_key is None:
+			key_count = 0
+		else:
+			key_count = len(self.dbobject.primary_key.fields)
 		result.append((
 			'attributes', 'Attributes',
 			tag.table(
@@ -81,11 +70,14 @@ class W3TableDocument(W3ObjectDocument):
 						tag.td(self.site.url_document('keycolcount.html').link()),
 						tag.td(key_count),
 						tag.td(self.site.url_document('colcount.html').link()),
-						tag.td(len(fields))
+						tag.td(len(self.dbobject.field_list))
 					),
 					tag.tr(
 						tag.td(self.site.url_document('dependentrel.html').link()),
-						tag.td(len(dependents)),
+						tag.td(
+							len(self.dbobject.dependents) +
+							sum(len(k.dependent_list) for k in self.dbobject.unique_key_list)
+						),
 						tag.td(self.site.url_document('size.html').link()),
 						tag.td(self.dbobject.size_str)
 					)
@@ -93,7 +85,7 @@ class W3TableDocument(W3ObjectDocument):
 				)
 			)
 		))
-		if len(fields) > 0:
+		if len(self.dbobject.field_list) > 0:
 			result.append((
 				'fields', 'Fields',
 				tag.table(
@@ -117,11 +109,11 @@ class W3TableDocument(W3ObjectDocument):
 							tag.td(_inc_index(field.key_index)), # XXX For Py2.5: field.key_index + 1 if field.key_index is not None else None,
 							tag.td(field.cardinality),
 							tag.td(self.format_comment(field.description, summary=True))
-						) for field in fields
+						) for field in self.dbobject.field_list
 					))
 				)
 			))
-		if len(indexes) > 0:
+		if len(self.dbobject.index_list) > 0:
 			result.append((
 				'indexes', 'Indexes',
 				tag.table(
@@ -141,11 +133,11 @@ class W3TableDocument(W3ObjectDocument):
 							tag.td(tag.ol((tag.li(ixfield.name) for (ixfield, _) in index.field_list), style=olstyle)),
 							tag.td(tag.ol((tag.li(orders[ixorder]) for (_, ixorder) in index.field_list), style=olstyle)),
 							tag.td(self.format_comment(index.description, summary=True))
-						) for index in indexes
+						) for index in self.dbobject.index_list
 					))
 				)
 			))
-		if len(constraints) > 0:
+		if len(self.dbobject.constraint_list) > 0:
 			def fields(constraint):
 				if isinstance(constraint, ForeignKey):
 					return [
@@ -153,7 +145,7 @@ class W3TableDocument(W3ObjectDocument):
 						self.site.link_to(constraint.ref_table),
 						tag.ol((tag.li('%s -> %s' % (cfield.name, pfield.name)) for (cfield, pfield) in constraint.fields), style=olstyle)
 					]
-				elif isinstance(constraint, PrimaryKey) or isinstance(constraint, UniqueKey) or isinstance(constraint, Check):
+				elif isinstance(constraint, UniqueKey) or isinstance(constraint, Check):
 					return tag.ol((tag.li(cfield.name) for cfield in constraint.fields), style=olstyle)
 				else:
 					return ''
@@ -174,11 +166,11 @@ class W3TableDocument(W3ObjectDocument):
 							tag.td(self.site.type_names[constraint.__class__]),
 							tag.td(fields(constraint)),
 							tag.td(self.format_comment(constraint.description, summary=True))
-						) for constraint in constraints
+						) for constraint in self.dbobject.constraint_list
 					))
 				)
 			))
-		if len(triggers) > 0:
+		if len(self.dbobject.trigger_list) > 0:
 			result.append((
 				'triggers', 'Triggers',
 				tag.table(
@@ -196,11 +188,11 @@ class W3TableDocument(W3ObjectDocument):
 							tag.td(times[trigger.trigger_time]),
 							tag.td(events[trigger.trigger_event]),
 							tag.td(self.format_comment(trigger.description, summary=True))
-						) for trigger in triggers
+						) for trigger in self.dbobject.trigger_list
 					))
 				)
 			))
-		if len(dependents) > 0:
+		if len(self.dbobject.dependents) + sum(len(k.dependent_list) for k in self.dbobject.unique_key_list) > 0:
 			result.append((
 				'dependents', 'Dependent Relations',
 				tag.table(
@@ -216,7 +208,14 @@ class W3TableDocument(W3ObjectDocument):
 							tag.td(self.site.link_to(dep)),
 							tag.td(self.site.type_names[dep.__class__]),
 							tag.td(self.format_comment(dep.description, summary=True))
-						) for dep in dependents
+						) for dep in chain(
+							self.dbobject.dependent_list,
+							(
+								fkey.relation
+								for ukey in self.dbobject.unique_key_list
+								for fkey in ukey.dependent_list
+							)
+						)
 					))
 				)
 			))

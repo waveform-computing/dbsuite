@@ -1,22 +1,26 @@
 # vim: set noet sw=4 ts=4:
 
 import sys
-mswindows = sys.platform == "win32"
 import optparse
 import ConfigParser
 import logging
 import fnmatch
 import os
 import imp
+import locale
 import textwrap
 import traceback
 import db2makedoc.db
 import db2makedoc.plugins
+from db2makedoc.util import *
 
 __version__ = "1.0.0"
 
+# Use the user's default locale instead of C
+locale.setlocale(locale.LC_ALL, '')
+
 # Formatting strings
-if not mswindows and hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
+if not sys.platform.startswith('win') and hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
 	BOLD = '\x1b[1m'
 	NORMAL = '\x1b[0m'
 	RED = '\x1b[31m'
@@ -226,6 +230,7 @@ def list_plugins():
 	output_plugins = sorted(output_plugins, key=lambda(name, plugin): name)
 	# Format and output the lists
 	tw = textwrap.TextWrapper()
+	tw.width = terminal_size()[0] - 2
 	tw.initial_indent = ' '*8
 	tw.subsequent_indent = tw.initial_indent
 	if len(input_plugins) > 0:
@@ -257,6 +262,7 @@ def help_plugin(plugin_name):
 	print ' '*4 + BOLD + plugin_name + NORMAL
 	print
 	tw = textwrap.TextWrapper()
+	tw.width = terminal_size()[0] - 2
 	tw.initial_indent = ' '*4
 	tw.subsequent_indent = tw.initial_indent
 	plugin_desc = '\n\n'.join(

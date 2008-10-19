@@ -10,13 +10,11 @@ class W3DatabaseDocument(W3ObjectDocument):
 
 	def generate_sections(self):
 		result = super(W3DatabaseDocument, self).generate_sections()
-		schemas = [obj for (name, obj) in sorted(self.dbobject.schemas.items(), key=lambda (name, obj):name)]
-		tbspaces = [obj for (name, obj) in sorted(self.dbobject.tablespaces.items(), key=lambda (name, obj):name)]
 		result.append((
 			'description', 'Description',
 			tag.p(self.format_comment(self.dbobject.description))
 		))
-		if len(schemas) > 0:
+		if len(self.dbobject.schema_list) > 0:
 			result.append((
 				'schemas', 'Schemas', [
 					tag.p("""The following table contains all schemas (logical
@@ -34,12 +32,19 @@ class W3DatabaseDocument(W3ObjectDocument):
 							tag.tr(
 								tag.td(self.site.link_to(schema)),
 								tag.td(self.format_comment(schema.description, summary=True))
-							) for schema in schemas
+							)
+							for schema in self.dbobject.schema_list
+							if sum((
+								len(schema.relation_list),
+								len(schema.index_list),
+								len(schema.routine_list),
+								len(schema.trigger_list),
+							)) > 0
 						))
 					)
 				]
 			))
-		if len(tbspaces) > 0:
+		if self.site.tbspace_list and len(self.dbobject.tablespace_list) > 0:
 			result.append((
 				'tbspaces', 'Tablespaces', [
 					tag.p("""The following table contains all tablespaces
@@ -58,7 +63,7 @@ class W3DatabaseDocument(W3ObjectDocument):
 							tag.tr(
 								tag.td(self.site.link_to(tbspace)),
 								tag.td(self.format_comment(tbspace.description, summary=True))
-							) for tbspace in tbspaces
+							) for tbspace in self.dbobject.tablespace_list
 						))
 					)
 				]

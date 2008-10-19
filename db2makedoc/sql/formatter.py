@@ -1102,6 +1102,7 @@ class DB2LUWFormatter(BaseFormatter):
 				(REGISTER, 'PATH'),
 				(REGISTER, 'SCHEMA'),
 				(REGISTER, 'SERVER'),
+				(REGISTER, 'SQLID'),
 				(REGISTER, 'TIME'),
 				(REGISTER, 'TIMESTAMP'),
 				(REGISTER, 'TIMEZONE'),
