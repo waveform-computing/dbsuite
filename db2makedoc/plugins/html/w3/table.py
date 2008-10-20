@@ -97,7 +97,7 @@ class W3TableDocument(W3ObjectDocument):
 							tag.th('Nulls'),
 							tag.th('Key Pos'),
 							tag.th('Cardinality'),
-							tag.th('Description')
+							tag.th('Description', class_='nosort')
 						)
 					),
 					tag.tbody((
@@ -110,7 +110,8 @@ class W3TableDocument(W3ObjectDocument):
 							tag.td(field.cardinality),
 							tag.td(self.format_comment(field.description, summary=True))
 						) for field in self.dbobject.field_list
-					))
+					)),
+					id='field-ts'
 				)
 			))
 		if len(self.dbobject.index_list) > 0:
@@ -123,7 +124,7 @@ class W3TableDocument(W3ObjectDocument):
 							tag.th('Unique'),
 							tag.th('Fields'),
 							tag.th('Sort Order'),
-							tag.th('Description')
+							tag.th('Description', class_='nosort')
 						)
 					),
 					tag.tbody((
@@ -134,7 +135,8 @@ class W3TableDocument(W3ObjectDocument):
 							tag.td(tag.ol((tag.li(orders[ixorder]) for (_, ixorder) in index.field_list), style=olstyle)),
 							tag.td(self.format_comment(index.description, summary=True))
 						) for index in self.dbobject.index_list
-					))
+					)),
+					id='index-ts'
 				)
 			))
 		if len(self.dbobject.constraint_list) > 0:
@@ -156,8 +158,8 @@ class W3TableDocument(W3ObjectDocument):
 						tag.tr(
 							tag.th('Name'),
 							tag.th('Type'),
-							tag.th('Fields'),
-							tag.th('Description')
+							tag.th('Fields', class_='nosort'),
+							tag.th('Description', class_='nosort')
 						)
 					),
 					tag.tbody((
@@ -167,7 +169,8 @@ class W3TableDocument(W3ObjectDocument):
 							tag.td(fields(constraint)),
 							tag.td(self.format_comment(constraint.description, summary=True))
 						) for constraint in self.dbobject.constraint_list
-					))
+					)),
+					id='const-ts'
 				)
 			))
 		if len(self.dbobject.trigger_list) > 0:
@@ -179,7 +182,7 @@ class W3TableDocument(W3ObjectDocument):
 							tag.th('Name'),
 							tag.th('Timing'),
 							tag.th('Event'),
-							tag.th('Description')
+							tag.th('Description', class_='nosort')
 						)
 					),
 					tag.tbody((
@@ -189,7 +192,8 @@ class W3TableDocument(W3ObjectDocument):
 							tag.td(events[trigger.trigger_event]),
 							tag.td(self.format_comment(trigger.description, summary=True))
 						) for trigger in self.dbobject.trigger_list
-					))
+					)),
+					id='trig-ts'
 				)
 			))
 		if len(self.dbobject.dependents) + sum(len(k.dependent_list) for k in self.dbobject.unique_key_list) > 0:
@@ -200,7 +204,7 @@ class W3TableDocument(W3ObjectDocument):
 						tag.tr(
 							tag.th('Name'),
 							tag.th('Type'),
-							tag.th('Description')
+							tag.th('Description', class_='nosort')
 						)
 					),
 					tag.tbody((
@@ -216,7 +220,8 @@ class W3TableDocument(W3ObjectDocument):
 								for fkey in ukey.dependent_list
 							)
 						)
-					))
+					)),
+					id='dep-ts'
 				)
 			))
 		if self.site.object_graph(self.dbobject):
@@ -227,7 +232,7 @@ class W3TableDocument(W3ObjectDocument):
 		if self.dbobject.create_sql:
 			result.append((
 				'sql', 'SQL Definition', [
-					tag.p(tag.a('Line #s On/Off', href='#', onclick='javascript:return toggleLineNums("sqldef");', class_='zoom')),
+					tag.p(tag.a('Line #s On/Off', href='#', onclick='javascript:return toggleLineNums("sqldef");')),
 					self.format_sql(self.dbobject.create_sql, number_lines=True, id='sqldef')
 				]
 			))

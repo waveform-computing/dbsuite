@@ -72,7 +72,7 @@ class W3ProcedureDocument(W3ObjectDocument):
 				tag.table(
 					tag.thead(
 						tag.tr(
-							tag.th('Prototype'),
+							tag.th('Prototype', class_='nosort'),
 							tag.th('Specific Name')
 						)
 					),
@@ -83,13 +83,14 @@ class W3ProcedureDocument(W3ObjectDocument):
 						)
 						for overload in self.dbobject.schema.procedures[self.dbobject.name]
 						if overload != self.dbobject
-					))
+					)),
+					id='overload-ts'
 				)
 			))
 		if self.dbobject.create_sql:
 			result.append((
 				'sql', 'SQL Definition', [
-					tag.p(tag.a('Line #s On/Off', href='#', onclick='javascript:return toggleLineNums("sqldef");', class_='zoom')),
+					tag.p(tag.a('Line #s On/Off', href='#', onclick='javascript:return toggleLineNums("sqldef");')),
 					self.format_sql(self.dbobject.create_sql, number_lines=True, id='sqldef')
 				]
 			))

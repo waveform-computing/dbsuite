@@ -56,8 +56,10 @@ except ImportError:
 	except ImportError:
 		raise ImportError('Unable to find a StringIO implementation')
 
-utf8encode = codecs.getencoder('UTF-8')
-utf8decode = codecs.getdecoder('UTF-8')
+# Determine the path containing this module (used for locating external source
+# files like CSS and JavaScript below)
+_my_path = os.path.dirname(os.path.abspath(__file__))
+
 
 # Constants for HTML versions
 (
@@ -232,8 +234,8 @@ class ElementFactory(object):
 		"""Adds content (string, node, node-list, etc.) to a node"""
 		if isinstance(content, basestring):
 			if content != '':
-				if isinstance(content, str):
-					content = utf8decode(content)[0]
+				if not isinstance(content, unicode):
+					content = content.decode()
 				if len(node) == 0:
 					if node.text is None:
 						node.text = content
@@ -1067,7 +1069,7 @@ class HTMLDocument(WebSiteDocument):
 			'content': s,
 		}
 		# Transcode the document into the target encoding
-		return codecs.getencoder(self.site.encoding)(s)[0]
+		return s.encode(self.site.encoding)
 
 	def flatten(self, content):
 		"""Converts the document into pure text for full-text indexing."""
@@ -1272,7 +1274,7 @@ class CSSDocument(WebSiteDocument):
 
 	def serialize(self, content):
 		"""Converts the document into a string for writing."""
-		return codecs.getencoder(self.site.encoding)(content)[0]
+		return content.encode(self.site.encoding)
 
 	def generate(self):
 		"""Constructs the content of the stylesheet."""
@@ -1289,55 +1291,14 @@ class CSSDocument(WebSiteDocument):
 class SQLCSSDocument(CSSDocument):
 	"""Stylesheet class for SQL syntax highlighting."""
 
+	sql_css = codecs.open(os.path.join(_my_path, 'sql.css'), 'r', 'UTF-8').read()
+
 	def __init__(self, site):
 		super(SQLCSSDocument, self).__init__(site, 'sql.css')
 
 	def generate(self):
 		doc = super(SQLCSSDocument, self).generate()
-		return doc + u"""\
-/* SQL syntax highlighting */
-pre.sql, ol.sql { background-color: #ddf; }
-pre.sql { padding: 1em; }
-
-ol.sql {
-    list-style: decimal;
-    padding-top: 1em;
-    padding-right: 1em;
-    padding-bottom: 1em;
-}
-
-ol.sql.hidenum {
-    list-style: none;
-    padding: 1em;
-}
-
-pre.sql,
-ol.sql li {
-    font-size: 9pt;
-    font-family: "Courier New", monospace;
-    /* Ensure <pre> stuff wraps if it's too long */
-    white-space: -moz-pre-wrap; /* Mozilla */
-    white-space: -o-pre-wrap;   /* Opera 7 */
-    white-space: -pre-wrap;     /* Opera 4-6 */
-    white-space: pre-wrap;      /* CSS 2.1 (Opera8+) */
-    /* No way to do this in IE... */
-}
-
-ol.sql li { color: #779; }
-
-.sql span.sql-error      { background-color: red; color: black; }
-.sql span.sql-comment    { font-style: italic; color: green; }
-.sql span.sql-keyword    { font-weight: bold; color: blue; }
-.sql span.sql-datatype   { font-weight: bold; color: green; }
-.sql span.sql-register   { font-weight: bold; color: purple; }
-.sql span.sql-label      { font-weight: bold; font-style: italic; color: teal; }
-.sql span.sql-identifier { color: black; }
-.sql span.sql-number     { color: maroon; }
-.sql span.sql-string     { color: maroon; }
-.sql span.sql-operator   { color: black; }
-.sql span.sql-parameter  { font-style: italic; color: black; }
-.sql span.sql-terminator { color: black; }
-"""
+		return doc + self.sql_css
 
 
 class JavaScriptDocument(WebSiteDocument):
@@ -1358,7 +1319,7 @@ class JavaScriptDocument(WebSiteDocument):
 
 	def serialize(self, content):
 		"""Converts the document into a string for writing."""
-		return codecs.getencoder(self.site.encoding)(content)[0]
+		return content.encode(self.site.encoding)
 
 	def generate(self):
 		"""Constructs the content of the JavaScript library."""
@@ -1368,6 +1329,32 @@ class JavaScriptDocument(WebSiteDocument):
 	def link(self, *args, **kwargs):
 		# Overridden to return a <script> element
 		return tag.script(src=self.url)
+
+
+class ImageDocument(WebSiteDocument):
+	"""Represents a static image.
+
+	This is the base class for static images. It provides no methods for
+	constructing or editing images; simply override the generate() method to
+	return the image data to write to the file.
+	"""
+
+	def write(self):
+		super(ImageDocument, self).write()
+		f = open(self.filename, 'wb')
+		try:
+			f.write(self.generate())
+		finally:
+			f.close()
+
+	def generate(self):
+		"""Constructs the content of the image."""
+		# Child class can override this to build the image (or simply read it from a source file)
+		return ''
+
+	def link(self, *args, **kwargs):
+		# Overridden to return an <img> element
+		return tag.img(src=self.url)
 
 
 class GraphDocument(WebSiteDocument):

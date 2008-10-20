@@ -42,7 +42,7 @@ class W3UniqueKeyDocument(W3ObjectDocument):
 					tag.thead(
 						tag.tr(
 							tag.th('Field'),
-							tag.th('Description')
+							tag.th('Description', class_='nosort')
 						)
 					),
 					tag.tbody((
@@ -50,13 +50,14 @@ class W3UniqueKeyDocument(W3ObjectDocument):
 							tag.td(field.name),
 							tag.td(self.format_comment(field.description, summary=True))
 						) for field in self.dbobject.fields
-					))
+					)),
+					id='field-ts'
 				)
 			))
 		if self.dbobject.create_sql:
 			result.append((
 				'sql', 'SQL Definition', [
-					tag.p(tag.a('Line #s On/Off', href='#', onclick='javascript:return toggleLineNums("sqldef");', class_='zoom')),
+					tag.p(tag.a('Line #s On/Off', href='#', onclick='javascript:return toggleLineNums("sqldef");')),
 					self.format_sql(self.dbobject.create_sql, number_lines=True, id='sqldef')
 				]
 			))

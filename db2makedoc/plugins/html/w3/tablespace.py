@@ -52,7 +52,7 @@ class W3TablespaceDocument(W3ObjectDocument):
 					tag.thead(
 						tag.tr(
 							tag.th('Name'),
-							tag.th('Description')
+							tag.th('Description', class_='nosort')
 						)
 					),
 					tag.tbody((
@@ -60,7 +60,8 @@ class W3TablespaceDocument(W3ObjectDocument):
 							tag.td(self.site.link_to(table)),
 							tag.td(self.format_comment(table.description, summary=True))
 						) for table in self.dbobject.table_list
-					))
+					)),
+					id='table-ts'
 				)
 			))
 		if len(self.dbobject.index_list) > 0:
@@ -71,7 +72,7 @@ class W3TablespaceDocument(W3ObjectDocument):
 						tag.tr(
 							tag.th('Name'),
 							tag.th('Applies To'),
-							tag.th('Description')
+							tag.th('Description', class_='nosort')
 						)
 					),
 					tag.tbody((
@@ -80,7 +81,8 @@ class W3TablespaceDocument(W3ObjectDocument):
 							tag.td(self.site.link_to(index.table)),
 							tag.td(self.format_comment(index.description, summary=True))
 						) for index in self.dbobject.index_list
-					))
+					)),
+					id='index-ts'
 				)
 			))
 		return result

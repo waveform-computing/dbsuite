@@ -65,7 +65,7 @@ class W3TriggerDocument(W3ObjectDocument):
 		if self.dbobject.create_sql:
 			result.append((
 				'sql', 'SQL Definition', [
-					tag.p(tag.a('Line #s On/Off', href='#', onclick='javascript:return toggleLineNums("sqldef");', class_='zoom')),
+					tag.p(tag.a('Line #s On/Off', href='#', onclick='javascript:return toggleLineNums("sqldef");')),
 					self.format_sql(self.dbobject.create_sql, number_lines=True, id='sqldef')
 				]
 			))

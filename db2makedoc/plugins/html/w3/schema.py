@@ -33,7 +33,7 @@ class W3SchemaDocument(W3ObjectDocument):
 						tag.tr(
 							tag.th('Name'),
 							tag.th('Type'),
-							tag.th('Description')
+							tag.th('Description', class_='nosort')
 						)
 					),
 					tag.tbody((
@@ -42,7 +42,8 @@ class W3SchemaDocument(W3ObjectDocument):
 							tag.td(self.site.type_names[relation.__class__]),
 							tag.td(self.format_comment(relation.description, summary=True))
 						) for relation in self.dbobject.relation_list
-					))
+					)),
+					id='relation-ts'
 				)
 			))
 		if len(self.dbobject.index_list) > 0:
@@ -54,7 +55,7 @@ class W3SchemaDocument(W3ObjectDocument):
 							tag.th('Name'),
 							tag.th('Unique'),
 							tag.th('Applies To'),
-							tag.th('Description')
+							tag.th('Description', class_='nosort')
 						)
 					),
 					tag.tbody((
@@ -64,7 +65,8 @@ class W3SchemaDocument(W3ObjectDocument):
 							tag.td(self.site.link_to(index.table)),
 							tag.td(self.format_comment(index.description, summary=True))
 						) for index in self.dbobject.index_list
-					))
+					)),
+					id='index-ts'
 				)
 			))
 		if len(self.dbobject.trigger_list) > 0:
@@ -77,7 +79,7 @@ class W3SchemaDocument(W3ObjectDocument):
 							tag.th('Timing'),
 							tag.th('Event'),
 							tag.th('Applies To'),
-							tag.th('Description')
+							tag.th('Description', class_='nosort')
 						)
 					),
 					tag.tbody((
@@ -88,7 +90,8 @@ class W3SchemaDocument(W3ObjectDocument):
 							tag.td(self.site.link_to(trigger.relation)),
 							tag.td(self.format_comment(trigger.description, summary=True))
 						) for trigger in self.dbobject.trigger_list
-					))
+					)),
+					id='trigger-ts'
 				)
 			))
 		if len(self.dbobject.routine_list) > 0:
@@ -100,7 +103,7 @@ class W3SchemaDocument(W3ObjectDocument):
 							tag.th('Name'),
 							tag.th('Specific Name'),
 							tag.th('Type'),
-							tag.th('Description')
+							tag.th('Description', class_='nosort')
 						)
 					),
 					tag.tbody((
@@ -110,7 +113,8 @@ class W3SchemaDocument(W3ObjectDocument):
 							tag.td(self.site.type_names[routine.__class__]),
 							tag.td(self.format_comment(routine.description, summary=True))
 						) for routine in self.dbobject.routine_list
-					))
+					)),
+					id='routine-ts'
 				)
 			))
 		if len(self.dbobject.relation_list) > 0 and self.site.object_graph(self.dbobject):

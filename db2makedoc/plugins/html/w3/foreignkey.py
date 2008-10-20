@@ -63,7 +63,7 @@ class W3ForeignKeyDocument(W3ObjectDocument):
 							tag.th('#'),
 							tag.th('Field'),
 							tag.th('Parent'),
-							tag.th('Description')
+							tag.th('Description', class_='nosort')
 						)
 					),
 					tag.tbody((
@@ -73,13 +73,14 @@ class W3ForeignKeyDocument(W3ObjectDocument):
 							tag.td(field2.name),
 							tag.td(self.format_comment(field1.description, summary=True))
 						) for (index, (field1, field2)) in enumerate(self.dbobject.fields)
-					))
+					)),
+					id='field-ts'
 				)
 			))
 		if self.dbobject.create_sql:
 			result.append((
 				'sql', 'SQL Definition', [
-					tag.p(tag.a('Line #s On/Off', href='#', onclick='javascript:return toggleLineNums("sqldef");', class_='zoom')),
+					tag.p(tag.a('Line #s On/Off', href='#', onclick='javascript:return toggleLineNums("sqldef");')),
 					self.format_sql(self.dbobject.create_sql, number_lines=True, id='sqldef')
 				]
 			))

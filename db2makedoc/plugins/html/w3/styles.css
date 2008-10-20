@@ -1,0 +1,137 @@
+/* Extend the w3 styles for tables */
+th.nowrap,
+td.nowrap {
+	white-space: nowrap;
+}
+
+/* Override some w3 styles for SQL syntax highlighting */
+ol.sql li {
+	line-height: 1em;
+	margin-top: 0;
+	margin-bottom: 0;
+}
+
+/* Styles for sortable table headers */
+table tr th.header {
+	cursor: pointer;
+	background-image: url(http://w3.ibm.com/ui/v8/images/icon-link-sort-u-light.gif);
+	background-repeat: no-repeat;
+	background-position: center right;
+	padding-right: 29px;
+}
+
+table tr th.header-sort-up {
+	background-image: url(http://w3.ibm.com/ui/v8/images/icon-link-sort-d-light.gif);
+}
+
+table tr th.header-sort-down {
+	background-image: url(http://w3.ibm.com/ui/v8/images/icon-link-sort-a-light.gif);
+}
+
+/* Styles for search results (the w3v8 search.css is too broken) */
+.limit-search {
+	background-color: #eee;
+	border-bottom: 1px solid #ccc;
+	margin: 1em 0;
+	padding: 1em 3em;
+	width: 100%;
+}
+.limit-search td { vertical-align: middle; }
+.limit-search td.col1 {
+	font-weight: bold;
+	text-align: right;
+	padding: 0 .5em 0 0;
+}
+.limit-search td.col2 { }
+.limit-search input[type="text"] { width: 280px; }
+
+.results-header,
+.results-footer {
+	border-collapse: collapse;
+	width: 100%;
+}
+.results-header { border-bottom: 1px solid #ccc; margin-bottom: 1em; }
+.results-footer { border-top: 1px solid #ccc; margin-top: 1em; }
+.results-header td,
+.results-footer td { padding: .4em 0; vertical-align: bottom; }
+tr.summary-options { background: url(//w3.ibm.com/ui/v8/images/rule-h-blue-dots.gif) left top repeat-x; }
+tr.summary-options td.results-count { text-align: left; width: 33%; }
+tr.summary-options td.options { text-align: center; }
+tr.summary-options td.results-sequence { text-align: right; }
+
+.search-results { width: 100%; }
+.search-results tr.result a { display: block; font-weight: bold; }
+.search-results tr.result.row1 td { padding: 0.5em 0 0 0; }
+.search-results tr.result.row2 td { padding: 0; }
+
+.search-results tr.result .relevance {
+	font-weight: bold;
+	text-align: right;
+}
+.search-results tr.result .url {
+	font-size: small;
+	font-style: italic;
+	color: #999;
+}
+
+/* Styles for draggable zoom box */
+div.zoom {
+	border: 2px solid black;
+	padding: 0;
+	margin: 0;
+	background-color: #dd0;
+	overflow: hidden;
+	position: absolute;
+	width: 250px;
+	height: 250px;
+}
+
+div.zoom img {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 1;
+}
+
+div.zoom div {
+	cursor: move;
+	background: navy;
+	color: white;
+	font-weight: bold;
+	padding: 0;
+	margin: 0;
+	text-align: center;
+	position: absolute;
+	width: 250px;
+	height: 1.5em;
+	top: 0;
+	left: 0;
+	z-index: 2;
+}
+
+div.zoom :link,
+div.zoom :visited {
+	color: white;
+	text-decoration: underline;
+	padding: 0 0.5em;
+	margin: 0;
+	text-align: center;
+	display: block;
+	position: absolute;
+	width: auto;
+	height: 1.5em;
+	top: 0;
+	right: 0;
+	z-index: 3;
+}
+
+:link.zoom,
+:visited.zoom {
+	padding: 0.5em;
+	background: navy;
+	color: white;
+	text-decoration: underline;
+}
+
+/* Fix display of border around diagrams in Firefox */
+#content-main img { border: 0 none; }

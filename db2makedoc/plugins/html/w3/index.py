@@ -64,7 +64,7 @@ class W3IndexDocument(W3ObjectDocument):
 							tag.th('#'),
 							tag.th('Name'),
 							tag.th('Order'),
-							tag.th('Description')
+							tag.th('Description', class_='nosort')
 						)
 					),
 					tag.tbody((
@@ -74,13 +74,14 @@ class W3IndexDocument(W3ObjectDocument):
 							tag.td(ordering),
 							tag.td(self.format_comment(field.description, summary=True))
 						) for (position, (field, ordering)) in enumerate(self.dbobject.field_list)
-					))
+					)),
+					id='field-ts'
 				)
 			))
 		if self.dbobject.create_sql:
 			result.append((
 				'sql', 'SQL Definition', [
-					tag.p(tag.a('Line #s On/Off', href='#', onclick='javascript:return toggleLineNums("sqldef");', class_='zoom')),
+					tag.p(tag.a('Line #s On/Off', href='#', onclick='javascript:return toggleLineNums("sqldef");')),
 					self.format_sql(self.dbobject.create_sql, number_lines=True, id='sqldef')
 				]
 			))

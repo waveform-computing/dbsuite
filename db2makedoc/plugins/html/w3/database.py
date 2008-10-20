@@ -25,7 +25,7 @@ class W3DatabaseDocument(W3ObjectDocument):
 						tag.thead(
 							tag.tr(
 								tag.th('Name'),
-								tag.th('Description')
+								tag.th('Description', class_='nosort')
 							)
 						),
 						tag.tbody((
@@ -40,7 +40,8 @@ class W3DatabaseDocument(W3ObjectDocument):
 								len(schema.routine_list),
 								len(schema.trigger_list),
 							)) > 0
-						))
+						)),
+						id='schema-ts'
 					)
 				]
 			))
@@ -56,7 +57,7 @@ class W3DatabaseDocument(W3ObjectDocument):
 						tag.thead(
 							tag.tr(
 								tag.th('Name'),
-								tag.th('Description')
+								tag.th('Description', class_='nosort')
 							)
 						),
 						tag.tbody((
@@ -64,7 +65,8 @@ class W3DatabaseDocument(W3ObjectDocument):
 								tag.td(self.site.link_to(tbspace)),
 								tag.td(self.format_comment(tbspace.description, summary=True))
 							) for tbspace in self.dbobject.tablespace_list
-						))
+						)),
+						id='tbspace-ts'
 					)
 				]
 			))

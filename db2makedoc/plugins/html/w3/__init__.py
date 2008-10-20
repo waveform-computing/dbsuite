@@ -12,8 +12,9 @@ from db2makedoc.db import (
 	Check, Index, Trigger, Function, Procedure, Tablespace
 )
 from db2makedoc.plugins.html.w3.document import (
-	W3Site, W3CSSDocument, W3JavaScriptDocument, W3SearchDocument,
-	W3SiteIndexDocument, W3ExternalDocument, W3PopupDocument
+	W3Site, W3CSSDocument, W3JavaScriptDocument, W3JQueryDocument,
+	W3JQueryTableSorterDocument, W3SearchDocument, W3SiteIndexDocument,
+	W3ExternalDocument, W3PopupDocument
 )
 from db2makedoc.plugins.html.w3.database import W3DatabaseDocument
 from db2makedoc.plugins.html.w3.schema import W3SchemaDocument, W3SchemaGraph
@@ -125,6 +126,8 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 		# Add static documents (CSS, JavaScript, search if requested)
 		W3CSSDocument(site)
 		W3JavaScriptDocument(site)
+		W3JQueryDocument(site)
+		W3JQueryTableSorterDocument(site)
 		if site.search:
 			W3SearchDocument(site)
 		for (url, title, body) in POPUPS:
