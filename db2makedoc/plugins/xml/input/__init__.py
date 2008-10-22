@@ -461,7 +461,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			yield row
 		lookup = {'always': 'A', 'default': 'D'}
 		for schema in self.doc.findall('schema'):
-			for relation in schema.findall('table') + schema.findall('view') + schema.findall('alias'):
+			for relation in chain(schema.findall('table'), schema.findall('view'),schema.findall('alias')):
 				for field in sorted(relation.findall('field'), key=lambda elem: int(elem.attrib['position'])):
 					datatype = self.ids[field.attrib['datatype']]
 					yield RelationCol(
@@ -504,7 +504,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			yield row
 		for schema in self.doc.findall('schema'):
 			for table in schema.findall('table'):
-				for key in table.findall('uniquekey') + table.findall('primarykey'):
+				for key in chain(table.findall('uniquekey'), table.findall('primarykey')):
 					yield UniqueKey(
 						schema.attrib['name'],
 						table.attrib['name'],
@@ -532,7 +532,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			yield row
 		for schema in self.doc.findall('schema'):
 			for table in schema.findall('table'):
-				for key in table.findall('uniquekey') + table.findall('primarykey'):
+				for key in chain(table.findall('uniquekey'), table.findall('primarykey')):
 					for field in key.findall('keyfield'):
 						ref = self.ids[field.attrib['ref']]
 						yield UniqueKeyCol(

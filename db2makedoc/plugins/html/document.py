@@ -16,6 +16,7 @@ import urlparse
 import threading
 import time
 
+from collections import deque
 from db2makedoc.highlighters import CommentHighlighter, SQLHighlighter
 from db2makedoc.plugins.html.entities import HTML_ENTITIES
 from db2makedoc.graph import Graph, Node, Edge, Cluster
@@ -74,74 +75,6 @@ _my_path = os.path.dirname(os.path.abspath(__file__))
 	TRANSITIONAL, # Transitional DTD
 	FRAMESET,     # Frameset DTD
 ) = range(3)
-
-
-class Attrs(dict):
-	"""A dictionary with special behaviours for HTML attributes.
-
-	Changes from the default dict type are as follows:
-
-	The + operator can be used to combine an Attrs instance with another dict
-	instance. The + operator is non-commutative with dictionaries in that, if a
-	key exists in both dictionaries on either side of the operator, the value
-	of the key in the dictionary on the right "wins". The augmented assignment
-	operation += is also supported.
-
-	In the operation a + b, the result (a new dictionary) contains the keys and
-	values of a, updated with the keys and values of b. Neither a nor b is
-	actually updated. If a is an instance of Attrs, the result of a + b is an
-	instance of Attrs.  If a is an instance of dict, while b is an instance of
-	Attrs, the result of a + b is an instance of dict.
-
-	Certain values are treated specially. Setting a key to None removes the key
-	from the dictionary. Setting a key to a boolean False value does likewise,
-	while boolean True results in the key being associated with its name (as in
-	checked='checked'). All values are converted to strings (for compatibility
-	with ElementTree).
-
-	Finally, underscore suffixes are automatically stripped from key names.
-	This is to enable easy declaration of attribute names which conflict with
-	Python keywords using the factory facilities of the HTMLDocument class
-	below.
-	"""
-
-	def __init__(self, source=None, **kwargs):
-		if source is not None and isinstance(source, dict):
-			self.update(source)
-		self.update(kwargs)
-
-	def __add__(self, other):
-		result = Attrs(self)
-		result.update(other)
-		return result
-
-	def __radd__(self, other):
-		result = dict(other)
-		result.update(self)
-		return result
-
-	def __iadd__(self, other):
-		self.update(other)
-
-	def __setitem__(self, key, value):
-		if value is None:
-			if key in self:
-				del self[key]
-		elif isinstance(value, bool):
-			if value:
-				super(Attrs, self).__setitem__(key, key)
-			elif key in self:
-				del self[key]
-		else:
-			# Try to use ASCII encodings when possible (for performance)
-			try:
-				super(Attrs, self).__setitem__(key.rstrip('_'), str(value))
-			except UnicodeEncodeError:
-				super(Attrs, self).__setitem__(key.rstrip('_'), unicode(value))
-
-	def update(self, source):
-		for key, value in source.iteritems():
-			self[key] = value
 
 
 class ElementFactory(object):
@@ -221,7 +154,8 @@ class ElementFactory(object):
 		elif isinstance(content, (int, long)):
 			# Format integer number with , as a thousand separator
 			s = str(content)
-			for i in xrange(len(s) - 3, 0, -3): s = '%s,%s' % (s[:i], s[i:])
+			for i in xrange(len(s) - 3, 0, -3):
+				s = '%s,%s' % (s[:i], s[i:])
 			return s
 		elif isinstance(content, basestring):
 			# Strings are returned verbatim
@@ -234,51 +168,73 @@ class ElementFactory(object):
 		"""Adds content (string, node, node-list, etc.) to a node"""
 		if isinstance(content, basestring):
 			if content != '':
-				if not isinstance(content, unicode):
-					content = content.decode()
 				if len(node) == 0:
 					if node.text is None:
 						node.text = content
 					else:
 						node.text += content
 				else:
-					if node[-1].tail is None:
-						node[-1].tail = content
+					last = node[-1]
+					if last.tail is None:
+						last.tail = content
 					else:
-						node[-1].tail += content
+						last.tail += content
+		elif isinstance(content, (int, long, bool, datetime.datetime, datetime.date, datetime.time)):
+			# XXX This branch exists for optimization purposes only (the except
+			# branch below is expensive)
+			self._append(node, self._format(content))
 		elif iselement(content):
 			node.append(content)
 		else:
 			try:
-				for n in iter(content):
+				for n in content:
 					self._append(node, n)
 			except TypeError:
 				self._append(node, self._format(content))
 
 	def _element(self, _name, *content, **attrs):
-		if attrs:
-			attrs = Attrs(attrs)
-		e = Element(_name, attrs)
-		self._append(e, content)
+		def conv(key, value):
+			# This little utility routine is used to clean up attributes:
+			# boolean True is represented as the key (as in checked="checked"),
+			# all values are converted to strings, and trailing underscores are
+			# removed from key names (convenience for names which are python
+			# keywords)
+			if not isinstance(key, basestring):
+				key = str(key)
+			else:
+				key = key.rstrip('_')
+			if value is True:
+				value = key
+			elif not isinstance(value, basestring):
+				value = str(value)
+			return key, value
+		e = Element(_name, dict(
+			conv(key, value)
+			for key, value in attrs.iteritems()
+			if value is not None and value is not False
+		))
+		for c in content:
+			self._append(e, c)
 		return e
 
 	def __getattr__(self, name):
+		elem_name = name.rstrip('_')
 		def generator(*content, **attrs):
-			return self._element(name.rstrip('_'), *content, **attrs)
+			return self._element(elem_name, *content, **attrs)
+		setattr(self, name, generator)
 		return generator
 
 	def script(self, *content, **attrs):
 		# XXX Workaround: the script element cannot be "empty" (IE fucks up)
-		if not content: content = (' ',)
+		if not content:
+			content = (' ',)
 		# If type isn't specified, default to 'text/javascript'
-		attrs = Attrs(attrs)
 		if not 'type' in attrs:
 			attrs['type'] = 'text/javascript'
 		return self._element('script', *content, **attrs)
 
 	def style(self, *content, **attrs):
 		# Default type is 'text/css', and media is 'screen'
-		attrs = Attrs(attrs)
 		if not 'type' in attrs:
 			attrs['type'] = 'text/css'
 		if not 'media' in attrs:
@@ -795,29 +751,37 @@ class WebSite(object):
 				db.cancel_transaction()
 				raise
 
-	def reset_progress(self, total):
-		self.start_progress = datetime.datetime.now()
-		self.total_remaining = total
-		self.last_progress = self.start_progress
+	def start_progress(self, total):
+		self._progress_start = datetime.datetime.now()
+		self._progress_total = total
+		self._progress_last = self._progress_start
 		logging.info('%d documents remaining' % total)
 
 	def write_progress(self, remaining):
-		interval = 60
-		if (datetime.datetime.now() - self.last_progress).seconds >= interval:
-			elapsed = (datetime.datetime.now() - self.start_progress).seconds
-			rate = (self.total_remaining - remaining) / float(elapsed)
+		if (datetime.datetime.now() - self._progress_last).seconds >= 60:
+			elapsed = datetime.datetime.now() - self._progress_start
+			rate = (self._progress_total - remaining) / float((elapsed.days * 86400) + elapsed.seconds)
 			eta = datetime.timedelta(seconds=int(remaining / rate))
 			logging.info('%d documents remaining, ETA %s @ %.2f docs/sec' % (remaining, eta, rate))
-			self.last_progress = datetime.datetime.now()
+			self._progress_last = datetime.datetime.now()
+
+	def finish_progress(self):
+		elapsed = datetime.datetime.now() - self._progress_start
+		# Get rid of microseconds from elapsed for display purposes
+		elapsed = datetime.timedelta(days=elapsed.days, seconds=elapsed.seconds)
+		rate = self._progress_total / float((elapsed.days * 86400) + elapsed.seconds)
+		logging.info('%d documents written in %s @ %.2f docs/sec' % (self._progress_total, elapsed, rate))
+		del self._progress_start, self._progress_total, self._progress_last
 
 	def write_single(self, docs):
 		"""Single-threaded document writer method."""
 		logging.debug('Single-threaded writer')
 		docs = set(docs)
-		self.reset_progress(len(docs))
+		self.start_progress(len(docs))
 		while docs:
 			self.write_progress(len(docs))
 			docs.pop().write()
+		self.finish_progress()
 
 	def write_multi(self, docs):
 		"""Multi-threaded document writer method.
@@ -831,22 +795,23 @@ class WebSite(object):
 		"""
 		logging.debug('Multi-threaded writer with %d threads' % self.threads)
 		self._documents_set = set(docs)
-		self.reset_progress(len(self._documents_set))
+		self.start_progress(len(self._documents_set))
 		# Create and start all the writing threads
 		threads = [
 			(i, threading.Thread(target=self.__thread_write, args=()))
 			for i in range(self.threads)
 		]
 		for (i, thread) in threads:
-			logging.debug('Starting writer thread #%d' % i)
+			logging.info('Starting writer thread #%d' % i)
 			thread.start()
 		# Join (wait on termination of) all writing threads
 		while threads:
 			(i, thread) = threads.pop()
-			while thread.is_alive():
+			while thread.isAlive():
 				self.write_progress(len(self._documents_set))
 				thread.join(10.0)
-			logging.debug('Writer thread #%d finished' % i)
+			logging.info('Writer thread #%d finished' % i)
+		self.finish_progress()
 
 	def __thread_write(self):
 		"""Sub-routine for writing documents.
@@ -1219,37 +1184,37 @@ class HTMLObjectDocument(HTMLDocument):
 	def _get_first(self):
 		result = super(HTMLObjectDocument, self)._get_first()
 		if not result and self.dbobject.first:
-			return self.site.object_document(self.dbobject.first)
-		else:
-			return result
+			result = self.site.object_document(self.dbobject.first)
+			self.first = result
+		return result
 
 	def _get_prior(self):
 		result = super(HTMLObjectDocument, self)._get_prior()
 		if not result and self.dbobject.prior:
-			return self.site.object_document(self.dbobject.prior)
-		else:
-			return result
+			result = self.site.object_document(self.dbobject.prior)
+			self.prior = result
+		return result
 
 	def _get_next(self):
 		result = super(HTMLObjectDocument, self)._get_next()
 		if not result and self.dbobject.next:
-			return self.site.object_document(self.dbobject.next)
-		else:
-			return result
+			result = self.site.object_document(self.dbobject.next)
+			self.next = result
+		return result
 
 	def _get_last(self):
 		result = super(HTMLObjectDocument, self)._get_last()
 		if not result and self.dbobject.last:
-			return self.site.object_document(self.dbobject.last)
-		else:
-			return result
+			result = self.site.object_document(self.dbobject.last)
+			self.last = result
+		return result
 
 	def _get_parent(self):
 		result = super(HTMLObjectDocument, self)._get_parent()
 		if not result and self.dbobject.parent:
-			return self.site.object_document(self.dbobject.parent)
-		else:
-			return result
+			result = self.site.object_document(self.dbobject.parent)
+			self.parent = result
+		return result
 
 
 class CSSDocument(WebSiteDocument):

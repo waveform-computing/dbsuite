@@ -12,6 +12,7 @@ import os
 import re
 import codecs
 import logging
+from collections import deque
 from db2makedoc.graph import Graph, Node, Edge, Cluster
 from db2makedoc.etree import ProcessingInstruction, fromstring, flatten_html
 from db2makedoc.db import (
@@ -19,7 +20,7 @@ from db2makedoc.db import (
 	Table, View, Alias, Trigger
 )
 from db2makedoc.plugins.html.document import (
-	Attrs, ElementFactory, WebSite, HTMLDocument, HTMLObjectDocument,
+	ElementFactory, WebSite, HTMLDocument, HTMLObjectDocument,
 	HTMLIndexDocument, HTMLExternalDocument, CSSDocument, JavaScriptDocument,
 	GraphDocument, GraphObjectDocument, SQLCSSDocument
 )
@@ -378,10 +379,10 @@ class W3ArticleDocument(W3Document):
 			links = [doc.title]
 			doc = doc.parent
 			while doc:
-				links.insert(0, ' > ')
-				links.insert(0, doc.link())
+				links.append(' > ')
+				links.append(doc.link())
 				doc = doc.parent
-			return tag.p(links, id='breadcrumbs')
+			return tag.p(reversed(links), id='breadcrumbs')
 		else:
 			return ''
 
@@ -400,7 +401,7 @@ class W3ArticleDocument(W3Document):
 
 		def link(doc, active=False, visible=True):
 			"""Sub-routine which generates a menu link from a document."""
-			if isinstance(doc, HTMLObjectDocument) and doc.level > 0:
+			if isinstance(doc, HTMLObjectDocument) and doc.parent:
 				content = doc.dbobject.name
 			elif isinstance(doc, HTMLIndexDocument):
 				content = doc.letter
@@ -408,12 +409,14 @@ class W3ArticleDocument(W3Document):
 				content = doc.title
 			# Non-top-level items longer than 12 characters are truncated
 			# and suffixed with a horizontal ellipsis (\u2026)
+			if len(content) > 12 and doc.parent:
+				content = content[:11] + u'\u2026'
 			return tag.a(
-				[content, content[:11] + u'\u2026'][bool(len(content) > 12 and doc.parent)],
+				content,
 				href=doc.url,
 				title=doc.title,
-				class_=[None, 'active'][active],
-				style=['display: none;', None][visible]
+				class_=(None, 'active')[active],
+				style=('display: none;', None)[visible]
 			)
 
 		def more(above):
@@ -434,7 +437,7 @@ class W3ArticleDocument(W3Document):
 			# Build the list of links for this menu level. The count is the
 			# number of visible items before we start hiding things with "More
 			# Items"
-			links = [link(doc, active=active), children]
+			links = deque((link(doc, active=active), children))
 			count = 10
 			pdoc = doc.prior
 			ndoc = doc.next
@@ -442,7 +445,7 @@ class W3ArticleDocument(W3Document):
 			while pdoc or ndoc:
 				if pdoc:
 					more_above = count <= 0 and doc.level > 0
-					links.insert(0, link(pdoc, visible=not more_above))
+					links.appendleft(link(pdoc, visible=not more_above))
 					pdoc = pdoc.prior
 					count -= 1
 				if ndoc:
@@ -452,7 +455,7 @@ class W3ArticleDocument(W3Document):
 					count -= 1
 			# Insert "More Items" links if necessary
 			if more_above:
-				links.insert(0, more(True))
+				links.appendleft(more(True))
 			if more_below:
 				links.append(more(False))
 			# Wrap the list of links in a div

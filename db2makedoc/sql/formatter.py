@@ -828,20 +828,17 @@ class BaseFormatter(object):
 		class suppress prespace in the case of dot, comma and close-parenthesis
 		operators and postspace in the case of dot and open-parenthesis.
 		"""
-		# Determine the prespace and postspace settings if necessary
-		if prespace is None:
-			prespace = self._prespace_default(template)
-		if postspace is None:
-			postspace = self._postspace_default(template)
 		# Compare the current token against the template. Note that the
 		# template may transform the token in order to match (see _cmp_tokens)
 		token = self._cmp_tokens(self._token(self._index), template)
 		if not token:
 			return None
 		# If a match was found, add a leading space (if WHITESPACE is being
-		# reformatted)
-		if WHITESPACE in self.reformat and prespace:
-			if not (self._output and self._output[-1][0] in (INDENT, WHITESPACE)):
+		# reformatted, and prespace permits it)
+		if WHITESPACE in self.reformat:
+			if prespace is None:
+				prespace = self._prespace_default(template)
+			if prespace and not (self._output and self._output[-1][0] in (INDENT, WHITESPACE)):
 				self._output.append((WHITESPACE, None, ' ', 0, 0))
 		self._output.append(token)
 		self._index += 1
@@ -851,8 +848,11 @@ class BaseFormatter(object):
 		# If postspace is False, prevent the next _match call from adding a
 		# leading space by adding an empty WHITESPACE token. The final phase of
 		# the parser removes empty tokens.
-		if not postspace:
-			self._output.append((WHITESPACE, None, '', 0, 0))
+		if WHITESPACE in self.reformat:
+			if postspace is None:
+				postspace = self._postspace_default(template)
+			if not postspace:
+				self._output.append((WHITESPACE, None, '', 0, 0))
 		return token
 
 	def _match_sequence(self, templates, prespace=None, postspace=None, interspace=None):

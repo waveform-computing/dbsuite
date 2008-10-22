@@ -16,7 +16,7 @@ from db2makedoc.db import (
 	Table, View, Alias, Trigger
 )
 from db2makedoc.plugins.html.document import (
-	Attrs, ElementFactory, WebSite, HTMLDocument, HTMLObjectDocument,
+	ElementFactory, WebSite, HTMLDocument, HTMLObjectDocument,
 	HTMLIndexDocument, HTMLExternalDocument, CSSDocument, SQLCSSDocument,
 	GraphDocument, GraphObjectDocument
 )
