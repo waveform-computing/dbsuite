@@ -68,7 +68,7 @@ are listed below.""")
 	parser.add_option('-n', '--dry-run', dest='test', action='store_true',
 		help="""test a configuration without actually executing anything""")
 	parser.add_option('-D', '--debug', dest='debug', action='store_true',
-		help="""enables debug mode (lots more output and always prints stack trace in case of failure)""")
+		help="""enables debug mode (runs db2makedoc under PDB)""")
 	(options, args) = parser.parse_args(args)
 	# Set up some logging stuff
 	console = logging.StreamHandler(sys.stderr)
@@ -97,6 +97,9 @@ are listed below.""")
 		parser.error('You must specify at least one configuration file')
 	elif options.test:
 		test_config(args)
+	elif options.debug:
+		import pdb
+		pdb.runcall(make_docs, args)
 	else:
 		make_docs(args)
 
