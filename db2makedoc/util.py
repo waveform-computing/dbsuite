@@ -199,9 +199,9 @@ def namedslice(cls, obj):
 	return cls(*(getattr(obj, attr, None) for attr in cls._fields))
 
 
-# Caching decorator
-__all__.append('cached')
-class cached(property):
+# Caching decorators
+__all__.append('cachedproperty')
+class cachedproperty(property):
 	"""Convert a method into a cached property"""
 
 	def __init__(self, method):
@@ -213,7 +213,7 @@ class cached(property):
 				value = method(s)
 				setattr(s, private, value)
 				return value
-		super(cached, self).__init__(fget)
+		super(cachedproperty, self).__init__(fget)
 
 
 # Console/terminal size calculation (urgh!)
