@@ -13,6 +13,8 @@ import re
 import codecs
 import logging
 from collections import deque
+from itertools import groupby
+from operator import attrgetter
 from db2makedoc.graph import Graph, Node, Edge, Cluster
 from db2makedoc.etree import ProcessingInstruction, fromstring, flatten_html
 from db2makedoc.db import (
@@ -96,7 +98,7 @@ class W3ElementFactory(ElementFactory):
 			# plugin for this table. Scan the th elements for any with the
 			# 'nosort' class and disable sorting on those columns
 			if 'id' in table.attrib:
-				table.append(self.script("""
+				script = self.script("""
 					$(document).ready(function() {
 						$('table.basic-table#%s').tablesorter({
 							cssAsc:       'header-sort-up',
@@ -110,7 +112,8 @@ class W3ElementFactory(ElementFactory):
 				""" % (
 					table.attrib['id'],
 					', '.join('%d: {sorter:false}' % col for col in nosort)
-				)))
+				))
+				return (table, script)
 		return table
 
 tag = W3ElementFactory()
@@ -152,6 +155,27 @@ class W3Document(HTMLDocument):
 		bodynode.attrib['id'] = 'w3-ibm-com'
 		return doc
 
+	def format_sql(self, sql, terminator=';', number_lines=False, id=None):
+		# Overridden to add line number toggling capability (via jQuery)
+		result = super(W3Document, self).format_sql(sql, terminator, number_lines, id)
+		if number_lines and id:
+			result = (result,
+				tag.script("""
+					$(document).ready(function() {
+						$('#%(id)s').before(
+							$(document.createElement('p')).append(
+								$(document.createElement('a'))
+									.append('Toggle line numbers')
+									.attr('href', '#')
+									.click(function() {
+										$('#%(id)s').toggleClass('hide-num');
+										return false;
+									})
+							)
+						);
+					});
+				""" % {'id': id}))
+		return result
 
 class W3PopupDocument(W3Document):
 	"""Document class representing a popup help window."""
@@ -516,27 +540,16 @@ class W3SiteIndexDocument(HTMLIndexDocument, W3ArticleDocument):
 	"""Document class containing an alphabetical index of objects"""
 
 	def generate_main(self):
-		# Generate the letter links to other docs in the index
-		links = tag.p()
-		doc = self.first
-		while doc:
-			if doc is self:
-				tag._append(links, tag.strong(doc.letter))
-			else:
-				tag._append(links, tag.a(doc.letter, href=doc.url))
-			tag._append(links, ' ')
-			doc = doc.next
+		# Generate the placeholder for the "expand all" and "collapse all" links
+		links = tag.p(id='expand-collapse-list')
 		# Sort the list of items in the index, and build the content. Note that
 		# self.items is actually reference to a site level object and therefore
 		# must be considered read-only, hence why the list is not sorted
 		# in-place here
-		index = sorted(self.items, key=lambda item: '%s %s' % (item.name, item.qualified_name))
-		index = sorted(dict(
-			(item1.name, [item2 for item2 in index if item1.name == item2.name])
-			for item1 in index
-		).iteritems(), key=lambda (name, _): name)
+		index = sorted(self.items, key=attrgetter('name', 'qualified_name'))
+		index = groupby(index, key=attrgetter('name'))
 		index = tag.dl(
-			(
+			((
 				tag.dt(name),
 				tag.dd(
 					tag.dl(
@@ -546,12 +559,55 @@ class W3SiteIndexDocument(HTMLIndexDocument, W3ArticleDocument):
 						) for item in items
 					)
 				)
-			) for (name, items) in index
+			) for (name, items) in index),
+			id='index-list'
 		)
+		# Generate the script blocks to handle expanding/collapsing definition
+		# list entries, and the placeholder for the "expand all" and "collapse
+		# all" links
+		script = tag.script("""
+			$(document).ready(function() {
+				/* Collapse all definition terms and add a click handler to toggle them */
+				$('#index-list')
+					.children('dd').hide().end()
+					.children('dt').addClass('expand-link-dark').click(function() {
+						$(this)
+							.toggleClass('expand-link-dark')
+							.toggleClass('collapse-link-dark')
+							.next().slideToggle();
+					});
+				/* Add the "expand all" and "collapse all" links */
+				$('#expand-collapse-list')
+					.append(
+						$(document.createElement('a'))
+							.attr('href', '#')
+							.append('Expand all')
+							.click(function() {
+								$('#index-list')
+									.children('dd').show().end()
+									.children('dt').removeClass('expand-link-dark').addClass('collapse-link-dark');
+								return false;
+							})
+					)
+					.append(' ')
+					.append(
+						$(document.createElement('a'))
+							.attr('href', '#')
+							.append('Collapse all')
+							.click(function() {
+								$('#index-list')
+									.children('dd').hide().end()
+									.children('dt').removeClass('collapse-link-dark').addClass('expand-link-dark');
+								return false;
+							})
+					);
+			});
+		""")
 		return (
 			links,
 			tag.hr(),
-			index
+			index,
+			script,
 		)
 
 
@@ -592,64 +648,6 @@ class W3SearchDocument(W3ArticleDocument):
 		php = php.replace('__ENCODING__', self.site.encoding)
 		result = super(W3SearchDocument, self).serialize(content)
 		return result.replace('__PHP__', php)
-
-
-class W3CSSDocument(CSSDocument):
-	"""Stylesheet class to supplement the w3v8 style with SQL syntax highlighting."""
-
-	styles_css = codecs.open(os.path.join(_my_path, 'styles.css'), 'r', 'UTF-8').read()
-
-	def __init__(self, site):
-		super(W3CSSDocument, self).__init__(site, 'styles.css')
-
-	def generate(self):
-		# We only need one supplemental CSS stylesheet (the default w3v8 styles
-		# are reasonably comprehensive). So this method is brutally simple...
-		doc = super(W3CSSDocument, self).generate()
-		# If local search is not enabled, ensure the local search check box is
-		# not shown
-		if not self.site.search:
-			doc += u"""
-td.limiter { display: none; }
-"""
-		return doc + self.styles_css
-
-
-class W3JavaScriptDocument(JavaScriptDocument):
-	"""Code class to supplement the w3v8 style with some simple routines."""
-
-	scripts_js = codecs.open(os.path.join(_my_path, 'scripts.js'), 'r', 'UTF-8').read()
-
-	def __init__(self, site):
-		super(W3JavaScriptDocument, self).__init__(site, 'scripts.js')
-
-	def generate(self):
-		doc = super(W3JavaScriptDocument, self).generate()
-		return doc + self.scripts_js
-
-
-class W3JQueryDocument(JavaScriptDocument):
-	"""Class encapsulating the jQuery JavaScript library."""
-
-	jquery_js = codecs.open(os.path.join(_my_path, 'jquery.js'), 'r', 'UTF-8').read()
-
-	def __init__(self, site):
-		super(W3JQueryDocument, self).__init__(site, 'jquery.js')
-
-	def generate(self):
-		return self.jquery_js
-
-
-class W3JQueryTableSorterDocument(JavaScriptDocument):
-	"""Class encapsulating the TableSorter jQuery plugin."""
-
-	jquery_tablesorter_js = codecs.open(os.path.join(_my_path, 'jquery.tablesorter.js'), 'r', 'UTF-8').read()
-
-	def __init__(self, site):
-		super(W3JQueryTableSorterDocument, self).__init__(site, 'jquery.tablesorter.js')
-
-	def generate(self):
-		return self.jquery_tablesorter_js
 
 
 class W3GraphDocument(GraphObjectDocument):
@@ -788,4 +786,23 @@ class W3GraphDocument(GraphObjectDocument):
 				return [link, image, map_small, map_zoom]
 		else:
 			return super(W3GraphDocument, self).link()
+
+
+# Declare classes for all the static documents in the W3 HTML plugin
+
+mod_path = os.path.dirname(os.path.abspath(__file__))
+
+class W3Script(ScriptDocument):
+	def __init__(self, site):
+		super(W3Script, self).__init__(site, os.path.join(mod_path, 'scripts.js'))
+
+class W3Style(StyleDocument):
+	def __init__(self, site):
+		super(W3Style, self).__init__(site, os.path.join(mod_path, 'styles.css'))
+	def generate(self):
+		# If local search is not enabled, ensure the local search check box is not shown
+		result = super(W3CSSDocument, self).generate()
+		if not self.site.search:
+			result += u'\ntd.limiter { display: none; }'
+		return result
 

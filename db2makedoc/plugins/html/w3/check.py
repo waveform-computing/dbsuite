@@ -56,10 +56,8 @@ class W3CheckDocument(W3ObjectDocument):
 			))
 		if self.dbobject.create_sql:
 			result.append((
-				'sql', 'SQL Definition', [
-					tag.p(tag.a('Line #s On/Off', href='#', onclick='javascript:return toggleLineNums("sqldef");')),
-					self.format_sql(self.dbobject.create_sql, number_lines=True, id='sqldef')
-				]
+				'sql', 'SQL Definition',
+				self.format_sql(self.dbobject.create_sql, number_lines=True, id='sql-def')
 			))
 		return result
 

@@ -14,7 +14,7 @@ import codecs
 import logging
 import db2makedoc.db
 import db2makedoc.plugins
-from db2makedoc.plugins.html.document import WebSite, SQLCSSDocument
+from db2makedoc.plugins.html.document import WebSite, SQLStyle
 from db2makedoc.graph import DEFAULT_CONVERTER
 from string import Template
 
@@ -25,7 +25,7 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 	used directly (it is an abstract class). Calling it something other than
 	"OutputPlugin" prevents it from being seen by the main application as a
 	valid output plugin.
-	
+
 	Developers wishing to derive a concrete plugin from this class need to call
 	their class "OutputPlugin" in order for the main application to use it.
 	"""
@@ -33,7 +33,7 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 	def __init__(self):
 		super(HTMLOutputPlugin, self).__init__()
 		self.site_class = WebSite
-		self.add_option('path', default='.', convert=self.convert_path, 
+		self.add_option('path', default='.', convert=self.convert_path,
 			doc="""The folder into which all files (HTML, CSS, SVG, etc.) will
 			be written. Use $db or ${db} to include the name of the database in
 			the path. The $dblower, $dbupper, and $dbtitle substitutions are
@@ -109,7 +109,7 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 			Defaults to 1. If you have more than 1 processor or core, setting
 			this to 2 or more may yield better performance (although values
 			above 4 usually make no difference)""")
-	
+
 	def configure(self, config):
 		super(HTMLOutputPlugin, self).configure(config)
 		# Check that the specified encoding exists (the following lookup()
@@ -144,7 +144,7 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 
 	def execute(self, database):
 		"""Invokes the plugin to produce documentation.
-		
+
 		Descendent classes should NOT override this method, but instead
 		override the methods of the Website class. To customize the class,
 		set self.site_class to a different class in descendent constructors.
@@ -170,7 +170,7 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 		self.create_documents(site)
 		logging.info('Writing output to "%s"' % self.options['path'])
 		site.write()
-	
+
 	def create_documents(self, site):
 		"""Creates the documents in the web-site.
 
@@ -183,9 +183,8 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 		extra (non database object) documents to the site. For example, style
 		sheets, JavaScript libraries, or static HTML documents.
 		"""
-		SQLCSSDocument(site)
 		site.database.touch(self.create_document, site)
-	
+
 	def create_document(self, dbobject, site):
 		"""Creates a document for a specific database object.
 
@@ -194,4 +193,4 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 		appropriate to the type of database object passed to the method.
 		"""
 		pass
-	
+

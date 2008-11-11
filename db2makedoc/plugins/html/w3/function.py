@@ -43,7 +43,7 @@ class W3FunctionDocument(W3ObjectDocument):
 							tag.th('#'),
 							tag.th('Name'),
 							tag.th('Type'),
-							tag.th('Description')
+							tag.th('Description', class_='nosort')
 						)
 					),
 					tag.tbody(
@@ -53,7 +53,8 @@ class W3FunctionDocument(W3ObjectDocument):
 							tag.td(param.datatype_str, class_='nowrap'),
 							tag.td(param.description)
 						) for param in self.dbobject.return_list
-					)
+					),
+					id='return-ts'
 				)
 			))
 		result.append((
@@ -111,17 +112,15 @@ class W3FunctionDocument(W3ObjectDocument):
 							tag.td(tag.a(overload.specific_name, href=self.site.object_document(overload).url))
 						)
 						for overload in self.dbobject.schema.functions[self.dbobject.name]
-						if overload != self.dbobject
+						if overload is not self.dbobject
 					)),
 					id='overload-ts'
 				)
 			))
 		if self.dbobject.create_sql:
 			result.append((
-				'sql', 'SQL Definition', [
-					tag.p(tag.a('Line #s On/Off', href='#', onclick='javascript:return toggleLineNums("sqldef");')),
-					self.format_sql(self.dbobject.create_sql, number_lines=True, id='sqldef')
-				]
+				'sql', 'SQL Definition',
+				self.format_sql(self.dbobject.create_sql, number_lines=True, id='sql-def')
 			))
 		return result
 

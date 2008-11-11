@@ -1,7 +1,7 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import View
-from db2makedoc.plugins.html.plain.document import PlainObjectDocument, PlainGraphDocument, tag
+from db2makedoc.plugins.html.plain.document import PlainObjectDocument, PlainGraphDocument
 
 times = {
 	'A': 'After',
@@ -20,11 +20,8 @@ class PlainViewDocument(PlainObjectDocument):
 		super(PlainViewDocument, self).__init__(site, view)
 	
 	def generate_sections(self):
+		tag = self.tag
 		result = super(PlainViewDocument, self).generate_sections()
-		fields = [obj for (name, obj) in sorted(self.dbobject.fields.items(), key=lambda (name, obj): name)]
-		triggers = [obj for (name, obj) in sorted(self.dbobject.triggers.items(), key=lambda (name, obj): name)]
-		dependencies = [obj for (name, obj) in sorted(self.dbobject.dependencies.items(), key=lambda (name, obj): name)]
-		dependents = [obj for (name, obj) in sorted(self.dbobject.dependents.items(), key=lambda (name, obj): name)]
 		result.append((
 			'description', 'Description',
 			tag.p(self.format_comment(self.dbobject.description))
@@ -49,7 +46,7 @@ class PlainViewDocument(PlainObjectDocument):
 					),
 					tag.tr(
 						tag.td(self.site.url_document('colcount.html').link()),
-						tag.td(len(fields)),
+						tag.td(len(self.dbobject.field_list)),
 						tag.td(self.site.url_document('readonly.html').link()),
 						tag.td(self.dbobject.read_only)
 					),
@@ -58,12 +55,13 @@ class PlainViewDocument(PlainObjectDocument):
 						tag.td(len(self.dbobject.dependent_list)),
 						tag.td(self.site.url_document('dependenciesrel.html').link()),
 						tag.td(len(self.dbobject.dependency_list))
-					)
+					),
+					summary='View attributes'
 					# XXX Include system?
 				)
 			)
 		))
-		if len(fields) > 0:
+		if len(self.dbobject.field_list) > 0:
 			result.append((
 				'fields', 'Fields',
 				tag.table(
@@ -73,7 +71,7 @@ class PlainViewDocument(PlainObjectDocument):
 							tag.th('Name'),
 							tag.th('Type'),
 							tag.th('Nulls'),
-							tag.th('Description')
+							tag.th('Description', class_='nosort')
 						)
 					),
 					tag.tbody((
@@ -83,11 +81,13 @@ class PlainViewDocument(PlainObjectDocument):
 							tag.td(field.datatype_str),
 							tag.td(field.nullable),
 							tag.td(self.format_comment(field.description, summary=True))
-						) for field in fields
-					))
+						) for field in self.dbobject.field_list
+					)),
+					id='field-ts',
+					summary='View fields'
 				)
 			))
-		if len(triggers) > 0:
+		if len(self.dbobject.trigger_list) > 0:
 			result.append((
 				'triggers', 'Triggers',
 				tag.table(
@@ -96,7 +96,7 @@ class PlainViewDocument(PlainObjectDocument):
 							tag.th('Name'),
 							tag.th('Timing'),
 							tag.th('Event'),
-							tag.th('Description')
+							tag.th('Description', class_='nosort')
 						)
 					),
 					tag.tbody((
@@ -105,11 +105,13 @@ class PlainViewDocument(PlainObjectDocument):
 							tag.td(times[trigger.trigger_time]),
 							tag.td(events[trigger.trigger_event]),
 							tag.td(self.format_comment(trigger.description, summary=True))
-						) for trigger in triggers
-					))
+						) for trigger in self.dbobject.trigger_list
+					)),
+					id='trigger-ts',
+					summary='View triggers'
 				)
 			))
-		if len(dependents) > 0:
+		if len(self.dbobject.dependent_list) > 0:
 			result.append((
 				'dependents', 'Dependent Relations',
 				tag.table(
@@ -117,7 +119,7 @@ class PlainViewDocument(PlainObjectDocument):
 						tag.tr(
 							tag.th('Name'),
 							tag.th('Type'),
-							tag.th('Description')
+							tag.th('Description', class_='nosort')
 						)
 					),
 					tag.tbody((
@@ -125,11 +127,13 @@ class PlainViewDocument(PlainObjectDocument):
 							tag.td(self.site.link_to(dep)),
 							tag.td(self.site.type_names[dep.__class__]),
 							tag.td(self.format_comment(dep.description, summary=True))
-						) for dep in dependents
-					))
+						) for dep in self.dbobject.dependent_list
+					)),
+					id='rdep-ts',
+					summary='View dependents'
 				)
 			))
-		if len(dependencies) > 0:
+		if len(self.dbobject.dependency_list) > 0:
 			result.append((
 				'dependencies', 'Dependencies',
 				tag.table(
@@ -137,7 +141,7 @@ class PlainViewDocument(PlainObjectDocument):
 						tag.tr(
 							tag.th('Name'),
 							tag.th('Type'),
-							tag.th('Description')
+							tag.th('Description', class_='nosort')
 						)
 					),
 					tag.tbody((
@@ -145,8 +149,10 @@ class PlainViewDocument(PlainObjectDocument):
 							tag.td(self.site.link_to(dep)),
 							tag.td(self.site.type_names[dep.__class__]),
 							tag.td(self.format_comment(dep.description, summary=True))
-						) for dep in dependencies
-					))
+						) for dep in self.dbobject.dependency_list
+					)),
+					id='dep-ts',
+					summary='View dependencies'
 				)
 			))
 		if self.site.object_graph(self.dbobject):
@@ -157,7 +163,7 @@ class PlainViewDocument(PlainObjectDocument):
 		if self.dbobject.create_sql:
 			result.append((
 				'sql', 'SQL Definition',
-				self.format_sql(self.dbobject.create_sql, number_lines=True)
+				self.format_sql(self.dbobject.create_sql, number_lines=True, id='sql-def')
 			))
 		return result
 
@@ -167,17 +173,17 @@ class PlainViewGraph(PlainGraphDocument):
 		super(PlainViewGraph, self).__init__(site, view)
 
 	def generate(self):
-		super(PlainViewGraph, self).generate()
+		graph = super(PlainViewGraph, self).generate()
 		view = self.dbobject
-		view_node = self.add(view, selected=True)
+		view_node = graph.add(view, selected=True)
 		for dependent in view.dependent_list:
-			dep_node = self.add(dependent)
+			dep_node = graph.add(dependent)
 			dep_edge = dep_node.connect_to(view_node)
 			dep_edge.label = '<uses>'
 			dep_edge.arrowhead = 'onormal'
 		for dependency in view.dependency_list:
-			dep_node = self.add(dependency)
+			dep_node = graph.add(dependency)
 			dep_edge = view_node.connect_to(dep_node)
 			dep_edge.label = '<uses>'
 			dep_edge.arrowhead = 'onormal'
-		return self.graph
+		return graph

@@ -3,27 +3,26 @@ pre.sql, ol.sql { background-color: #ddf; }
 pre.sql { padding: 1em; }
 
 ol.sql {
-    list-style: decimal;
-    padding-top: 1em;
-    padding-right: 1em;
-    padding-bottom: 1em;
+	list-style: decimal;
+	padding: 1em;
+	padding-left: 4em;
 }
 
-ol.sql.hidenum {
-    list-style: none;
-    padding: 1em;
+ol.sql.hide-num {
+	list-style: none;
+	padding: 1em;
 }
 
 pre.sql,
 ol.sql li {
-    font-size: 9pt;
-    font-family: "Courier New", monospace;
-    /* Ensure <pre> stuff wraps if it's too long */
-    white-space: -moz-pre-wrap; /* Mozilla */
-    white-space: -o-pre-wrap;   /* Opera 7 */
-    white-space: -pre-wrap;     /* Opera 4-6 */
-    white-space: pre-wrap;      /* CSS 2.1 (Opera8+) */
-    /* No way to do this in IE... */
+	font-size: 9pt;
+	font-family: "Courier New", monospace;
+	/* Ensure <pre> stuff wraps if it's too long */
+	white-space: -moz-pre-wrap; /* Mozilla */
+	white-space: -o-pre-wrap;   /* Opera 7 */
+	white-space: -pre-wrap;     /* Opera 4-6 */
+	white-space: pre-wrap;      /* CSS 2.1 (Opera8+) */
+	/* No way to do this in IE... */
 }
 
 ol.sql li { color: #779; }

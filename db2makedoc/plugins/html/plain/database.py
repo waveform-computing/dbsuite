@@ -1,7 +1,7 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import Database
-from db2makedoc.plugins.html.plain.document import PlainObjectDocument, tag
+from db2makedoc.plugins.html.plain.document import PlainObjectDocument
 
 class PlainDatabaseDocument(PlainObjectDocument):
 	def __init__(self, site, database):
@@ -9,14 +9,13 @@ class PlainDatabaseDocument(PlainObjectDocument):
 		super(PlainDatabaseDocument, self).__init__(site, database)
 
 	def generate_sections(self):
+		tag = self.tag
 		result = super(PlainDatabaseDocument, self).generate_sections()
-		schemas = [obj for (name, obj) in sorted(self.dbobject.schemas.items(), key=lambda (name, obj):name)]
-		tbspaces = [obj for (name, obj) in sorted(self.dbobject.tablespaces.items(), key=lambda (name, obj):name)]
 		result.append((
 			'description', 'Description',
 			tag.p(self.format_comment(self.dbobject.description))
 		))
-		if len(schemas) > 0:
+		if len(self.dbobject.schema_list) > 0:
 			result.append((
 				'schemas', 'Schemas', [
 					tag.p("""The following table contains all schemas (logical
@@ -27,19 +26,21 @@ class PlainDatabaseDocument(PlainObjectDocument):
 						tag.thead(
 							tag.tr(
 								tag.th('Name'),
-								tag.th('Description')
+								tag.th('Description', class_='nosort')
 							)
 						),
 						tag.tbody((
 							tag.tr(
 								tag.td(self.site.link_to(schema)),
 								tag.td(self.format_comment(schema.description, summary=True))
-							) for schema in schemas
-						))
+							) for schema in self.dbobject.schema_list
+						)),
+						id='schema-ts',
+						summary='Database schemas'
 					)
 				]
 			))
-		if self.site.tbspace_list and len(tbspaces) > 0:
+		if self.site.tbspace_list and len(self.dbobject.tablespace_list) > 0:
 			result.append((
 				'tbspaces', 'Tablespaces', [
 					tag.p("""The following table contains all tablespaces
@@ -51,15 +52,17 @@ class PlainDatabaseDocument(PlainObjectDocument):
 						tag.thead(
 							tag.tr(
 								tag.th('Name'),
-								tag.th('Description')
+								tag.th('Description', class_='nosort')
 							)
 						),
 						tag.tbody((
 							tag.tr(
 								tag.td(self.site.link_to(tbspace)),
 								tag.td(self.format_comment(tbspace.description, summary=True))
-							) for tbspace in tbspaces
-						))
+							) for tbspace in self.dbobject.tablespace_list
+						)),
+						id='tbspace-ts',
+						summary='Database tablespaces'
 					)
 				]
 			))

@@ -22,17 +22,6 @@ function showItems(e) {
 	return false;
 }
 
-// Toggles the line numbers in a syntax highlighted SQL block
-function toggleLineNums(e) {
-	if (typeof e == 'string')
-		e = document.getElementById(e);
-	if (e.className.match(/ *hidenum/))
-		e.className = e.className.replace(/ *hidenum/, '')
-	else
-		e.className += ' hidenum';
-	return false;
-}
-
 var W3_SEARCH = 'http://w3.ibm.com/search/do/search';
 var DOC_SEARCH = 'search.php';
 

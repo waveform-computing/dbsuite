@@ -11,9 +11,13 @@ from db2makedoc.db import (
 	Database, Schema, Table, View, Alias, UniqueKey, ForeignKey,
 	Check, Index, Trigger, Function, Procedure, Tablespace
 )
+from db2makedoc.plugins.html.document import (
+	JQueryScript, TablesorterScript, ThickboxStyle, ThickboxScript
+)
 from db2makedoc.plugins.html.plain.document import (
 	PlainSite, PlainSearchDocument, PlainSiteIndexDocument,
-	PlainExternalDocument, PlainCSSDocument, PlainPopupDocument
+	PlainExternalDocument, PlainStyle, HeaderImage, SortAscImage,
+	SortDescImage, ExpandImage, CollapseImage
 )
 from db2makedoc.plugins.html.plain.database import PlainDatabaseDocument
 from db2makedoc.plugins.html.plain.schema import PlainSchemaDocument, PlainSchemaGraph
@@ -28,7 +32,7 @@ from db2makedoc.plugins.html.plain.trigger import PlainTriggerDocument
 from db2makedoc.plugins.html.plain.function import PlainFunctionDocument
 from db2makedoc.plugins.html.plain.procedure import PlainProcedureDocument
 from db2makedoc.plugins.html.plain.tablespace import PlainTablespaceDocument
-from db2makedoc.plugins.html.plain.popups import POPUPS
+from db2makedoc.plugins.html.plain.popups import create_popups
 
 
 class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
@@ -58,7 +62,7 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 			page. If diagrams are larger, they will be resized to fit within
 			the specified size. Values must be specified as "widthxheight",
 			e.g.  "640x480". Defaults to "600x800".""")
-	
+
 	def configure(self, config):
 		super(OutputPlugin, self).configure(config)
 		# If diagrams are requested, check we can find GraphViz in the PATH
@@ -104,11 +108,19 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 
 	def create_documents(self, site):
 		# Overridden to add static documents (CSS, PHP, etc.)
-		PlainCSSDocument(site)
+		PlainStyle(site)
+		ThickboxStyle(site)
+		JQueryScript(site)
+		TablesorterScript(site)
+		ThickboxScript(site)
+		HeaderImage(site)
+		SortAscImage(site)
+		SortDescImage(site)
+		ExpandImage(site)
+		CollapseImage(site)
 		if site.search:
 			PlainSearchDocument(site)
-		for (url, title, body) in POPUPS:
-			PlainPopupDocument(site, url, title, body)
+		create_popups(site)
 		# Call inherited method to generate documents for all objects
 		super(OutputPlugin, self).create_documents(site)
 		# Add index documents for all indexed classes

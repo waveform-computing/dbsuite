@@ -10,15 +10,16 @@ import os
 import codecs
 import logging
 from db2makedoc.graph import Graph, Node, Edge, Cluster
-from db2makedoc.etree import ProcessingInstruction, fromstring
+from db2makedoc.etree import ProcessingInstruction
 from db2makedoc.db import (
 	DatabaseObject, Database, Schema, Relation,
 	Table, View, Alias, Trigger
 )
 from db2makedoc.plugins.html.document import (
-	ElementFactory, WebSite, HTMLDocument, HTMLObjectDocument,
-	HTMLIndexDocument, HTMLExternalDocument, CSSDocument, SQLCSSDocument,
-	GraphDocument, GraphObjectDocument
+	HTMLElementFactory, ObjectGraph, WebSite, HTMLDocument, HTMLObjectDocument,
+	HTMLIndexDocument, HTMLExternalDocument, StyleDocument, ScriptDocument,
+	ImageDocument, GraphDocument, GraphObjectDocument, SQLStyle, JQueryScript,
+	JQueryUIScript, TablesorterScript, ThickboxScript, ThickboxStyle
 )
 
 # Import the imaging library
@@ -29,8 +30,12 @@ except ImportError:
 	# user if PIL is required but not present
 	pass
 
+# Determine the path containing this module (used for locating external source
+# files like CSS, PHP and JavaScript below)
+_my_path = os.path.dirname(os.path.abspath(__file__))
 
-class PlainElementFactory(ElementFactory):
+
+class PlainElementFactory(HTMLElementFactory):
 	# Overridden to apply plain styles to certain elements
 
 	def _add_class(self, node, cls):
@@ -39,19 +44,90 @@ class PlainElementFactory(ElementFactory):
 		node.attrib['class'] = ' '.join(classes)
 
 	def table(self, *content, **attrs):
+		attrs.setdefault('cellspacing', '1')
 		table = self._element('table', *content, **attrs)
-		# If there's a tbody element, apply 'even' and 'odd' CSS classes to
-		# rows in the body.
+		nosort = []
+		try:
+			thead = self._find(table, 'thead')
+		except:
+			pass
+		else:
+			for tr in thead.findall('tr'):
+				if 'id' in table.attrib:
+					for index, th in enumerate(tr.findall('th')):
+						if 'nosort' in th.attrib.get('class', '').split():
+							nosort.append(index)
+		# Apply extra styles to tables with a tbody element (other tables are
+		# likely to be pure layout tables)
 		try:
 			tbody = self._find(table, 'tbody')
 		except:
 			pass
 		else:
+			# Apply even and odd classes to rows
 			for index, tr in enumerate(tbody.findall('tr')):
 				self._add_class(tr, ['odd', 'even'][index % 2])
+			# If there's an id on the main table element, add a script element
+			# within the table definition to activate the jQuery tablesorter
+			# plugin for this table, and scan th elements for any nosort
+			# classes to disable sorting on them
+			if 'id' in table.attrib:
+				script = self.script("""
+					$(document).ready(function() {
+						$('table#%s').tablesorter({
+							cssAsc:       'sort-asc',
+							cssDesc:      'sort-desc',
+							cssHeader:    'sortable',
+							widgets:      ['zebra'],
+							widgetZebra:  {css: ['odd', 'even']},
+							headers:      {%s}
+						});
+					});
+				""" % (
+					table.attrib['id'],
+					', '.join('%d: {sorter:false}' % col for col in nosort)
+				))
+				return (table, script)
 		return table
 
-tag = PlainElementFactory()
+
+class PlainGraph(ObjectGraph):
+	# Overridden to style graphs to fit the site style
+
+	def style(self, item):
+		super(PlainGraph, self).style(item)
+		# Set the graph to use the same default font as the stylesheet
+		# XXX Any way to set a fallback here like in CSS?
+		if isinstance(item, (Node, Edge)):
+			item.fontname = 'Trebuchet MS'
+			item.fontsize = 9.0
+		elif isinstance(item, Cluster):
+			item.fontname = 'Trebuchet MS'
+			item.fontsize = 11.0
+		# Set shapes and color schemes on objects that represent database
+		# objects
+		if hasattr(item, 'dbobject'):
+			if isinstance(item.dbobject, Schema):
+				item.style = 'filled'
+				item.fillcolor = '#ece6d7'
+				item.color = '#ece6d7'
+			elif isinstance(item.dbobject, Relation):
+				item.shape = 'rectangle'
+				item.style = 'filled'
+				if isinstance(item.dbobject, Table):
+					item.fillcolor = '#bbbbff'
+				elif isinstance(item.dbobject, View):
+					item.style = 'filled,rounded'
+					item.fillcolor = '#bbffbb'
+				elif isinstance(item.dbobject, Alias):
+					if isinstance(item.dbobject.final_relation, View):
+						item.style = 'filled,rounded'
+					item.fillcolor = '#ffffbb'
+				item.color = '#000000'
+			elif isinstance(item.dbobject, Trigger):
+				item.shape = 'hexagon'
+				item.style = 'filled'
+				item.fillcolor = '#ffbbbb'
 
 
 class PlainSite(WebSite):
@@ -62,6 +138,25 @@ class PlainSite(WebSite):
 		self.last_updated = options['last_updated']
 		self.max_graph_size = options['max_graph_size']
 		self.stylesheets = options['stylesheets']
+		self.tag = PlainElementFactory()
+		self.graph_class = PlainGraph
+		# Create static documents. Note that we don't keep a reference to the
+		# image documents.  Firstly, the objects will be kept alive by virtue
+		# of being added to the urls map in this object (by virtue of the
+		# add_document call in their constructors). Secondly, no document ever
+		# refers directly to these objects - they're referred to solely in in
+		# the plain stylesheet
+		self.plain_style = PlainStyle(self)
+		self.jquery_script = JQueryScript(self)
+		self.tablesorter_script = TablesorterScript(self)
+		self.thickbox_style = ThickboxStyle(self)
+		self.thickbox_script = ThickboxScript(self)
+		HeaderImage(self)
+		SortableImage(self)
+		SortAscImage(self)
+		SortDescImage(self)
+		ExpandImage(self)
+		CollapseImage(self)
 
 
 class PlainExternalDocument(HTMLExternalDocument):
@@ -72,22 +167,15 @@ class PlainDocument(HTMLDocument):
 	"""Document class for use with the plain style."""
 
 	def generate(self):
-		# Overridden to add basic styling
 		doc = super(PlainDocument, self).generate()
-		# Add styles
+		# Add styles and scripts
+		tag = self.tag
 		headnode = tag._find(doc, 'head')
-		for sheet in self.site.stylesheets:
-			headnode.append(sheet.link())
-		if self.site.stylesheets:
-			for url in self.site.stylesheets:
-				headnode.append(tag.style(src=url, media='all'))
-		headnode.append(tag.script("""
-function popup(url, type, height, width) {
-	newWin = window.open(url, 'popupWindow', 'height=' + height + ',width=' + width +
-		',resizable=yes,menubar=no,status=no,toolbar=no,scrollbars=yes');
-	newWin.focus();
-	return false;
-}"""))
+		headnode.append(self.site.plain_style.link())
+		headnode.append(self.site.jquery_script.link())
+		headnode.append(self.site.tablesorter_script.link())
+		headnode.append(self.site.thickbox_style.link())
+		headnode.append(self.site.thickbox_script.link())
 		# Add common header elements to the body
 		bodynode = tag._find(doc, 'body')
 		bodynode.append(tag.h1(self.site.title, id='top'))
@@ -97,7 +185,7 @@ function popup(url, type, height, width) {
 				tag.input(type='text', name='q', size=20),
 				' ',
 				tag.input(type='submit', value='Go'),
-				method='GET', action='search.php'
+				method='get', action='search.php'
 			))
 		bodynode.append(self.generate_crumbs())
 		return doc
@@ -115,9 +203,31 @@ function popup(url, type, height, width) {
 				links.insert(0, ' > ')
 				links.insert(0, doc.link())
 				doc = doc.parent
-			return tag.p(links, id='breadcrumbs')
+			return self.tag.p(links, id='breadcrumbs')
 		else:
-			return tag.p()
+			return self.tag.p('', id='breadcrumbs')
+
+	def format_sql(self, sql, terminator=';', number_lines=False, id=None):
+		# Overridden to add line number toggling capability (via jQuery)
+		result = super(PlainDocument, self).format_sql(sql, terminator, number_lines, id)
+		if number_lines and id:
+			result = (result,
+				self.tag.script("""
+					$(document).ready(function() {
+						$('#%(id)s').before(
+							$(document.createElement('p')).append(
+								$(document.createElement('a'))
+									.append('Toggle line numbers')
+									.attr('href', '#')
+									.click(function() {
+										$('#%(id)s').toggleClass('hide-num');
+										return false;
+									})
+							).addClass('toggle')
+						);
+					});
+				""" % {'id': id}))
+		return result
 
 
 class PlainObjectDocument(HTMLObjectDocument, PlainDocument):
@@ -128,9 +238,9 @@ class PlainObjectDocument(HTMLObjectDocument, PlainDocument):
 		self.last_updated = site.last_updated
 	
 	def generate(self):
-		# Call the inherited method to create the skeleton document
 		doc = super(PlainObjectDocument, self).generate()
 		# Add body content
+		tag = self.tag
 		bodynode = tag._find(doc, 'body')
 		bodynode.append(tag.h2('%s %s' % (self.site.type_names[self.dbobject.__class__], self.dbobject.qualified_name)))
 		sections = self.generate_sections()
@@ -140,7 +250,7 @@ class PlainObjectDocument(HTMLObjectDocument, PlainDocument):
 				for (id, title, content) in sections
 			), id='toc'))
 			tag._append(bodynode, (
-				(tag.h3(title, id=id), content, tag.p(tag.a('Back to top', href='#top')))
+				(tag.h3(title, id=id), content)
 				for (id, title, content) in sections
 			))
 		if self.copyright:
@@ -160,13 +270,13 @@ class PlainSiteIndexDocument(HTMLIndexDocument, PlainDocument):
 	"""Document class containing an alphabetical index of objects"""
 
 	def generate(self):
-		# Call the inherited method to create the skeleton document
 		doc = super(PlainSiteIndexDocument, self).generate()
 		# Add body content
+		tag = self.tag
 		bodynode = tag._find(doc, 'body')
 		bodynode.append(tag.h2('%s Index' % self.site.type_names[self.dbclass]))
 		# Generate the letter links to other docs in the index
-		links = tag.p()
+		links = tag.p(id='letters')
 		item = self.first
 		while item:
 			if item is self:
@@ -176,7 +286,6 @@ class PlainSiteIndexDocument(HTMLIndexDocument, PlainDocument):
 			tag._append(links, ' ')
 			item = item.next
 		bodynode.append(links)
-		bodynode.append(tag.hr())
 		# Sort the list of items in the index, and build the content. Note that
 		# self.items is actually reference to a site level object and therefore
 		# must be considered read-only, hence why the list is not sorted
@@ -187,7 +296,7 @@ class PlainSiteIndexDocument(HTMLIndexDocument, PlainDocument):
 			for item1 in index
 		).iteritems(), key=lambda (name, _): name)
 		bodynode.append(tag.dl(
-			(
+			((
 				tag.dt(name),
 				tag.dd(
 					tag.dl(
@@ -197,53 +306,57 @@ class PlainSiteIndexDocument(HTMLIndexDocument, PlainDocument):
 						) for item in items
 					)
 				)
-			) for (name, items) in index
+			) for (name, items) in index),
+			id='index-list'
 		))
+		# Generate the script blocks to handle expanding/collapsing definition
+		# list entries, and the placeholder for the "expand all" and "collapse
+		# all" links
+		bodynode.append(tag.script("""
+			$(document).ready(function() {
+				/* Collapse all definition terms and add a click handler to toggle them */
+				$('#index-list')
+					.children('dd').hide().end()
+					.children('dt').addClass('expand').click(function() {
+						$(this)
+							.toggleClass('expand')
+							.toggleClass('collapse')
+							.next().slideToggle();
+					});
+				/* Add the "expand all" and "collapse all" links */
+				$('#letters')
+					.append(
+						$(document.createElement('a'))
+							.attr('href', '#')
+							.append('Expand all')
+							.click(function() {
+								$('#index-list')
+									.children('dd').show().end()
+									.children('dt').removeClass('expand').addClass('collapse');
+								return false;
+							})
+					)
+					.append(' ')
+					.append(
+						$(document.createElement('a'))
+							.attr('href', '#')
+							.append('Collapse all')
+							.click(function() {
+								$('#index-list')
+									.children('dd').hide().end()
+									.children('dt').removeClass('collapse').addClass('expand');
+								return false;
+							})
+					);
+			});
+		"""))
 		return doc
-
-
-class PlainPopupDocument(PlainDocument):
-	"""Document class representing a popup help window."""
-
-	def __init__(self, site, url, title, body, width=400, height=300):
-		"""Initializes an instance of the class."""
-		super(PlainPopupDocument, self).__init__(site, url)
-		self.title = title
-		self.body = body
-		self.width = width
-		self.height = height
-	
-	def generate(self):
-		# Call the inherited method to create the skeleton document
-		doc = super(PlainPopupDocument, self).generate()
-		# Add styles specific to w3v8 popup documents
-		headnode = tag._find(doc, 'head')
-		# Generate the popup content
-		bodynode = tag._find(doc, 'body')
-		del bodynode[:] # Clear the existing body content
-		bodynode.append(tag.div(
-			tag.h2(self.title),
-			self.body,
-			tag.div(
-				tag.hr(),
-				tag.div(
-					tag.a('Close Window', href='javascript:close();'),
-					tag.a('Print', href='javascript:window.print();'),
-					class_='content'
-				),
-				id='footer'
-			)
-		))
-		return doc
-
-	def link(self):
-		# Modify the link to use the JS popup() routine
-		return tag.a(self.title, href=self.url, title=self.title,
-			onclick='javascript:return popup("%s","internal",%d,%d);' % (self.url, self.height, self.width))
 
 
 class PlainSearchDocument(PlainDocument):
 	"""Document class containing the PHP search script"""
+
+	search_php = open(os.path.join(_my_path, 'search.php'), 'r').read()
 
 	def __init__(self, site):
 		super(PlainSearchDocument, self).__init__(site, 'search.php')
@@ -254,6 +367,7 @@ class PlainSearchDocument(PlainDocument):
 	
 	def generate(self):
 		doc = super(PlainSearchDocument, self).generate()
+		tag = self.tag
 		bodynode = tag._find(doc, 'body')
 		bodynode.append(tag.p(
 			tag.a(self.site.home_title, href=self.site.home_url),
@@ -278,213 +392,12 @@ class PlainSearchDocument(PlainDocument):
 	
 	def serialize(self, content):
 		# XXX See generate()
-		php = r"""
-require '__XAPIAN__';
-
-# Defaults and limits
-$PAGE_DEFAULT = 1;
-$PAGE_MIN = 1;
-$PAGE_MAX = 0; # Calculated by run_query()
-$COUNT_DEFAULT = 20;
-$COUNT_MIN = 10;
-$COUNT_MAX = 100;
-
-# Globals derived from GET values
-$Q = array_key_exists('q', $_GET) ? strval($_GET['q']) : '';
-$PAGE = array_key_exists('page', $_GET) ? intval($_GET['page']) : $PAGE_DEFAULT;
-$PAGE = max($PAGE_MIN, $PAGE);
-$COUNT = array_key_exists('count', $_GET) ? intval($_GET['count']) : $COUNT_DEFAULT;
-$COUNT = max($COUNT_MIN, min($COUNT_MAX, $COUNT));
-
-function run_query() {
-	global $Q, $PAGE, $COUNT, $PAGE_MAX;
-
-	$db = new XapianDatabase('search');
-	$enquire = new XapianEnquire($db);
-	$parser = new XapianQueryParser();
-	$parser->set_stemmer(new XapianStem('__LANG__'));
-	$parser->set_stemming_strategy(XapianQueryParser::STEM_SOME);
-	$parser->set_database($db);
-	$query = $parser->parse_query($Q,
-		XapianQueryParser::FLAG_BOOLEAN_ANY_CASE |  # Enable boolean operators (with any case)
-		XapianQueryParser::FLAG_PHRASE |            # Enable quoted phrases 
-		XapianQueryParser::FLAG_LOVEHATE |          # Enable + and -
-		XapianQueryParser::FLAG_SPELLING_CORRECTION # Enable suggested corrections
-	);
-	$enquire->set_query($query);
-	$result = $enquire->get_mset((($PAGE - 1) * $COUNT) + 1, $COUNT);
-	$PAGE_MAX = ceil($result->get_matches_estimated() / floatval($COUNT));
-	return $result;
-}
-
-function result_header($doc, $matches) {
-	global $Q, $PAGE, $COUNT;
-
-	$page_from = (($PAGE - 1) * $COUNT) + 1;
-	$page_to = $page_from + $matches->size() - 1;
-	$label = sprintf('Showing results %d to %d of about %d for "%s"',
-		$page_from, $page_to, $matches->get_matches_estimated(), $Q);
-	$result = $doc->createElement('p');
-	$result->appendChild(new DOMText($label));
-	return $result;
-}
-
-function result_table($doc, $matches) {
-	$result = $doc->createElement('table');
-	$result->appendChild(new DOMAttr('class', 'searchresults'));
-	# Write the header row
-	$row = $doc->createElement('tr');
-	foreach (array('Relevance', 'Link') as $content) {
-		$cell = $doc->createElement('th');
-		$cell->appendChild(new DOMText($content));
-		$row->appendChild($cell);
-	}
-	$result->appendChild($row);
-	# Write the result rows
-	$i = $matches->begin();
-	while (! $i->equals($matches->end())) {
-		list($url, $data) = explode("\n", $i->get_document()->get_data(), 2);
-		$relevance = new DOMText(sprintf('%d%%', $i->get_percent()));
-		$link = $doc->createElement('a');
-		$link->appendChild(new DOMAttr('href', $url));
-		$link->appendChild(new DOMText($data));
-		$row = $doc->createElement('tr');
-		foreach (array($relevance, $link) as $content) {
-			$cell = $doc->createElement('td');
-			$cell->appendChild($content);
-			$row->appendChild($cell);
-		}
-		$result->appendChild($row);
-		$i->next();
-	}
-	return $result;
-}
-
-function result_page_link($doc, $page, $label='') {
-	global $Q, $PAGE, $PAGE_MIN, $PAGE_MAX, $COUNT;
-
-	if ($label == '') $label = strval($page);
-	if (($page == $PAGE) || ($page < $PAGE_MIN) || ($page > $PAGE_MAX)) {
-		$result = $doc->createTextNode($label);
-	}
-	else {
-		$result = $doc->createElement('a');
-		$result->appendChild(new DOMAttr('href',
-			sprintf('?q=%s&page=%d&count=%d', $Q, $page, $COUNT)));
-		$result->appendChild(new DOMText($label));
-	}
-	return $result;
-}
-
-function result_pages($doc) {
-	global $PAGE, $PAGE_MIN, $PAGE_MAX;
-
-	$result = $doc->createElement('p');
-	$result->appendChild(new DOMAttr('class', 'search-pages'));
-	$result->appendChild(result_page_link($doc, $PAGE - 1, '< Previous'));
-	$result->appendChild(new DOMText(' '));
-	for ($i = $PAGE_MIN; $i <= $PAGE_MAX; $i++) {
-		$result->appendChild(result_page_link($doc, $i));
-		$result->appendChild(new DOMText(' '));
-	}
-	$result->appendChild(result_page_link($doc, $PAGE + 1, 'Next >'));
-	return $result;
-}
-
-try {
-	$doc = new DOMDocument('1.0', '__ENCODING__');
-	$root = $doc->createElement('div');
-	$doc->appendChild($root);
-	$matches = run_query();
-	$root->appendChild(result_header($doc, $matches));
-	$root->appendChild(result_pages($doc));
-	$root->appendChild(result_table($doc, $matches));
-	print($doc->saveXML($doc->documentElement));
-}
-catch (Exception $e) {
-	print(htmlspecialchars($e->getMessage() . "\n"));
-}
-"""
+		php = self.search_php
 		php = php.replace('__XAPIAN__', 'xapian.php')
 		php = php.replace('__LANG__', self.site.lang)
 		php = php.replace('__ENCODING__', self.site.encoding)
 		result = super(PlainSearchDocument, self).serialize(content)
 		return result.replace('__PHP__', php)
-
-
-class PlainCSSDocument(CSSDocument):
-	"""Stylesheet class to define the base site style."""
-
-	def __init__(self, site):
-		super(PlainCSSDocument, self).__init__(site, 'styles.css')
-
-	def generate(self):
-		doc = super(PlainCSSDocument, self).generate()
-		return doc + u"""\
-/* General styles */
-
-body {
-	font-family: "BitStream Vera Sans", "Verdana", "Arial", "Helvetica", sans-serif;
-	font-size: 10pt;
-	margin: 0.5em;
-	padding: 0;
-}
-
-table {
-    border: 1px solid black;
-    border-collapse: collapse;
-}
-
-table tr.odd { background: white; }
-table tr.even { background: #ddd; }
-
-table td,
-table th { border-left: 1px solid black; padding: 0.2em 0.5em; }
-table th { background: #47b; color: white; text-align: left; }
-table td { vertical-align: top; }
-
-h1 {
-    background: #259;
-    color: white;
-    text-align: center;
-    padding: 0.3em;
-    margin-top: 0;
-}
-
-h3 {
-    background: #47b;
-    color: white;
-    padding: 0.5em;
-}
-
-dl dt {
-	font-weight: bold;
-}
-
-ul#toc {
-    position: fixed;
-    top: 0.5em;
-    right: 0.5em;
-    background: #ddf;
-    padding: 1.5em 2em;
-    margin: 0;
-    list-style: none;
-}
-
-p#footer,
-p#timestamp {
-    color: #777;
-    text-align: center;
-    margin: 0;
-}
-
-p.search-pages {
-	font-weight: bold;
-}
-
-/* Fix display of border around diagrams in Firefox */
-img { border: 0 none; }
-"""
 
 
 class PlainGraphDocument(GraphObjectDocument):
@@ -493,10 +406,14 @@ class PlainGraphDocument(GraphObjectDocument):
 	def __init__(self, site, dbobject):
 		"""Initializes an instance of the class."""
 		super(PlainGraphDocument, self).__init__(site, dbobject)
-		(maxw, maxh) = site.max_graph_size
-		self.graph.ratio = str(float(maxh) / float(maxw))
 		self.written = False
 		self.scale = None
+
+	def generate(self):
+		(maxw, maxh) = self.site.max_graph_size
+		graph = super(PlainGraphDocument, self).generate()
+		graph.ratio = str(float(maxh) / float(maxw))
+		return graph
 	
 	def write(self):
 		# Overridden to set the introduced "written" flag (to ensure we don't
@@ -538,30 +455,62 @@ class PlainGraphDocument(GraphObjectDocument):
 					else:
 						im = im.resize((neww, newh), Image.NEAREST)
 					im.save(self.filename)
-	
+
 	def map(self):
 		# Overridden to allow generating the client-side map for the "full
 		# size" graph, or the smaller version potentially produced by the
 		# write() method
-		if not self.written:
-			self.write()
+		self.write()
 		result = super(PlainGraphDocument, self).map()
 		if self.scale is not None:
 			for area in result:
 				# Convert coords string into a list of integer tuples
-				coords = [
+				orig_coords = (
 					tuple(int(i) for i in coord.split(','))
 					for coord in area.attrib['coords'].split(' ')
-				]
+				)
 				# Resize all the coordinates by the scale
-				coords = [
+				scaled_coords = (
 					tuple(int(round(i * self.scale)) for i in coord)
-					for coord in coords
-				]
+					for coord in orig_coords
+				)
 				# Convert the scaled results back into a string
 				area.attrib['coords'] = ' '.join(
 					','.join(str(i) for i in coord)
-					for coord in coords
+					for coord in scaled_coords
 				)
 		return result
+
+
+# Declare classes for all the static documents in the plain HTML plugin
+
+mod_path = os.path.dirname(os.path.abspath(__file__))
+
+class PlainStyle(StyleDocument):
+	def __init__(self, site):
+		super(PlainStyle, self).__init__(site, os.path.join(mod_path, 'styles.css'))
+
+class HeaderImage(ImageDocument):
+	def __init__(self, site):
+		super(HeaderImage, self).__init__(site, os.path.join(mod_path, 'header.png'))
+
+class SortableImage(ImageDocument):
+	def __init__(self, site):
+		super(SortableImage, self).__init__(site, os.path.join(mod_path, 'sortable.png'))
+
+class SortAscImage(ImageDocument):
+	def __init__(self, site):
+		super(SortAscImage, self).__init__(site, os.path.join(mod_path, 'sortasc.png'))
+
+class SortDescImage(ImageDocument):
+	def __init__(self, site):
+		super(SortDescImage, self).__init__(site, os.path.join(mod_path, 'sortdesc.png'))
+
+class ExpandImage(ImageDocument):
+	def __init__(self, site):
+		super(ExpandImage, self).__init__(site, os.path.join(mod_path, 'expand.png'))
+
+class CollapseImage(ImageDocument):
+	def __init__(self, site):
+		super(CollapseImage, self).__init__(site, os.path.join(mod_path, 'collapse.png'))
 

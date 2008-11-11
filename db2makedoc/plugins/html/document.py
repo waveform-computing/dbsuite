@@ -17,6 +17,7 @@ import threading
 import time
 
 from collections import deque
+from operator import attrgetter
 from db2makedoc.highlighters import CommentHighlighter, SQLHighlighter
 from db2makedoc.plugins.html.entities import HTML_ENTITIES
 from db2makedoc.graph import Graph, Node, Edge, Cluster
@@ -32,13 +33,6 @@ from db2makedoc.sql.formatter import (
 	ERROR, COMMENT, KEYWORD, IDENTIFIER, LABEL, DATATYPE, REGISTER,
 	NUMBER, STRING, OPERATOR, PARAMETER, TERMINATOR, STATEMENT
 )
-
-# Import the CSSUtils API
-# XXX Unneeded until we actually start work on the CSSDocument class
-#try:
-#	import cssutils
-#except ImportError:
-#	raise ImportError('Unable to find a CSS Utils implementation')
 
 # Import the xapian bindings
 try:
@@ -77,15 +71,16 @@ _my_path = os.path.dirname(os.path.abspath(__file__))
 ) = range(3)
 
 
-class ElementFactory(object):
+class HTMLElementFactory(object):
 	"""A class inspired by Genshi for easy creation of ElementTree Elements.
 
-	The ElementFactory class should rarely be used directly. Instead, use the
-	"tag" object which is an instance of ElementFactory. The ElementFactory
-	class was inspired by the genshi builder unit in that it permits simple
-	creation of Elements by calling methods on the tag object named after the
-	element you wish to create. Positional arguments become content within the
-	element, and keyword arguments become attributes.
+	The HTMLElementFactory class should rarely be used directly. Instead, use
+	the "tag" object belonging to a WebSite derived object, which is an
+	instance of HTMLElementFactory. The HTMLElementFactory class was inspired
+	by the Genshi builder unit in that it permits simple creation of Elements
+	by calling methods on the tag object named after the element you wish to
+	create. Positional arguments become content within the element, and keyword
+	arguments become attributes.
 
 	If you need an attribute or element tag that conflicts with a Python
 	keyword, simply append an underscore to the name (which will be
@@ -248,8 +243,6 @@ class ElementFactory(object):
 		else:
 			return self._element('style', *content, **attrs)
 
-tag = ElementFactory()
-
 
 class HTMLCommentHighlighter(CommentHighlighter):
 	"""Class which converts simple comment markup into HTML.
@@ -268,15 +261,15 @@ class HTMLCommentHighlighter(CommentHighlighter):
 
 	def handle_strong(self, text):
 		"""Highlights strong text with HTML <strong> elements."""
-		return tag.strong(text)
+		return self.site.tag.strong(text)
 
 	def handle_emphasize(self, text):
 		"""Highlights emphasized text with HTML <em> elements."""
-		return tag.em(text)
+		return self.site.tag.em(text)
 
 	def handle_underline(self, text):
 		"""Highlights underlined text with HTML <u> elements."""
-		return tag.u(text)
+		return self.site.tag.u(text)
 
 	def start_para(self, summary):
 		"""Emits an empty string for the start of a paragraph."""
@@ -284,7 +277,7 @@ class HTMLCommentHighlighter(CommentHighlighter):
 
 	def end_para(self, summary):
 		"""Emits an HTML <br>eak element for the end of a paragraph."""
-		return tag.br()
+		return self.site.tag.br()
 
 	def handle_link(self, target):
 		"""Emits an HTML <a>nchor element linking to the object's documentation."""
@@ -314,9 +307,10 @@ class HTMLSQLHighlighter(SQLHighlighter):
 	the HTMLDocument object passed to the constructor.
 	"""
 
-	def __init__(self):
+	def __init__(self, site):
 		"""Initializes an instance of the class."""
 		super(HTMLSQLHighlighter, self).__init__()
+		self.site = site
 		self.css_classes = {
 			ERROR:      'sql-error',
 			COMMENT:    'sql-comment',
@@ -343,12 +337,73 @@ class HTMLSQLHighlighter(SQLHighlighter):
 		# whitespace in anything except <pre>
 		source = re.sub(' {2,}', lambda m: u'\u00A0' * len(m.group()), source)
 		if css_class is not None:
-			return tag.span(source, class_=css_class)
+			return self.site.tag.span(source, class_=css_class)
 		else:
 			return source
 
 	def format_line(self, index, line):
-		return tag.li(self.format_token(token) for token in line)
+		return self.site.tag.li(self.format_token(token) for token in line)
+
+
+class ObjectGraph(Graph):
+	"""A version of the Graph class which represents database objects.
+
+	This is the base class for graphs used in generated web sites. The
+	_get_dot() getter method is overridden to call the introduced style()
+	method on all objects within the graph. Dervied plugins may override
+	style() to refine or change the style, in which case they must also update
+	the graph_class attribute of the site object. The overridden _get_dot()
+	method caches its output (given that knowledge that html derived plugins
+	always use this class in a one-shot manner). Finally, an add() method is
+	introduced which can be used to add database objects to the graph easily.
+	"""
+
+	def __init__(self, site, id, directed=True, strict=False):
+		assert isinstance(site, WebSite)
+		super(ObjectGraph, self).__init__(id, directed, strict)
+		self.dbobjects = {}
+		self.site = site
+
+	def add(self, dbobject, selected=False):
+		"""Utility method to add a database object to the graph.
+
+		This utility method adds the specified database object to the graph as
+		a node (or a cluster) and attaches custom attributes to the node to tie
+		it to the database object it represents. Descendents should override
+		this method if they wish to customize the attributes or add support for
+		additional database object types.
+		"""
+		assert isinstance(dbobject, DatabaseObject)
+		item = self.dbobjects.get(dbobject)
+		if item is None:
+			if isinstance(dbobject, Schema):
+				item = Cluster(self, dbobject.qualified_name)
+				item.label = dbobject.name
+			elif isinstance(dbobject, (Relation, Trigger)):
+				cluster = self.add(dbobject.schema)
+				item = Node(cluster, dbobject.qualified_name)
+				item.label = dbobject.name
+			item.selected = selected
+			item.dbobject = dbobject
+			self.dbobjects[dbobject] = item
+		return item
+
+	def style(self, item):
+		"""Applies common styles to graph objects."""
+		# Overridden to add URLs to graph items representing database objects,
+		# and to apply a thicker border to the selected object
+		if hasattr(item, 'dbobject'):
+			doc = self.site.object_document(item.dbobject)
+			if isinstance(item, (Node, Edge, Cluster)) and doc:
+				item.URL = doc.url
+		if hasattr(item, 'selected') and item.selected:
+			styles = set((item.style or '').split(','))
+			styles.add('setlinewidth(3)')
+			item.style = ','.join(styles)
+
+	def _get_dot(self):
+		self.touch(self.style)
+		return super(ObjectGraph, self)._get_dot()
 
 
 class WebSite(object):
@@ -384,6 +439,7 @@ class WebSite(object):
 		self.search = options['search']
 		self.threads = options['threads']
 		self.title = options['site_title']
+		self.tbspace_list = options['tbspace_list']
 		self.diagrams = bool(options['diagrams'])
 		if self.title is None:
 			self.title = '%s Documentation' % self.database.name
@@ -412,11 +468,8 @@ class WebSite(object):
 		}
 		self.default_desc = 'No description in the system catalog'
 		self.urls = {}
-		self.stylesheets = []
-		self.scripts = []
 		self.object_docs = {}
 		self.object_graphs = {}
-		self.tbspace_list = options['tbspace_list']
 		# If indexes are requested, build the sorted object lists now (and set
 		# up the first level of the index_docs mapping)
 		self.first_index = None
@@ -427,6 +480,12 @@ class WebSite(object):
 				self.index_maps[cls] = {}
 				self.index_docs[cls] = {}
 			self.database.touch(self.index_object, options['indexes'])
+		# Create the element factory
+		self.tag = HTMLElementFactory()
+		# Set the base graph class
+		self.graph_class = ObjectGraph
+		# Create static documents
+		self.sql_style = SQLStyle(self)
 
 	def index_object(self, dbobject, dbclasses):
 		"""Adds a database object to the relevant index lists.
@@ -467,10 +526,6 @@ class WebSite(object):
 			self.object_graphs[document.dbobject] = document
 		elif isinstance(document, HTMLIndexDocument):
 			self.index_docs[document.dbclass][document.letter] = document
-		elif isinstance(document, CSSDocument):
-			self.stylesheets.append(document)
-		elif isinstance(document, JavaScriptDocument):
-			self.scripts.append(document)
 
 	def url_document(self, url):
 		"""Returns the WebSiteDocument associated with a given URL.
@@ -569,7 +624,7 @@ class WebSite(object):
 		doc = self.object_document(dbobject, *args, **kwargs)
 		if doc:
 			assert isinstance(doc, HTMLDocument)
-			return tag.a(dbobject.qualified_name, href=doc.url, title=doc.title)
+			return self.tag.a(dbobject.qualified_name, href=doc.url, title=doc.title)
 		elif parent:
 			suffixes = []
 			target = dbobject
@@ -603,7 +658,7 @@ class WebSite(object):
 		assert isinstance(dbobject, DatabaseObject)
 		graph = self.object_graph(dbobject, *args, **kwargs)
 		if graph is None:
-			return tag.p('Graph for %s is not available' % dbobject.qualified_name)
+			return self.tag.p('Graph for %s is not available' % dbobject.qualified_name)
 		else:
 			assert isinstance(graph, GraphDocument)
 			return graph.link()
@@ -626,11 +681,11 @@ class WebSite(object):
 		assert issubclass(dbclass, DatabaseObject)
 		doc = self.index_document(dbclass, letter, *args, **kwargs)
 		if doc is None:
-			return tag.p('%s index is not available' % self.type_names[dbclass])
+			return self.tag.p('%s index is not available' % self.type_names[dbclass])
 		elif letter is None:
 			return doc.link()
 		else:
-			return tag.a(letter, href=doc.url, title=doc.title)
+			return self.tag.a(letter, href=doc.url, title=doc.title)
 
 	def link_indexes(self):
 		"""Utility method for linking letters of indexes together.
@@ -685,7 +740,7 @@ class WebSite(object):
 		dbclass_parent = self.object_document(self.database)
 		dbclass_prior = None
 		for (dbclass, dbclass_doc) in zip(dbclasses, dbclass_docs):
-			letter_docs = sorted(self.index_docs[dbclass].itervalues(), key=lambda doc: doc.letter)
+			letter_docs = sorted(self.index_docs[dbclass].itervalues(), key=attrgetter('letter'))
 			if letter_docs:
 				# Replace the URL of the class document with the URL of the
 				# first letter of the index. We can't do this at construction
@@ -769,7 +824,10 @@ class WebSite(object):
 		elapsed = datetime.datetime.now() - self._progress_start
 		# Get rid of microseconds from elapsed for display purposes
 		elapsed = datetime.timedelta(days=elapsed.days, seconds=elapsed.seconds)
-		rate = self._progress_total / float((elapsed.days * 86400) + elapsed.seconds)
+		try:
+			rate = self._progress_total / float((elapsed.days * 86400) + elapsed.seconds)
+		except ZeroDivisionError:
+			rate = 0
 		logging.info('%d documents written in %s @ %.2f docs/sec' % (self._progress_total, elapsed, rate))
 		del self._progress_start, self._progress_total, self._progress_last
 
@@ -827,30 +885,53 @@ class WebSite(object):
 class WebSiteDocument(object):
 	"""Represents a document in a website (e.g. HTML, CSS, image, etc.)"""
 
-	def __init__(self, site, url, filename=None):
+	def __init__(self, site, url):
 		"""Initializes an instance of the class."""
 		assert isinstance(site, WebSite)
 		super(WebSiteDocument, self).__init__()
 		self.site = site
 		self.url = url
 		self.absolute_url = urlparse.urljoin(self.site.base_url, url)
-		if filename is None:
-			parts = [self.site.base_path]
-			parts.extend(self.url.split('/'))
-			self.filename = os.path.join(*parts)
-		else:
-			self.filename = filename
+		parts = [self.site.base_path] + self.url.split('/')
+		self.filename = os.path.join(*parts)
+		self.tag = self.site.tag
 		self.site.add_document(self)
+
+	def generate(self):
+		"""Generates the document's content.
+
+		Derived classes should override this method to generate the content of
+		the document, returning it in a format suitable for passing to the
+		serialize method.
+		"""
+		return u''
+
+	def serialize(self, content):
+		"""Converts content into a byte string for writing to disk.
+
+		Derived classes should override this method if they need to serialize
+		types other than unicode (which is the only type this base
+		implementation handles).
+		"""
+		if isinstance(content, unicode):
+			return content.encode(self.site.encoding)
+		else:
+			return content
 
 	def write(self):
 		"""Writes this document to a file in the site's path.
 
-		Derived classes should override this method to write the content of the
-		document to the file specified by the instance's filename property.  If
-		writing a text-based format, remember to encode the output with the
-		encoding specified by the owning site object.
+		Derived classes generally shouldn't need to override this method. The
+		base implementation here uses generate() to create the document content
+		and serialize() to convert it to a byte string. Derived classes should
+		consider overriding those methods instead.
 		"""
 		logging.debug('Writing %s' % self.filename)
+		f = open(self.filename, 'wb')
+		try:
+			f.write(self.serialize(self.generate()))
+		finally:
+			f.close()
 
 	def link(self, *args, **kwargs):
 		"""Returns the Element(s) required to link to the document.
@@ -865,7 +946,88 @@ class WebSiteDocument(object):
 		generation of the link. For example, in the case of a stylesheet a
 		media parameter might be included.
 		"""
-		return tag.a(self.url, href=self.url)
+		return self.tag.a(self.url, href=self.url)
+
+
+class StaticDocument(WebSiteDocument):
+	"""Represents a web site document with statically defined content.
+
+	This is the base class for documents sourced from a file on disk. The
+	source parameter of the constructor specifies the full path and filename of
+	the source file. If the encoding parameter is None, the source file is
+	assumed to be binary (e.g. an image) and no transcoding will occur.
+	Otherwise, the specified encoding will be used to decode the source file to
+	unicode, before re-encoding it with the site's configured encoding.
+	"""
+
+	def __init__(self, site, source, encoding=None, url=None):
+		if url is None:
+			url = os.path.basename(source)
+		super(StaticDocument, self).__init__(site, url)
+		self.source = source
+		self.encoding = encoding
+
+	def generate(self):
+		if self.encoding:
+			f = codecs.open(self.source, 'r', self.encoding)
+		else:
+			f = open(self.source, 'rb')
+		return f.read()
+
+
+class ImageDocument(StaticDocument):
+	"""Represents a static image.
+
+	This is the base class for static images. It provides no methods for
+	constructing or editing images; simply specify the source file as the
+	source parameter to the constructor, or replace the generate method to
+	return the image to write to the target file.
+	"""
+
+	def __init__(self, site, source, alt=None):
+		super(ImageDocument, self).__init__(site, source, encoding=None)
+		self.alt = alt
+
+	def link(self, *args, **kwargs):
+		# Overridden to return an <img> element
+		return self.tag.img(src=self.url, alt=self.alt)
+
+
+class StyleDocument(StaticDocument):
+	"""Represents a simple static CSS document.
+
+	This is the base class for CSS stylesheets. It provides no methods for
+	constructing or editing CSS; simply specify the source file as the source
+	parameter to the constructor, or replace the generate method to return the
+	CSS to write to the target file.
+	"""
+
+	def __init__(self, site, source, encoding='UTF-8', media='all'):
+		super(StyleDocument, self).__init__(site, source, encoding)
+		self.media = media
+
+	def link(self, *args, **kwargs):
+		# Overridden to return a <link> to the stylesheet (the tag
+		# ElementFactory takes care of converting <style> into <link> when
+		# there's no content, and src is specified)
+		return self.tag.style(src=self.url, media=self.media)
+
+
+class ScriptDocument(StaticDocument):
+	"""Represents a simple JavaScript document.
+
+	This is the base class for JavaScript libraries. It provides no methods for
+	constructing or editing JavaScript; simply specify the source file as the
+	source parameter to the constructor, or replace the generate method to
+	return the CSS to write to the target file.
+	"""
+
+	def __init__(self, site, source, encoding='UTF-8'):
+		super(ScriptDocument, self).__init__(site, source, encoding)
+
+	def link(self, *args, **kwargs):
+		# Overridden to return a <script> element
+		return self.tag.script(src=self.url)
 
 
 class HTMLDocument(WebSiteDocument):
@@ -877,8 +1039,8 @@ class HTMLDocument(WebSiteDocument):
 	ElementTree API.
 	"""
 
-	def __init__(self, site, url, filename=None):
-		super(HTMLDocument, self).__init__(site, url, filename)
+	def __init__(self, site, url):
+		super(HTMLDocument, self).__init__(site, url)
 		self.ftsdoc = None
 		self.title = ''
 		self.description = ''
@@ -895,7 +1057,7 @@ class HTMLDocument(WebSiteDocument):
 		self.robots_index = True
 		self.robots_follow = True
 		self.comment_highlighter = HTMLCommentHighlighter(self.site)
-		self.sql_highlighter = HTMLSQLHighlighter()
+		self.sql_highlighter = HTMLSQLHighlighter(self.site)
 		self._first = None
 		self._prior = None
 		self._next = None
@@ -958,34 +1120,6 @@ class HTMLDocument(WebSiteDocument):
 	parent = property(lambda self: self._get_parent(), lambda self, value: self._set_parent(value))
 	level = property(_get_level)
 
-	def write(self):
-		super(HTMLDocument, self).write()
-		doc = self.generate()
-		# If full-text-searching is enabled, set up a Xapian indexer and
-		# stemmer and fill out the ftsdoc. The site class handles writing all
-		# the ftsdoc's to the xapian database once all writing is finished
-		if self.search:
-			logging.debug('Indexing %s' % self.filename)
-			indexer = xapian.TermGenerator()
-			# XXX Seems to be a bug in xapian 1.0.2 which causes a segfault
-			# with this enabled
-			#indexer.set_flags(xapian.TermGenerator.FLAG_SPELLING)
-			indexer.set_stemmer(xapian.Stem(self.lang))
-			self.ftsdoc = xapian.Document()
-			self.ftsdoc.set_data('\n'.join([
-				self.url,
-				self.title or self.url,
-				self.description or self.title or self.url,
-			]))
-			indexer.set_document(self.ftsdoc)
-			indexer.index_text(self.flatten(doc))
-		# Finally, write the output to the destination file
-		f = open(self.filename, 'w')
-		try:
-			f.write(self.serialize(doc))
-		finally:
-			f.close()
-
 	# Regex which finds characters within the range of characters capable of
 	# being encoded as HTML entities
 	entitiesre = re.compile(u'[%s-%s]' % (
@@ -995,46 +1129,60 @@ class HTMLDocument(WebSiteDocument):
 
 	def serialize(self, content):
 		"""Converts the document into a string for writing."""
-		# "Pure" XML won't handle HTML character entities. So we do it
-		# manually. First, get the XML as a Unicode string (without any XML
-		# PI or DOCTYPE)
-		if self.site.htmlver >= XHTML10:
-			content.attrib['xmlns'] = 'http://www.w3.org/1999/xhtml'
-		s = unicode(tostring(content))
-		# Convert any characters into HTML entities that can be
-		def subfunc(match):
-			if ord(match.group()) in HTML_ENTITIES:
-				return u'&%s;' % HTML_ENTITIES[ord(match.group())]
-			else:
-				return match.group()
-		s = self.entitiesre.sub(subfunc, s)
-		# Insert an XML PI at the start reflecting the target encoding (and
-		# a DOCTYPE as ElementTree doesn't handle this for us directly)
-		try:
-			(public_id, system_id) = {
-				(HTML4, STRICT):         ('-//W3C//DTD HTML 4.01//EN', 'http://www.w3.org/TR/html4/strict.dtd'),
-				(HTML4, TRANSITIONAL):   ('-//W3C//DTD HTML 4.01 Transitional//EN', 'http://www.w3.org/TR/html4/loose.dtd'),
-				(HTML4, FRAMESET):       ('-//W3C//DTD HTML 4.01 Frameset//EN', 'http://www.w3.org/TR/html4/frameset.dtd'),
-				(XHTML10, STRICT):       ('-//W3C//DTD XHTML 1.0 Strict//EN', 'http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd'),
-				(XHTML10, TRANSITIONAL): ('-//W3C//DTD XHTML 1.0 Transitional//EN', 'http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd'),
-				(XHTML10, FRAMESET):     ('-//W3C//DTD XHTML 1.0 Frameset//EN', 'http://www.w3.org/TR/xhtml1/DTD/xhtml1-frameset.dtd'),
-				(XHTML11, STRICT):       ('-//W3C//DTD XHTML 1.1//EN', 'xhtml11-flat.dtd'),
-			}[(self.site.htmlver, self.site.htmlstyle)]
-		except KeyError:
-			raise KeyError('Invalid HTML version and style (XHTML11 only supports the STRICT style)')
-		s = u"""\
-<?xml version="1.0" encoding="%(encoding)s"?>
-<!DOCTYPE html
-  PUBLIC "%(publicid)s"
-  "%(systemid)s">
-%(content)s""" % {
-			'encoding': self.site.encoding,
-			'publicid': public_id,
-			'systemid': system_id,
-			'content': s,
-		}
-		# Transcode the document into the target encoding
-		return s.encode(self.site.encoding)
+		if iselement(content):
+			assert content.tag == 'html'
+			# If full-text-searching is enabled, set up a Xapian indexer and
+			# stemmer and fill out the ftsdoc. The site class handles writing
+			# all the ftsdoc's to the xapian database once all writing is
+			# finished
+			if self.search:
+				logging.debug('Indexing %s' % self.filename)
+				indexer = xapian.TermGenerator()
+				# XXX Seems to be a bug in xapian 1.0.2 which causes a segfault
+				# with this enabled
+				#indexer.set_flags(xapian.TermGenerator.FLAG_SPELLING)
+				indexer.set_stemmer(xapian.Stem(self.lang))
+				self.ftsdoc = xapian.Document()
+				self.ftsdoc.set_data('\n'.join([
+					self.url,
+					self.title or self.url,
+					self.description or self.title or self.url,
+				]))
+				indexer.set_document(self.ftsdoc)
+				indexer.index_text(self.flatten(content))
+			# "Pure" XML won't handle HTML character entities. So we do it
+			# manually. First, get the XML as a Unicode string (without any XML
+			# PI or DOCTYPE)
+			if self.site.htmlver >= XHTML10:
+				content.attrib['xmlns'] = 'http://www.w3.org/1999/xhtml'
+			content = unicode(tostring(content))
+			# Convert any characters into HTML entities that can be
+			def subfunc(match):
+				if ord(match.group()) in HTML_ENTITIES:
+					return u'&%s;' % HTML_ENTITIES[ord(match.group())]
+				else:
+					return match.group()
+			content = self.entitiesre.sub(subfunc, content)
+			# Insert an XML PI at the start reflecting the target encoding (and
+			# a DOCTYPE as ElementTree doesn't handle this for us directly)
+			try:
+				(public_id, system_id) = {
+					(HTML4, STRICT):         ('-//W3C//DTD HTML 4.01//EN',              'http://www.w3.org/TR/html4/strict.dtd'),
+					(HTML4, TRANSITIONAL):   ('-//W3C//DTD HTML 4.01 Transitional//EN', 'http://www.w3.org/TR/html4/loose.dtd'),
+					(HTML4, FRAMESET):       ('-//W3C//DTD HTML 4.01 Frameset//EN',     'http://www.w3.org/TR/html4/frameset.dtd'),
+					(XHTML10, STRICT):       ('-//W3C//DTD XHTML 1.0 Strict//EN',       'http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd'),
+					(XHTML10, TRANSITIONAL): ('-//W3C//DTD XHTML 1.0 Transitional//EN', 'http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd'),
+					(XHTML10, FRAMESET):     ('-//W3C//DTD XHTML 1.0 Frameset//EN',     'http://www.w3.org/TR/xhtml1/DTD/xhtml1-frameset.dtd'),
+					(XHTML11, STRICT):       ('-//W3C//DTD XHTML 1.1//EN',              'xhtml11-flat.dtd'),
+				}[(self.site.htmlver, self.site.htmlstyle)]
+			except KeyError:
+				raise KeyError('Invalid HTML version and style (XHTML11 only supports the STRICT style)')
+			content = u'\n'.join((
+				u'<?xml version="1.0" encoding="%s"?>' % self.site.encoding,
+				u'<!DOCTYPE html PUBLIC "%s" "%s">' % (public_id, system_id),
+				content
+			))
+		return super(HTMLDocument, self).serialize(content)
 
 	def flatten(self, content):
 		"""Converts the document into pure text for full-text indexing."""
@@ -1048,46 +1196,48 @@ class HTMLDocument(WebSiteDocument):
 		# Override this in descendent classes to include additional content
 		# Add some standard <meta> elements (encoding, keywords, author, robots
 		# info, Dublin Core stuff, etc.)
-		content = [
-			tag.meta(name='Robots', content=','.join([
-				'%sindex'  % ['no', ''][bool(self.robots_index)],
-				'%sfollow' % ['no', ''][bool(self.robots_follow)],
-			])),
+		tag = self.tag
+		head = tag.head(
+			tag.meta(name='Robots', content=','.join((
+				'%sindex'  % ('no', '')[bool(self.robots_index)],
+				'%sfollow' % ('no', '')[bool(self.robots_follow)],
+			))),
 			tag.meta(name='DC.Date', content=self.date, scheme='iso8601'),
-			tag.meta(name='DC.Language', content='%s-%s' % (self.lang, self.sublang), scheme='rfc1766'),
-		]
+			tag.meta(name='DC.Language', content='%s-%s' % (self.lang, self.sublang), scheme='rfc1766')
+		)
 		if self.copyright is not None:
-			content.append(tag.meta(name='DC.Rights', content=self.copyright))
+			head.append(tag.meta(name='DC.Rights', content=self.copyright))
 		if self.description is not None:
-			content.append(tag.meta(name='Description', content=self.description))
+			head.append(tag.meta(name='Description', content=self.description))
 		if len(self.keywords) > 0:
-			content.append(tag.meta(name='Keywords', content=', '.join(self.keywords)))
+			head.append(tag.meta(name='Keywords', content=', '.join(self.keywords)))
 		if self.author_email is not None:
-			content.append(tag.meta(name='Owner', content=self.author_email))
-			content.append(tag.meta(name='Feedback', content=self.author_email))
-			content.append(tag.link(rel='author', href='mailto:%s' % self.author_email, title=self.author_name))
+			head.append(tag.meta(name='Owner', content=self.author_email))
+			head.append(tag.meta(name='Feedback', content=self.author_email))
+			head.append(tag.link(rel='author', href='mailto:%s' % self.author_email, title=self.author_name))
 		# Add some navigation <link> elements
-		content.append(tag.link(rel='home', href=self.site.home_url))
+		head.append(tag.link(rel='home', href=self.site.home_url))
 		if self.first:
-			content.append(tag.link(rel='first', href=self.first.url))
+			head.append(tag.link(rel='first', href=self.first.url))
 		if self.prior:
-			content.append(tag.link(rel='prev', href=self.prior.url))
+			head.append(tag.link(rel='prev', href=self.prior.url))
 		if self.next:
-			content.append(tag.link(rel='next', href=self.next.url))
+			head.append(tag.link(rel='next', href=self.next.url))
 		if self.last:
-			content.append(tag.link(rel='last', href=self.last.url))
+			head.append(tag.link(rel='last', href=self.last.url))
 		if self.parent:
-			content.append(tag.link(rel='up', href=self.parent.url))
+			head.append(tag.link(rel='up', href=self.parent.url))
 		# Add <link> elements for the favicon
 		if self.icon_url:
-			content.append(tag.link(rel='icon', href=self.icon_url, type=self.icon_type))
-			content.append(tag.link(rel='shortcut icon', href=self.icon_url, type=self.icon_type))
+			head.append(tag.link(rel='icon', href=self.icon_url, type=self.icon_type))
+			head.append(tag.link(rel='shortcut icon', href=self.icon_url, type=self.icon_type))
+		# Add the stylesheet to support the format_sql() method
+		head.append(self.site.sql_style.link())
 		# Add the title
 		if self.title is not None:
-			content.append(tag.title('%s - %s' % (self.site.title, self.title)))
-		# Create the <head> element with the above content, and an empty <body>
-		# element
-		return tag.html(tag.head(content), tag.body())
+			head.append(tag.title('%s - %s' % (self.site.title, self.title)))
+		# Generate and return the document
+		return tag.html(head, tag.body())
 
 	def format_comment(self, comment, summary=False):
 		return self.comment_highlighter.parse(comment or self.site.default_desc, summary)
@@ -1095,15 +1245,15 @@ class HTMLDocument(WebSiteDocument):
 	def format_sql(self, sql, terminator=';', number_lines=False, id=None):
 		tokens = self.sql_highlighter.parse(sql, terminator, line_split=number_lines)
 		if number_lines:
-			return tag.ol(tokens, class_='sql', id=id)
+			return self.tag.ol(tokens, class_='sql', id=id)
 		else:
-			return tag.pre(tokens, class_='sql', id=id)
+			return self.tag.pre(tokens, class_='sql', id=id)
 
 	def format_prototype(self, sql):
-		return tag.code(self.sql_highlighter.parse_prototype(sql), class_='sql')
+		return self.tag.code(self.sql_highlighter.parse_prototype(sql), class_='sql')
 
 	def link(self, *args, **kwargs):
-		return tag.a(self.title, href=self.url, title=self.title)
+		return self.tag.a(self.title, href=self.url, title=self.title)
 
 
 class HTMLExternalDocument(HTMLDocument):
@@ -1113,14 +1263,10 @@ class HTMLExternalDocument(HTMLDocument):
 	db2makedoc (whether on the local web server or elsewhere). The write()
 	method of this class is overridden to do nothing. Instances of this class
 	primarily serve as the target of other document's links.
-
-	Note that the filename parameter to the constructor is replaced by title
-	(there's no point having a filename for a document we'll never write to
-	after all!).
 	"""
 
 	def __init__(self, site, url, title):
-		super(HTMLExternalDocument, self).__init__(site, url, '')
+		super(HTMLExternalDocument, self).__init__(site, url)
 		self.title = title
 
 	def write(self):
@@ -1216,110 +1362,10 @@ class HTMLObjectDocument(HTMLDocument):
 			self.parent = result
 		return result
 
-
-class CSSDocument(WebSiteDocument):
-	"""Represents a simple CSS document.
-
-	This is the base class for CSS stylesheets. It provides no methods for
-	constructing or editing CSS; simply override the generate() method to
-	return the CSS to write to the file.
-	"""
-
-	def __init__(self, site, url, filename=None, media='all'):
-		super(CSSDocument, self).__init__(site, url, filename)
-		self.media = media
-
-	def write(self):
-		super(CSSDocument, self).write()
-		f = open(self.filename, 'w')
-		try:
-			f.write(self.serialize(self.generate()))
-		finally:
-			f.close()
-
-	def serialize(self, content):
-		"""Converts the document into a string for writing."""
-		return content.encode(self.site.encoding)
-
 	def generate(self):
-		"""Constructs the content of the stylesheet."""
-		# Child classes can override this to build the stylesheet
-		return u''
-
-	def link(self, *args, **kwargs):
-		# Overridden to return a <link> to the stylesheet (the tag
-		# ElementFactory takes care of converting <style> into <link> when
-		# there's no content, and src is specified)
-		return tag.style(src=self.url, media=self.media)
-
-
-class SQLCSSDocument(CSSDocument):
-	"""Stylesheet class for SQL syntax highlighting."""
-
-	sql_css = codecs.open(os.path.join(_my_path, 'sql.css'), 'r', 'UTF-8').read()
-
-	def __init__(self, site):
-		super(SQLCSSDocument, self).__init__(site, 'sql.css')
-
-	def generate(self):
-		doc = super(SQLCSSDocument, self).generate()
-		return doc + self.sql_css
-
-
-class JavaScriptDocument(WebSiteDocument):
-	"""Represents a simple JavaScript document.
-
-	This is the base class for JavaScript libraries. It provides no methods for
-	constructing or editing JavaScript; simply override the generate() method
-	to return the JavaScript to write to the file.
-	"""
-
-	def write(self):
-		super(JavaScriptDocument, self).write()
-		f = open(self.filename, 'w')
-		try:
-			f.write(self.serialize(self.generate()))
-		finally:
-			f.close()
-
-	def serialize(self, content):
-		"""Converts the document into a string for writing."""
-		return content.encode(self.site.encoding)
-
-	def generate(self):
-		"""Constructs the content of the JavaScript library."""
-		# Child classes can override this to build the script
-		return u''
-
-	def link(self, *args, **kwargs):
-		# Overridden to return a <script> element
-		return tag.script(src=self.url)
-
-
-class ImageDocument(WebSiteDocument):
-	"""Represents a static image.
-
-	This is the base class for static images. It provides no methods for
-	constructing or editing images; simply override the generate() method to
-	return the image data to write to the file.
-	"""
-
-	def write(self):
-		super(ImageDocument, self).write()
-		f = open(self.filename, 'wb')
-		try:
-			f.write(self.generate())
-		finally:
-			f.close()
-
-	def generate(self):
-		"""Constructs the content of the image."""
-		# Child class can override this to build the image (or simply read it from a source file)
-		return ''
-
-	def link(self, *args, **kwargs):
-		# Overridden to return an <img> element
-		return tag.img(src=self.url)
+		doc = super(HTMLObjectDocument, self).generate()
+		doc.find('head').append(self.site.sql_style.link())
+		return doc
 
 
 class GraphDocument(WebSiteDocument):
@@ -1331,62 +1377,39 @@ class GraphDocument(WebSiteDocument):
 	rudimentary editing facilities for constructor dot graphs.
 	"""
 
-	def __init__(self, site, url):
+	def __init__(self, site, url, alt=''):
 		super(GraphDocument, self).__init__(site, url)
-		self.graph = Graph('G')
-		self.graph.rankdir = 'LR'
-		self.graph.dpi = '96'
+		self.alt = alt
 		# PNGs and GIFs use a client-side image-map to define link locations
 		# (SVGs just use embedded links)
 		self.usemap = os.path.splitext(self.filename)[1].lower() in ('.png', '.gif')
-		# generated is a latch to ensure generate() isn't performed
-		# more than once when dealing with image maps (which have to run
-		# through graphviz twice, once for the image, once for the map)
-		self.generated = False
-
-	def write(self):
-		"""Writes this document to a file in the site's path"""
-		super(GraphDocument, self).write()
-		# Generate the graph if it hasn't been already
-		if not self.generated:
-			g = self.generate()
-			g.touch(self.style)
-		else:
-			g = self.graph
-		# The following lookup tables are used to decide on the method used to
-		# write output based on the extension of the image filename
-		method_lookup = {
-			'.png': g.to_png,
-			'.gif': g.to_gif,
-			'.svg': g.to_svg,
-			'.ps':  g.to_ps,
-			'.eps': g.to_ps,
-		}
-		ext = os.path.splitext(self.filename)[1].lower()
-		try:
-			method = method_lookup[ext]
-		except KeyError:
-			raise Exception('Unknown image extension "%s"' % ext)
-		f = open(self.filename, 'wb')
-		try:
-			method(f)
-		finally:
-			f.close()
 
 	def generate(self):
-		"""Constructs the content of the graph."""
-		self.generated = True
-		return self.graph
+		graph = self.site.graph_class(self.site, 'G')
+		graph.rankdir = 'LR'
+		graph.dpi = 96
+		return graph
 
-	def style(self, node):
-		"""Applies common styles to graph objects."""
-		# Override this in descendents to change common graph styles
-		if isinstance(node, (Node, Edge)):
-			node.fontname = 'Verdana'
-			node.fontsize = 8.0
-		elif isinstance(node, Cluster):
-			node.fontname = 'Verdana'
-			node.fontsize = 10.0
+	def serialize(self, content):
+		if isinstance(content, Graph):
+			# The following lookup tables are used to decide on the method used
+			# to write output based on the extension of the image filename
+			ext = os.path.splitext(self.filename)[1].lower()
+			try:
+				method = {
+					'.png': content.to_png,
+					'.gif': content.to_gif,
+					'.svg': content.to_svg,
+					'.ps':  content.to_ps,
+					'.eps': content.to_ps,
+				}[ext]
+			except KeyError:
+				raise Exception('Unknown image extension "%s"' % ext)
+			result = StringIO()
+			method(result)
+			return result.getvalue()
+		else:
+			return super(GraphDocument, self).serialize(content)
 
 	def link(self, *args, **kwargs):
 		if self.usemap:
@@ -1394,22 +1417,17 @@ class GraphDocument(WebSiteDocument):
 			# more work is required. We need to get the graph to generate
 			# the <map> doc, then import all elements from that
 			map = self.map()
-			img = tag.img(src=self.url, usemap='#' + map.attrib['id'])
-			return [img, map]
+			img = self.tag.img(src=self.url, usemap='#' + map.attrib['id'], alt=self.alt)
+			return (img, map)
 		else:
-			return tag.img(src=self.url)
+			return self.tag.img(src=self.url, alt=self.alt)
 
 	def map(self):
 		"""Returns an Element containing the client-side image map."""
 		assert self.usemap
-		if not self.generated:
-			g = self.generate()
-			g.touch(self.style)
-		else:
-			g = self.graph
 		f = StringIO()
 		try:
-			g.to_map(f)
+			self.generate().to_map(f)
 			result = fromstring(f.getvalue())
 			result.attrib['id'] = self.url.rsplit('.', 1)[0] + '.map'
 			result.attrib['name'] = result.attrib['id']
@@ -1424,63 +1442,41 @@ class GraphObjectDocument(GraphDocument):
 	def __init__(self, site, dbobject):
 		"""Initializes an instance of the class."""
 		self.dbobject = dbobject # must be set before calling the inherited method
-		super(GraphObjectDocument, self).__init__(site, '%s.png' % dbobject.identifier)
-		self.dbobjects = {}
+		super(GraphObjectDocument, self).__init__(site,
+			url='%s.png' % dbobject.identifier,
+			alt='Diagram of %s' % dbobject.qualified_name)
 
-	def style(self, node):
-		# Overridden to add URLs to graph items representing database objects,
-		# and to apply common styles for database objects
-		super(GraphObjectDocument, self).style(node)
-		if hasattr(node, 'dbobject'):
-			doc = self.site.object_document(node.dbobject)
-			if isinstance(node, (Node, Edge, Cluster)) and doc:
-				node.URL = doc.url
-			if isinstance(node.dbobject, Schema):
-				node.style = 'filled'
-				node.fillcolor = '#ece6d7'
-				node.color = '#ece6d7'
-			elif isinstance(node.dbobject, Relation):
-				node.shape = 'rectangle'
-				node.style = 'filled'
-				if isinstance(node.dbobject, Table):
-					node.fillcolor = '#bbbbff'
-				elif isinstance(node.dbobject, View):
-					node.style = 'filled,rounded'
-					node.fillcolor = '#bbffbb'
-				elif isinstance(node.dbobject, Alias):
-					if isinstance(node.dbobject.final_relation, View):
-						node.style = 'filled,rounded'
-					node.fillcolor = '#ffffbb'
-				node.color = '#000000'
-			elif isinstance(node.dbobject, Trigger):
-				node.shape = 'hexagon'
-				node.style = 'filled'
-				node.fillcolor = '#ffbbbb'
-		if hasattr(node, 'selected') and node.selected:
-			styles = node.style.split(',')
-			styles.append('setlinewidth(3)')
-			node.style = ','.join(styles)
 
-	def add(self, dbobject, selected=False):
-		"""Utility method to add a database object to the graph.
+# Declare classes for all the static documents in the default HTML plugin
 
-		This utility method adds the specified database object along with
-		standardized formatting depending on the type of the object.
-		Descendents should override this method if they wish to tweak the
-		styling or add support for additional object types.
-		"""
-		assert isinstance(dbobject, DatabaseObject)
-		o = self.dbobjects.get(dbobject)
-		if o is None:
-			if isinstance(dbobject, Schema):
-				o = Cluster(self.graph, dbobject.qualified_name)
-				o.label = dbobject.name
-			elif isinstance(dbobject, (Relation, Trigger)):
-				cluster = self.add(dbobject.schema)
-				o = Node(cluster, dbobject.qualified_name)
-				o.label = dbobject.name
-			o.selected = selected
-			o.dbobject = dbobject
-			self.dbobjects[dbobject] = o
-		return o
+mod_path = os.path.dirname(os.path.abspath(__file__))
 
+class SQLStyle(StyleDocument):
+	def __init__(self, site):
+		super(SQLStyle, self).__init__(site,
+			os.path.join(mod_path, 'sql.css'))
+
+class ThickboxStyle(StyleDocument):
+	def __init__(self, site):
+		super(ThickboxStyle, self).__init__(site,
+			os.path.join(mod_path, 'thickbox.css'))
+
+class ThickboxScript(ScriptDocument):
+	def __init__(self, site):
+		super(ThickboxScript, self).__init__(site,
+			os.path.join(mod_path, 'thickbox.js'))
+
+class JQueryScript(ScriptDocument):
+	def __init__(self, site):
+		super(JQueryScript, self).__init__(site,
+			os.path.join(mod_path, 'jquery.js'))
+
+class JQueryUIScript(ScriptDocument):
+	def __init__(self, site):
+		super(JQueryScript, self).__init__(site,
+			os.path.join(mod_path, 'jquery.ui.all.js'))
+
+class TablesorterScript(ScriptDocument):
+	def __init__(self, site):
+		super(TablesorterScript, self).__init__(site,
+			os.path.join(mod_path, 'jquery.tablesorter.js'))

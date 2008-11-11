@@ -122,8 +122,8 @@ class W3TableDocument(W3ObjectDocument):
 						tag.tr(
 							tag.th('Name'),
 							tag.th('Unique'),
-							tag.th('Fields'),
-							tag.th('Sort Order'),
+							tag.th('Fields', class_='nosort'),
+							tag.th('Sort Order', class_='nosort'),
 							tag.th('Description', class_='nosort')
 						)
 					),
@@ -231,10 +231,8 @@ class W3TableDocument(W3ObjectDocument):
 			))
 		if self.dbobject.create_sql:
 			result.append((
-				'sql', 'SQL Definition', [
-					tag.p(tag.a('Line #s On/Off', href='#', onclick='javascript:return toggleLineNums("sqldef");')),
-					self.format_sql(self.dbobject.create_sql, number_lines=True, id='sqldef')
-				]
+				'sql', 'SQL Definition',
+				self.format_sql(self.dbobject.create_sql, number_lines=True, id='sql-def')
 			))
 		return result
 

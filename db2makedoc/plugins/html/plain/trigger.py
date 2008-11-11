@@ -1,7 +1,7 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import Trigger
-from db2makedoc.plugins.html.plain.document import PlainObjectDocument, tag
+from db2makedoc.plugins.html.plain.document import PlainObjectDocument
 
 trigtime = {
 	'A': 'After',
@@ -24,6 +24,7 @@ class PlainTriggerDocument(PlainObjectDocument):
 		super(PlainTriggerDocument, self).__init__(site, trigger)
 
 	def generate_sections(self):
+		tag = self.tag
 		result = super(PlainTriggerDocument, self).generate_sections()
 		result.append((
 			'description', 'Description',
@@ -59,13 +60,14 @@ class PlainTriggerDocument(PlainObjectDocument):
 						tag.td('Relation'),
 						tag.td(self.site.link_to(self.dbobject.relation))
 					)
-				)
+				),
+				summary='Trigger attributes'
 			)
 		))
 		if self.dbobject.create_sql:
 			result.append((
 				'sql', 'SQL Definition',
-				self.format_sql(self.dbobject.create_sql, number_lines=True)
+				self.format_sql(self.dbobject.create_sql, number_lines=True, id='sql-def')
 			))
 		return result
 

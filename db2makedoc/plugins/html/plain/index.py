@@ -1,7 +1,7 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import Index
-from db2makedoc.plugins.html.plain.document import PlainObjectDocument, tag
+from db2makedoc.plugins.html.plain.document import PlainObjectDocument
 
 class PlainIndexDocument(PlainObjectDocument):
 	def __init__(self, site, index):
@@ -9,9 +9,8 @@ class PlainIndexDocument(PlainObjectDocument):
 		super(PlainIndexDocument, self).__init__(site, index)
 
 	def generate_sections(self):
+		tag = self.tag
 		result = super(PlainIndexDocument, self).generate_sections()
-		fields = [(field, ordering, position) for (position, (field, ordering)) in enumerate(self.dbobject.field_list)]
-		fields = sorted(fields, key=lambda (field, ordering, position): field.name)
 		result.append((
 			'description', 'Description',
 			tag.p(self.format_comment(self.dbobject.description))
@@ -44,7 +43,7 @@ class PlainIndexDocument(PlainObjectDocument):
 						tag.td(self.site.url_document('createdby.html').link()),
 						tag.td(self.dbobject.owner),
 						tag.td(self.site.url_document('colcount.html').link()),
-						tag.td(len(fields))
+						tag.td(len(self.dbobject.field_list))
 					),
 					tag.tr(
 						tag.td(self.site.url_document('unique.html').link()),
@@ -54,10 +53,11 @@ class PlainIndexDocument(PlainObjectDocument):
 					)
 					# XXX Include size?
 					# XXX Include system?
-				)
+				),
+				summary='Index attributes'
 			)
 		))
-		if len(fields) > 0:
+		if len(self.dbobject.field_list) > 0:
 			result.append((
 				'fields', 'Fields',
 				tag.table(
@@ -66,7 +66,7 @@ class PlainIndexDocument(PlainObjectDocument):
 							tag.th('#'),
 							tag.th('Name'),
 							tag.th('Order'),
-							tag.th('Description')
+							tag.th('Description', class_='nosort')
 						)
 					),
 					tag.tbody((
@@ -75,14 +75,16 @@ class PlainIndexDocument(PlainObjectDocument):
 							tag.td(field.name),
 							tag.td(ordering),
 							tag.td(self.format_comment(field.description, summary=True))
-						) for (field, ordering, position) in fields
-					))
+						) for (position, (field, ordering)) in enumerate(self.dbobject.field_list)
+					)),
+					id='field-ts',
+					summary='Index fields'
 				)
 			))
 		if self.dbobject.create_sql:
 			result.append((
 				'sql', 'SQL Definition',
-				self.format_sql(self.dbobject.create_sql, number_lines=True)
+				self.format_sql(self.dbobject.create_sql, number_lines=True, id='sql-def')
 			))
 		return result
 

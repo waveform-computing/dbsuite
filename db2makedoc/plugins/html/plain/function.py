@@ -1,7 +1,7 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import Function
-from db2makedoc.plugins.html.plain.document import PlainObjectDocument, tag
+from db2makedoc.plugins.html.plain.document import PlainObjectDocument
 
 functype = {
 	'C': 'Column/Aggregate',
@@ -23,23 +23,42 @@ class PlainFunctionDocument(PlainObjectDocument):
 		super(PlainFunctionDocument, self).__init__(site, function)
 	
 	def generate_sections(self):
+		tag = self.tag
 		result = super(PlainFunctionDocument, self).generate_sections()
-		overloads = self.dbobject.schema.functions[self.dbobject.name]
-		params = list(self.dbobject.param_list) # Take a copy of the parameter list
-		if self.dbobject.type in ['R', 'T']:
-			# Extend the list with return parameters if the function is a ROW
-			# or TABLE function (and hence, returns multiple named params)
-			params.extend(self.dbobject.return_list)
 		result.append((
 			'description', 'Description', [
 				tag.p(self.format_prototype(self.dbobject.prototype)),
 				tag.p(self.format_comment(self.dbobject.description)),
 				tag.dl((
 					(tag.dt(param.name), tag.dd(self.format_comment(param.description)))
-					for param in params
+					for param in self.dbobject.param_list
 				))
 			]
 		))
+		if self.dbobject.type in ('R', 'T'):
+			result.append((
+				'returns', 'Returns',
+				tag.table(
+					tag.thead(
+						tag.tr(
+							tag.th('#'),
+							tag.th('Name'),
+							tag.th('Type'),
+							tag.th('Description', class_='nosort')
+						)
+					),
+					tag.tbody(
+						tag.tr(
+							tag.td(param.position + 1),
+							tag.td(param.name, class_='nowrap'),
+							tag.td(param.datatype_str, class_='nowrap'),
+							tag.td(param.description)
+						) for param in self.dbobject.return_list
+					),
+					id='return-ts',
+					summary='Function returned row/table structure'
+				)
+			))
 		result.append((
 			'attributes', 'Attributes',
 			tag.table(
@@ -76,16 +95,17 @@ class PlainFunctionDocument(PlainObjectDocument):
 						tag.td(self.site.url_document('specificname.html').link()),
 						tag.td(self.dbobject.specific_name)
 					)
-				)
+				),
+				summary='Function attributes'
 			)
 		))
-		if len(overloads) > 1:
+		if len(self.dbobject.schema.functions[self.dbobject.name]) > 1:
 			result.append((
 				'overloads', 'Overloaded Versions',
 				tag.table(
 					tag.thead(
 						tag.tr(
-							tag.th('Prototype'),
+							tag.th('Prototype', class_='nosort'),
 							tag.th('Specific Name')
 						)
 					),
@@ -93,14 +113,18 @@ class PlainFunctionDocument(PlainObjectDocument):
 						tag.tr(
 							tag.td(self.format_prototype(overload.prototype)),
 							tag.td(tag.a(overload.specific_name, href=self.site.object_document(overload).url))
-						) for overload in overloads if overload != self.dbobject
-					))
+						)
+						for overload in self.dbobject.schema.functions[self.dbobject.name]
+						if overload is not self.dbobject
+					)),
+					id='overload-ts',
+					summary='Overloaded variants'
 				)
 			))
 		if self.dbobject.create_sql:
 			result.append((
 				'sql', 'SQL Definition',
-				self.format_sql(self.dbobject.create_sql, number_lines=True)
+				self.format_sql(self.dbobject.create_sql, number_lines=True, id='sql-def')
 			))
 		return result
 

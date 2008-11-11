@@ -11,6 +11,14 @@ ol.sql li {
 	margin-bottom: 0;
 }
 
+/* Styles for expandable definition lists */
+dl dt.expand-link-dark,
+dl dt.expand-link-light,
+dl dt.collapse-link-dark,
+dl dt.collapse-link-light {
+	padding-bottom: 0;
+}
+
 /* Styles for sortable table headers */
 table tr th.header {
 	cursor: pointer;

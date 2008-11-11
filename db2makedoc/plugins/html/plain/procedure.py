@@ -1,7 +1,7 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import Procedure
-from db2makedoc.plugins.html.plain.document import PlainObjectDocument, tag
+from db2makedoc.plugins.html.plain.document import PlainObjectDocument
 
 access = {
 	None: 'No SQL',
@@ -17,8 +17,8 @@ class PlainProcedureDocument(PlainObjectDocument):
 		super(PlainProcedureDocument, self).__init__(site, procedure)
 	
 	def generate_sections(self):
+		tag = self.tag
 		result = super(PlainProcedureDocument, self).generate_sections()
-		overloads = self.dbobject.schema.procedures[self.dbobject.name]
 		result.append((
 			'description', 'Description', [
 				tag.p(self.format_prototype(self.dbobject.prototype)),
@@ -64,16 +64,17 @@ class PlainProcedureDocument(PlainObjectDocument):
 						tag.td(self.site.url_document('specificname.html').link()),
 						tag.td(self.dbobject.specific_name, colspan=3)
 					)
-				)
+				),
+				summary='Procedure attributes'
 			)
 		))
-		if len(overloads) > 1:
+		if len(self.dbobject.schema.procedures[self.dbobject.name]) > 1:
 			result.append((
 				'overloads', 'Overloaded Versions',
 				tag.table(
 					tag.thead(
 						tag.tr(
-							tag.th('Prototype'),
+							tag.th('Prototype', class_='nosort'),
 							tag.th('Specific Name')
 						)
 					),
@@ -81,14 +82,18 @@ class PlainProcedureDocument(PlainObjectDocument):
 						tag.tr(
 							tag.td(self.format_prototype(overload.prototype)),
 							tag.td(tag.a(overload.specific_name, href=self.site.object_document(overload).url))
-						) for overload in overloads if overload != self.dbobject
-					))
+						)
+						for overload in self.dbobject.schema.procedures[self.dbobject.name]
+						if overload is not self.dbobject
+					)),
+					id='overload-ts',
+					summary='Overloaded variants'
 				)
 			))
 		if self.dbobject.create_sql:
 			result.append((
 				'sql', 'SQL Definition',
-				self.format_sql(self.dbobject.create_sql, number_lines=True)
+				self.format_sql(self.dbobject.create_sql, number_lines=True, id='sql-def')
 			))
 		return result
 

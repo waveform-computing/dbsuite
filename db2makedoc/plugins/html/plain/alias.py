@@ -1,7 +1,7 @@
 # vim: set noet sw=4 ts=4:
 
 from db2makedoc.db import Alias
-from db2makedoc.plugins.html.plain.document import PlainObjectDocument, PlainGraphDocument, tag
+from db2makedoc.plugins.html.plain.document import PlainObjectDocument, PlainGraphDocument
 
 def _inc_index(i):
 	if i is None:
@@ -9,15 +9,15 @@ def _inc_index(i):
 	else:
 		return i + 1
 
+
 class PlainAliasDocument(PlainObjectDocument):
 	def __init__(self, site, alias):
 		assert isinstance(alias, Alias)
 		super(PlainAliasDocument, self).__init__(site, alias)
 
 	def generate_sections(self):
+		tag = self.tag
 		result = super(PlainAliasDocument, self).generate_sections()
-		fields = [obj for (name, obj) in sorted(self.dbobject.fields.iteritems(), key=lambda (name, obj): name)]
-		dependents = [obj for (name, obj) in sorted(self.dbobject.dependents.iteritems(), key=lambda (name, obj): name)]
 		result.append((
 			'description', 'Description',
 			tag.p(self.format_comment(self.dbobject.description))
@@ -44,10 +44,11 @@ class PlainAliasDocument(PlainObjectDocument):
 						tag.td('Alias For'),
 						tag.td(self.site.link_to(self.dbobject.relation), colspan=3)
 					)
-				)
+				),
+				summary='Alias attributes'
 			)
 		))
-		if len(fields) > 0:
+		if len(self.dbobject.field_list) > 0:
 			result.append((
 				'fields', 'Fields',
 				tag.table(
@@ -59,7 +60,7 @@ class PlainAliasDocument(PlainObjectDocument):
 							tag.th('Nulls'),
 							tag.th('Key Pos'),
 							tag.th('Cardinality'),
-							tag.th('Description')
+							tag.th('Description', class_='nosort')
 						)
 					),
 					tag.tbody((
@@ -71,11 +72,13 @@ class PlainAliasDocument(PlainObjectDocument):
 							tag.td(_inc_index(field.key_index)), # XXX For Py2.5: field.key_index + 1 if field.key_index is not None else None,
 							tag.td(field.cardinality),
 							tag.td(self.format_comment(field.description, summary=True))
-						) for field in fields
-					))
+						) for field in self.dbobject.field_list
+					)),
+					id='field-ts',
+					summary='Alias fields'
 				)
 			))
-		if len(dependents) > 0:
+		if len(self.dbobject.dependent_list) > 0:
 			result.append((
 				'dependents', 'Dependent Relations',
 				tag.table(
@@ -83,7 +86,7 @@ class PlainAliasDocument(PlainObjectDocument):
 						tag.tr(
 							tag.th('Name'),
 							tag.th('Type'),
-							tag.th('Description')
+							tag.th('Description', class_='nosort')
 						)
 					),
 					tag.tbody((
@@ -91,8 +94,10 @@ class PlainAliasDocument(PlainObjectDocument):
 							tag.td(self.site.link_to(dep)),
 							tag.td(self.site.type_names[dep.__class__]),
 							tag.td(self.format_comment(dep.description, summary=True))
-						) for dep in dependents
-					))
+						) for dep in self.dbobject.dependent_list
+					)),
+					id='dep-ts',
+					summary='Alias dependents'
 				)
 			))
 		if self.site.object_graph(self.dbobject):
@@ -103,27 +108,28 @@ class PlainAliasDocument(PlainObjectDocument):
 		if self.dbobject.create_sql:
 			result.append((
 				'sql', 'SQL Definition',
-				self.format_sql(self.dbobject.create_sql, number_lines=True)
+				self.format_sql(self.dbobject.create_sql, number_lines=True, id='sql-def')
 			))
 		return result
+
 
 class PlainAliasGraph(PlainGraphDocument):
 	def __init__(self, site, alias):
 		assert isinstance(alias, Alias)
 		super(PlainAliasGraph, self).__init__(site, alias)
-	
+
 	def generate(self):
-		super(PlainAliasGraph, self).generate()
+		graph = super(PlainAliasGraph, self).generate()
 		alias = self.dbobject
-		alias_node = self.add(alias, selected=True)
-		target_node = self.add(alias.relation)
+		alias_node = graph.add(alias, selected=True)
+		target_node = graph.add(alias.relation)
 		target_edge = alias_node.connect_to(target_node)
 		target_edge.label = '<for>'
 		target_edge.arrowhead = 'onormal'
 		for dependent in alias.dependent_list:
-			dep_node = self.add(dependent)
+			dep_node = graph.add(dependent)
 			dep_edge = dep_node.connect_to(alias_node)
 			dep_edge.label = '<uses>'
 			dep_edge.arrowhead = 'onormal'
-		return self.graph
+		return graph
 
