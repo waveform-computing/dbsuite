@@ -11,10 +11,9 @@ GraphViz.
 """
 
 import sys
-mswindows = sys.platform == "win32"
+mswindows = sys.platform.startswith('win')
 import os
 import re
-from string import Template
 from subprocess import Popen, PIPE, STDOUT
 try:
 	from cStringIO import StringIO
@@ -48,17 +47,17 @@ class GraphObject(object):
 	_attributes = frozenset()
 
 	def __init__(self):
-		self._attr_values = {}
+		super(GraphObject, self).__setattr__('_attr_values', {})
 		super(GraphObject, self).__init__()
 
-	def __getattr__(self, name):
+	def __getattribute__(self, name):
 		try:
-			return self._attr_values[name]
+			return super(GraphObject, self).__getattribute__('_attr_values')[name]
 		except KeyError:
-			if name in self._attributes:
+			if name in super(GraphObject, self).__getattribute__('_attributes'):
 				return None
 			else:
-				raise AttributeError("'%s' object has no attribute '%s'" % (self.__class__.__name__, name))
+				return super(GraphObject, self).__getattribute__(name)
 
 	def __setattr__(self, name, value):
 		if name in self._attributes:
@@ -82,10 +81,10 @@ class GraphObject(object):
 	
 	def _attr_values_str(self):
 		"""Internal utility method that returns _attr_values as a formatted string"""
-		return ', '.join([
+		return ', '.join(
 			'%s=%s' % (self._quote(n), self._quote(str(v)))
 			for (n, v) in self._attr_values.iteritems()
-		])
+		)
 	
 	def _get_graph(self):
 		"""Returns the top-level graph that owns the object"""
@@ -105,6 +104,7 @@ class GraphObject(object):
 	graph = property(_get_graph)
 	dot = property(lambda self: self._get_dot())
 
+
 class GraphBase(GraphObject):
 	"""Base class for all graph objects"""
 
@@ -118,6 +118,7 @@ class GraphBase(GraphObject):
 		self.children = []
 		self.parent = None
 		self.id = id
+
 
 class Graph(GraphBase):
 	"""Class representing a top level graph"""
@@ -140,33 +141,37 @@ class Graph(GraphBase):
 
 		The id parameter specifies the id of the graph. The optional directed
 		parameter specifies whether the graph is directed (each edge is one
-		way) or undirected (each edge is bidirectional).
+		way) or undirected (each edge is bidirectional). If the strict
+		parameter is True, then cycles and multi-edges in a directed graph will
+		be ignored.
 		"""
-		# XXX Document the strict parameter once you figure out what it's for :-)
 		super(Graph, self).__init__(id)
 		self.directed = directed
 		self.strict = strict
 
 	def _get_dot(self):
-		t = Template("""\
-$strict$graph $id {
-	graph [$attributes];
-	$children
-}""")
-		return t.safe_substitute({
-			'strict': ['', 'strict '][self.strict],
-			'graph': ['graph', 'digraph'][self.directed],
-			'id': self._quote(str(self.id)),
+		keys = {
+			'strict':     ['', 'strict '][self.strict and self.directed],
+			'type':       ['graph', 'digraph'][self.directed],
+			'id':         self._quote(str(self.id)),
 			'attributes': self._attr_values_str(),
-			'children': '\n\t'.join([c.dot + ';' for c in self.children]),
-		})
-	
+			'children':   '\n\t'.join(c.dot + ';' for c in self.children),
+		}
+		return """\
+%(strict)s%(type)s %(id)s {
+	graph [%(attributes)s];
+	%(children)s
+}""" % keys
+
 	def _call_graphviz(self, output, converter, format, graph_attr, node_attr, edge_attr):
 		"""Internal utility method use by the various to_X conversion methods."""
 		cmd_line = [converter, '-T%s' % format]
-		cmd_line.extend(['-G%s=%s' % (n, v) for (n, v) in graph_attr.iteritems()])
-		cmd_line.extend(['-N%s=%s' % (n, v) for (n, v) in node_attr.iteritems()])
-		cmd_line.extend(['-E%s=%s' % (n, v) for (n, v) in edge_attr.iteritems()])
+		if graph_attr:
+			cmd_line.extend(['-G%s=%s' % (n, v) for (n, v) in graph_attr.iteritems()])
+		if node_attr:
+			cmd_line.extend(['-N%s=%s' % (n, v) for (n, v) in node_attr.iteritems()])
+		if edge_attr:
+			cmd_line.extend(['-E%s=%s' % (n, v) for (n, v) in edge_attr.iteritems()])
 		p = Popen(cmd_line, stdin=PIPE, stdout=PIPE, close_fds=not mswindows)
 		try:
 			output.write(p.communicate(self.dot)[0])
@@ -174,15 +179,15 @@ $strict$graph $id {
 			p.wait()
 
 	svg_fix = re.compile(r'(style=".*font-size:\s*[0-9]*(\.[0-9]+)?)(\s*;.*")')
-	def to_svg(self, output, converter=DEFAULT_CONVERTER, graph_attr={}, node_attr={}, edge_attr={}):
+	def to_svg(self, output, converter=DEFAULT_CONVERTER, graph_attr=None, node_attr=None, edge_attr=None):
 		"""Converts the Graph into an SVG image.
 
 		Parameters:
 		output -- A file-like object to write the SVG to
 		converter -- The path and name of the GraphViz application to use
-		graph_attr -- A dictionary of graph attributes to pass on the command line
-		node_attr -- A dictionary of node attributes to pass on the command line
-		edge_attr -- A dictionary of edge attributes to pass on the command line
+		graph_attr -- An optional dictionary of graph attributes to pass on the command line
+		node_attr -- An optional dictionary of node attributes to pass on the command line
+		edge_attr -- An optional dictionary of edge attributes to pass on the command line
 		"""
 		s = StringIO()
 		self._call_graphviz(s, converter, SVG_FORMAT, graph_attr, node_attr, edge_attr)
@@ -190,29 +195,29 @@ $strict$graph $id {
 		# style element needs a unit, usually px, to work correctly in Firefox,
 		# Opera, etc.
 		output.write(self.svg_fix.sub(r'\1px\3', s.getvalue()))
-	
-	def to_ps(self, output, converter=DEFAULT_CONVERTER, graph_attr={}, node_attr={}, edge_attr={}):
+
+	def to_ps(self, output, converter=DEFAULT_CONVERTER, graph_attr=None, node_attr=None, edge_attr=None):
 		"""Converts the Graph into a PostScript document.
 
 		Parameters are identical to the to_svg() method.
 		"""
 		self._call_graphviz(output, converter, PS_FORMAT, graph_attr, node_attr, edge_attr)
-	
-	def to_png(self, output, converter=DEFAULT_CONVERTER, graph_attr={}, node_attr={}, edge_attr={}):
+
+	def to_png(self, output, converter=DEFAULT_CONVERTER, graph_attr=None, node_attr=None, edge_attr=None):
 		"""Converts the Graph into a PNG image (and optionally a client-side image-map).
 
 		Parameters are identical to the to_svg() method.
 		"""
 		self._call_graphviz(output, converter, PNG_FORMAT, graph_attr, node_attr, edge_attr)
 	
-	def to_gif(self, output, converter=DEFAULT_CONVERTER, graph_attr={}, node_attr={}, edge_attr={}):
+	def to_gif(self, output, converter=DEFAULT_CONVERTER, graph_attr=None, node_attr=None, edge_attr=None):
 		"""Converts the Graph into a GIF image (and optionally a client-side image-map).
 
 		Parameters are identical to the to_svg() method.
 		"""
 		self._call_graphviz(output, converter, GIF_FORMAT, graph_attr, node_attr, edge_attr)
 	
-	def to_map(self, output, converter=DEFAULT_CONVERTER, graph_attr={}, node_attr={}, edge_attr={}):
+	def to_map(self, output, converter=DEFAULT_CONVERTER, graph_attr=None, node_attr=None, edge_attr=None):
 		"""Converts the Graph into a client-side image map.
 
 		Parameters are identical to the to_svg() method.
@@ -250,7 +255,8 @@ $strict$graph $id {
 					if method(i, *args, **kwargs):
 						return True
 
-		touch_sub(self, args, kwargs)
+		return touch_sub(self, args, kwargs)
+
 
 class Subgraph(GraphBase):
 	"""Class representing a subgraph within a graph (or subgraph)"""
@@ -263,22 +269,23 @@ class Subgraph(GraphBase):
 		The id parameter specifies the id of the graph. Each object in a
 		graphviz graph must have a unique identifier.
 		"""
-		super(Subgraph, self).__init__(id)
 		assert isinstance(graph, GraphBase)
+		super(Subgraph, self).__init__(id)
 		self.parent = graph
 		graph.children.append(self)
 
 	def _get_dot(self):
-		t = Template("""\
-subgraph $id {
-	graph [$attributes];
-	$children
-}""")
-		return t.safe_substitute({
-			'id': self._quote(str(self.id)),
+		keys = {
+			'id':         self._quote(str(self.id)),
 			'attributes': self._attr_values_str(),
-			'children': '\n\t'.join([c.dot + ';' for c in self.children]),
-		})
+			'children':   '\n\t'.join(c.dot + ';' for c in self.children),
+		}
+		return """\
+subgraph %(id)s {
+	graph [%(attributes)s];
+	%(children)s
+}""" % keys
+
 
 class Cluster(Subgraph):
 	"""Class representing a cluster-style subgraph within a top-level graph"""
@@ -294,6 +301,7 @@ class Cluster(Subgraph):
 		The id parameter specifies the id of the graph. Each object in a
 		graphviz graph must have a unique identifier.
 		"""
+		assert isinstance(graph, Graph)
 		super(Cluster, self).__init__(graph, id)
 		# XXX Hmm ... need to ensure id is provided and is unique with cluster_ prefix
 	
@@ -305,6 +313,7 @@ class Cluster(Subgraph):
 		result = super(Cluster, self)._get_dot()
 		self.id = save_id
 		return result
+
 
 class Node(GraphObject):
 	"""Class representing a node or vertex in a graph"""
@@ -322,8 +331,8 @@ class Node(GraphObject):
 		The id parameter specifies the id of the node. Each object in a
 		graphviz graph must have a unique identifier.
 		"""
-		super(Node, self).__init__()
 		assert isinstance(graph, GraphBase)
+		super(Node, self).__init__()
 		self.parent = graph
 		self.id = id
 		graph.children.append(self)
@@ -407,6 +416,7 @@ class Node(GraphObject):
 		else:
 			self.graph.touch(find_undirected, node=node, edge=edge)
 		return edge[0]
+
 
 class Edge(GraphObject):
 	"""Class representing an edge between two nodes in a graph"""
