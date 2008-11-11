@@ -987,34 +987,34 @@ class InputPlugin(Plugin):
 			yield row
 
 
-	@cached
+	@cachedproperty
 	def schemas(self):
 		# Note: schemas themselves are not filtered because datatypes are not
 		# filtered (if a system schema got excluded, system datatypes would be
 		# excluded and the object hierarchy would break horribly)
 		return sorted(self.get_schemas(), key=attrgetter('name'))
 
-	@cached
+	@cachedproperty
 	def datatypes(self):
 		return sorted(self.get_datatypes(), key=attrgetter('schema', 'name'))
 
-	@cached
+	@cachedproperty
 	def tables(self):
 		result = self.filter(self.get_tables(), key=attrgetter('schema'))
 		return sorted(result, key=attrgetter('schema', 'name'))
 
-	@cached
+	@cachedproperty
 	def views(self):
 		result = self.filter(self.get_views(), key=attrgetter('schema'))
 		return sorted(result, key=attrgetter('schema', 'name'))
 
-	@cached
+	@cachedproperty
 	def aliases(self):
 		result = self.filter(self.get_aliases(), key=attrgetter('schema'))
 		result = self.filter(result, key=attrgetter('base_schema'))
 		return sorted(result, key=attrgetter('schema', 'name'))
 
-	@cached
+	@cachedproperty
 	def relations(self):
 		result = (
 			namedslice(Relation, relation)
@@ -1022,7 +1022,7 @@ class InputPlugin(Plugin):
 		)
 		return sorted(result, key=attrgetter('schema', 'name'))
 
-	@cached
+	@cachedproperty
 	def relation_dependencies(self):
 		result = self.filter(self.get_view_dependencies(), key=attrgetter('schema'))
 		result = self.filter(result, key=attrgetter('dep_schema'))
@@ -1033,7 +1033,7 @@ class InputPlugin(Plugin):
 			for (view, deps) in result
 		)
 
-	@cached
+	@cachedproperty
 	def relation_dependents(self):
 		result = chain(
 			(
@@ -1053,46 +1053,46 @@ class InputPlugin(Plugin):
 			for (relation, deps) in result
 		)
 
-	@cached
+	@cachedproperty
 	def indexes(self):
 		result = self.filter(self.get_indexes(), key=attrgetter('schema'))
 		result = self.filter(result, key=attrgetter('table_schema'))
 		return sorted(result, key=attrgetter('schema', 'name'))
 
-	@cached
+	@cachedproperty
 	def index_cols(self):
 		result = self.filter(self.get_index_cols(), key=attrgetter('index_schema'))
 		result = groupby(result, key=attrgetter('index_schema', 'index_name'))
 		return dict((IndexRef(*index), list(cols)) for (index, cols) in result)
 
-	@cached
+	@cachedproperty
 	def table_indexes(self):
 		result = sorted(self.indexes, key=attrgetter('table_schema', 'table_name', 'schema', 'name'))
 		result = groupby(result, key=attrgetter('table_schema', 'table_name'))
 		return dict((TableRef(*table), list(indexes)) for (table, indexes) in result)
 
-	@cached
+	@cachedproperty
 	def relation_cols(self):
 		result = self.filter(self.get_relation_cols(), key=attrgetter('relation_schema'))
 		result = sorted(result, key=attrgetter('relation_schema', 'relation_name'))
 		result = groupby(result, key=attrgetter('relation_schema', 'relation_name'))
 		return dict((RelationRef(*relation), list(cols)) for (relation, cols) in result)
 
-	@cached
+	@cachedproperty
 	def unique_keys(self):
 		result = self.filter(self.get_unique_keys(), key=attrgetter('table_schema'))
 		result = sorted(result, key=attrgetter('table_schema', 'table_name', 'name'))
 		result = groupby(result, key=attrgetter('table_schema', 'table_name'))
 		return dict((TableRef(*table), list(keys)) for (table, keys) in result)
 
-	@cached
+	@cachedproperty
 	def unique_key_cols(self):
 		result = self.filter(self.get_unique_key_cols(), key=attrgetter('const_schema'))
 		result = sorted(result, key=attrgetter('const_schema', 'const_table', 'const_name'))
 		result = groupby(result, key=attrgetter('const_schema', 'const_table', 'const_name'))
 		return dict((ConstraintRef(*key), list(cols)) for (key, cols) in result)
 
-	@cached
+	@cachedproperty
 	def foreign_keys(self):
 		result = self.filter(self.get_foreign_keys(), key=attrgetter('table_schema'))
 		result = self.filter(result, key=attrgetter('const_schema'))
@@ -1100,57 +1100,57 @@ class InputPlugin(Plugin):
 		result = groupby(result, key=attrgetter('table_schema', 'table_name'))
 		return dict((TableRef(*table), list(keys)) for (table, keys) in result)
 
-	@cached
+	@cachedproperty
 	def foreign_key_cols(self):
 		result = self.filter(self.get_foreign_key_cols(), key=attrgetter('const_schema'))
 		result = sorted(result, key=attrgetter('const_schema', 'const_table', 'const_name'))
 		result = groupby(result, key=attrgetter('const_schema', 'const_table', 'const_name'))
 		return dict((ConstraintRef(*key), list(cols)) for (key, cols) in result)
 
-	@cached
+	@cachedproperty
 	def parent_keys(self):
 		result = (key for (table, keys) in self.foreign_keys.iteritems() for key in keys)
 		result = sorted(result, key=attrgetter('const_schema', 'const_table', 'const_name'))
 		result = groupby(result, key=attrgetter('const_schema', 'const_table', 'const_name'))
 		return dict((ConstraintRef(*ukey), list(fkeys)) for (ukey, fkeys) in result)
 
-	@cached
+	@cachedproperty
 	def checks(self):
 		result = self.filter(self.get_checks(), key=attrgetter('table_schema'))
 		result = sorted(result, key=attrgetter('table_schema', 'table_name', 'name'))
 		result = groupby(result, key=attrgetter('table_schema', 'table_name'))
 		return dict((TableRef(*table), list(checks)) for (table, checks) in result)
 
-	@cached
+	@cachedproperty
 	def check_cols(self):
 		result = self.filter(self.get_check_cols(), key=attrgetter('const_schema'))
 		result = sorted(result, key=attrgetter('const_schema', 'const_table', 'const_name'))
 		result = groupby(result, key=attrgetter('const_schema', 'const_table', 'const_name'))
 		return dict((ConstraintRef(*key), list(cols)) for (key, cols) in result)
 
-	@cached
+	@cachedproperty
 	def functions(self):
 		result = self.filter(self.get_functions(), key=attrgetter('schema'))
 		return sorted(result, key=attrgetter('schema', 'specific'))
 
-	@cached
+	@cachedproperty
 	def procedures(self):
 		result = self.filter(self.get_procedures(), key=attrgetter('schema'))
 		return sorted(result, key=attrgetter('schema', 'specific'))
 
-	@cached
+	@cachedproperty
 	def routine_params(self):
 		result = self.filter(self.get_routine_params(), key=attrgetter('routine_schema'))
 		result = sorted(result, key=attrgetter('routine_schema', 'routine_specific'))
 		result = groupby(result, key=attrgetter('routine_schema', 'routine_specific'))
 		return dict((RoutineRef(*routine), list(params)) for (routine, params) in result)
 
-	@cached
+	@cachedproperty
 	def triggers(self):
 		result = self.filter(self.get_triggers(), key=attrgetter('schema'))
 		return sorted(result, key=attrgetter('schema', 'name'))
 
-	@cached
+	@cachedproperty
 	def trigger_dependencies(self):
 		result = self.filter(self.get_trigger_dependencies(), key=attrgetter('trig_schema'))
 		result = self.filter(result, key=attrgetter('dep_schema'))
@@ -1161,7 +1161,7 @@ class InputPlugin(Plugin):
 			for (trigger, deps) in result
 		)
 
-	@cached
+	@cachedproperty
 	def trigger_dependents(self):
 		result = (
 			TriggerDep(*(trigger + dep))
@@ -1175,23 +1175,23 @@ class InputPlugin(Plugin):
 			for (relation, deps) in result
 		)
 
-	@cached
+	@cachedproperty
 	def relation_triggers(self):
 		result = sorted(self.triggers, key=attrgetter('relation_schema', 'relation_name', 'schema', 'name'))
 		result = groupby(result, key=attrgetter('relation_schema', 'relation_name'))
 		return dict((RelationRef(*relation), list(triggers)) for (relation, triggers) in result)
 
-	@cached
+	@cachedproperty
 	def tablespaces(self):
 		return sorted(self.get_tablespaces(), key=attrgetter('name'))
 
-	@cached
+	@cachedproperty
 	def tablespace_tables(self):
 		result = sorted(self.tables, key=attrgetter('tbspace', 'schema', 'name'))
 		result = groupby(result, key=attrgetter('tbspace'))
 		return dict((TablespaceRef(tbspace), list(tables)) for (tbspace, tables) in result)
 
-	@cached
+	@cachedproperty
 	def tablespace_indexes(self):
 		result = sorted(self.indexes, key=attrgetter('tbspace', 'schema', 'name'))
 		result = groupby(result, key=attrgetter('tbspace'))
