@@ -2,8 +2,6 @@
 
 """Output plugin for plain HTML web pages."""
 
-import os
-import logging
 import db2makedoc.plugins
 import db2makedoc.plugins.html
 
@@ -11,28 +9,15 @@ from db2makedoc.db import (
 	Database, Schema, Table, View, Alias, UniqueKey, ForeignKey,
 	Check, Index, Trigger, Function, Procedure, Tablespace
 )
-from db2makedoc.plugins.html.document import (
-	JQueryScript, TablesorterScript, ThickboxStyle, ThickboxScript
-)
 from db2makedoc.plugins.html.plain.document import (
-	PlainSite, PlainSearchDocument, PlainSiteIndexDocument,
-	PlainExternalDocument, PlainStyle, HeaderImage, SortAscImage,
-	SortDescImage, ExpandImage, CollapseImage
+	PlainSite, PlainSearch, PlainSiteIndex, PlainExternal,
+	PlainDatabaseDocument, PlainSchemaDocument, PlainTableDocument,
+	PlainViewDocument, PlainAliasDocument, PlainUniqueKeyDocument,
+	PlainForeignKeyDocument, PlainCheckDocument, PlainIndexDocument,
+	PlainTriggerDocument, PlainFunctionDocument, PlainProcedureDocument,
+	PlainTablespaceDocument, PlainSchemaGraph, PlainTableGraph, PlainViewGraph,
+	PlainAliasGraph
 )
-from db2makedoc.plugins.html.plain.database import PlainDatabaseDocument
-from db2makedoc.plugins.html.plain.schema import PlainSchemaDocument, PlainSchemaGraph
-from db2makedoc.plugins.html.plain.table import PlainTableDocument, PlainTableGraph
-from db2makedoc.plugins.html.plain.view import PlainViewDocument, PlainViewGraph
-from db2makedoc.plugins.html.plain.alias import PlainAliasDocument, PlainAliasGraph
-from db2makedoc.plugins.html.plain.uniquekey import PlainUniqueKeyDocument
-from db2makedoc.plugins.html.plain.foreignkey import PlainForeignKeyDocument
-from db2makedoc.plugins.html.plain.check import PlainCheckDocument
-from db2makedoc.plugins.html.plain.index import PlainIndexDocument
-from db2makedoc.plugins.html.plain.trigger import PlainTriggerDocument
-from db2makedoc.plugins.html.plain.function import PlainFunctionDocument
-from db2makedoc.plugins.html.plain.procedure import PlainProcedureDocument
-from db2makedoc.plugins.html.plain.tablespace import PlainTablespaceDocument
-from db2makedoc.plugins.html.plain.popups import create_popups
 
 
 class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
@@ -107,26 +92,11 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 		return super(OutputPlugin, self).substitute() + ('stylesheets',)
 
 	def create_documents(self, site):
-		# Overridden to add static documents (CSS, PHP, etc.)
-		PlainStyle(site)
-		ThickboxStyle(site)
-		JQueryScript(site)
-		TablesorterScript(site)
-		ThickboxScript(site)
-		HeaderImage(site)
-		SortAscImage(site)
-		SortDescImage(site)
-		ExpandImage(site)
-		CollapseImage(site)
-		if site.search:
-			PlainSearchDocument(site)
-		create_popups(site)
-		# Call inherited method to generate documents for all objects
 		super(OutputPlugin, self).create_documents(site)
 		# Add index documents for all indexed classes
 		for dbclass in site.index_maps:
 			for letter in site.index_maps[dbclass]:
-				PlainSiteIndexDocument(site, dbclass, letter)
+				PlainSiteIndex(site, dbclass, letter)
 	
 	def create_document(self, dbobject, site):
 		# Overridden to generate documents and graphs for specific types of

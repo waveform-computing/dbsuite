@@ -14,9 +14,7 @@ import datetime
 import logging
 import urlparse
 import threading
-import time
 
-from collections import deque
 from operator import attrgetter
 from db2makedoc.highlighters import CommentHighlighter, SQLHighlighter
 from db2makedoc.plugins.html.entities import HTML_ENTITIES
@@ -27,7 +25,7 @@ from db2makedoc.db import (
 	Field, UniqueKey, PrimaryKey, ForeignKey, Check, Param
 )
 from db2makedoc.etree import (
-	fromstring, tostring, iselement, Element, Comment, flatten_html
+	fromstring, tostring, iselement, Element, flatten_html
 )
 from db2makedoc.sql.formatter import (
 	ERROR, COMMENT, KEYWORD, IDENTIFIER, LABEL, DATATYPE, REGISTER,
@@ -50,11 +48,6 @@ except ImportError:
 		from StringIO import StringIO
 	except ImportError:
 		raise ImportError('Unable to find a StringIO implementation')
-
-# Determine the path containing this module (used for locating external source
-# files like CSS and JavaScript below)
-_my_path = os.path.dirname(os.path.abspath(__file__))
-
 
 # Constants for HTML versions
 (
@@ -102,6 +95,11 @@ class HTMLElementFactory(object):
 	>>> tostring(tag.p('A ', tag.a('link', class_='menuitem')))
 	'<p>A <a class="menuitem">link</a></p>'
 	"""
+
+	def __init__(self, site):
+		super(HTMLElementFactory, self).__init__()
+		assert isinstance(site, WebSite)
+		self._site = site
 
 	def _find(self, root, tagname, id=None):
 		"""Returns the first element with the specified tagname and id"""
@@ -243,6 +241,84 @@ class HTMLElementFactory(object):
 		else:
 			return self._element('style', *content, **attrs)
 
+	def p_typed(self, content, dbobject, attrs):
+		return self.p(content % {'type': self._site.type_name(dbobject).lower()}, **attrs)
+
+	def p_attributes(self, dbobject, **attrs):
+		# Boilerplate paragraph describing the common attributes table of a database object
+		return self.p_typed("""The following table briefly lists
+			general attributes of the %(type)s. Most attribute titles can be
+			clicked on to gain a complete description of the attribute.""",
+			dbobject, attrs)
+
+	def p_constraint_fields(self, dbobject, **attrs):
+		# Boilerplate paragraph describing the fields table of a constraint
+		return self.p_typed("""The following table lists the fields constrained
+			by the %(type)s. Note that the ordering of fields in the table is
+			irrelevant.""",
+			dbobject, attrs)
+
+	def p_relation_fields(self, dbobject, **attrs):
+		# Boilerplate paragraph describing the fields table of a relation
+		s = """The following table lists the fields of the %(type)s.  The #
+			column lists the 1-based position of the field in the %(type)s, the
+			Type column lists the SQL data-type of the field, and Nulls
+			indicates whether the field can contain the SQL NULL value."""
+		if isinstance(dbobject, Alias):
+			dbobject = dbobject.final_relation
+		if isinstance(dbobject, Table):
+			s += """ The Key Pos column will list the 1-based position of the
+				field in the primary key of the table (if one exists), and the
+				Cardinality column the approximate number of unique values
+				stored in the field (if statistics have been gathered)."""
+		return self.p_typed(s, dbobject, attrs)
+
+	def p_overloads(self, dbobject, **attrs):
+		# Boilerplate paragraph describing the overloaded versions of a routine
+		return self.p_typed("""The following table lists the overloaded
+			versions of this %(type)s, that is other routines with the same
+			name but a different parameter list typically used to provide the
+			same functionality across a range of data types.""",
+			dbobject, attrs)
+
+	def p_dependent_relations(self, dbobject, **attrs):
+		# Boilerplate paragraph describing the dependent relations table of an object
+		return self.p_typed("""The following table lists all relations which
+			depend on this %(type)s (e.g. views which reference this %(type)s
+			in their defining query).""",
+			dbobject, attrs)
+
+	def p_dependencies(self, dbobject, **attrs):
+		# Boilerplate paragraph describing the dependencies of an object
+		return self.p_typed("""The following table lists all relations which
+			this relation depends upon (e.g. tables referenced by this %(type)s
+			in its defining query).""",
+			dbobject, attrs)
+
+	def p_triggers(self, dbobject, **attrs):
+		# Boilerplate paragraph describing the triggers of a relation
+		return self.p_typed("""The following table lists all triggers that fire
+			in response to changes (insertions, updates, and/or deletions) in
+			this %(type)s.""",
+			dbobject, attrs)
+
+	def p_diagram(self, dbobject, **attrs):
+		# Boilerplate paragraph describing the diagram of an object
+		return self.p_typed("""The following diagram illustrates this %(type)s
+			and its direct dependencies and dependents. You may click on
+			objects within the diagram to visit the documentation for that
+			object.""",
+			dbobject, attrs)
+
+	def p_sql_definition(self, dbobject, **attrs):
+		# Boilerplate paragraph describing the SQL definition of an object
+		return self.p_typed("""The SQL used to define the %(type)s is given
+			below.  Note that, depending on the underlying database
+			implementation, this SQL may not be accurate (in some cases the
+			database does not store the original command, so the SQL is
+			reconstructed from metadata), or even valid for the platform.""",
+			dbobject, attrs)
+
 
 class HTMLCommentHighlighter(CommentHighlighter):
 	"""Class which converts simple comment markup into HTML.
@@ -254,7 +330,6 @@ class HTMLCommentHighlighter(CommentHighlighter):
 	"""
 
 	def __init__(self, site):
-		"""Initializes an instance of the class."""
 		super(HTMLCommentHighlighter, self).__init__()
 		assert isinstance(site, WebSite)
 		self.site = site
@@ -396,10 +471,6 @@ class ObjectGraph(Graph):
 			doc = self.site.object_document(item.dbobject)
 			if isinstance(item, (Node, Edge, Cluster)) and doc:
 				item.URL = doc.url
-		if hasattr(item, 'selected') and item.selected:
-			styles = set((item.style or '').split(','))
-			styles.add('setlinewidth(3)')
-			item.style = ','.join(styles)
 
 	def _get_dot(self):
 		self.touch(self.style)
@@ -420,6 +491,26 @@ class WebSite(object):
 		assert isinstance(database, Database)
 		super(WebSite, self).__init__()
 		self.database = database
+		self.urls = {}
+		self.object_docs = {}
+		self.object_graphs = {}
+		self.first_index = None
+		self.index_maps = {}
+		self.index_docs = {}
+		self.get_options(options)
+		self.get_factories()
+		self.tag = self.tag_class(self)
+		phase = 0
+		while self.create_documents(phase):
+			phase += 1
+
+	def get_options(self, options):
+		"""Configures the class from the dictionary of options given.
+
+		This method is called at the start of construction. It is expected to
+		set the attributes of the class according to the values in the options
+		dictionary passed by the plugin (along with any default values).
+		"""
 		self.htmlver = XHTML10
 		self.htmlstyle = STRICT
 		self.base_url = ''
@@ -440,7 +531,8 @@ class WebSite(object):
 		self.threads = options['threads']
 		self.title = options['site_title']
 		self.tbspace_list = options['tbspace_list']
-		self.diagrams = bool(options['diagrams'])
+		self.indexes = options['indexes']
+		self.diagrams = options['diagrams']
 		if self.title is None:
 			self.title = '%s Documentation' % self.database.name
 		self.type_names = {
@@ -467,25 +559,74 @@ class WebSite(object):
 			View:           'View',
 		}
 		self.default_desc = 'No description in the system catalog'
-		self.urls = {}
-		self.object_docs = {}
-		self.object_graphs = {}
-		# If indexes are requested, build the sorted object lists now (and set
-		# up the first level of the index_docs mapping)
-		self.first_index = None
-		self.index_maps = {}
-		self.index_docs = {}
-		if options['indexes']:
-			for cls in options['indexes']:
-				self.index_maps[cls] = {}
-				self.index_docs[cls] = {}
-			self.database.touch(self.index_object, options['indexes'])
-		# Create the element factory
-		self.tag = HTMLElementFactory()
-		# Set the base graph class
+
+	def get_factories(self):
+		"""Configures the classes used by the site to generate content.
+
+		This method is called when the WebSite class is instantiated. It sets
+		the three classes that the site (and associated document classes) use
+		to generate content. Specifically, it sets the attributes tag_class
+		(must be a descendent of or compatible with HTMLElementFactory),
+		popup_class (must be like HTMLPopupDocument), and graph_class (must be
+		like ObjectGraph).
+		"""
+		self.tag_class = HTMLElementFactory
+		self.popup_class = HTMLPopupDocument
 		self.graph_class = ObjectGraph
-		# Create static documents
-		self.sql_style = SQLStyle(self)
+
+	def create_documents(self, phase=0):
+		"""Creates the documents associated with the site.
+
+		This method constructs all the documents associated with the site. It
+		is called multiple times as the last phase of the construction of
+		WebSite. On each call, the phase parameter is incremented by one. The
+		reason for the multiple calls is that many documents depend on other
+		documents being present prior to their construction (e.g. documents
+		which depend on fixed stylesheets, or scripts). Hence documents with
+		no dependencies should be constructed in phase 0, documents which depend
+		on these in phase 1, and so on.
+
+		Although rather unorthodox, this system permits descendents to
+		intermingle creation of their documents with the base class' creation
+		order without spawning myriad oddly named create_something_documents
+		methods.
+
+		This method is called continually with an incrementing phase parameter
+		until it returns False. Hence, descendents should ensure they return
+		the result of the superclass' call or'ed with their own result.
+		"""
+		if phase == 0:
+			# Build the static documents (basically just file copies with optional
+			# transcoding to the site's encoding)
+			self.sql_style = SQLStyle(self)
+			self.jquery_script = JQueryScript(self)
+			self.tablesorter_script = TablesorterScript(self)
+			self.thickbox_style = ThickboxStyle(self)
+			self.thickbox_script = ThickboxScript(self)
+			return True
+		elif phase == 1:
+			# Build the static popup documents
+			popups = fromstring(codecs.open(os.path.join(mod_path, 'popups.xml'), 'r', 'utf-8').read())
+			for popup in popups:
+				self.popup_class(self,
+					url=popup.attrib['filename'],
+					title=popup.attrib['title'],
+					width=popup.attrib.get('width', 400),
+					height=popup.attrib.get('height', 300),
+					body=list(popup)
+				)
+			return True
+		elif phase == 2:
+			# If indexes are requested, build the sorted object lists now (and set
+			# up the first level of the index_docs mapping)
+			if self.indexes:
+				for cls in self.indexes:
+					self.index_maps[cls] = {}
+					self.index_docs[cls] = {}
+				self.database.touch(self.index_object, self.indexes)
+			return True
+		else:
+			return False
 
 	def index_object(self, dbobject, dbclasses):
 		"""Adds a database object to the relevant index lists.
@@ -524,7 +665,7 @@ class WebSite(object):
 			self.object_docs[document.dbobject] = document
 		elif isinstance(document, GraphObjectDocument):
 			self.object_graphs[document.dbobject] = document
-		elif isinstance(document, HTMLIndexDocument):
+		elif isinstance(document, HTMLSiteIndexDocument):
 			self.index_docs[document.dbclass][document.letter] = document
 
 	def url_document(self, url):
@@ -601,6 +742,28 @@ class WebSite(object):
 		"""
 		assert isinstance(dbobject, DatabaseObject)
 		return self.object_graphs.get(dbobject)
+
+	def type_name(self, dbobject):
+		"""Returns the string naming the object's type.
+
+		This method returns a string describing the object's type, looked up in
+		the type_names dictionary. If an exact match can be found, it is
+		returned, otherwise a subclass match is sufficient.
+		"""
+		def class_type_name(cls):
+			try:
+				return self.type_names[cls]
+			except KeyError:
+				for base in cls.__bases__:
+					try:
+						return class_type_name(base)
+					except KeyError:
+						continue
+				raise ValueError('Cannot find name of %s' % cls)
+		if isinstance(dbobject, type):
+			return class_type_name(dbobject)
+		else:
+			return class_type_name(dbobject.__class__)
 
 	def link_to(self, dbobject, parent=False, *args, **kwargs):
 		"""Returns a link to a document representing the specified database object.
@@ -681,7 +844,7 @@ class WebSite(object):
 		assert issubclass(dbclass, DatabaseObject)
 		doc = self.index_document(dbclass, letter, *args, **kwargs)
 		if doc is None:
-			return self.tag.p('%s index is not available' % self.type_names[dbclass])
+			return self.tag.p('%s index is not available' % self.type_name(dbclass))
 		elif letter is None:
 			return doc.link()
 		else:
@@ -723,7 +886,7 @@ class WebSite(object):
 		# no index content
 		dbclasses = [
 			dbclass for dbclass in sorted(self.index_docs.iterkeys(),
-				key=lambda dbclass: self.type_names[dbclass])
+				key=lambda dbclass: self.type_name(dbclass))
 			if self.index_docs[dbclass]
 		]
 		# Create "fake" documents to represent each index. Note that the URL
@@ -732,7 +895,7 @@ class WebSite(object):
 		dbclass_docs = [
 			HTMLExternalDocument(self,
 				'indexof_%s.html' % dbclass.config_names[0],
-				'%s Index' % self.type_names[dbclass]
+				'%s Index' % self.type_name(dbclass)
 			)
 			for dbclass in dbclasses
 		]
@@ -1045,15 +1208,6 @@ class HTMLDocument(WebSiteDocument):
 		self.title = ''
 		self.description = ''
 		self.keywords = []
-		self.author_name = site.author_name
-		self.author_email = site.author_email
-		self.icon_url = site.icon_url
-		self.icon_type = site.icon_type
-		self.date = site.date
-		self.lang = site.lang
-		self.sublang = site.sublang
-		self.copyright = site.copyright
-		self.search = site.search
 		self.robots_index = True
 		self.robots_follow = True
 		self.comment_highlighter = HTMLCommentHighlighter(self.site)
@@ -1135,13 +1289,13 @@ class HTMLDocument(WebSiteDocument):
 			# stemmer and fill out the ftsdoc. The site class handles writing
 			# all the ftsdoc's to the xapian database once all writing is
 			# finished
-			if self.search:
+			if self.site.search:
 				logging.debug('Indexing %s' % self.filename)
 				indexer = xapian.TermGenerator()
 				# XXX Seems to be a bug in xapian 1.0.2 which causes a segfault
 				# with this enabled
 				#indexer.set_flags(xapian.TermGenerator.FLAG_SPELLING)
-				indexer.set_stemmer(xapian.Stem(self.lang))
+				indexer.set_stemmer(xapian.Stem(self.site.lang))
 				self.ftsdoc = xapian.Document()
 				self.ftsdoc.set_data('\n'.join([
 					self.url,
@@ -1193,6 +1347,11 @@ class HTMLDocument(WebSiteDocument):
 
 	def generate(self):
 		"""Called by write() to generate the document as an ElementTree."""
+		# Generate and return the document
+		return self.tag.html(self.generate_head(), self.generate_body())
+
+	def generate_head(self):
+		"""Called by generate() to generate the document <head> element."""
 		# Override this in descendent classes to include additional content
 		# Add some standard <meta> elements (encoding, keywords, author, robots
 		# info, Dublin Core stuff, etc.)
@@ -1202,19 +1361,19 @@ class HTMLDocument(WebSiteDocument):
 				'%sindex'  % ('no', '')[bool(self.robots_index)],
 				'%sfollow' % ('no', '')[bool(self.robots_follow)],
 			))),
-			tag.meta(name='DC.Date', content=self.date, scheme='iso8601'),
-			tag.meta(name='DC.Language', content='%s-%s' % (self.lang, self.sublang), scheme='rfc1766')
+			tag.meta(name='DC.Date', content=self.site.date, scheme='iso8601'),
+			tag.meta(name='DC.Language', content='%s-%s' % (self.site.lang, self.site.sublang), scheme='rfc1766')
 		)
-		if self.copyright is not None:
-			head.append(tag.meta(name='DC.Rights', content=self.copyright))
+		if self.site.copyright is not None:
+			head.append(tag.meta(name='DC.Rights', content=self.site.copyright))
 		if self.description is not None:
 			head.append(tag.meta(name='Description', content=self.description))
 		if len(self.keywords) > 0:
 			head.append(tag.meta(name='Keywords', content=', '.join(self.keywords)))
-		if self.author_email is not None:
-			head.append(tag.meta(name='Owner', content=self.author_email))
-			head.append(tag.meta(name='Feedback', content=self.author_email))
-			head.append(tag.link(rel='author', href='mailto:%s' % self.author_email, title=self.author_name))
+		if self.site.author_email is not None:
+			head.append(tag.meta(name='Owner', content=self.site.author_email))
+			head.append(tag.meta(name='Feedback', content=self.site.author_email))
+			head.append(tag.link(rel='author', href='mailto:%s' % self.site.author_email, title=self.site.author_name))
 		# Add some navigation <link> elements
 		head.append(tag.link(rel='home', href=self.site.home_url))
 		if self.first:
@@ -1228,16 +1387,23 @@ class HTMLDocument(WebSiteDocument):
 		if self.parent:
 			head.append(tag.link(rel='up', href=self.parent.url))
 		# Add <link> elements for the favicon
-		if self.icon_url:
-			head.append(tag.link(rel='icon', href=self.icon_url, type=self.icon_type))
-			head.append(tag.link(rel='shortcut icon', href=self.icon_url, type=self.icon_type))
-		# Add the stylesheet to support the format_sql() method
-		head.append(self.site.sql_style.link())
+		if self.site.icon_url:
+			head.append(tag.link(rel='icon', href=self.site.icon_url, type=self.site.icon_type))
+			head.append(tag.link(rel='shortcut icon', href=self.site.icon_url, type=self.site.icon_type))
 		# Add the title
 		if self.title is not None:
 			head.append(tag.title('%s - %s' % (self.site.title, self.title)))
-		# Generate and return the document
-		return tag.html(head, tag.body())
+		# Add the JQuery, Tablesorter and Thickbox links (all used to support
+		# markup generated by HTMLElementFactory)
+		head.append(self.site.jquery_script.link())
+		head.append(self.site.tablesorter_script.link())
+		head.append(self.site.thickbox_style.link())
+		head.append(self.site.thickbox_script.link())
+		return head
+
+	def generate_body(self):
+		"""Called by generate() to generate the document <body> element."""
+		return self.tag.body()
 
 	def format_comment(self, comment, summary=False):
 		return self.comment_highlighter.parse(comment or self.site.default_desc, summary)
@@ -1254,6 +1420,33 @@ class HTMLDocument(WebSiteDocument):
 
 	def link(self, *args, **kwargs):
 		return self.tag.a(self.title, href=self.url, title=self.title)
+
+
+class HTMLPopupDocument(HTMLDocument):
+	"""Document class representing a popup help window."""
+
+	def __init__(self, site, url, title, body, width=400, height=300):
+		"""Initializes an instance of the class."""
+		super(HTMLPopupDocument, self).__init__(site, url)
+		self.title = title
+		self.body = body
+		self.width = int(width)
+		self.height = int(height)
+	
+	def generate_body(self):
+		tag = self.tag
+		return tag.body(
+			tag.div(
+				tag.h3(self.title),
+				self.body,
+				class_='popup'
+			)
+		)
+
+	def link(self):
+		# Modify the link to use Thickbox
+		return self.tag.a(self.title, class_='thickbox', title=self.title,
+			href='%s?TB_iframe=true&width=%d&height=%d' % (self.url, self.width, self.height))
 
 
 class HTMLExternalDocument(HTMLDocument):
@@ -1274,7 +1467,7 @@ class HTMLExternalDocument(HTMLDocument):
 		pass
 
 
-class HTMLIndexDocument(HTMLDocument):
+class HTMLSiteIndexDocument(HTMLDocument):
 	"""Document class representing an alphabetical index of objects."""
 
 	def __init__(self, site, dbclass, letter):
@@ -1295,11 +1488,41 @@ class HTMLIndexDocument(HTMLDocument):
 			url = 'indexof_%s_%s.html' % (dbclass.config_names[0], letter)
 		else:
 			url = 'indexof_%s_%s.html' % (dbclass.config_names[0], hex(ord(letter)))
-		super(HTMLIndexDocument, self).__init__(site, url)
-		self.title = '%s Index' % self.site.type_names[dbclass]
+		super(HTMLSiteIndexDocument, self).__init__(site, url)
+		self.title = '%s Index' % self.site.type_name(dbclass)
 		self.description = self.title
 		self.search = False
 		self.items = site.index_maps[dbclass][letter]
+
+	def generate_body(self):
+		body = super(HTMLSiteIndexDocument, self).generate_body()
+		tag = self.tag
+		# Sort the list of items in the index, and build the content. Note that
+		# self.items is actually reference to a site level object and therefore
+		# must be considered read-only, hence why the list is not sorted
+		# in-place here
+		index = sorted(self.items, key=lambda item: '%s %s' % (item.name, item.qualified_name))
+		index = sorted(dict(
+			(item1.name, [item2 for item2 in index if item1.name == item2.name])
+			for item1 in index
+		).iteritems(), key=lambda (name, _): name)
+		body.append(
+			tag.dl(
+				((
+					tag.dt(name),
+					tag.dd(
+						tag.dl(
+							(
+								tag.dt(self.site.type_name(item), ' ', self.site.link_to(item, parent=True)),
+								tag.dd(self.format_comment(item.description, summary=True))
+							) for item in items
+						)
+					)
+				) for (name, items) in index),
+				id='index-list'
+			)
+		)
+		return body
 
 
 class HTMLObjectDocument(HTMLDocument):
@@ -1316,13 +1539,13 @@ class HTMLObjectDocument(HTMLDocument):
 			ident = dbobject.identifier
 		super(HTMLObjectDocument, self).__init__(site, '%s.html' % ident)
 		self.title = '%s %s' % (
-			self.site.type_names[self.dbobject.__class__],
+			self.site.type_name(self.dbobject),
 			self.dbobject.qualified_name
 		)
 		self.description = self.dbobject.description or self.title
 		self.keywords = [
 			self.site.database.name,
-			self.site.type_names[self.dbobject.__class__],
+			self.site.type_name(self.dbobject),
 			self.dbobject.name,
 			self.dbobject.qualified_name
 		]
@@ -1362,10 +1585,33 @@ class HTMLObjectDocument(HTMLDocument):
 			self.parent = result
 		return result
 
-	def generate(self):
-		doc = super(HTMLObjectDocument, self).generate()
-		doc.find('head').append(self.site.sql_style.link())
-		return doc
+	def generate_head(self):
+		head = super(HTMLObjectDocument, self).generate_head()
+		# Add the stylesheet to support the format_sql() method
+		head.append(self.site.sql_style.link())
+		return head
+
+	def format_sql(self, sql, terminator=';', number_lines=False, id=None):
+		# Overridden to add line number toggling capability (via jQuery)
+		result = super(HTMLObjectDocument, self).format_sql(sql, terminator, number_lines, id)
+		if number_lines and id:
+			result = (result,
+				self.tag.script("""
+					$(document).ready(function() {
+						$('#%(id)s').before(
+							$(document.createElement('p')).append(
+								$(document.createElement('a'))
+									.append('Toggle line numbers')
+									.attr('href', '#')
+									.click(function() {
+										$('#%(id)s').toggleClass('hide-num');
+										return false;
+									})
+							).addClass('toggle')
+						);
+					});
+				""" % {'id': id}))
+		return result
 
 
 class GraphDocument(WebSiteDocument):
@@ -1453,30 +1699,24 @@ mod_path = os.path.dirname(os.path.abspath(__file__))
 
 class SQLStyle(StyleDocument):
 	def __init__(self, site):
-		super(SQLStyle, self).__init__(site,
-			os.path.join(mod_path, 'sql.css'))
+		super(SQLStyle, self).__init__(site, os.path.join(mod_path, 'sql.css'))
 
 class ThickboxStyle(StyleDocument):
 	def __init__(self, site):
-		super(ThickboxStyle, self).__init__(site,
-			os.path.join(mod_path, 'thickbox.css'))
+		super(ThickboxStyle, self).__init__(site, os.path.join(mod_path, 'thickbox.css'))
 
 class ThickboxScript(ScriptDocument):
 	def __init__(self, site):
-		super(ThickboxScript, self).__init__(site,
-			os.path.join(mod_path, 'thickbox.js'))
+		super(ThickboxScript, self).__init__(site, os.path.join(mod_path, 'thickbox.js'))
 
 class JQueryScript(ScriptDocument):
 	def __init__(self, site):
-		super(JQueryScript, self).__init__(site,
-			os.path.join(mod_path, 'jquery.js'))
+		super(JQueryScript, self).__init__(site, os.path.join(mod_path, 'jquery.js'))
 
 class JQueryUIScript(ScriptDocument):
 	def __init__(self, site):
-		super(JQueryScript, self).__init__(site,
-			os.path.join(mod_path, 'jquery.ui.all.js'))
+		super(JQueryScript, self).__init__(site, os.path.join(mod_path, 'jquery.ui.all.js'))
 
 class TablesorterScript(ScriptDocument):
 	def __init__(self, site):
-		super(TablesorterScript, self).__init__(site,
-			os.path.join(mod_path, 'jquery.tablesorter.js'))
+		super(TablesorterScript, self).__init__(site, os.path.join(mod_path, 'jquery.tablesorter.js'))

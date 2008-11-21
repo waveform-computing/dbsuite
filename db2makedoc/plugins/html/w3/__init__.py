@@ -2,8 +2,6 @@
 
 """Output plugin for IBM Intranet w3v8 style web pages."""
 
-import os
-import logging
 import db2makedoc.plugins
 import db2makedoc.plugins.html
 
@@ -12,24 +10,13 @@ from db2makedoc.db import (
 	Check, Index, Trigger, Function, Procedure, Tablespace
 )
 from db2makedoc.plugins.html.w3.document import (
-	W3Site, W3CSSDocument, W3JavaScriptDocument, W3JQueryDocument,
-	W3JQueryTableSorterDocument, W3SearchDocument, W3SiteIndexDocument,
-	W3ExternalDocument, W3PopupDocument
+	W3Site, W3Style, W3Script, W3Search, W3SiteIndex, W3External,
+	W3DatabaseDocument, W3SchemaDocument, W3SchemaGraph, W3TableDocument,
+	W3TableGraph, W3ViewDocument, W3ViewGraph, W3AliasDocument, W3AliasGraph,
+	W3UniqueKeyDocument, W3ForeignKeyDocument, W3CheckDocument,
+	W3IndexDocument, W3TriggerDocument, W3FunctionDocument,
+	W3ProcedureDocument, W3TablespaceDocument
 )
-from db2makedoc.plugins.html.w3.database import W3DatabaseDocument
-from db2makedoc.plugins.html.w3.schema import W3SchemaDocument, W3SchemaGraph
-from db2makedoc.plugins.html.w3.table import W3TableDocument, W3TableGraph
-from db2makedoc.plugins.html.w3.view import W3ViewDocument, W3ViewGraph
-from db2makedoc.plugins.html.w3.alias import W3AliasDocument, W3AliasGraph
-from db2makedoc.plugins.html.w3.uniquekey import W3UniqueKeyDocument
-from db2makedoc.plugins.html.w3.foreignkey import W3ForeignKeyDocument
-from db2makedoc.plugins.html.w3.check import W3CheckDocument
-from db2makedoc.plugins.html.w3.index import W3IndexDocument
-from db2makedoc.plugins.html.w3.trigger import W3TriggerDocument
-from db2makedoc.plugins.html.w3.function import W3FunctionDocument
-from db2makedoc.plugins.html.w3.procedure import W3ProcedureDocument
-from db2makedoc.plugins.html.w3.tablespace import W3TablespaceDocument
-from db2makedoc.plugins.html.w3.popups import POPUPS
 
 
 class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
@@ -47,6 +34,9 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 		"""Initializes an instance of the class."""
 		super(OutputPlugin, self).__init__()
 		self.site_class = W3Site
+		self.add_option('confidential', default='false', convert=self.convert_bool,
+			doc="""If true, each page will be marked "IBM Confidential" below
+			the title""")
 		self.add_option('breadcrumbs', default='true', convert=self.convert_bool,
 			doc="""If true, breadcrumb links will be shown at the top of each
 			page""")
@@ -79,6 +69,8 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 			function will permit viewing the full size image. Values must be
 			specified as "widthxheight", e.g. "640x480". Defaults to
 			"600x800".""")
+		# Tweak the default icon_url
+		self.options['icon_url'] = ('http://w3.ibm.com/favicon.ico',) + self.options['icon_url'][1:]
 	
 	def configure(self, config):
 		super(OutputPlugin, self).configure(config)
@@ -123,21 +115,11 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 		return super(OutputPlugin, self).substitute() + ('feedback_url', 'menu_items', 'related_items')
 
 	def create_documents(self, site):
-		# Add static documents (CSS, JavaScript, search if requested)
-		W3CSSDocument(site)
-		W3JavaScriptDocument(site)
-		W3JQueryDocument(site)
-		W3JQueryTableSorterDocument(site)
-		if site.search:
-			W3SearchDocument(site)
-		for (url, title, body) in POPUPS:
-			W3PopupDocument(site, url, title, body)
-		# Call inherited method to generate documents for all objects
 		super(OutputPlugin, self).create_documents(site)
 		# Add index documents for all indexed classes
 		for dbclass in site.index_maps:
 			for letter in site.index_maps[dbclass]:
-				W3SiteIndexDocument(site, dbclass, letter)
+				W3SiteIndex(site, dbclass, letter)
 		# Add external documents for all menu_items
 		found_top = False
 		menu_docs = []
@@ -147,7 +129,7 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 				doc.title = title
 				found_top = True
 			else:
-				doc = W3ExternalDocument(site, url, title)
+				doc = W3External(site, url, title)
 			menu_docs.append(doc)
 		if not found_top:
 			doc = site.object_document(site.database)
@@ -165,6 +147,7 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 		# dictionary lookup (a perfect class match is tested for first,
 		# followed by a subclass match).
 		classes = self.class_map.get(type(dbobject))
+		# XXX This is wrong! What if there's a DatabaseObject entry in the dictionary?!
 		if classes is None:
 			for dbclass in self.class_map:
 				if isinstance(dbobject, dbclass):

@@ -7,20 +7,32 @@ certain methods to provide formatting specific to the plain style.
 """
 
 import os
-import codecs
 import logging
 from db2makedoc.graph import Graph, Node, Edge, Cluster
-from db2makedoc.etree import ProcessingInstruction
+from db2makedoc.etree import ProcessingInstruction, iselement
 from db2makedoc.db import (
 	DatabaseObject, Database, Schema, Relation,
 	Table, View, Alias, Trigger
 )
 from db2makedoc.plugins.html.document import (
-	HTMLElementFactory, ObjectGraph, WebSite, HTMLDocument, HTMLObjectDocument,
-	HTMLIndexDocument, HTMLExternalDocument, StyleDocument, ScriptDocument,
-	ImageDocument, GraphDocument, GraphObjectDocument, SQLStyle, JQueryScript,
-	JQueryUIScript, TablesorterScript, ThickboxScript, ThickboxStyle
+	HTMLElementFactory, ObjectGraph, WebSite, HTMLDocument, HTMLPopupDocument,
+	HTMLObjectDocument, HTMLSiteIndexDocument, HTMLExternalDocument,
+	StyleDocument, ScriptDocument, ImageDocument, GraphDocument,
+	GraphObjectDocument
 )
+from db2makedoc.plugins.html.database import DatabaseDocument
+from db2makedoc.plugins.html.schema import SchemaDocument, SchemaGraph
+from db2makedoc.plugins.html.table import TableDocument, TableGraph
+from db2makedoc.plugins.html.view import ViewDocument, ViewGraph
+from db2makedoc.plugins.html.alias import AliasDocument, AliasGraph
+from db2makedoc.plugins.html.uniquekey import UniqueKeyDocument
+from db2makedoc.plugins.html.foreignkey import ForeignKeyDocument
+from db2makedoc.plugins.html.check import CheckDocument
+from db2makedoc.plugins.html.index import IndexDocument
+from db2makedoc.plugins.html.trigger import TriggerDocument
+from db2makedoc.plugins.html.function import FunctionDocument
+from db2makedoc.plugins.html.procedure import ProcedureDocument
+from db2makedoc.plugins.html.tablespace import TablespaceDocument
 
 # Import the imaging library
 try:
@@ -30,14 +42,10 @@ except ImportError:
 	# user if PIL is required but not present
 	pass
 
-# Determine the path containing this module (used for locating external source
-# files like CSS, PHP and JavaScript below)
-_my_path = os.path.dirname(os.path.abspath(__file__))
+mod_path = os.path.dirname(os.path.abspath(__file__))
 
 
 class PlainElementFactory(HTMLElementFactory):
-	# Overridden to apply plain styles to certain elements
-
 	def _add_class(self, node, cls):
 		classes = set(node.attrib.get('class', '').split(' '))
 		classes.add(cls)
@@ -92,25 +100,22 @@ class PlainElementFactory(HTMLElementFactory):
 
 
 class PlainGraph(ObjectGraph):
-	# Overridden to style graphs to fit the site style
-
 	def style(self, item):
 		super(PlainGraph, self).style(item)
 		# Set the graph to use the same default font as the stylesheet
 		# XXX Any way to set a fallback here like in CSS?
 		if isinstance(item, (Node, Edge)):
 			item.fontname = 'Trebuchet MS'
-			item.fontsize = 9.0
+			item.fontsize = 8.0
 		elif isinstance(item, Cluster):
 			item.fontname = 'Trebuchet MS'
-			item.fontsize = 11.0
+			item.fontsize = 10.0
 		# Set shapes and color schemes on objects that represent database
 		# objects
 		if hasattr(item, 'dbobject'):
 			if isinstance(item.dbobject, Schema):
 				item.style = 'filled'
-				item.fillcolor = '#ece6d7'
-				item.color = '#ece6d7'
+				item.fillcolor = '#eeeeee'
 			elif isinstance(item.dbobject, Relation):
 				item.shape = 'rectangle'
 				item.style = 'filled'
@@ -123,259 +128,237 @@ class PlainGraph(ObjectGraph):
 					if isinstance(item.dbobject.final_relation, View):
 						item.style = 'filled,rounded'
 					item.fillcolor = '#ffffbb'
-				item.color = '#000000'
 			elif isinstance(item.dbobject, Trigger):
 				item.shape = 'hexagon'
 				item.style = 'filled'
 				item.fillcolor = '#ffbbbb'
+		# Outline the selected object more clearly
+		if isinstance(item, (Cluster, Node)) and hasattr(item, 'selected'):
+			item.color = ['#cdcdcd', '#000000'][item.selected]
 
 
 class PlainSite(WebSite):
-	"""Site class representing a collection of PlainDocument instances."""
-
-	def __init__(self, database, options):
-		super(PlainSite, self).__init__(database, options)
+	def get_options(self, options):
+		super(PlainSite, self).get_options(options)
 		self.last_updated = options['last_updated']
 		self.max_graph_size = options['max_graph_size']
 		self.stylesheets = options['stylesheets']
-		self.tag = PlainElementFactory()
+
+	def get_factories(self):
+		self.tag_class = PlainElementFactory
+		self.popup_class = PlainPopup
 		self.graph_class = PlainGraph
-		# Create static documents. Note that we don't keep a reference to the
-		# image documents.  Firstly, the objects will be kept alive by virtue
-		# of being added to the urls map in this object (by virtue of the
-		# add_document call in their constructors). Secondly, no document ever
-		# refers directly to these objects - they're referred to solely in in
-		# the plain stylesheet
-		self.plain_style = PlainStyle(self)
-		self.jquery_script = JQueryScript(self)
-		self.tablesorter_script = TablesorterScript(self)
-		self.thickbox_style = ThickboxStyle(self)
-		self.thickbox_script = ThickboxScript(self)
-		HeaderImage(self)
-		SortableImage(self)
-		SortAscImage(self)
-		SortDescImage(self)
-		ExpandImage(self)
-		CollapseImage(self)
+
+	def create_documents(self, phase=0):
+		result = super(PlainSite, self).create_documents(phase)
+		if phase == 0:
+			# Create static documents. Note that we don't keep a reference to the
+			# image documents.  Firstly, the objects will be kept alive by virtue
+			# of being added to the urls map in this object (by virtue of the
+			# add_document call in their constructors). Secondly, no document ever
+			# refers directly to these objects - they're referred to solely in in
+			# the plain stylesheet
+			self.plain_style = PlainStyle(self)
+			HeaderImage(self)
+			SortableImage(self)
+			SortAscImage(self)
+			SortDescImage(self)
+			ExpandImage(self)
+			CollapseImage(self)
+			if self.search:
+				PlainSearch(self)
+			return True
+		else:
+			return result
 
 
-class PlainExternalDocument(HTMLExternalDocument):
+class PlainExternal(HTMLExternalDocument):
 	pass
 
 
 class PlainDocument(HTMLDocument):
-	"""Document class for use with the plain style."""
-
 	def generate(self):
-		doc = super(PlainDocument, self).generate()
-		# Add styles and scripts
+		html = super(PlainDocument, self).generate()
+		head = html.find('head')
+		body = html.find('body')
 		tag = self.tag
-		headnode = tag._find(doc, 'head')
-		headnode.append(self.site.plain_style.link())
-		headnode.append(self.site.jquery_script.link())
-		headnode.append(self.site.tablesorter_script.link())
-		headnode.append(self.site.thickbox_style.link())
-		headnode.append(self.site.thickbox_script.link())
-		# Add common header elements to the body
-		bodynode = tag._find(doc, 'body')
-		bodynode.append(tag.h1(self.site.title, id='top'))
+		return tag.html(
+			head,
+			tag.body(
+				tag.h1(self.site.title, id='top'),
+				self.generate_search(),
+				self.generate_crumbs(),
+				tag.h2(self.title),
+				list(body), # Copy of the original <body> content
+				self.generate_footer(),
+				**body.attrib # Copy of the original <body> attributes
+			),
+			**html.attrib # Copy of the original <html> attributes
+		)
+
+	def generate_head(self):
+		head = super(PlainDocument, self).generate_head()
+		tag = self.tag
+		# Add styles and scripts
+		head.append(self.site.plain_style.link())
+		head.append(self.site.jquery_script.link())
+		head.append(self.site.tablesorter_script.link())
+		head.append(self.site.thickbox_style.link())
+		head.append(self.site.thickbox_script.link())
+		return head
+
+	def generate_search(self):
 		if self.site.search:
-			bodynode.append(tag.form(
+			tag = self.tag
+			return tag.form(
 				'Search: ',
 				tag.input(type='text', name='q', size=20),
 				' ',
 				tag.input(type='submit', value='Go'),
-				method='get', action='search.php'
-			))
-		bodynode.append(self.generate_crumbs())
-		return doc
+				id='search',
+				method='get',
+				action='search.php'
+			)
+		else:
+			return ''
 
 	def generate_crumbs(self):
 		"""Creates the breadcrumb links above the article body."""
 		if self.parent:
-			if isinstance(self, PlainSiteIndexDocument):
+			if isinstance(self, PlainSiteIndex):
 				doc = self.parent
 			else:
 				doc = self
 			links = [doc.title]
 			doc = doc.parent
 			while doc:
-				links.insert(0, ' > ')
-				links.insert(0, doc.link())
+				links.append(' > ')
+				links.append(doc.link())
 				doc = doc.parent
-			return self.tag.p(links, id='breadcrumbs')
+			return self.tag.p(reversed(links), id='breadcrumbs')
 		else:
 			return self.tag.p('', id='breadcrumbs')
 
-	def format_sql(self, sql, terminator=';', number_lines=False, id=None):
-		# Overridden to add line number toggling capability (via jQuery)
-		result = super(PlainDocument, self).format_sql(sql, terminator, number_lines, id)
-		if number_lines and id:
-			result = (result,
-				self.tag.script("""
-					$(document).ready(function() {
-						$('#%(id)s').before(
-							$(document.createElement('p')).append(
-								$(document.createElement('a'))
-									.append('Toggle line numbers')
-									.attr('href', '#')
-									.click(function() {
-										$('#%(id)s').toggleClass('hide-num');
-										return false;
-									})
-							).addClass('toggle')
-						);
-					});
-				""" % {'id': id}))
-		return result
+	def generate_footer(self):
+		if self.site.copyright or self.site.last_updated:
+			tag = self.tag
+			footer = tag.div(id='footer')
+			if self.site.copyright:
+				footer.append(tag.p(self.site.copyright, id='copyright'))
+			if self.site.last_updated:
+				footer.append(tag.p('Updated on %s' % self.site.date.strftime('%a, %d %b %Y'), id='timestamp'))
+			return footer
+		else:
+			return ''
+
+
+class PlainPopup(HTMLPopupDocument):
+	def generate_head(self):
+		head = super(PlainPopup, self).generate_head()
+		head.append(self.site.plain_style.link())
+		return head
 
 
 class PlainObjectDocument(HTMLObjectDocument, PlainDocument):
-	"""Document class representing a database object (table, view, index, etc.)"""
-
-	def __init__(self, site, dbobject):
-		super(PlainObjectDocument, self).__init__(site, dbobject)
-		self.last_updated = site.last_updated
-	
 	def generate(self):
 		doc = super(PlainObjectDocument, self).generate()
-		# Add body content
 		tag = self.tag
-		bodynode = tag._find(doc, 'body')
-		bodynode.append(tag.h2('%s %s' % (self.site.type_names[self.dbobject.__class__], self.dbobject.qualified_name)))
-		sections = self.generate_sections()
-		if sections:
-			bodynode.append(tag.ul((
-				tag.li(tag.a(title, href='#' + id, title='Jump to section'))
-				for (id, title, content) in sections
-			), id='toc'))
-			tag._append(bodynode, (
-				(tag.h3(title, id=id), content)
-				for (id, title, content) in sections
-			))
-		if self.copyright:
-			bodynode.append(tag.p(self.copyright, id='footer'))
-		if self.last_updated:
-			bodynode.append(tag.p('Updated on %s' % self.date.strftime('%a, %d %b %Y'), id='timestamp'))
+		body = doc.find('body')
+		# Build a TOC from all <h3> elements contained in <div class="section">
+		# elements, and insert it after the page title
+		i = 3
+		if self.site.search:
+			i += 1
+		body[i:i] = [
+			tag.ul(
+				(
+					tag.li(tag.a(elem.find('h3').text, href='#' + elem.attrib['id'], title='Jump to section'))
+					for elem in body
+					if iselement(elem)
+					and elem.tag == 'div'
+					and elem.attrib.get('class') == 'section'
+					and iselement(elem.find('h3'))
+					and 'id' in elem.attrib
+				),
+				id='toc'
+			)
+		]
 		return doc
 
-	def generate_sections(self):
-		"""Creates the actual body content."""
-		# Override in descendents to return a list of tuples with the following
-		# structure: (id, title, [content]). "content" is a list of Elements.
-		return []
 
-
-class PlainSiteIndexDocument(HTMLIndexDocument, PlainDocument):
-	"""Document class containing an alphabetical index of objects"""
-
-	def generate(self):
-		doc = super(PlainSiteIndexDocument, self).generate()
-		# Add body content
+class PlainSiteIndex(HTMLSiteIndexDocument, PlainDocument):
+	def generate_body(self):
+		body = super(PlainSiteIndex, self).generate_body()
 		tag = self.tag
-		bodynode = tag._find(doc, 'body')
-		bodynode.append(tag.h2('%s Index' % self.site.type_names[self.dbclass]))
-		# Generate the letter links to other docs in the index
-		links = tag.p(id='letters')
+		# Generate the letter links to other docs in the index, and insert them
+		# after the page title
+		links = []
 		item = self.first
 		while item:
 			if item is self:
-				tag._append(links, tag.strong(item.letter))
+				links.append(tag.strong(item.letter))
 			else:
-				tag._append(links, tag.a(item.letter, href=item.url))
-			tag._append(links, ' ')
+				links.append(tag.a(item.letter, href=item.url))
+			links.append(' ')
 			item = item.next
-		bodynode.append(links)
-		# Sort the list of items in the index, and build the content. Note that
-		# self.items is actually reference to a site level object and therefore
-		# must be considered read-only, hence why the list is not sorted
-		# in-place here
-		index = sorted(self.items, key=lambda item: '%s %s' % (item.name, item.qualified_name))
-		index = sorted(dict(
-			(item1.name, [item2 for item2 in index if item1.name == item2.name])
-			for item1 in index
-		).iteritems(), key=lambda (name, _): name)
-		bodynode.append(tag.dl(
-			((
-				tag.dt(name),
-				tag.dd(
-					tag.dl(
-						(
-							tag.dt(self.site.type_names[item.__class__], ' ', self.site.link_to(item, parent=True)),
-							tag.dd(self.format_comment(item.description, summary=True))
-						) for item in items
-					)
-				)
-			) for (name, items) in index),
-			id='index-list'
-		))
-		# Generate the script blocks to handle expanding/collapsing definition
-		# list entries, and the placeholder for the "expand all" and "collapse
-		# all" links
-		bodynode.append(tag.script("""
-			$(document).ready(function() {
-				/* Collapse all definition terms and add a click handler to toggle them */
-				$('#index-list')
-					.children('dd').hide().end()
-					.children('dt').addClass('expand').click(function() {
-						$(this)
-							.toggleClass('expand')
-							.toggleClass('collapse')
-							.next().slideToggle();
-					});
-				/* Add the "expand all" and "collapse all" links */
-				$('#letters')
-					.append(
-						$(document.createElement('a'))
-							.attr('href', '#')
-							.append('Expand all')
-							.click(function() {
-								$('#index-list')
-									.children('dd').show().end()
-									.children('dt').removeClass('expand').addClass('collapse');
-								return false;
-							})
-					)
-					.append(' ')
-					.append(
-						$(document.createElement('a'))
-							.attr('href', '#')
-							.append('Collapse all')
-							.click(function() {
-								$('#index-list')
-									.children('dd').hide().end()
-									.children('dt').removeClass('collapse').addClass('expand');
-								return false;
-							})
-					);
-			});
-		"""))
-		return doc
+		# Add all the JavaScript toggles
+		body[0:0] = [
+			tag.p(links, id='letters'),
+			tag.script("""
+				$(document).ready(function() {
+					/* Collapse all definition terms and add a click handler to toggle them */
+					$('#index-list')
+						.children('dd').hide().end()
+						.children('dt').addClass('expand').click(function() {
+							$(this)
+								.toggleClass('expand')
+								.toggleClass('collapse')
+								.next().slideToggle();
+						});
+					/* Add the "expand all" and "collapse all" links */
+					$('#letters')
+						.append(
+							$(document.createElement('a'))
+								.attr('href', '#')
+								.append('Expand all')
+								.click(function() {
+									$('#index-list')
+										.children('dd').show().end()
+										.children('dt').removeClass('expand').addClass('collapse');
+									return false;
+								})
+						)
+						.append(' ')
+						.append(
+							$(document.createElement('a'))
+								.attr('href', '#')
+								.append('Collapse all')
+								.click(function() {
+									$('#index-list')
+										.children('dd').hide().end()
+										.children('dt').removeClass('collapse').addClass('expand');
+									return false;
+								})
+						);
+				});
+			""")
+		]
+		return body
 
 
-class PlainSearchDocument(PlainDocument):
+class PlainSearch(PlainDocument):
 	"""Document class containing the PHP search script"""
 
-	search_php = open(os.path.join(_my_path, 'search.php'), 'r').read()
+	search_php = open(os.path.join(mod_path, 'search.php'), 'r').read()
 
 	def __init__(self, site):
-		super(PlainSearchDocument, self).__init__(site, 'search.php')
+		super(PlainSearch, self).__init__(site, 'search.php')
 		self.title = '%s - Search Results' % site.title
 		self.description = 'Search Results'
 		self.search = False
-		self.last_updated = site.last_updated
 	
-	def generate(self):
-		doc = super(PlainSearchDocument, self).generate()
-		tag = self.tag
-		bodynode = tag._find(doc, 'body')
-		bodynode.append(tag.p(
-			tag.a(self.site.home_title, href=self.site.home_url),
-			' > ',
-			'Search Results',
-			id='breadcrumbs'
-		))
-		bodynode.append(tag.h2('Search Results'))
+	def generate_body(self):
+		body = super(PlainSearch, self).generate_body()
 		# XXX Dirty hack to work around a bug in ElementTree: if we use an ET
 		# ProcessingInstruction here, ET converts XML special chars (<, >,
 		# etc.) into XML entities, which is unnecessary and completely breaks
@@ -383,12 +366,8 @@ class PlainSearchDocument(PlainDocument):
 		# PHP in an overridden serialize() method. This will break horribly if
 		# the PHP code contains any non-ASCII characters and/or the target
 		# encoding is not ASCII-based (e.g. EBCDIC).
-		bodynode.append(ProcessingInstruction('php', '__PHP__'))
-		if self.copyright:
-			bodynode.append(tag.p(self.copyright, id='footer'))
-		if self.last_updated:
-			bodynode.append(tag.p('Indexed on %s' % self.date.strftime('%a, %d %b %Y'), id='timestamp'))
-		return doc
+		body.append(ProcessingInstruction('php', '__PHP__'))
+		return body
 	
 	def serialize(self, content):
 		# XXX See generate()
@@ -396,15 +375,12 @@ class PlainSearchDocument(PlainDocument):
 		php = php.replace('__XAPIAN__', 'xapian.php')
 		php = php.replace('__LANG__', self.site.lang)
 		php = php.replace('__ENCODING__', self.site.encoding)
-		result = super(PlainSearchDocument, self).serialize(content)
+		result = super(PlainSearch, self).serialize(content)
 		return result.replace('__PHP__', php)
 
 
 class PlainGraphDocument(GraphObjectDocument):
-	"""Graph class representing a database object or collection of objects."""
-
 	def __init__(self, site, dbobject):
-		"""Initializes an instance of the class."""
 		super(PlainGraphDocument, self).__init__(site, dbobject)
 		self.written = False
 		self.scale = None
@@ -430,7 +406,7 @@ class PlainGraphDocument(GraphObjectDocument):
 					logging.warning('Failed to open image "%s" for resizing: %s' % (self.filename, e))
 					if os.path.exists(self.filename):
 						newname = '%s.broken' % self.filename
-						logging.warning('Removing potentially corrupt image file "%s" to "%s"' % (self.filename, newname))
+						logging.warning('Moving potentially corrupt image file "%s" to "%s"' % (self.filename, newname))
 						if os.path.exists(newname):
 							os.unlink(newname)
 						os.rename(self.filename, newname)
@@ -484,8 +460,6 @@ class PlainGraphDocument(GraphObjectDocument):
 
 # Declare classes for all the static documents in the plain HTML plugin
 
-mod_path = os.path.dirname(os.path.abspath(__file__))
-
 class PlainStyle(StyleDocument):
 	def __init__(self, site):
 		super(PlainStyle, self).__init__(site, os.path.join(mod_path, 'styles.css'))
@@ -514,3 +488,56 @@ class CollapseImage(ImageDocument):
 	def __init__(self, site):
 		super(CollapseImage, self).__init__(site, os.path.join(mod_path, 'collapse.png'))
 
+
+# Declare styled document and graph classes
+
+class PlainDatabaseDocument(PlainObjectDocument, DatabaseDocument):
+	pass
+
+class PlainSchemaDocument(PlainObjectDocument, SchemaDocument):
+	pass
+
+class PlainTableDocument(PlainObjectDocument, TableDocument):
+	pass
+
+class PlainViewDocument(PlainObjectDocument, ViewDocument):
+	pass
+
+class PlainAliasDocument(PlainObjectDocument, AliasDocument):
+	pass
+
+class PlainUniqueKeyDocument(PlainObjectDocument, UniqueKeyDocument):
+	pass
+
+class PlainForeignKeyDocument(PlainObjectDocument, ForeignKeyDocument):
+	pass
+
+class PlainCheckDocument(PlainObjectDocument, CheckDocument):
+	pass
+
+class PlainIndexDocument(PlainObjectDocument, IndexDocument):
+	pass
+
+class PlainTriggerDocument(PlainObjectDocument, TriggerDocument):
+	pass
+
+class PlainFunctionDocument(PlainObjectDocument, FunctionDocument):
+	pass
+
+class PlainProcedureDocument(PlainObjectDocument, ProcedureDocument):
+	pass
+
+class PlainTablespaceDocument(PlainObjectDocument, TablespaceDocument):
+	pass
+
+class PlainSchemaGraph(SchemaGraph, PlainGraphDocument):
+	pass
+
+class PlainTableGraph(TableGraph, PlainGraphDocument):
+	pass
+
+class PlainViewGraph(ViewGraph, PlainGraphDocument):
+	pass
+
+class PlainAliasGraph(AliasGraph, PlainGraphDocument):
+	pass

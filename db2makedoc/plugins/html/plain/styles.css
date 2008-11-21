@@ -37,7 +37,7 @@ h3 {
 	margin-right: 16px;
 }
 
-form {
+form#search {
 	position: absolute;
 	top: 50px;
 	right: 8px;
@@ -72,7 +72,7 @@ p, dl, ol, ul, table, img {
 	margin: 1.1em 32px;
 }
 
-ol, ul { padding-left: 2em; }
+ol, ul, dl dd { padding-left: 2em; }
 dl dt { font-weight: bold; }
 
 input[type="submit"],
@@ -95,14 +95,19 @@ dl#index-list dt.collapse:hover { background-color: #dee; }
 dl#index-list dt.expand { background-image: url('expand.png'); }
 dl#index-list dt.collapse { background-image: url('collapse.png'); }
 
-p#footer,
-p#timestamp {
+/* Override the base sql.css stylesheet */
+body ol.sql { background-color: #eee; border: 1px solid #cdcdcd; }
+
+div#footer {
+	border-top: 1px solid #ccc;
 	color: #777;
 	margin: 0 16px;
 }
 
-p#footer { border-top: 1px solid #ccc; }
-p#timestamp { position: relative; top: -1.5em; text-align: right; }
+div#footer p { margin: 1em 0; }
+div#footer p#copyright { float: left; }
+div#footer p#timestamp { float: right; }
+
 p.search-pages { font-weight: bold; }
 
 img { border: 0 none; }

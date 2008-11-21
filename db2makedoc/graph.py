@@ -124,17 +124,17 @@ class Graph(GraphBase):
 	"""Class representing a top level graph"""
 
 	_attributes = frozenset(('Damping', 'K', 'URL', 'bb', 'bgcolor', 'center',
-			'charset', 'clusterrank', 'colorscheme', 'comment', 'compound',
-			'concentrate', 'defaultdist', 'dim', 'diredgeconstraints', 'dpi',
-			'epsilon', 'esep', 'fontcolor', 'fontname', 'fontpath', 'fontsize',
-			'label', 'labeljust', 'labelloc', 'landscape', 'layers',
-			'layersep', 'levelsgap', 'lp', 'margin', 'maxiter', 'mclimit',
-			'mindist', 'mode', 'model', 'mosek', 'nodesep', 'normalize',
-			'nslimit1', 'ordering', 'orientation', 'outputorder', 'overlap',
-			'pack', 'packmode', 'page', 'pagedir', 'quantum', 'rankdir',
-			'ranksep', 'ratio', 'remincross', 'resolution', 'root', 'rotate',
-			'searchsize', 'sep', 'showboxes', 'size', 'splines', 'start',
-			'stylesheet', 'target', 'truecolor', 'viewport', 'voro_margin'))
+		'charset', 'clusterrank', 'colorscheme', 'comment', 'compound',
+		'concentrate', 'defaultdist', 'dim', 'diredgeconstraints', 'dpi',
+		'epsilon', 'esep', 'fontcolor', 'fontname', 'fontpath', 'fontsize',
+		'label', 'labeljust', 'labelloc', 'landscape', 'layers', 'layersep',
+		'levelsgap', 'lp', 'margin', 'maxiter', 'mclimit', 'mindist', 'mode',
+		'model', 'mosek', 'nodesep', 'normalize', 'nslimit1', 'ordering',
+		'orientation', 'outputorder', 'overlap', 'pack', 'packmode', 'page',
+		'pagedir', 'quantum', 'rankdir', 'ranksep', 'ratio', 'remincross',
+		'resolution', 'root', 'rotate', 'searchsize', 'sep', 'showboxes',
+		'size', 'splines', 'start', 'stylesheet', 'target', 'truecolor',
+		'viewport', 'voro_margin'))
 
 	def __init__(self, id, directed=True, strict=False):
 		"""Initializes an instance of the class.
@@ -291,9 +291,9 @@ class Cluster(Subgraph):
 	"""Class representing a cluster-style subgraph within a top-level graph"""
 
 	_attributes = frozenset(('K', 'URL', 'bgcolor', 'color', 'colorscheme',
-			'fillcolor', 'fontcolor', 'fontname', 'fontsize', 'label',
-			'labeljust', 'labelloc', 'lp', 'nojustify', 'pencolor',
-			'peripheries', 'style', 'target', 'tooltip'))
+		'fillcolor', 'fontcolor', 'fontname', 'fontsize', 'label', 'labeljust',
+		'labelloc', 'lp', 'nojustify', 'pencolor', 'penwidth', 'peripheries',
+		'style', 'target', 'tooltip'))
 
 	def __init__(self, graph, id):
 		"""Initializes an instance of the class.
@@ -319,11 +319,11 @@ class Node(GraphObject):
 	"""Class representing a node or vertex in a graph"""
 
 	_attributes = frozenset(('URL', 'color', 'comment', 'distortion',
-			'fillcolor', 'fixedsize', 'fontcolor', 'fontname', 'fontsize',
-			'group', 'height', 'label', 'layer', 'margin', 'nojustify',
-			'orientation', 'peripheries', 'pin', 'pos', 'rects', 'regular',
-			'root', 'samplepoints', 'shape', 'shapefile', 'showboxes', 'sides',
-			'skew', 'style', 'target', 'tooltip', 'vertices', 'width', 'z'))
+		'fillcolor', 'fixedsize', 'fontcolor', 'fontname', 'fontsize', 'group',
+		'height', 'label', 'layer', 'margin', 'nojustify', 'orientation',
+		'penwidth', 'peripheries', 'pin', 'pos', 'rects', 'regular', 'root',
+		'samplepoints', 'shape', 'shapefile', 'showboxes', 'sides', 'skew',
+		'style', 'target', 'tooltip', 'vertices', 'width', 'z'))
 
 	def __init__(self, graph, id):
 		"""Initializes an instance of the class.
@@ -422,15 +422,14 @@ class Edge(GraphObject):
 	"""Class representing an edge between two nodes in a graph"""
 
 	_attributes = frozenset(('URL', 'arrowhead', 'arrowsize', 'arrowtail',
-			'color', 'comment', 'constraint', 'decorate', 'dir', 'fontcolor',
-			'fontname', 'fontsize', 'headURL', 'headclip', 'headhref',
-			'headlabel', 'headport', 'headtarget', 'headtooltip', 'href',
-			'label', 'labelangle', 'labeldistance', 'labelfloat',
-			'labelfontcolor', 'labelfontname', 'labelfontsize', 'layer', 'len',
-			'lhead', 'lp', 'ltail', 'minlen', 'nojustify', 'pos', 'samehead',
-			'sametail', 'showboxes', 'style', 'tailURL', 'tailclip',
-			'tailhref', 'taillabel', 'tailport', 'tailtarget', 'tailtooltip',
-			'target', 'tooltip', 'weight'))
+		'color', 'comment', 'constraint', 'decorate', 'dir', 'fontcolor',
+		'fontname', 'fontsize', 'headURL', 'headclip', 'headhref', 'headlabel',
+		'headport', 'headtarget', 'headtooltip', 'href', 'label', 'labelangle',
+		'labeldistance', 'labelfloat', 'labelfontcolor', 'labelfontname',
+		'labelfontsize', 'layer', 'len', 'lhead', 'lp', 'ltail', 'minlen',
+		'nojustify', 'penwidth', 'pos', 'samehead', 'sametail', 'showboxes',
+		'style', 'tailURL', 'tailclip', 'tailhref', 'taillabel', 'tailport',
+		'tailtarget', 'tailtooltip', 'target', 'tooltip', 'weight'))
 
 	def __init__(self, graph, from_node, to_node):
 		"""Initializes an instance of the class.

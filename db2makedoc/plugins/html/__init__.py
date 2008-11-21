@@ -9,7 +9,7 @@ website containing HTML documents amongst other things).
 
 import os
 import sys
-mswindows = sys.platform[:5] == 'win32'
+mswindows = sys.platform.startswith('win')
 import codecs
 import logging
 import db2makedoc.db
