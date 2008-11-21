@@ -4,19 +4,8 @@
 
 import db2makedoc.plugins
 import db2makedoc.plugins.html
-
-from db2makedoc.db import (
-	Database, Schema, Table, View, Alias, UniqueKey, ForeignKey,
-	Check, Index, Trigger, Function, Procedure, Tablespace
-)
-from db2makedoc.plugins.html.w3.document import (
-	W3Site, W3Style, W3Script, W3Search, W3SiteIndex, W3External,
-	W3DatabaseDocument, W3SchemaDocument, W3SchemaGraph, W3TableDocument,
-	W3TableGraph, W3ViewDocument, W3ViewGraph, W3AliasDocument, W3AliasGraph,
-	W3UniqueKeyDocument, W3ForeignKeyDocument, W3CheckDocument,
-	W3IndexDocument, W3TriggerDocument, W3FunctionDocument,
-	W3ProcedureDocument, W3TablespaceDocument
-)
+from db2makedoc.db import Schema, Table, View, Alias
+from db2makedoc.plugins.html.w3.document import W3Site
 
 
 class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
@@ -80,79 +69,12 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 				import PIL
 			except ImportError:
 				raise db2makedoc.plugins.PluginConfigurationError('Diagrams requested, but the Python Imaging Library (PIL) was not found')
-		# Build the map of document classes
-		self.class_map = {
-			Database:   set([W3DatabaseDocument]),
-			Schema:     set([W3SchemaDocument]),
-			Table:      set([W3TableDocument]),
-			View:       set([W3ViewDocument]),
-			Alias:      set([W3AliasDocument]),
-			UniqueKey:  set([W3UniqueKeyDocument]),
-			ForeignKey: set([W3ForeignKeyDocument]),
-			Check:      set([W3CheckDocument]),
-			Index:      set([W3IndexDocument]),
-			Trigger:    set([W3TriggerDocument]),
-			Function:   set([W3FunctionDocument]),
-			Procedure:  set([W3ProcedureDocument]),
-			Tablespace: set([W3TablespaceDocument]),
-		}
-		graph_map = {
-			Schema:  W3SchemaGraph,
-			Table:   W3TableGraph,
-			View:    W3ViewGraph,
-			Alias:   W3AliasGraph,
-		}
-		for item in self.options['diagrams']:
-			try:
-				self.class_map[item].add(graph_map[item])
-			except KeyError:
-				raise db2makedoc.plugins.PluginConfigurationError('No diagram support for "%s" objects (supported objects are %s)' % (
-					item.config_names[0],
-					', '.join(c.config_names[0] for c in graph_map.iterkeys()))
-				)
+		supported_diagrams = set([Schema, Table, View, Alias])
+		if self.options['diagrams'] - supported_diagrams:
+			raise db2makedoc.plugins.PluginConfigurationError('No diagram support for %s objects (supported objects are %s)' % (
+				', '.join(c.config_names[0] for c in self.options['diagrams'] - supported_diagrams),
+				', '.join(c.config_names[0] for c in supported_diagrams)
+			))
 
 	def substitute(self):
 		return super(OutputPlugin, self).substitute() + ('feedback_url', 'menu_items', 'related_items')
-
-	def create_documents(self, site):
-		super(OutputPlugin, self).create_documents(site)
-		# Add index documents for all indexed classes
-		for dbclass in site.index_maps:
-			for letter in site.index_maps[dbclass]:
-				W3SiteIndex(site, dbclass, letter)
-		# Add external documents for all menu_items
-		found_top = False
-		menu_docs = []
-		for (title, url) in [(self.options['home_title'], self.options['home_url'])] + self.options['menu_items']:
-			if url == '#':
-				doc = site.object_document(site.database)
-				doc.title = title
-				found_top = True
-			else:
-				doc = W3External(site, url, title)
-			menu_docs.append(doc)
-		if not found_top:
-			doc = site.object_document(site.database)
-			menu_docs.append(doc)
-		prior = None
-		for doc in menu_docs:
-			doc.first = menu_docs[0]
-			doc.last = menu_docs[-1]
-			doc.prior = prior
-			prior = doc
-	
-	def create_document(self, dbobject, site):
-		# Overridden to generate documents and graphs for specific types of
-		# database objects. Document and graph classes are determined from a
-		# dictionary lookup (a perfect class match is tested for first,
-		# followed by a subclass match).
-		classes = self.class_map.get(type(dbobject))
-		# XXX This is wrong! What if there's a DatabaseObject entry in the dictionary?!
-		if classes is None:
-			for dbclass in self.class_map:
-				if isinstance(dbobject, dbclass):
-					classes = self.class_map[dbclass]
-		if classes is not None:
-			for docclass in classes:
-				docclass(site, dbobject)
-

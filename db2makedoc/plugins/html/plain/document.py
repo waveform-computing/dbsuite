@@ -11,8 +11,8 @@ import logging
 from db2makedoc.graph import Graph, Node, Edge, Cluster
 from db2makedoc.etree import ProcessingInstruction, iselement
 from db2makedoc.db import (
-	DatabaseObject, Database, Schema, Relation,
-	Table, View, Alias, Trigger
+	Database, Schema, Relation, Table, View, Alias, UniqueKey,
+	ForeignKey, Check, Index, Trigger, Function, Procedure, Tablespace
 )
 from db2makedoc.plugins.html.document import (
 	HTMLElementFactory, ObjectGraph, WebSite, HTMLDocument, HTMLPopupDocument,
@@ -79,7 +79,7 @@ class PlainElementFactory(HTMLElementFactory):
 			# within the table definition to activate the jQuery tablesorter
 			# plugin for this table, and scan th elements for any nosort
 			# classes to disable sorting on them
-			if 'id' in table.attrib:
+			if 'id' in table.attrib and len(tbody.findall('tr')) > 1:
 				script = self.script("""
 					$(document).ready(function() {
 						$('table#%s').tablesorter({
@@ -113,28 +113,33 @@ class PlainGraph(ObjectGraph):
 		# Set shapes and color schemes on objects that represent database
 		# objects
 		if hasattr(item, 'dbobject'):
+			item.fontcolor = '#000000'
 			if isinstance(item.dbobject, Schema):
 				item.style = 'filled'
 				item.fillcolor = '#eeeeee'
 			elif isinstance(item.dbobject, Relation):
-				item.shape = 'rectangle'
 				item.style = 'filled'
 				if isinstance(item.dbobject, Table):
-					item.fillcolor = '#bbbbff'
+					item.shape = 'rectangle'
+					item.fillcolor = '#aaaaff'
 				elif isinstance(item.dbobject, View):
-					item.style = 'filled,rounded'
-					item.fillcolor = '#bbffbb'
+					item.shape = 'octagon'
+					item.fillcolor = '#99ff99'
 				elif isinstance(item.dbobject, Alias):
-					if isinstance(item.dbobject.final_relation, View):
-						item.style = 'filled,rounded'
-					item.fillcolor = '#ffffbb'
+					if isinstance(item.dbobject.final_relation, Table):
+						item.shape = 'rectangle'
+					else:
+						item.shape = 'octagon'
+					item.fillcolor = '#ffbb99'
 			elif isinstance(item.dbobject, Trigger):
 				item.shape = 'hexagon'
 				item.style = 'filled'
-				item.fillcolor = '#ffbbbb'
+				item.fillcolor = '#ff9999'
 		# Outline the selected object more clearly
 		if isinstance(item, (Cluster, Node)) and hasattr(item, 'selected'):
-			item.color = ['#cdcdcd', '#000000'][item.selected]
+			item.color = [item.fillcolor, '#000000'][item.selected]
+		elif isinstance(item, Edge):
+			item.color = '#999999'
 
 
 class PlainSite(WebSite):
@@ -148,6 +153,32 @@ class PlainSite(WebSite):
 		self.tag_class = PlainElementFactory
 		self.popup_class = PlainPopup
 		self.graph_class = PlainGraph
+		self.index_class = PlainSiteIndex
+		self.document_classes = {
+			Database:   set([PlainDatabaseDocument]),
+			Schema:     set([PlainSchemaDocument]),
+			Table:      set([PlainTableDocument]),
+			View:       set([PlainViewDocument]),
+			Alias:      set([PlainAliasDocument]),
+			UniqueKey:  set([PlainUniqueKeyDocument]),
+			ForeignKey: set([PlainForeignKeyDocument]),
+			Check:      set([PlainCheckDocument]),
+			Index:      set([PlainIndexDocument]),
+			Trigger:    set([PlainTriggerDocument]),
+			Function:   set([PlainFunctionDocument]),
+			Procedure:  set([PlainProcedureDocument]),
+			Tablespace: set([PlainTablespaceDocument]),
+		}
+		graph_map = {
+			Schema:  PlainSchemaGraph,
+			Table:   PlainTableGraph,
+			View:    PlainViewGraph,
+			Alias:   PlainAliasGraph,
+		}
+		# The plugin's configure method has already check all items in
+		# self.diagrams are supported
+		for item in self.diagrams:
+			self.document_classes[item].add(graph_map[item])
 
 	def create_documents(self, phase=0):
 		result = super(PlainSite, self).create_documents(phase)
@@ -201,10 +232,6 @@ class PlainDocument(HTMLDocument):
 		tag = self.tag
 		# Add styles and scripts
 		head.append(self.site.plain_style.link())
-		head.append(self.site.jquery_script.link())
-		head.append(self.site.tablesorter_script.link())
-		head.append(self.site.thickbox_style.link())
-		head.append(self.site.thickbox_script.link())
 		return head
 
 	def generate_search(self):

@@ -167,30 +167,5 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 			if isinstance(self.options[option], basestring):
 				self.options[option] = Template(self.options[option]).safe_substitute(values)
 		site = self.site_class(database, self.options)
-		self.create_documents(site)
-		logging.info('Writing output to "%s"' % self.options['path'])
 		site.write()
-
-	def create_documents(self, site):
-		"""Creates the documents in the web-site.
-
-		The basic implementation in this class simply calls create_document for
-		each object in the database hierarchy.  The create_document method
-		should be overridden in descendents to create a document of the
-		appropriate class.
-
-		This method should be overridden in descendents if they wish to add
-		extra (non database object) documents to the site. For example, style
-		sheets, JavaScript libraries, or static HTML documents.
-		"""
-		site.database.touch(self.create_document, site)
-
-	def create_document(self, dbobject, site):
-		"""Creates a document for a specific database object.
-
-		This a stub method to be overridden in descendents. The concrete
-		implementation should create a document instance (or instances)
-		appropriate to the type of database object passed to the method.
-		"""
-		pass
 

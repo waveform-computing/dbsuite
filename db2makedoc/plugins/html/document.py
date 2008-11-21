@@ -452,11 +452,11 @@ class ObjectGraph(Graph):
 		item = self.dbobjects.get(dbobject)
 		if item is None:
 			if isinstance(dbobject, Schema):
-				item = Cluster(self, dbobject.qualified_name)
+				item = Cluster(self, dbobject.identifier)
 				item.label = dbobject.name
 			elif isinstance(dbobject, (Relation, Trigger)):
 				cluster = self.add(dbobject.schema)
-				item = Node(cluster, dbobject.qualified_name)
+				item = Node(cluster, dbobject.identifier)
 				item.label = dbobject.name
 			item.selected = selected
 			item.dbobject = dbobject
@@ -564,15 +564,21 @@ class WebSite(object):
 		"""Configures the classes used by the site to generate content.
 
 		This method is called when the WebSite class is instantiated. It sets
-		the three classes that the site (and associated document classes) use
-		to generate content. Specifically, it sets the attributes tag_class
-		(must be a descendent of or compatible with HTMLElementFactory),
-		popup_class (must be like HTMLPopupDocument), and graph_class (must be
-		like ObjectGraph).
+		the classes that the site (and associated document classes) use to
+		generate content, and the document classes map itself.
+		
+		Specifically, it sets the attributes tag_class (must be a descendent of
+		or compatible with HTMLElementFactory), popup_class (must be like
+		HTMLPopupDocument), graph_class (must be like ObjectGraph). It also
+		sets document_classes which must map database object classes to
+		sequences of document classes, and index_class (must be like
+		HTMLSiteIndexDocument).
 		"""
 		self.tag_class = HTMLElementFactory
 		self.popup_class = HTMLPopupDocument
 		self.graph_class = ObjectGraph
+		self.document_classes = {}
+		self.index_class = HTMLSiteIndexDocument
 
 	def create_documents(self, phase=0):
 		"""Creates the documents associated with the site.
@@ -603,18 +609,13 @@ class WebSite(object):
 			self.tablesorter_script = TablesorterScript(self)
 			self.thickbox_style = ThickboxStyle(self)
 			self.thickbox_script = ThickboxScript(self)
+			ThickboxImage(self)
 			return True
 		elif phase == 1:
 			# Build the static popup documents
 			popups = fromstring(codecs.open(os.path.join(mod_path, 'popups.xml'), 'r', 'utf-8').read())
 			for popup in popups:
-				self.popup_class(self,
-					url=popup.attrib['filename'],
-					title=popup.attrib['title'],
-					width=popup.attrib.get('width', 400),
-					height=popup.attrib.get('height', 300),
-					body=list(popup)
-				)
+				self.popup_class(site=self, body=list(popup), **popup.attrib)
 			return True
 		elif phase == 2:
 			# If indexes are requested, build the sorted object lists now (and set
@@ -625,8 +626,45 @@ class WebSite(object):
 					self.index_docs[cls] = {}
 				self.database.touch(self.index_object, self.indexes)
 			return True
+		elif phase == 3:
+			# Build the object and index documents
+			self.database.touch(self.add_object)
+			for cls in self.index_maps:
+				for letter in self.index_maps[cls]:
+					self.index_class(self, cls, letter)
+			return True
 		else:
 			return False
+
+	def add_object(self, dbobject):
+		"""Adds documents for a specific database object.
+
+		This a utility method called for each object in the database hierarchy.
+		The default implementation here uses the mapping of database object
+		classes to sets of document classes (document_classes) to generate
+		document(s) for the specific database object. Descendents may choose to
+		override this if they have different methods of determining what
+		documents to create (if any).
+		"""
+		def find_doc_classes(cls):
+			# Look for a perfect class match, and if not found, search along
+			# each base class' hierarchy for matches
+			try:
+				return self.document_classes[cls]
+			except KeyError:
+				for base in cls.__bases__:
+					try:
+						return find_doc_classes(base)
+					except ValueError:
+						continue
+				raise ValueError('Unable to find a mapping for %s' % cls)
+		try:
+			doc_classes = find_doc_classes(type(dbobject))
+		except ValueError:
+			pass
+		else:
+			for doc_class in doc_classes:
+				doc_class(self, dbobject)
 
 	def index_object(self, dbobject, dbclasses):
 		"""Adds a database object to the relevant index lists.
@@ -763,7 +801,7 @@ class WebSite(object):
 		if isinstance(dbobject, type):
 			return class_type_name(dbobject)
 		else:
-			return class_type_name(dbobject.__class__)
+			return class_type_name(type(dbobject))
 
 	def link_to(self, dbobject, parent=False, *args, **kwargs):
 		"""Returns a link to a document representing the specified database object.
@@ -925,6 +963,7 @@ class WebSite(object):
 
 	def write(self):
 		"""Writes all documents in the site to disk."""
+		logging.info('Writing output to "%s"' % self.base_path)
 		if self.index_docs:
 			self.link_indexes()
 		if self.threads == 1:
@@ -1445,7 +1484,7 @@ class HTMLPopupDocument(HTMLDocument):
 
 	def link(self):
 		# Modify the link to use Thickbox
-		return self.tag.a(self.title, class_='thickbox', title=self.title,
+		return self.tag.a(self.title, class_='thickbox',
 			href='%s?TB_iframe=true&width=%d&height=%d' % (self.url, self.width, self.height))
 
 
@@ -1708,6 +1747,10 @@ class ThickboxStyle(StyleDocument):
 class ThickboxScript(ScriptDocument):
 	def __init__(self, site):
 		super(ThickboxScript, self).__init__(site, os.path.join(mod_path, 'thickbox.js'))
+
+class ThickboxImage(ImageDocument):
+	def __init__(self, site):
+		super(ThickboxImage, self).__init__(site, os.path.join(mod_path, 'macFFBgHack.png'))
 
 class JQueryScript(ScriptDocument):
 	def __init__(self, site):

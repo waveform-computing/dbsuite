@@ -1,27 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <popups>
-	<popup filename="cardinality.html" title="Cardinality">
+	<popup url="cardinality.html" title="Cardinality" width="400" height="200">
 		<p>The total number of rows in the table or index as of the last time
 			statistics were gathered. The value is n/a if statistics have not
 			or cannot be gathered.</p>
 	</popup>
-	<popup filename="colcount.html" title="# Columns">
+	<popup url="colcount.html" title="# Columns" width="400" height="100">
 		<p>The total number of columns in the table, view or index.</p>
 	</popup>
-	<popup filename="createdby.html" title="Created By">
+	<popup url="createdby.html" title="Created By" width="400" height="200">
 		<p>The ID of the user that created the object. This user owns the
 			object and hence, by default, holds all privileges associated with
 			the type of object. In the case of system objects, the creator is
 			usually the user that created the database or some default value
 			(e.g. SYSIBM in the case of DB2).</p>
 	</popup>
-	<popup filename="created.html" title="Created">
+	<popup url="created.html" title="Created" width="400" height="200">
 		<p>The date on which the object was created. Note that this is not
 			necessarily the date on which the object was first created. If an
 			object is dropped and later re-created, the created date will
 			change to reflect the later date.</p>
 	</popup>
-	<popup filename="deleterule.html" title="Delete Rule">
+	<popup url="deleterule.html" title="Delete Rule" width="400" height="300">
 		<p>Determines the action that is taken when a row is deleted from the
 			table referenced by the foreign key, and the row is the parent of
 			one or more rows in the foreign key's table. The following are the
@@ -40,33 +40,33 @@
 				have their key values set to <code>NULL</code>.</dd>
 		</dl>
 	</popup>
-	<popup filename="dependenciesrel.html" title="Dependencies">
+	<popup url="dependenciesrel.html" title="Dependencies" width="400" height="200">
 		<p>The number of relations that this view depends on. Specifically,
 			the number of tables, views, etc. that this view references in its
 			SQL statement.</p>
 	</popup>
-	<popup filename="dependentrel.html" title="Dependent Relations">
+	<popup url="dependentrel.html" title="Dependent Relations" width="400" height="200">
 		<p>The number of relations that depend on this one. Specifically, the
 			number of materialized query tables or views that reference this
 			relation in their SQL statements, plus the number of tables that
 			have a foreign key that references this relation.</p>
 	</popup>
-	<popup filename="deterministic.html" title="Deterministic">
+	<popup url="deterministic.html" title="Deterministic" width="400" height="200">
 		<p>If True, the routine is deterministic. That is, given the same input
 			values, the routine always produces the same output or performs the
 			same action (it has no random or chronological aspects).</p>
 	</popup>
-	<popup filename="externalaction.html" title="External Action">
+	<popup url="externalaction.html" title="External Action" width="400" height="200">
 		<p>If True, the routine has external side effects (indicating that the
 			number of invocations of the routine is significant, and hence that
 			the optimizer cannot eliminate any otherwise unnecessary routine
 			calls).</p>
 	</popup>
-	<popup filename="functype.html" title="Type">
+	<popup url="functype.html" title="Type" width="400" height="200">
 		<p>Indicates whether the function returns a single scalar value, a row
 			(a tuple of values), or a table.</p>
 	</popup>
-	<popup filename="granularity.html" title="Trigger Granularity">
+	<popup url="granularity.html" title="Trigger Granularity" width="400" height="300">
 		<p>Indicates how many times the trigger will fire for a given event.
 			Possible values are:</p>
 		<dl>
@@ -79,30 +79,30 @@
 				access a table of old/new values within theie body.</dd>
 		</dl>
 	</popup>
-	<popup filename="indexes.html" title="# Indexes">
+	<popup url="indexes.html" title="# Indexes" width="400" height="200">
 		<p>Indicates the number of indexes which store their physical data
 			within the tablespace. Note that a table can store it's row data,
 			LOB data and index data in separate tablespaces.</p>
 	</popup>
-	<popup filename="keycolcount.html" title="# Key Columns">
+	<popup url="keycolcount.html" title="# Key Columns" width="400" height="200">
 		<p>If the table has a primary key, this indicates the number of fields
 			that make up the key. Otherwise, the value is 0. Note that, if the
 			value is 0, this does not mean there are no unique keys (or unique
 			indexes) defined for the table; only the primary key of a table is
 			referred to by this statistic.</p>
 	</popup>
-	<popup filename="laststats.html" title="Last Statistics">
+	<popup url="laststats.html" title="Last Statistics" width="400" height="200">
 		<p>The date on which statistics were last gathered for this object.
 			Most attributes of the object will only be valid as of this date.
 			If statistics have never been or cannot be gathered for this
 			object, this will be n/a.</p>
 	</popup>
-	<popup filename="nullcall.html" title="Call on NULL">
+	<popup url="nullcall.html" title="Call on NULL" width="400" height="200">
 		<p>If True, the routine is called when one or more parameters is NULL.
 			Otherwise, the optimizer assumes that if one or more parameters is
 			NULL, the output will be NULL.</p>
 	</popup>
-	<popup filename="readonly.html" title="Read Only">
+	<popup url="readonly.html" title="Read Only" width="400" height="300">
 		<p>If True, the view is not updateable. If False, the view can be
 			updated using the <code>INSERT</code>, <code>UPDATE</code>, and
 			<code>DELETE</code> <acronym title="Data Manipulation
@@ -124,7 +124,7 @@
 				<code>DISTINCT</code></li>
 		</ul>
 	</popup>
-	<popup filename="size.html" title="Size">
+	<popup url="size.html" title="Size" width="400" height="200">
 		<p>The approximate size on disk of the database object. Note that this
 			is an approximation only as it depends on how up to date the
 			statistics for the object are. In some cases, other factors affect
@@ -133,7 +133,7 @@
 			of the object in order to provide a hint as to the amount of I/O
 			that may be required when accessing it.</p>
 	</popup>
-	<popup filename="specificname.html" title="Specific Name">
+	<popup url="specificname.html" title="Specific Name" width="400" height="200">
 		<p>The specific name of a routine can be used to identify the routine
 			in various statements without resorting to providing the parameter
 			prototypes (which can be considerably simpler if the routine
@@ -141,7 +141,7 @@
 		<p>Note however, that a routine <em>cannot</em> be invoked by its
 			specific name.</p>
 	</popup>
-	<popup filename="sqlaccess.html" title="SQL Access">
+	<popup url="sqlaccess.html" title="SQL Access" width="400" height="300">
 		<p>Indicates the level of access the routine has to SQL statements. The
 			possible values are:</p>
 		<dl>
@@ -157,19 +157,19 @@
 			<dd>The routine can read and write tables within the database.</dd>
 		</dl>
 	</popup>
-	<popup filename="tables.html" title="# Tables">
+	<popup url="tables.html" title="# Tables" width="400" height="200">
 		<p>Indicates the number of tables which store their physical data
 			within the tablespace. Note that a table can store it's row data,
 			LOB data and index data in separate tablespaces. Therefore a table
 			may count towards the table count of more than one tablespace.</p>
 	</popup>
-	<popup filename="tbspacetype.html" title="Tablespace Type">
+	<popup url="tbspacetype.html" title="Tablespace Type" width="400" height="200">
 		<p>Indicates the type of the tablespace. As tablespaces are concepts
 			that are very specific to a database engine, this is provided as
 			free text. Interpret the content in the context of your database
 			engine.</p>
 	</popup>
-	<popup filename="triggerevent.html" title="Trigger Event">
+	<popup url="triggerevent.html" title="Trigger Event" width="400" height="300">
 		<p>Indicates what sort of event will fire the trigger.  Possible values
 			are:</p>
 		<dl>
@@ -184,7 +184,7 @@
 				<code>DELETE</code> against the target relation.</dd>
 		</dl>
 	</popup>
-	<popup filename="triggertiming.html" title="Trigger Time">
+	<popup url="triggertiming.html" title="Trigger Time" width="400" height="300">
 		<p>Indicates when the trigger fires in relation to the action that
 			activates it. Possible values are:</p>
 		<dl>
@@ -198,13 +198,13 @@
 				an read-only view definition read-write.</dd>
 		</dl>
 	</popup>
-	<popup filename="unique.html" title="Unique">
+	<popup url="unique.html" title="Unique" width="400" height="200">
 		<p>If True, the index only permits unique combinations of the
 		fields that it contains. Unique indexes can also contain "include"
 		fields which are not tracked for uniqueness, but are included in the
 		index for performance reasons only.</p>
 	</popup>
-	<popup filename="updaterule.html" title="Update Rule">
+	<popup url="updaterule.html" title="Update Rule" width="400" height="300">
 		<p>Determines the action that is taken when a row is updated in the
 			table referenced by the foreign key, which changes the values of the
 			unique key that the foreign key references, and the row is the parent

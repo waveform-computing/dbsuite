@@ -57,7 +57,7 @@ are listed below.""")
 	)
 	parser.add_option('-q', '--quiet', dest='loglevel', action='store_const', const=logging.ERROR,
 		help="""produce less console output""")
-	parser.add_option('-v', '--verbose', dest='loglevel', action='store_const', const=logging.DEBUG,
+	parser.add_option('-v', '--verbose', dest='loglevel', action='store_const', const=logging.INFO,
 		help="""produce more console output""")
 	parser.add_option('-l', '--log-file', dest='logfile',
 		help="""log messages to the specified file""")
@@ -139,14 +139,14 @@ def process_config(config_file):
 			config_file = config_file.name
 		else:
 			config_file = '<unknown>'
-	logging.info('Processing configuration file "%s"' % config_file)
+	logging.info('Reading configuration file "%s"' % config_file)
 	# Sort sections into inputs and outputs, which are lists containing
 	# (section, module) tuples, where module is the module containing the
 	# plugin specified by the section.
 	inputs = []
 	outputs = []
 	for section in parser.sections():
-		logging.info('Processing section [%s]' % section)
+		logging.info('Reading section [%s]' % section)
 		if not parser.has_option(section, 'plugin'):
 			raise db2makedoc.plugins.PluginConfigurationError('No "plugin" value found')
 		plugin_name = parser.get(section, 'plugin')
@@ -219,18 +219,20 @@ def list_plugins():
 		(name[len(db2makedoc.plugins.__name__)+1:], plugin)
 		for (name, plugin) in get_plugins(db2makedoc.plugins)
 	]
-	input_plugins = [
-		(name, plugin.InputPlugin)
-		for (name, plugin) in plugins
-		if is_input_plugin(plugin)
-	]
-	output_plugins = [
-		(name, plugin.OutputPlugin)
-		for (name, plugin) in plugins
-		if is_output_plugin(plugin)
-	]
-	input_plugins = sorted(input_plugins, key=lambda(name, plugin): name)
-	output_plugins = sorted(output_plugins, key=lambda(name, plugin): name)
+	input_plugins = sorted(
+		(
+			(name, plugin.InputPlugin)
+			for (name, plugin) in plugins
+			if is_input_plugin(plugin)
+		), key=itemgetter(0)
+	)
+	output_plugins = sorted(
+		(
+			(name, plugin.OutputPlugin)
+			for (name, plugin) in plugins
+			if is_output_plugin(plugin)
+		), key=itemgetter(0)
+	)
 	# Format and output the lists
 	tw = textwrap.TextWrapper()
 	tw.width = terminal_size()[0] - 2
@@ -323,14 +325,14 @@ def get_plugins(root, name=None):
 	logging.debug('Retrieving all plugins in %s' % name)
 	path = os.path.sep.join(root.__path__)
 	files = os.listdir(path)
-	dirs = [
+	dirs = (
 		i for i in files
 		if os.path.isdir(os.path.join(path, i)) and i != 'CVS' and i != '.svn'
-	]
-	files = [
+	)
+	files = (
 		i[:-3] for i in fnmatch.filter(files, '*.py')
 		if os.path.isfile(os.path.join(path, i)) and i != '__init__.py'
-	]
+	)
 	# Deal with file-based modules first
 	for f in files:
 		try:
@@ -400,9 +402,8 @@ def get_plugin_desc(plugin, summary=False):
 	stripped from all lines. If the summary parameter is True, the first line
 	of the description is returned.
 	"""
-	s = plugin.__doc__
 	# Strip leading indentation
-	s = [line.lstrip() for line in s.split('\n')]
+	s = [line.lstrip() for line in plugin.__doc__.split('\n')]
 	if summary:
 		return s[0]
 	else:

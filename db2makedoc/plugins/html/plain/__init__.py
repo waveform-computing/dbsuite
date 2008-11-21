@@ -4,20 +4,8 @@
 
 import db2makedoc.plugins
 import db2makedoc.plugins.html
-
-from db2makedoc.db import (
-	Database, Schema, Table, View, Alias, UniqueKey, ForeignKey,
-	Check, Index, Trigger, Function, Procedure, Tablespace
-)
-from db2makedoc.plugins.html.plain.document import (
-	PlainSite, PlainSearch, PlainSiteIndex, PlainExternal,
-	PlainDatabaseDocument, PlainSchemaDocument, PlainTableDocument,
-	PlainViewDocument, PlainAliasDocument, PlainUniqueKeyDocument,
-	PlainForeignKeyDocument, PlainCheckDocument, PlainIndexDocument,
-	PlainTriggerDocument, PlainFunctionDocument, PlainProcedureDocument,
-	PlainTablespaceDocument, PlainSchemaGraph, PlainTableGraph, PlainViewGraph,
-	PlainAliasGraph
-)
+from db2makedoc.db import Schema, Table, View, Alias
+from db2makedoc.plugins.html.plain.document import PlainSite
 
 
 class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
@@ -57,58 +45,12 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 				import PIL
 			except ImportError:
 				raise db2makedoc.plugins.PluginConfigurationError('Diagrams requested, but the Python Imaging Library (PIL) was not found')
-		# Build the map of document classes
-		self.class_map = {
-			Database:   set([PlainDatabaseDocument]),
-			Schema:     set([PlainSchemaDocument]),
-			Table:      set([PlainTableDocument]),
-			View:       set([PlainViewDocument]),
-			Alias:      set([PlainAliasDocument]),
-			UniqueKey:  set([PlainUniqueKeyDocument]),
-			ForeignKey: set([PlainForeignKeyDocument]),
-			Check:      set([PlainCheckDocument]),
-			Index:      set([PlainIndexDocument]),
-			Trigger:    set([PlainTriggerDocument]),
-			Function:   set([PlainFunctionDocument]),
-			Procedure:  set([PlainProcedureDocument]),
-			Tablespace: set([PlainTablespaceDocument]),
-		}
-		graph_map = {
-			Schema:  PlainSchemaGraph,
-			Table:   PlainTableGraph,
-			View:    PlainViewGraph,
-			Alias:   PlainAliasGraph,
-		}
-		for item in self.options['diagrams']:
-			try:
-				self.class_map[item].add(graph_map[item])
-			except KeyError:
-				raise db2makedoc.plugins.PluginConfigurationError('No diagram support for "%s" objects (supported objects are %s)' % (
-					item.config_names[0],
-					', '.join(c.config_names[0] for c in graph_map.iterkeys()))
-				)
+		supported_diagrams = set([Schema, Table, View, Alias])
+		if self.options['diagrams'] - supported_diagrams:
+			raise db2makedoc.plugins.PluginConfigurationError('No diagram support for %s objects (supported objects are %s)' % (
+				', '.join(c.config_names[0] for c in self.options['diagrams'] - supported_diagrams),
+				', '.join(c.config_names[0] for c in supported_diagrams)
+			))
 
 	def substitute(self):
 		return super(OutputPlugin, self).substitute() + ('stylesheets',)
-
-	def create_documents(self, site):
-		super(OutputPlugin, self).create_documents(site)
-		# Add index documents for all indexed classes
-		for dbclass in site.index_maps:
-			for letter in site.index_maps[dbclass]:
-				PlainSiteIndex(site, dbclass, letter)
-	
-	def create_document(self, dbobject, site):
-		# Overridden to generate documents and graphs for specific types of
-		# database objects. Document and graph classes are determined from a
-		# dictionary lookup (a perfect class match is tested for first,
-		# followed by a subclass match).
-		classes = self.class_map.get(type(dbobject))
-		if classes is None:
-			for dbclass in self.class_map:
-				if isinstance(dbobject, dbclass):
-					classes = self.class_map[dbclass]
-		if classes is not None:
-			for docclass in classes:
-				docclass(site, dbobject)
-

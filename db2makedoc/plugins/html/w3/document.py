@@ -15,8 +15,8 @@ from collections import deque
 from db2makedoc.graph import Graph, Node, Edge, Cluster
 from db2makedoc.etree import ProcessingInstruction, iselement, flatten_html
 from db2makedoc.db import (
-	DatabaseObject, Database, Schema, Relation,
-	Table, View, Alias, Trigger
+	Database, Schema, Relation, Table, View, Alias, UniqueKey,
+	ForeignKey, Check, Index, Trigger, Function, Procedure, Tablespace
 )
 from db2makedoc.plugins.html.document import (
 	HTMLElementFactory, ObjectGraph, WebSite, HTMLDocument, HTMLPopupDocument,
@@ -103,7 +103,7 @@ class W3ElementFactory(HTMLElementFactory):
 			# within the table definition to activate the jQuery tablesorter
 			# plugin for this table. Scan the th elements for any with the
 			# 'nosort' class and disable sorting on those columns
-			if 'id' in table.attrib:
+			if 'id' in table.attrib and len(tbody.findall('tr')) > 1:
 				script = self.script("""
 					$(document).ready(function() {
 						$('table.basic-table#%s').tablesorter({
@@ -137,28 +137,32 @@ class W3Graph(ObjectGraph):
 		# Set shapes and color schemes on objects that represent database
 		# objects
 		if hasattr(item, 'dbobject'):
+			item.fontcolor = '#000000'
 			if isinstance(item.dbobject, Schema):
 				item.style = 'filled'
 				item.fillcolor = '#dddddd'
 			elif isinstance(item.dbobject, Relation):
-				item.shape = 'rectangle'
 				item.style = 'filled'
 				if isinstance(item.dbobject, Table):
-					item.fillcolor = '#bbbbff'
+					item.shape = 'rectangle'
+					item.fillcolor = '#6699cc'
 				elif isinstance(item.dbobject, View):
-					item.style = 'filled,rounded'
-					item.fillcolor = '#bbffbb'
+					item.shape = 'octagon'
+					item.fillcolor = '#99cc33'
 				elif isinstance(item.dbobject, Alias):
-					if isinstance(item.dbobject.final_relation, View):
-						item.style = 'filled,rounded'
-					item.fillcolor = '#ffffbb'
+					if isinstance(item.dbobject.final_relation, Table):
+						item.shape = 'rectangle'
+					else:
+						item.shape = 'octagon'
+					item.fillcolor = '#ff9900'
 			elif isinstance(item.dbobject, Trigger):
 				item.shape = 'hexagon'
 				item.style = 'filled'
-				item.fillcolor = '#ffbbbb'
+				item.fillcolor = '#cc3333'
+				item.fontcolor = '#ffffff'
 		# Outline the selected object more clearly
 		if isinstance(item, (Cluster, Node)) and hasattr(item, 'selected'):
-			item.color = ['#000000', '#0055aa'][item.selected]
+			item.color = [item.fillcolor, '#000000'][item.selected]
 
 
 class W3Site(WebSite):
@@ -178,13 +182,63 @@ class W3Site(WebSite):
 		self.tag_class = W3ElementFactory
 		self.popup_class = W3Popup
 		self.graph_class = W3Graph
+		self.index_class = W3SiteIndex
+		self.document_classes = {
+			Database:   set([W3DatabaseDocument]),
+			Schema:     set([W3SchemaDocument]),
+			Table:      set([W3TableDocument]),
+			View:       set([W3ViewDocument]),
+			Alias:      set([W3AliasDocument]),
+			UniqueKey:  set([W3UniqueKeyDocument]),
+			ForeignKey: set([W3ForeignKeyDocument]),
+			Check:      set([W3CheckDocument]),
+			Index:      set([W3IndexDocument]),
+			Trigger:    set([W3TriggerDocument]),
+			Function:   set([W3FunctionDocument]),
+			Procedure:  set([W3ProcedureDocument]),
+			Tablespace: set([W3TablespaceDocument]),
+		}
+		graph_map = {
+			Schema:  W3SchemaGraph,
+			Table:   W3TableGraph,
+			View:    W3ViewGraph,
+			Alias:   W3AliasGraph,
+		}
+		# The plugin's configure method has already check all items in
+		# self.diagrams are supported
+		for item in self.diagrams:
+			self.document_classes[item].add(graph_map[item])
 
 	def create_documents(self, phase=0):
 		result = super(W3Site, self).create_documents(phase)
 		if phase == 0:
+			# Add the style and search documents
 			self.w3_style = W3Style(self)
 			if self.search:
 				W3Search(self)
+			return True
+		elif phase == 3:
+			# Add external documents for all menu_items
+			found_top = False
+			menu_docs = []
+			for (title, url) in [(self.home_title, self.home_url)] + self.menu_items:
+				if url == '#':
+					doc = self.object_document(self.database)
+					doc.title = title
+					found_top = True
+				else:
+					doc = W3External(self, url, title)
+				menu_docs.append(doc)
+			if not found_top:
+				doc = self.object_document(self.database)
+				menu_docs.append(doc)
+			# Configure links between external menu_docs
+			prior = None
+			for doc in menu_docs:
+				doc.first = menu_docs[0]
+				doc.last = menu_docs[-1]
+				doc.prior = prior
+				prior = doc
 			return True
 		else:
 			return result
@@ -223,7 +277,8 @@ class W3Popup(W3Document):
 		self.title = title
 		self.body = body
 		self.width = int(width)
-		self.height = int(height)
+		# Add some padding for the huge footer in the w3v8 popup style
+		self.height = int(height) + 100
 
 	def generate_head(self):
 		head = super(W3Popup, self).generate_head()
