@@ -804,59 +804,68 @@ class Database(DatabaseObject):
 				None))
 		else:
 			return None
-	
+
+	def iterator(self):
+		"""Returns a generator which iterates over all objects in the database.
+
+		The iterator() method returns a generator which yields every object in
+		the database. The iterator does not guarantee the order of objects that
+		it yields (for example, there is no guarantee that a schema will be
+		yielded prior to a table that exists within that schema).
+
+		Note that certain objects in the tree are excluded for not being
+		"database objects". Specifically, function and procedure parameters are
+		not included, nor are index fields, or constraint fields. This is
+		because these are not "independent" objects, i.e. while you can add and
+		remove fields to/from a table, you cannot add and remove parameters
+		to/from a procedure (without redefining it).
+		"""
+		yield self
+		for schema in self.schemas.itervalues():
+			yield schema
+			for datatype in schema.datatypes.itervalues():
+				yield datatype
+			for table in schema.tables.itervalues():
+				yield table
+				for ukey in table.unique_keys.itervalues():
+					yield ukey
+				for fkey in table.foreign_keys.itervalues():
+					yield fkey
+				for check in table.checks.itervalues():
+					yield check
+				for field in table.fields.itervalues():
+					yield field
+			for view in schema.views.itervalues():
+				yield view
+				for field in view.fields.itervalues():
+					yield field
+			for alias in schema.aliases.itervalues():
+				yield alias
+				for field in alias.fields.itervalues():
+					yield field
+			for index in schema.indexes.itervalues():
+				yield index
+			for function in schema.specific_functions.itervalues():
+				yield function
+			for procedure in schema.specific_procedures.itervalues():
+				yield procedure
+			for trigger in schema.triggers.itervalues():
+				yield trigger
+		for tbspace in self.tablespaces.itervalues():
+			yield tbspace
+
 	def touch(self, method, *args, **kwargs):
 		"""Calls the specified method for each object within the database.
 
 		The touch() method can be used to perform an operation on all objects
-		or a sub-set of all objects in the database. It iterates over all
-		objects of the database, recursing into schemas, tables, etc. The
-		specified method is called for each object with a single parameter
-		(namely, the object). Note that certain objects in the tree are
-		excluded for not being "database objects". Specifically, function and
-		procedure parameters are not included, nor are index fields, or
-		constraint fields. This is because these are not "independent" objects,
-		i.e. while you can add and remove fields to/from a table, you cannot
-		add and remove parameters to/from a procedure (without redefining it).
-
-		Additional parameters can be passed which will be captured by args and
-		kwargs and passed verbatim to method on each invocation.
+		or a sub-set of all objects in the database. It calls method with
+		the specified positional and/or keyword parameters for all objects
+		returned by the iterator() method.
 
 		The return value of the method is ignored.
 		"""
-		method(self, *args, **kwargs)
-		for schema in self.schemas.itervalues():
-			method(schema, *args, **kwargs)
-			for datatype in schema.datatypes.itervalues():
-				method(datatype, *args, **kwargs)
-			for table in schema.tables.itervalues():
-				method(table, *args, **kwargs)
-				for ukey in table.unique_keys.itervalues():
-					method(ukey, *args, **kwargs)
-				for fkey in table.foreign_keys.itervalues():
-					method(fkey, *args, **kwargs)
-				for check in table.checks.itervalues():
-					method(check, *args, **kwargs)
-				for field in table.fields.itervalues():
-					method(field, *args, **kwargs)
-			for view in schema.views.itervalues():
-				method(view, *args, **kwargs)
-				for field in view.fields.itervalues():
-					method(field, *args, **kwargs)
-			for alias in schema.aliases.itervalues():
-				method(alias, *args, **kwargs)
-				for field in alias.fields.itervalues():
-					method(field, *args, **kwargs)
-			for index in schema.indexes.itervalues():
-				method(index, *args, **kwargs)
-			for function in schema.specific_functions.itervalues():
-				method(function, *args, **kwargs)
-			for procedure in schema.specific_procedures.itervalues():
-				method(procedure, *args, **kwargs)
-			for trigger in schema.triggers.itervalues():
-				method(trigger, *args, **kwargs)
-		for tbspace in self.tablespaces.itervalues():
-			method(tbspace, *args, **kwargs)
+		for dbobject in self.iterator():
+			method(dbobject, *args, **kwargs)
 
 	def _get_identifier(self):
 		return "db"
@@ -1014,7 +1023,7 @@ class Table(Relation):
 		self.size = row.size
 		self._tablespace = row.tbspace
 		self._field_list = [
-			Field(self, input, pos, i)
+			Field(self, input, pos + 1, i)
 			for (pos, i) in enumerate(input.relation_cols.get((schema.name, self.name), []))
 		]
 		self._fields = dict((i.name, i) for i in self._field_list)
@@ -1144,7 +1153,7 @@ class View(Relation):
 		self.read_only = row.read_only
 		self.sql = row.sql
 		self._field_list = [
-			Field(self, input, pos, i)
+			Field(self, input, pos + 1, i)
 			for (pos, i) in enumerate(input.relation_cols.get((schema.name, self.name), []))
 		]
 		self._fields = dict((i.name, i) for i in self._field_list)
@@ -1410,13 +1419,13 @@ class Function(Routine):
 		self.sql_access = row.access
 		self.sql = row.sql
 		self._param_list = [
-			Param(self, input, pos, i)
+			Param(self, input, pos + 1, i)
 			for (pos, i) in enumerate(input.routine_params.get((schema.name, self.specific_name), []))
 			if i.direction != 'R'
 		]
 		self._params = dict((i.name, i) for i in self._param_list)
 		self._return_list = [
-			Param(self, input, pos, i)
+			Param(self, input, pos + 1, i)
 			for (pos, i) in enumerate(input.routine_params.get((schema.name, self.specific_name), []))
 			if i.direction == 'R'
 		]
@@ -1486,7 +1495,7 @@ class Procedure(Routine):
 		self.sql_access = row.access
 		self.sql = row.sql
 		self._param_list = [
-			Param(self, input, pos, i)
+			Param(self, input, pos + 1, i)
 			for (pos, i) in enumerate(input.routine_params.get((schema.name, self.specific_name), []))
 			if i.direction != 'R'
 		]
@@ -1680,7 +1689,7 @@ class Field(RelationObject):
 	def _get_key_index(self):
 		"""Returns the position of this field in the table's primary key"""
 		if self.key:
-			return self.key.fields.index(self)
+			return self.key.fields.index(self) + 1
 		else:
 			return None
 

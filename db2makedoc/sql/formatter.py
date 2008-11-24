@@ -86,21 +86,24 @@ SUFFIX_KMG = {
 	'G': 1024**3,
 }
 
+ctrlchars = re.compile(ur'([\x00-\x1F\x7F]+)')
 def quote_str(s, qchar="'"):
 	"""Quotes a string, doubling all quotation characters within it.
 
 	The s parameter provides the string to be quoted. The optional qchar
 	parameter provides the quotation mark used to enclose the string. If the
-	string contains any non-printable control characters (e.g. NULL) it will be
+	string contains any control characters (tabs, newlines, etc.) they will be
 	quoted as a hex-string (i.e. a string prefixed by X which contains bytes
-	encoded as two hex numbers).
+	encoded as two hex numbers), and concatenated to the rest of the string.
 	"""
-	# XXX The ctrlchars set probably needs a better definition
-	ctrlchars = set(chr(c) for c in xrange(32))
-	if ctrlchars & set(s):
-		return 'X%s%s%s' % (qchar, ''.join('%.2X' % (ord(c),) for c in s), qchar)
-	else:
-		return '%s%s%s' % (qchar, s.replace(qchar, qchar*2), qchar)
+	result = []
+	for index, group in enumerate(ctrlchars.split(s)):
+		if group:
+			if index % 2:
+				result.append('X%s%s%s' % (qchar, ''.join('%.2X' % ord(c) for c in group), qchar))
+			else:
+				result.append('%s%s%s' % (qchar, group.replace(qchar, qchar*2), qchar))
+	return ' || '.join(result)
 
 def dump(tokens):
 	"""Utility routine for debugging purposes: prints the tokens in a human readable format."""
@@ -190,9 +193,11 @@ class Error(Exception):
 
 	def __repr__(self):
 		"""Outputs a representation of the exception"""
-		return self.message
+		return 'Error(%s)' % repr(self.message)
 
-	__str__ = __repr__
+	def __str__(self):
+		"""Outputs the message of the exception"""
+		return self.message
 
 class ParseError(Error):
 	"""Base class for errors encountered during parsing"""
@@ -230,19 +235,24 @@ class ParseTokenError(ParseError):
 		"""Outputs a string version of the exception."""
 		# Generate a block of context with an indicator showing the error
 		context_lines = 5
-		sourcelines = ''.join([s for (_, _, s, _, _) in self.source]).splitlines()
+		sourcelines = ''.join(s for (_, _, s, _, _) in self.source).splitlines()
 		lineindex = self.line - 1
-		if self.line > len(sourcelines): lineindex = -1
-		marker = ''.join([{'\t': '\t'}.get(c, ' ') for c in sourcelines[lineindex][:self.col-1]]) + '^'
+		if self.line > len(sourcelines):
+			lineindex = -1
+		marker = ''.join({'\t': '\t'}.get(c, ' ') for c in sourcelines[lineindex][:self.col-1]) + '^'
 		sourcelines.insert(self.line, marker)
 		i = self.line - context_lines
-		if i < 0: i = 0
+		if i < 0:
+			i = 0
 		context = '\n'.join(sourcelines[i:self.line + context_lines])
 		# Format the message with the context
-		return ('%s:\n'
-				'line   : %d\n'
-				'column : %d\n'
-				'context:\n%s' % (self.message, self.line, self.col, context))
+		return '\n'.join([
+			self.message + ':',
+			'line   : %d' % self.line,
+			'column : %d' % self.col,
+			'context:',
+			context
+		])
 
 	def token_name(self, token):
 		"""Formats a token for display in an error message string"""

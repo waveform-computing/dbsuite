@@ -82,7 +82,7 @@ class ViewDocument(HTMLObjectDocument):
 						),
 						tag.tbody((
 							tag.tr(
-								tag.td(field.position + 1),
+								tag.td(field.position),
 								tag.td(field.name),
 								tag.td(field.datatype_str),
 								tag.td(field.nullable),

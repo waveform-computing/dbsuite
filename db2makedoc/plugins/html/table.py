@@ -20,12 +20,6 @@ events = {
 	'D': 'Delete',
 }
 
-def _inc_index(i):
-	if i is None:
-		return i
-	else:
-		return i + 1
-
 class TableDocument(HTMLObjectDocument):
 	def generate_body(self):
 		body = super(TableDocument, self).generate_body()
@@ -111,11 +105,11 @@ class TableDocument(HTMLObjectDocument):
 						),
 						tag.tbody((
 							tag.tr(
-								tag.td(field.position + 1),
+								tag.td(field.position),
 								tag.td(field.name),
 								tag.td(field.datatype_str),
 								tag.td(field.nullable),
-								tag.td(_inc_index(field.key_index)), # XXX For Py2.5: field.key_index + 1 if field.key_index is not None else None,
+								tag.td(field.key_index),
 								tag.td(field.cardinality),
 								tag.td(self.format_comment(field.description, summary=True))
 							) for field in self.dbobject.field_list
