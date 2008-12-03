@@ -18,9 +18,8 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 
 	This output plugin generates an SQL script which can be used to apply
 	comments to a database. This is particularly useful in the case where a
-	database has been commented over time by various different groups, who now
-	wish to centralize the source of comments (e.g. in a version control
-	repository).
+	database has been commented on a adhoc basis, and now a centralized source
+	of comments is required (e.g. for a version control repository).
 	"""
 
 	def __init__(self):
@@ -49,7 +48,7 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 			doc="""The schema containing the DOCCAT views. Only used when the
 			statement option is not 'comment'. Please note this parameter is
 			case sensitive. If you provide a lowercase value, it will be
-			appropriately quoted!""")
+			used verbatim which is probably not the intention!""")
 		self.add_option('maxlen', default='0', convert=lambda i: self.convert_int(i, minvalue=0),
 			doc="""The maximum length for comments. By default, this is 0 which
 			indicates no maximum length. If greater than zero, comments longer
@@ -127,6 +126,16 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 				self.find_cache[cls] = result
 				return result
 
+	def get_predicates(self, predicates, qualifier=None):
+		if qualifier:
+			qualifier = format_ident(qualifier) + '.'
+		else:
+			qualifier = ''
+		return ' AND '.join(
+			'%s%s = %s' % (qualifier, format_ident(key), quote_str(value))
+			for (key, value) in predicates.iteritems()
+		)
+
 	def get_statement(self, dbobject):
 		method = self.find_method(type(dbobject))
 		if method:
@@ -165,7 +174,10 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 				'\t%-*s IS %s' % (max_name_len, name, description)
 				for (name, description) in field_comments
 			)
-			field_comments = 'COMMENT ON %s.%s (\n%s\n)%s' % (
+			field_comments = """\
+COMMENT ON %s.%s (
+%s
+)%s""" % (
 				format_ident(o.schema.name),
 				format_ident(o.name),
 				field_comments,
@@ -186,15 +198,12 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 	comment_constraint = lambda self, o: self.comment('CONSTRAINT',         (o.relation.schema.name, o.relation.name, o.name), o.description)
 	comment_view = comment_table
 
-	def get_predicates(self, predicates):
-		return ' AND '.join(
-			'%s = %s' % (format_ident(key), quote_str(value))
-			for (key, value) in predicates.iteritems()
-		)
-
 	def update(self, dbobject, table, predicates):
 		if dbobject.description or self.blanks:
-			return 'UPDATE %s.%s\n\tSET REMARKS = %s\n\tWHERE %s%s' % (
+			return """\
+UPDATE %s.%s
+	SET REMARKS = %s
+	WHERE %s%s""" % (
 				format_ident(self.schema),
 				format_ident(table),
 				self.get_description(dbobject.description),
@@ -225,7 +234,12 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 			if not self.blanks:
 				field_comments.append('\t\tELSE REMARKS')
 			field_comments = '\n'.join(field_comments)
-			field_comments = 'UPDATE %s.COLUMNS\n\tSET REMARKS = CASE COLNAME\n%s\n\tEND\n\tWHERE %s%s' % (
+			field_comments = """\
+UPDATE %s.COLUMNS
+	SET REMARKS = CASE COLNAME
+%s
+	END
+	WHERE %s%s""" % (
 				format_ident(self.schema),
 				field_comments,
 				self.get_predicates(predicates),
@@ -256,7 +270,12 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 			if not self.blanks:
 				param_comments.append('\t\tELSE REMARKS')
 			param_comments = '\n'.join(param_comments)
-			param_comments = 'UPDATE %s.ROUTINEPARMS\n\tSET REMARKS = CASE ORDINAL\n%s\n\tEND\n\tWHERE %s%s' % (
+			param_comments = """\
+UPDATE %s.ROUTINEPARMS
+	SET REMARKS = CASE ORDINAL
+%s
+	END
+	WHERE %s%s""" % (
 				format_ident(self.schema),
 				param_comments,
 				self.get_predicates(predicates),
@@ -311,4 +330,155 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 		'TBSPACE': o.name,
 	})
 	update_view = update_table
+
+	def merge(self, dbobject, table, predicates):
+		if dbobject.description or self.blanks:
+			return """\
+MERGE INTO %s.%s T
+	USING TABLE(VALUES(%s)) AS S(REMARKS)
+	ON %s
+	WHEN MATCHED THEN
+		UPDATE SET REMARKS = S.REMARKS
+	WHEN NOT MATCHED THEN
+		INSERT (%s, REMARKS)
+		VALUES (%s, S.REMARKS)%s""" % (
+				format_ident(self.schema),
+				format_ident(table),
+				self.get_description(dbobject.description),
+				self.get_predicates(predicates, qualifier='T'),
+				', '.join(format_ident(k) for k in predicates.iterkeys()),
+				', '.join(quote_str(v) for v in predicates.itervalues()),
+				self.terminator,
+			)
+
+	def merge_table(self, o):
+		predicates = {
+			'TABSCHEMA': o.schema.name,
+			'TABNAME':   o.name,
+		}
+		if o.description or self.blanks:
+			table_comment = self.merge(o, 'TABLES', predicates)
+		else:
+			table_comment = ''
+		field_comments = [
+			(quote_str(f.name), self.get_description(f.description))
+			for f in o.field_list
+			if f.description or self.blanks
+		]
+		if field_comments:
+			max_name_len = max(len(name) for (name, description) in field_comments)
+			field_comments = [
+				'\t\t(%-*s, %s)' % (max_name_len, name, description)
+				for (name, description) in field_comments
+			]
+			field_comments = ',\n'.join(field_comments)
+			field_comments = """\
+MERGE INTO %s.COLUMNS AS T
+	USING TABLE(VALUES
+%s
+	) AS S(COLNAME, REMARKS)
+	ON %s AND T.COLNAME = S.COLNAME
+	WHEN MATCHED THEN
+		UPDATE SET REMARKS = S.REMARKS
+	WHEN NOT MATCHED THEN
+		INSERT (%s, COLNAME, REMARKS)
+		VALUES (%s, S.COLNAME, S.REMARKS)%s""" % (
+				format_ident(self.schema),
+				field_comments,
+				self.get_predicates(predicates, qualifier='T'),
+				', '.join(format_ident(k) for k in predicates.iterkeys()),
+				', '.join(quote_str(v) for v in predicates.itervalues()),
+				self.terminator,
+			)
+		else:
+			field_comments = ''
+		return '\n'.join(s for s in (table_comment, field_comments) if s)
+
+	def merge_param_type(self, o, type):
+		param_comments = [
+			(p.position, quote_str(p.name), self.get_description(p.description))
+			for p in o.param_list
+			if p.type == type and (p.description or self.blanks)
+		]
+		predicates = {
+			'ROUTINESCHEMA': o.schema.name,
+			'SPECIFICNAME':  o.specific_name,
+			'ROWTYPE':       {'I': 'P'}.get(type, type),
+		}
+		if param_comments:
+			max_name_len = max(len(name) for (pos, name, description) in param_comments)
+			max_pos_len = max(len(str(pos)) for (pos, name, description) in param_comments)
+			param_comments = [
+				'\t\t(%-*d, %-*s, %s)' % (max_pos_len, pos, max_name_len, name, description)
+				for (pos, name, description) in param_comments
+			]
+			param_comments = ',\n'.join(param_comments)
+			param_comments = """\
+MERGE INTO %s.ROUTINEPARMS AS T
+	USING TABLE(VALUES
+%s
+	) AS S(ORDINAL, PARMNAME, REMARKS)
+	ON %s AND T.ORDINAL = S.ORDINAL
+	WHEN MATCHED THEN
+		UPDATE SET REMARKS = S.REMARKS
+	WHEN NOT MATCHED THEN
+		INSERT (%s, ROWTYPE, ORDINAL, PARMNAME, REMARKS)
+		VALUES (%s, %s, S.ORDINAL, S.PARMNAME, S.REMARKS)%s""" %(
+				format_ident(self.schema),
+				param_comments,
+				self.get_predicates(predicates),
+				', '.join(format_ident(k) for k in predicates.iterkeys()),
+				', '.join(quote_str(v) for v in predicates.itervalues()),
+				type,
+				self.terminator,
+			)
+		else:
+			param_comments = ''
+		return param_comments
+
+	def merge_routine(self, o):
+		predicates = {
+			'ROUTINESCHEMA': o.schema.name,
+			'SPECIFICNAME':  o.specific_name,
+		}
+		if o.description or self.blanks:
+			routine_comment = self.merge(o, 'ROUTINES', predicates)
+		else:
+			routine_comment = ''
+		return '\n'.join(s for s in (
+			routine_comment,
+			self.merge_param_type(o, 'B'),
+			self.merge_param_type(o, 'I'),
+			self.merge_param_type(o, 'O'),
+			self.merge_param_type(o, 'R')
+		) if s)
+
+	merge_alias = lambda self, o: self.merge(o, 'TABLES', {
+		'TABSCHEMA': o.schema.name,
+		'TABNAME':   o.name,
+	})
+	merge_constraint = lambda self, o: self.merge(o, 'TABCONST', {
+		'TABSCHEMA': o.relation.schema.name,
+		'TABNAME':   o.relation.name,
+		'CONSTNAME': o.name,
+	})
+	merge_datatype = lambda self, o: self.merge(o, 'DATATYPES', {
+		'TYPESCHEMA': o.schema.name,
+		'TYPENAME':   o.name,
+	})
+	merge_index = lambda self, o: self.merge(o, 'INDEXES', {
+		'INDSCHEMA': o.schema.name,
+		'INDNAME':   o.name,
+	})
+	merge_trigger = lambda self, o: self.merge(o, 'TRIGGERS', {
+		'TRIGSCHEMA': o.schema.name,
+		'TRIGNAME':   o.name,
+	})
+	merge_schema = lambda self, o: self.merge(o, 'SCHEMATA', {
+		'SCHEMANAME': o.name,
+	})
+	merge_tablespace = lambda self, o: self.merge(o, 'TABLESPACES', {
+		'TBSPACE': o.name,
+	})
+	merge_view = merge_table
 
