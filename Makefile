@@ -5,21 +5,20 @@ PYTHON=python
 PYFLAGS=
 #LYNX=lynx
 #LYNXFLAGS=-nonumbers -justify
-#LYNX=links
-#LYNXFLAGS=
 LYNX=links
 LYNXFLAGS=-no-numbering -no-references
 
 # Calculate the base name of the distribution, the location of all source files
 # and documentation files
+NAME:=$(shell $(PYTHON) $(PYFLAGS) setup.py --name)
 BASE:=$(shell $(PYTHON) $(PYFLAGS) setup.py --fullname)
 SRCS:=$(shell \
-	$(PYTHON) $(PYFLAGS) setup.py sdist --manifest-only >/dev/null 2>&1 && \
-	cat MANIFEST && \
-	rm MANIFEST)
+	$(PYTHON) $(PYFLAGS) setup.py egg_info >/dev/null 2>&1 && \
+	cat $(NAME).egg-info/SOURCES.txt)
 DOCS:=README.txt TODO.txt
 
 # Calculate the name of all distribution archives / installers
+EGG=dist/$(BASE).egg
 WININST=dist/$(BASE).win32.exe
 RPMS=dist/$(BASE)-1.noarch.rpm dist/$(BASE)-1.src.rpm
 SRCTAR=dist/$(BASE).tar.gz
@@ -38,17 +37,20 @@ test:
 
 clean:
 	$(PYTHON) $(PYFLAGS) setup.py clean
-	rm -f $(DOCS) MANIFEST tags
-	rm -fr build/
+	rm -f $(DOCS) tags
+	rm -fr build/ $(NAME).egg-info/
 
 cleanall: clean
 	rm -fr dist/
 
 dist: bdist sdist
 
-bdist: $(WININST) $(RPMS)
+bdist: $(WININST) $(RPMS) $(EGG)
 
 sdist: $(SRCTAR) $(SRCZIP)
+
+$(EGG): $(SRCS) $(DOCS)
+	$(PYTHON) $(PYFLAGS) setup.py bdist --formats=egg
 
 $(WININST): $(SRCS) $(DOCS)
 	$(PYTHON) $(PYFLAGS) setup.py bdist --formats=wininst
@@ -61,9 +63,6 @@ $(SRCTAR): $(SRCS) $(DOCS)
 
 $(SRCZIP): $(SRCS) $(DOCS)
 	$(PYTHON) $(PYFLAGS) setup.py sdist --formats=zip
-
-MANIFEST: MANIFEST.in setup.py $(DOCS)
-	$(PYTHON) $(PYFLAGS) setup.py sdist --manifest-only
 
 tags: FORCE
 	ctags -R --exclude="build/*"

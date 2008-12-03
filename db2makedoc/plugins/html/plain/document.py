@@ -8,6 +8,7 @@ certain methods to provide formatting specific to the plain style.
 
 import os
 import logging
+from pkg_resources import resource_string, resource_stream
 from db2makedoc.graph import Graph, Node, Edge, Cluster
 from db2makedoc.etree import ProcessingInstruction, iselement
 from db2makedoc.db import (
@@ -41,8 +42,6 @@ except ImportError:
 	# Ignore any import errors - the main plugin takes care of warning the
 	# user if PIL is required but not present
 	pass
-
-mod_path = os.path.dirname(os.path.abspath(__file__))
 
 
 class PlainElementFactory(HTMLElementFactory):
@@ -376,7 +375,7 @@ class PlainSiteIndex(HTMLSiteIndexDocument, PlainDocument):
 class PlainSearch(PlainDocument):
 	"""Document class containing the PHP search script"""
 
-	search_php = open(os.path.join(mod_path, 'search.php'), 'r').read()
+	search_php = resource_string(__name__, 'search.php')
 
 	def __init__(self, site):
 		super(PlainSearch, self).__init__(site, 'search.php')
@@ -489,31 +488,31 @@ class PlainGraphDocument(GraphObjectDocument):
 
 class PlainStyle(StyleDocument):
 	def __init__(self, site):
-		super(PlainStyle, self).__init__(site, os.path.join(mod_path, 'styles.css'))
+		super(PlainStyle, self).__init__(site, resource_stream(__name__, 'styles.css'))
 
 class HeaderImage(ImageDocument):
 	def __init__(self, site):
-		super(HeaderImage, self).__init__(site, os.path.join(mod_path, 'header.png'))
+		super(HeaderImage, self).__init__(site, resource_stream(__name__, 'header.png'))
 
 class SortableImage(ImageDocument):
 	def __init__(self, site):
-		super(SortableImage, self).__init__(site, os.path.join(mod_path, 'sortable.png'))
+		super(SortableImage, self).__init__(site, resource_stream(__name__, 'sortable.png'))
 
 class SortAscImage(ImageDocument):
 	def __init__(self, site):
-		super(SortAscImage, self).__init__(site, os.path.join(mod_path, 'sortasc.png'))
+		super(SortAscImage, self).__init__(site, resource_stream(__name__, 'sortasc.png'))
 
 class SortDescImage(ImageDocument):
 	def __init__(self, site):
-		super(SortDescImage, self).__init__(site, os.path.join(mod_path, 'sortdesc.png'))
+		super(SortDescImage, self).__init__(site, resource_stream(__name__, 'sortdesc.png'))
 
 class ExpandImage(ImageDocument):
 	def __init__(self, site):
-		super(ExpandImage, self).__init__(site, os.path.join(mod_path, 'expand.png'))
+		super(ExpandImage, self).__init__(site, resource_stream(__name__, 'expand.png'))
 
 class CollapseImage(ImageDocument):
 	def __init__(self, site):
-		super(CollapseImage, self).__init__(site, os.path.join(mod_path, 'collapse.png'))
+		super(CollapseImage, self).__init__(site, resource_stream(__name__, 'collapse.png'))
 
 
 # Declare styled document and graph classes

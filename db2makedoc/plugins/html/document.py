@@ -8,7 +8,6 @@ website containing HTML documents amongst other things).
 """
 
 import os
-import codecs
 import re
 import datetime
 import logging
@@ -16,6 +15,7 @@ import urlparse
 import threading
 
 from operator import attrgetter
+from pkg_resources import resource_stream, resource_string
 from db2makedoc.highlighters import CommentHighlighter, SQLHighlighter
 from db2makedoc.plugins.html.entities import HTML_ENTITIES
 from db2makedoc.graph import Graph, Node, Edge, Cluster
@@ -613,7 +613,7 @@ class WebSite(object):
 			return True
 		elif phase == 1:
 			# Build the static popup documents
-			popups = fromstring(codecs.open(os.path.join(mod_path, 'popups.xml'), 'r', 'utf-8').read())
+			popups = fromstring(resource_string(__name__, 'popups.xml'))
 			for popup in popups:
 				self.popup_class(site=self, body=list(popup), **popup.attrib)
 			return True
@@ -1170,11 +1170,14 @@ class StaticDocument(WebSiteDocument):
 		self.encoding = encoding
 
 	def generate(self):
-		if self.encoding:
-			f = codecs.open(self.source, 'r', self.encoding)
+		if hasattr(self.source, 'read'):
+			content = self.source.read()
 		else:
-			f = open(self.source, 'rb')
-		return f.read()
+			content = open(self.source, 'rb').read()
+		if self.encoding:
+			return content.decode(self.encoding)
+		else:
+			return content
 
 
 class ImageDocument(StaticDocument):
@@ -1734,32 +1737,30 @@ class GraphObjectDocument(GraphDocument):
 
 # Declare classes for all the static documents in the default HTML plugin
 
-mod_path = os.path.dirname(os.path.abspath(__file__))
-
 class SQLStyle(StyleDocument):
 	def __init__(self, site):
-		super(SQLStyle, self).__init__(site, os.path.join(mod_path, 'sql.css'))
+		super(SQLStyle, self).__init__(site, resource_stream(__name__, 'sql.css'))
 
 class ThickboxStyle(StyleDocument):
 	def __init__(self, site):
-		super(ThickboxStyle, self).__init__(site, os.path.join(mod_path, 'thickbox.css'))
+		super(ThickboxStyle, self).__init__(site, resource_stream(__name__, 'thickbox.css'))
 
 class ThickboxScript(ScriptDocument):
 	def __init__(self, site):
-		super(ThickboxScript, self).__init__(site, os.path.join(mod_path, 'thickbox.js'))
+		super(ThickboxScript, self).__init__(site, resource_stream(__name__, 'thickbox.js'))
 
 class ThickboxImage(ImageDocument):
 	def __init__(self, site):
-		super(ThickboxImage, self).__init__(site, os.path.join(mod_path, 'macFFBgHack.png'))
+		super(ThickboxImage, self).__init__(site, resource_stream(__name__, 'macFFBgHack.png'))
 
 class JQueryScript(ScriptDocument):
 	def __init__(self, site):
-		super(JQueryScript, self).__init__(site, os.path.join(mod_path, 'jquery.js'))
+		super(JQueryScript, self).__init__(site, resource_stream(__name__, 'jquery.js'))
 
 class JQueryUIScript(ScriptDocument):
 	def __init__(self, site):
-		super(JQueryScript, self).__init__(site, os.path.join(mod_path, 'jquery.ui.all.js'))
+		super(JQueryScript, self).__init__(site, resource_stream(__name__, 'jquery.ui.all.js'))
 
 class TablesorterScript(ScriptDocument):
 	def __init__(self, site):
-		super(TablesorterScript, self).__init__(site, os.path.join(mod_path, 'jquery.tablesorter.js'))
+		super(TablesorterScript, self).__init__(site, resource_stream(__name__, 'jquery.tablesorter.js'))

@@ -12,6 +12,7 @@ import textwrap
 import traceback
 import db2makedoc.db
 import db2makedoc.plugins
+import db2makedoc.highlighters
 from db2makedoc.util import *
 
 __version__ = "1.0.0"
@@ -33,7 +34,7 @@ else:
 	GREEN = ''
 	BLUE = ''
 
-def main(args=None):
+def db2makedoc_main(args=None):
 	if args is None:
 		args = sys.argv[1:]
 	# Parse the command line arguments
@@ -87,23 +88,92 @@ are listed below.""")
 		logging.getLogger().setLevel(logging.DEBUG)
 	else:
 		logging.getLogger().setLevel(logging.INFO)
-		sys.excepthook = production_excepthook
-	# Call one of the action routines depending on the options
-	if options.listplugins:
-		list_plugins()
-	elif options.plugin:
-		help_plugin(options.plugin)
-	elif len(args) == 0:
-		parser.error('You must specify at least one configuration file')
-	elif options.test:
-		test_config(args)
-	elif options.debug:
-		import pdb
-		pdb.runcall(make_docs, args)
-	else:
-		make_docs(args)
+	try:
+		# Call one of the action routines depending on the options
+		if options.listplugins:
+			list_plugins()
+		elif options.plugin:
+			help_plugin(options.plugin)
+		elif len(args) == 0:
+			parser.error('You must specify at least one configuration file')
+		elif options.test:
+			test_config(args)
+		elif options.debug:
+			import pdb
+			pdb.runcall(make_docs, args)
+		else:
+			make_docs(args)
+		return 0
+	except:
+		if options.debug:
+			raise
+		else:
+			return handle_exception(*sys.exc_info())
 
-def production_excepthook(type, value, tb):
+def db2tidysql_main(args=None):
+	if args is None:
+		args = sys.argv[1:]
+	# Parse the command line arguments
+	parser = optparse.OptionParser(
+		usage='%prog [options] files...',
+		version='%%prog %s SQL reformatter' % __version__,
+		description="""\
+This utility reformats SQL for human consumption using the same parser that the
+db2makedoc application uses for generating SQL in documentation. Either specify
+the name of a file containing the SQL to reformat, or specify - to indicate
+that stdin should be read. The reformatted SQL will be written to stdout in
+either case. The available command line options are listed below.""")
+	parser.set_defaults(
+		debug=False,
+		terminator=';',
+		loglevel=logging.WARNING
+	)
+	parser.add_option('-q', '--quiet', dest='loglevel', action='store_const', const=logging.ERROR,
+		help="""produce less console output""")
+	parser.add_option('-v', '--verbose', dest='loglevel', action='store_const', const=logging.DEBUG,
+		help="""produce more console output""")
+	parser.add_option('-t', '--terminator', dest='terminator',
+		help="""specify the statement terminator (default=';')""")
+	parser.add_option('-D', '--debug', dest='debug', action='store_true',
+		help="""enables debug mode (lots more output and always prints stack trace in case of failure)""")
+	(options, args) = parser.parse_args(args)
+	# Set up some logging stuff
+	console = logging.StreamHandler(sys.stderr)
+	console.setFormatter(logging.Formatter('%(message)s'))
+	console.setLevel(options.loglevel)
+	logging.getLogger().addHandler(console)
+	# Set up the exceptions hook for uncaught exceptions and the logging
+	# levels if --debug was given
+	if options.debug:
+		console.setLevel(logging.DEBUG)
+		logging.getLogger().setLevel(logging.DEBUG)
+	else:
+		logging.getLogger().setLevel(logging.INFO)
+	try:
+		# Call one of the action routines depending on the options
+		done_stdin = False
+		highlighter = db2makedoc.highlighters.SQLHighlighter()
+		for sql_file in args:
+			if sql_file == '-':
+				if not done_stdin:
+					done_stdin = True
+					sql_file = sys.stdin
+				else:
+					raise IOError('Cannot read input from stdin multiple times')
+			else:
+				sql_file = open(sql_file, 'rU')
+			sql = sql_file.read()
+			sql = ''.join(highlighter.parse(sql, terminator=options.terminator))
+			sys.stdout.write(sql)
+			sys.stdout.flush()
+		return 0
+	except:
+		if options.debug:
+			raise
+		else:
+			return handle_exception(*sys.exc_info())
+
+def handle_exception(type, value, tb):
 	"""Exception hook for non-debug mode."""
 	# I/O errors and plugin errors should be simple to solve - no need to
 	# bother the user with a full stack trace, just the error message will
@@ -116,8 +186,8 @@ def production_excepthook(type, value, tb):
 		for line in traceback.format_exception(type, value, tb):
 			for s in line.rstrip().split('\n'):
 				logging.critical(s)
-	# Pass a failure exit code to the calling shell
-	sys.exit(1)
+	# Pass a failure exit code to the calling function
+	return 1
 
 def process_config(config_file):
 	"""Parses and prepares plugins from a configuration file.
@@ -408,6 +478,3 @@ def get_plugin_desc(plugin, summary=False):
 		return s[0]
 	else:
 		return '\n'.join(s)
-
-if __name__ == '__main__':
-	main()

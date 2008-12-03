@@ -12,6 +12,7 @@ import pdb
 import os
 import logging
 from collections import deque
+from pkg_resources import resource_string, resource_stream
 from db2makedoc.graph import Graph, Node, Edge, Cluster
 from db2makedoc.etree import ProcessingInstruction, iselement, flatten_html
 from db2makedoc.db import (
@@ -44,8 +45,6 @@ except ImportError:
 	# Ignore any import errors - the main plugin takes care of warning the
 	# user if PIL is required but not present
 	pass
-
-mod_path = os.path.dirname(os.path.abspath(__file__))
 
 
 class W3ElementFactory(HTMLElementFactory):
@@ -699,7 +698,7 @@ class W3SiteIndex(HTMLSiteIndexDocument, W3Article):
 class W3Search(W3Article):
 	"""Document class containing the PHP search script"""
 
-	search_php = open(os.path.join(mod_path, 'search.php'), 'r').read()
+	search_php = resource_string(__name__, 'search.php')
 
 	def __init__(self, site):
 		super(W3Search, self).__init__(site, 'search.php')
@@ -819,11 +818,11 @@ class W3GraphDocument(GraphObjectDocument):
 
 class W3Script(ScriptDocument):
 	def __init__(self, site):
-		super(W3Script, self).__init__(site, os.path.join(mod_path, 'scripts.js'))
+		super(W3Script, self).__init__(site, resource_stream(__name__, 'scripts.js'))
 
 class W3Style(StyleDocument):
 	def __init__(self, site):
-		super(W3Style, self).__init__(site, os.path.join(mod_path, 'styles.css'))
+		super(W3Style, self).__init__(site, resource_stream(__name__, 'styles.css'))
 	def generate(self):
 		# If local search is not enabled, ensure the local search check box is not shown
 		result = super(W3Style, self).generate()
