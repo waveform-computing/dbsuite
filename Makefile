@@ -8,31 +8,46 @@ PYFLAGS=
 LYNX=links
 LYNXFLAGS=-no-numbering -no-references
 
-# Calculate the base name of the distribution, the location of all source files
-# and documentation files
+# Calculate the base names of the distribution, the location of all source,
+# documentation and executable script files
 NAME:=$(shell $(PYTHON) $(PYFLAGS) setup.py --name)
 BASE:=$(shell $(PYTHON) $(PYFLAGS) setup.py --fullname)
-SRCS:=$(shell \
+PYVER:=$(shell $(PYTHON) $(PYFLAGS) -c "import sys; print 'py%d.%d' % sys.version_info[:2]")
+SCRIPTS:=$(shell $(PYTHON) $(PYFLAGS) -c "import setup; setup.get_console_scripts()")
+SOURCE:=$(shell \
 	$(PYTHON) $(PYFLAGS) setup.py egg_info >/dev/null 2>&1 && \
 	cat $(NAME).egg-info/SOURCES.txt)
 DOCS:=README.txt TODO.txt
 
 # Calculate the name of all distribution archives / installers
-EGG=dist/$(BASE).egg
-WININST=dist/$(BASE).win32.exe
-RPMS=dist/$(BASE)-1.noarch.rpm dist/$(BASE)-1.src.rpm
-SRCTAR=dist/$(BASE).tar.gz
-SRCZIP=dist/$(BASE).zip
+DIST_EGG=dist/$(BASE)-$(PYVER).egg
+DIST_WININST=dist/$(BASE).win32.exe
+DIST_RPM=dist/$(BASE)-1.src.rpm
+DIST_TAR=dist/$(BASE).tar.gz
+DIST_ZIP=dist/$(BASE).zip
 
 # Default target
-build:
+build: $(DOCS)
 	$(PYTHON) $(PYFLAGS) setup.py build
 
-install:
+install: $(DOCS)
 	$(PYTHON) $(PYFLAGS) setup.py install
 
+develop: $(DOCS) $(HOME)/bin/python tags
+	$(PYTHON) $(PYFLAGS) setup.py develop
+	@echo
+	@echo "Please run the following to remove any redundant hash entries:"
+	@echo hash -d $(SCRIPTS)
+
+undevelop:
+	$(PYTHON) $(PYFLAGS) setup.py develop --uninstall
+	for s in $(SCRIPTS); do rm -f $(HOME)/bin/$$s; done
+	@echo
+	@echo "Please run the following to remove any redundant hash entries:"
+	@echo hash -d $(SCRIPTS)
+
 test:
-	echo No tests currently implemented
+	@echo "No tests currently implemented"
 	#cd examples && ./runtests.sh
 
 clean:
@@ -45,27 +60,32 @@ cleanall: clean
 
 dist: bdist sdist
 
-bdist: $(WININST) $(RPMS) $(EGG)
+bdist: $(DIST_WININST) $(DIST_RPM) $(DIST_EGG)
 
-sdist: $(SRCTAR) $(SRCZIP)
+sdist: $(DIST_TAR) $(DIST_ZIP)
 
-$(EGG): $(SRCS) $(DOCS)
-	$(PYTHON) $(PYFLAGS) setup.py bdist --formats=egg
+$(DIST_EGG): $(SOURCE) $(DOCS)
+	$(PYTHON) $(PYFLAGS) setup.py bdist_egg
 
-$(WININST): $(SRCS) $(DOCS)
-	$(PYTHON) $(PYFLAGS) setup.py bdist --formats=wininst
+$(DIST_WININST): $(SOURCE) $(DOCS)
+	$(PYTHON) $(PYFLAGS) setup.py bdist_wininst
 
-$(RPMS): $(SRCS) $(DOCS)
-	$(PYTHON) $(PYFLAGS) setup.py bdist --formats=rpm
+$(DIST_RPM): $(SOURCE) $(DOCS)
+	$(PYTHON) $(PYFLAGS) setup.py bdist_rpm --source-only
 
-$(SRCTAR): $(SRCS) $(DOCS)
+$(DIST_TAR): $(SOURCE) $(DOCS)
 	$(PYTHON) $(PYFLAGS) setup.py sdist --formats=gztar
 
-$(SRCZIP): $(SRCS) $(DOCS)
+$(DIST_ZIP): $(SOURCE) $(DOCS)
 	$(PYTHON) $(PYFLAGS) setup.py sdist --formats=zip
 
-tags: FORCE
-	ctags -R --exclude="build/*"
+$(HOME)/bin/python:
+	wget http://peak.telecommunity.com/dist/virtual-python.py
+	$(PYTHON) $(PYFLAGS) virtual-python.py
+	rm virtual-python.py
+
+tags: $(SOURCE)
+	ctags -R --exclude="build/*" --languages="Python"
 
 README.txt: FORCE
 	echo "Generated from the db2makedoc wiki at:" > README.txt
