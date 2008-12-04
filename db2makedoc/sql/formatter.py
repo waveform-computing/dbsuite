@@ -97,13 +97,19 @@ def quote_str(s, qchar="'"):
 	encoded as two hex numbers), and concatenated to the rest of the string.
 	"""
 	result = []
-	for index, group in enumerate(ctrlchars.split(s)):
-		if group:
-			if index % 2:
-				result.append('X%s%s%s' % (qchar, ''.join('%.2X' % ord(c) for c in group), qchar))
-			else:
-				result.append('%s%s%s' % (qchar, group.replace(qchar, qchar*2), qchar))
-	return ' || '.join(result)
+	if s == '':
+		# Special case for the empty string (the general case deliberately
+		# outputs nothing for empty strings to eliminate leading and trailing
+		# empty groups
+		return qchar*2
+	else:
+		for index, group in enumerate(ctrlchars.split(s)):
+			if group:
+				if index % 2:
+					result.append('X%s%s%s' % (qchar, ''.join('%.2X' % ord(c) for c in group), qchar))
+				else:
+					result.append('%s%s%s' % (qchar, group.replace(qchar, qchar*2), qchar))
+		return ' || '.join(result)
 
 def dump(tokens):
 	"""Utility routine for debugging purposes: prints the tokens in a human readable format."""
@@ -1582,9 +1588,9 @@ class DB2LUWFormatter(BaseFormatter):
 					self._parse_searched_case()
 				else:
 					self._parse_simple_case()
-			elif self._match_sequence(['NEXT', 'VALUE', 'FOR']):
+			elif self._match_sequence(['NEXT', 'VALUE', 'FOR']) or self._match_sequence(['NEXTVAL', 'FOR']):
 				self._parse_sequence_name()
-			elif self._match_sequence(['PREVIOUS', 'VALUE', 'FOR']):
+			elif self._match_sequence(['PREVIOUS', 'VALUE', 'FOR']) or self._match_sequence(['PREVVAL', 'FOR']):
 				self._parse_sequence_name()
 			elif self._match_sequence(['ROW', 'CHANGE']):
 				self._expect_one_of(['TOKEN', 'TIMESTAMP'])
@@ -2131,9 +2137,10 @@ class DB2LUWFormatter(BaseFormatter):
 			# Parse optional column alias
 			if self._match('AS'):
 				self._expect(IDENTIFIER)
-			# Ambiguity: FROM can legitimately appear in this position as a
-			# KEYWORD (which the IDENTIFIER match below would accept)
-			elif not self._peek('FROM'):
+			# Ambiguity: FROM and INTO can legitimately appear in this
+			# position as a KEYWORD (which the IDENTIFIER match below would
+			# accept)
+			elif not self._peek_one_of(['FROM', 'INTO']):
 				self._match(IDENTIFIER)
 
 	def _parse_grouping_expression(self):
@@ -7262,11 +7269,17 @@ class DB2LUWFormatter(BaseFormatter):
 				self._expect('HANDLER')
 				reraise = True
 				self._expect('FOR')
-				if self._match('NOT'):
-					self._expect('FOUND')
-				elif self._match_one_of(['SQLEXCEPTION', 'SQLWARNING']):
-					pass
-				else:
+				self._save_state()
+				try:
+					while True:
+						if self._match('NOT'):
+							self._expect('FOUND')
+						else:
+							self._expect_one_of(['NOT', 'SQLEXCEPTION', 'SQLWARNING'])
+						if not self._match(','):
+							break
+				except ParseError:
+					self._restore_state()
 					while True:
 						if self._match('SQLSTATE'):
 							self._match('VALUE')
@@ -7275,6 +7288,8 @@ class DB2LUWFormatter(BaseFormatter):
 							self._expect(IDENTIFIER)
 						if not self._match(','):
 							break
+				else:
+					self._forget_state()
 				self._parse_procedure_statement()
 				self._expect((TERMINATOR, ';'))
 				self._newline()
