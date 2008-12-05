@@ -1115,10 +1115,15 @@ class WebSiteDocument(object):
 		types other than unicode (which is the only type this base
 		implementation handles).
 		"""
-		if isinstance(content, unicode):
-			return content.encode(self.site.encoding)
+		if isinstance(content, basestring):
+			if isinstance(content, unicode):
+				return content.encode(self.site.encoding)
+			else:
+				return content
+		elif hasattr(content, 'read'):
+			return content.read()
 		else:
-			return content
+			raise ValueError('unable to serialize content of type %s' % type(content))
 
 	def write(self):
 		"""Writes this document to a file in the site's path.
@@ -1154,30 +1159,28 @@ class WebSiteDocument(object):
 class StaticDocument(WebSiteDocument):
 	"""Represents a web site document with statically defined content.
 
-	This is the base class for documents sourced from a file on disk. The
-	source parameter of the constructor specifies the full path and filename of
-	the source file. If the encoding parameter is None, the source file is
-	assumed to be binary (e.g. an image) and no transcoding will occur.
-	Otherwise, the specified encoding will be used to decode the source file to
-	unicode, before re-encoding it with the site's configured encoding.
+	This is the base class for documents sourced from a package resource. The
+	source parameter of the constructor specifies the name of the resource.  If
+	the encoding parameter is None, the resource is assumed to be binary (e.g.
+	an image) and no transcoding will occur.  Otherwise, the specified encoding
+	will be used to decode the resource to unicode, before re-encoding it with
+	the site's configured encoding.
 	"""
 
-	def __init__(self, site, source, encoding=None, url=None):
+	def __init__(self, site, url, content, encoding=None):
 		if url is None:
 			url = os.path.basename(source)
 		super(StaticDocument, self).__init__(site, url)
-		self.source = source
+		self.content = content
 		self.encoding = encoding
 
 	def generate(self):
-		if hasattr(self.source, 'read'):
-			content = self.source.read()
-		else:
-			content = open(self.source, 'rb').read()
 		if self.encoding:
-			return content.decode(self.encoding)
+			if hasattr(self.content, 'read'):
+				self.content = self.content.read()
+			return self.content.decode(self.encoding)
 		else:
-			return content
+			return self.content
 
 
 class ImageDocument(StaticDocument):
@@ -1189,8 +1192,8 @@ class ImageDocument(StaticDocument):
 	return the image to write to the target file.
 	"""
 
-	def __init__(self, site, source, alt=None):
-		super(ImageDocument, self).__init__(site, source, encoding=None)
+	def __init__(self, site, url, content, alt=None):
+		super(ImageDocument, self).__init__(site, url, content, encoding=None)
 		self.alt = alt
 
 	def link(self, *args, **kwargs):
@@ -1207,8 +1210,8 @@ class StyleDocument(StaticDocument):
 	CSS to write to the target file.
 	"""
 
-	def __init__(self, site, source, encoding='UTF-8', media='all'):
-		super(StyleDocument, self).__init__(site, source, encoding)
+	def __init__(self, site, url, content, encoding='UTF-8', media='all'):
+		super(StyleDocument, self).__init__(site, url, content, encoding)
 		self.media = media
 
 	def link(self, *args, **kwargs):
@@ -1227,15 +1230,59 @@ class ScriptDocument(StaticDocument):
 	return the CSS to write to the target file.
 	"""
 
-	def __init__(self, site, source, encoding='UTF-8'):
-		super(ScriptDocument, self).__init__(site, source, encoding)
+	def __init__(self, site, url, content, encoding='UTF-8'):
+		super(ScriptDocument, self).__init__(site, url, content, encoding)
 
 	def link(self, *args, **kwargs):
 		# Overridden to return a <script> element
 		return self.tag.script(src=self.url)
 
 
-class HTMLDocument(WebSiteDocument):
+class XMLDocument(WebSiteDocument):
+	"""Represents a simple XML document.
+
+	This is the base class for XML documents. It provides no methods for
+	constructing or editing XML, it simply overrides the serialize() method to
+	handle the case where the generate() method returns an ElementTree, and
+	adds the public_id and system_id attributes for construction of the
+	(optional) DOCTYPE declaration.
+	"""
+
+	def __init__(self, site, url):
+		super(XMLDocument, self).__init__(site, url)
+		self.public_id = None
+		self.system_id = None
+		self.entities = None
+
+	def serialize(self, content):
+		if iselement(content):
+			# Construct the XML PI, and add the optional DOCTYPE (if we've got
+			# public and system IDs)
+			result = [u'<?xml version="1.0" encoding="%s"?>' % self.site.encoding]
+			if self.public_id and self.system_id:
+				result.append(u'<!DOCTYPE %s PUBLIC "%s" "%s">' % (content.tag, self.public_id, self.system_id))
+			content = unicode(tostring(content))
+			if self.entities:
+				# Dirty manual hack to convert non-XML entities (to support
+				# things like HTML)
+				def subfunc(match):
+					if ord(match.group()) in self.entities:
+						return u'&%s;' % self.entities[ord(match.group())]
+					else:
+						return match.group()
+				entities_re = re.compile(u'[%s-%s]' % (
+					unichr(min(self.entities.iterkeys())),
+					unichr(max(self.entities.iterkeys()))
+				))
+				content = entities_re.sub(subfunc, content)
+			# Glue everything together as a unicode string and leave it to the
+			# parent to handle the transcoding...
+			result.append(content)
+			content = u'\n'.join(result)
+		return super(XMLDocument, self).serialize(content)
+
+
+class HTMLDocument(XMLDocument):
 	"""Represents a simple HTML document.
 
 	This is the base class for HTML documents. It provides several utility
@@ -1254,6 +1301,19 @@ class HTMLDocument(WebSiteDocument):
 		self.robots_follow = True
 		self.comment_highlighter = HTMLCommentHighlighter(self.site)
 		self.sql_highlighter = HTMLSQLHighlighter(self.site)
+		try:
+			(self.public_id, self.system_id) = {
+				(HTML4, STRICT):         ('-//W3C//DTD HTML 4.01//EN',              'http://www.w3.org/TR/html4/strict.dtd'),
+				(HTML4, TRANSITIONAL):   ('-//W3C//DTD HTML 4.01 Transitional//EN', 'http://www.w3.org/TR/html4/loose.dtd'),
+				(HTML4, FRAMESET):       ('-//W3C//DTD HTML 4.01 Frameset//EN',     'http://www.w3.org/TR/html4/frameset.dtd'),
+				(XHTML10, STRICT):       ('-//W3C//DTD XHTML 1.0 Strict//EN',       'http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd'),
+				(XHTML10, TRANSITIONAL): ('-//W3C//DTD XHTML 1.0 Transitional//EN', 'http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd'),
+				(XHTML10, FRAMESET):     ('-//W3C//DTD XHTML 1.0 Frameset//EN',     'http://www.w3.org/TR/xhtml1/DTD/xhtml1-frameset.dtd'),
+				(XHTML11, STRICT):       ('-//W3C//DTD XHTML 1.1//EN',              'xhtml11-flat.dtd'),
+			}[(self.site.htmlver, self.site.htmlstyle)]
+		except KeyError:
+			raise KeyError('Invalid HTML version and style (XHTML11 only supports the STRICT style)')
+		self.entities = HTML_ENTITIES
 		self._first = None
 		self._prior = None
 		self._next = None
@@ -1316,15 +1376,7 @@ class HTMLDocument(WebSiteDocument):
 	parent = property(lambda self: self._get_parent(), lambda self, value: self._set_parent(value))
 	level = property(_get_level)
 
-	# Regex which finds characters within the range of characters capable of
-	# being encoded as HTML entities
-	entitiesre = re.compile(u'[%s-%s]' % (
-		unichr(min(HTML_ENTITIES.iterkeys())),
-		unichr(max(HTML_ENTITIES.iterkeys()))
-	))
-
 	def serialize(self, content):
-		"""Converts the document into a string for writing."""
 		if iselement(content):
 			assert content.tag == 'html'
 			# If full-text-searching is enabled, set up a Xapian indexer and
@@ -1346,38 +1398,6 @@ class HTMLDocument(WebSiteDocument):
 				]))
 				indexer.set_document(self.ftsdoc)
 				indexer.index_text(self.flatten(content))
-			# "Pure" XML won't handle HTML character entities. So we do it
-			# manually. First, get the XML as a Unicode string (without any XML
-			# PI or DOCTYPE)
-			if self.site.htmlver >= XHTML10:
-				content.attrib['xmlns'] = 'http://www.w3.org/1999/xhtml'
-			content = unicode(tostring(content))
-			# Convert any characters into HTML entities that can be
-			def subfunc(match):
-				if ord(match.group()) in HTML_ENTITIES:
-					return u'&%s;' % HTML_ENTITIES[ord(match.group())]
-				else:
-					return match.group()
-			content = self.entitiesre.sub(subfunc, content)
-			# Insert an XML PI at the start reflecting the target encoding (and
-			# a DOCTYPE as ElementTree doesn't handle this for us directly)
-			try:
-				(public_id, system_id) = {
-					(HTML4, STRICT):         ('-//W3C//DTD HTML 4.01//EN',              'http://www.w3.org/TR/html4/strict.dtd'),
-					(HTML4, TRANSITIONAL):   ('-//W3C//DTD HTML 4.01 Transitional//EN', 'http://www.w3.org/TR/html4/loose.dtd'),
-					(HTML4, FRAMESET):       ('-//W3C//DTD HTML 4.01 Frameset//EN',     'http://www.w3.org/TR/html4/frameset.dtd'),
-					(XHTML10, STRICT):       ('-//W3C//DTD XHTML 1.0 Strict//EN',       'http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd'),
-					(XHTML10, TRANSITIONAL): ('-//W3C//DTD XHTML 1.0 Transitional//EN', 'http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd'),
-					(XHTML10, FRAMESET):     ('-//W3C//DTD XHTML 1.0 Frameset//EN',     'http://www.w3.org/TR/xhtml1/DTD/xhtml1-frameset.dtd'),
-					(XHTML11, STRICT):       ('-//W3C//DTD XHTML 1.1//EN',              'xhtml11-flat.dtd'),
-				}[(self.site.htmlver, self.site.htmlstyle)]
-			except KeyError:
-				raise KeyError('Invalid HTML version and style (XHTML11 only supports the STRICT style)')
-			content = u'\n'.join((
-				u'<?xml version="1.0" encoding="%s"?>' % self.site.encoding,
-				u'<!DOCTYPE html PUBLIC "%s" "%s">' % (public_id, system_id),
-				content
-			))
 		return super(HTMLDocument, self).serialize(content)
 
 	def flatten(self, content):
@@ -1390,7 +1410,10 @@ class HTMLDocument(WebSiteDocument):
 	def generate(self):
 		"""Called by write() to generate the document as an ElementTree."""
 		# Generate and return the document
-		return self.tag.html(self.generate_head(), self.generate_body())
+		doc = self.tag.html(self.generate_head(), self.generate_body())
+		if self.site.htmlver >= XHTML10:
+			doc.attrib['xmlns'] = 'http://www.w3.org/1999/xhtml'
+		return doc
 
 	def generate_head(self):
 		"""Called by generate() to generate the document <head> element."""
@@ -1739,28 +1762,28 @@ class GraphObjectDocument(GraphDocument):
 
 class SQLStyle(StyleDocument):
 	def __init__(self, site):
-		super(SQLStyle, self).__init__(site, resource_stream(__name__, 'sql.css'))
+		super(SQLStyle, self).__init__(site, 'sql.css', resource_stream(__name__, 'sql.css'))
 
 class ThickboxStyle(StyleDocument):
 	def __init__(self, site):
-		super(ThickboxStyle, self).__init__(site, resource_stream(__name__, 'thickbox.css'))
+		super(ThickboxStyle, self).__init__(site, 'thickbox.css', resource_stream(__name__, 'thickbox.css'))
 
 class ThickboxScript(ScriptDocument):
 	def __init__(self, site):
-		super(ThickboxScript, self).__init__(site, resource_stream(__name__, 'thickbox.js'))
+		super(ThickboxScript, self).__init__(site, 'thickbox.js', resource_stream(__name__, 'thickbox.js'))
 
 class ThickboxImage(ImageDocument):
 	def __init__(self, site):
-		super(ThickboxImage, self).__init__(site, resource_stream(__name__, 'macFFBgHack.png'))
+		super(ThickboxImage, self).__init__(site, 'macFFBgHack.png', resource_stream(__name__, 'macFFBgHack.png'))
 
 class JQueryScript(ScriptDocument):
 	def __init__(self, site):
-		super(JQueryScript, self).__init__(site, resource_stream(__name__, 'jquery.js'))
+		super(JQueryScript, self).__init__(site, 'jquery.js', resource_stream(__name__, 'jquery.js'))
 
 class JQueryUIScript(ScriptDocument):
 	def __init__(self, site):
-		super(JQueryScript, self).__init__(site, resource_stream(__name__, 'jquery.ui.all.js'))
+		super(JQueryScript, self).__init__(site, 'jquery.ui.all.js', resource_stream(__name__, 'jquery.ui.all.js'))
 
 class TablesorterScript(ScriptDocument):
 	def __init__(self, site):
-		super(TablesorterScript, self).__init__(site, resource_stream(__name__, 'jquery.tablesorter.js'))
+		super(TablesorterScript, self).__init__(site, 'jquery.tablesorter.js', resource_stream(__name__, 'jquery.tablesorter.js'))

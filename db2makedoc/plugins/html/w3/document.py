@@ -20,9 +20,10 @@ from db2makedoc.db import (
 	ForeignKey, Check, Index, Trigger, Function, Procedure, Tablespace
 )
 from db2makedoc.plugins.html.document import (
-	HTMLElementFactory, ObjectGraph, WebSite, HTMLDocument, HTMLPopupDocument,
-	HTMLObjectDocument, HTMLSiteIndexDocument, HTMLExternalDocument,
-	StyleDocument, ScriptDocument, GraphDocument, GraphObjectDocument
+	HTMLElementFactory, ObjectGraph, WebSite, XMLDocument, HTMLDocument,
+	HTMLPopupDocument, HTMLObjectDocument, HTMLSiteIndexDocument,
+	HTMLExternalDocument, StyleDocument, ScriptDocument, GraphDocument,
+	GraphObjectDocument
 )
 from db2makedoc.plugins.html.database import DatabaseDocument
 from db2makedoc.plugins.html.schema import SchemaDocument, SchemaGraph
@@ -211,8 +212,9 @@ class W3Site(WebSite):
 	def create_documents(self, phase=0):
 		result = super(W3Site, self).create_documents(phase)
 		if phase == 0:
-			# Add the style and search documents
+			# Add the style, script and search documents
 			self.w3_style = W3Style(self)
+			self.w3_script = W3Script(self)
 			if self.search:
 				W3Search(self)
 			return True
@@ -238,6 +240,8 @@ class W3Site(WebSite):
 				doc.last = menu_docs[-1]
 				doc.prior = prior
 				prior = doc
+			# Generate the site navigation map
+			W3SiteNav(self)
 			return True
 		else:
 			return result
@@ -484,6 +488,7 @@ class W3Article(W3Document):
 		""", media='all'))
 		head.append(tag.style(src='//w3.ibm.com/ui/v8/css/print.css', media='print'))
 		head.append(self.site.w3_style.link())
+		head.append(self.site.w3_script.link())
 		return head
 
 	def generate_body(self):
@@ -568,7 +573,7 @@ class W3Article(W3Document):
 			# number of visible items before we start hiding things with "More
 			# Items"
 			links = deque((link(doc, active=active), children))
-			count = 10
+			count = 6
 			pdoc = doc.prior
 			ndoc = doc.next
 			more_above = more_below = False
@@ -644,6 +649,49 @@ class W3ObjectDocument(HTMLObjectDocument, W3Article):
 			heading.attrib['class'] = 'bar-blue-med'
 			section.append(tag.p(tag.a('Back to top', href='#masthead')))
 		return doc
+
+
+class W3SiteNav(XMLDocument):
+	def __init__(self, site):
+		super(W3SiteNav, self).__init__(site, 'nav.xml')
+
+	def generate(self):
+		def link(doc):
+			if isinstance(doc, HTMLObjectDocument) and doc.parent:
+				content = doc.dbobject.name
+			elif isinstance(doc, HTMLSiteIndexDocument):
+				content = doc.letter
+			else:
+				content = doc.title
+			# Non-top-level items longer than 12 characters are truncated
+			# and suffixed with a horizontal ellipsis (\u2026)
+			if len(content) > 12 and doc.parent:
+				content = content[:11] + u'\u2026'
+			return self.tag.a(content, href=doc.url, title=doc.title)
+
+		# Generate links for all documents
+		links = {}
+		for doc in set(self.site.urls.itervalues()):
+			if isinstance(doc, HTMLDocument):
+				links[doc] = link(doc)
+		# Stitch together links into a single site map document
+		root = self.tag.root()
+		queue = set(links.iterkeys())
+		while queue:
+			doc = queue.pop()
+			if doc.first:
+				if doc.parent:
+					parent = links[doc.parent]
+				else:
+					parent = root
+				doclist = self.tag.list()
+				parent.append(doclist)
+				doc = doc.first
+				while doc:
+					queue.discard(doc)
+					doclist.append(links[doc])
+					doc = doc.next
+		return root
 
 
 class W3SiteIndex(HTMLSiteIndexDocument, W3Article):
@@ -818,11 +866,11 @@ class W3GraphDocument(GraphObjectDocument):
 
 class W3Script(ScriptDocument):
 	def __init__(self, site):
-		super(W3Script, self).__init__(site, resource_stream(__name__, 'scripts.js'))
+		super(W3Script, self).__init__(site, 'scripts.js', resource_stream(__name__, 'scripts.js'))
 
 class W3Style(StyleDocument):
 	def __init__(self, site):
-		super(W3Style, self).__init__(site, resource_stream(__name__, 'styles.css'))
+		super(W3Style, self).__init__(site, 'styles.css', resource_stream(__name__, 'styles.css'))
 	def generate(self):
 		# If local search is not enabled, ensure the local search check box is not shown
 		result = super(W3Style, self).generate()

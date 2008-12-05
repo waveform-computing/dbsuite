@@ -488,31 +488,31 @@ class PlainGraphDocument(GraphObjectDocument):
 
 class PlainStyle(StyleDocument):
 	def __init__(self, site):
-		super(PlainStyle, self).__init__(site, resource_stream(__name__, 'styles.css'))
+		super(PlainStyle, self).__init__(site, 'styles.css', resource_stream(__name__, 'styles.css'))
 
 class HeaderImage(ImageDocument):
 	def __init__(self, site):
-		super(HeaderImage, self).__init__(site, resource_stream(__name__, 'header.png'))
+		super(HeaderImage, self).__init__(site, 'header.png', resource_stream(__name__, 'header.png'))
 
 class SortableImage(ImageDocument):
 	def __init__(self, site):
-		super(SortableImage, self).__init__(site, resource_stream(__name__, 'sortable.png'))
+		super(SortableImage, self).__init__(site, 'sortable.png', resource_stream(__name__, 'sortable.png'))
 
 class SortAscImage(ImageDocument):
 	def __init__(self, site):
-		super(SortAscImage, self).__init__(site, resource_stream(__name__, 'sortasc.png'))
+		super(SortAscImage, self).__init__(site, 'sortasc.png', resource_stream(__name__, 'sortasc.png'))
 
 class SortDescImage(ImageDocument):
 	def __init__(self, site):
-		super(SortDescImage, self).__init__(site, resource_stream(__name__, 'sortdesc.png'))
+		super(SortDescImage, self).__init__(site, 'sortdesc.png', resource_stream(__name__, 'sortdesc.png'))
 
 class ExpandImage(ImageDocument):
 	def __init__(self, site):
-		super(ExpandImage, self).__init__(site, resource_stream(__name__, 'expand.png'))
+		super(ExpandImage, self).__init__(site, 'expand.png', resource_stream(__name__, 'expand.png'))
 
 class CollapseImage(ImageDocument):
 	def __init__(self, site):
-		super(CollapseImage, self).__init__(site, resource_stream(__name__, 'collapse.png'))
+		super(CollapseImage, self).__init__(site, 'collapse.png', resource_stream(__name__, 'collapse.png'))
 
 
 # Declare styled document and graph classes
