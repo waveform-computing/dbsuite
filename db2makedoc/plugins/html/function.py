@@ -40,15 +40,15 @@ class FunctionDocument(HTMLObjectDocument):
 					tag.table(
 						tag.thead(
 							tag.tr(
-								tag.th('#'),
-								tag.th('Name'),
-								tag.th('Type'),
+								tag.th('#', class_='nowrap'),
+								tag.th('Name', class_='nowrap'),
+								tag.th('Type', class_='nowrap'),
 								tag.th('Description', class_='nosort')
 							)
 						),
 						tag.tbody(
 							tag.tr(
-								tag.td(param.position + 1),
+								tag.td(param.position + 1, class_='nowrap'),
 								tag.td(param.name, class_='nowrap'),
 								tag.td(param.datatype_str, class_='nowrap'),
 								tag.td(param.description)
@@ -115,13 +115,13 @@ class FunctionDocument(HTMLObjectDocument):
 						tag.thead(
 							tag.tr(
 								tag.th('Prototype', class_='nosort'),
-								tag.th('Specific Name')
+								tag.th('Specific Name', class_='nowrap')
 							)
 						),
 						tag.tbody((
 							tag.tr(
 								tag.td(self.format_prototype(overload.prototype)),
-								tag.td(tag.a(overload.specific_name, href=self.site.object_document(overload).url))
+								tag.td(tag.a(overload.specific_name, href=self.site.object_document(overload).url), class_='nowrap')
 							)
 							for overload in self.dbobject.schema.functions[self.dbobject.name]
 							if overload is not self.dbobject

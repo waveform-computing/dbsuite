@@ -75,17 +75,17 @@ class IndexDocument(HTMLObjectDocument):
 					tag.table(
 						tag.thead(
 							tag.tr(
-								tag.th('#'),
-								tag.th('Name'),
-								tag.th('Order'),
+								tag.th('#', class_='nowrap'),
+								tag.th('Name', class_='nowrap'),
+								tag.th('Order', class_='nowrap'),
 								tag.th('Description', class_='nosort')
 							)
 						),
 						tag.tbody((
 							tag.tr(
-								tag.td(position + 1),
-								tag.td(field.name),
-								tag.td(ordering),
+								tag.td(position + 1, class_='nowrap'),
+								tag.td(field.name, class_='nowrap'),
+								tag.td(ordering, class_='nowrap'),
 								tag.td(self.format_comment(field.description, summary=True))
 							) for (position, (field, ordering)) in enumerate(self.dbobject.field_list)
 						)),

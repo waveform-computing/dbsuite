@@ -51,19 +51,19 @@ class AliasDocument(HTMLObjectDocument):
 				table = tag.table(
 					tag.thead(
 						tag.tr(
-							tag.th('#'),
-							tag.th('Name'),
-							tag.th('Type'),
-							tag.th('Nulls'),
+							tag.th('#', class_='nowrap'),
+							tag.th('Name', class_='nowrap'),
+							tag.th('Type', class_='nowrap'),
+							tag.th('Nulls', class_='nowrap'),
 							tag.th('Description', class_='nosort')
 						)
 					),
 					tag.tbody((
 						tag.tr(
-							tag.td(field.position + 1),
-							tag.td(field.name),
-							tag.td(field.datatype_str),
-							tag.td(field.nullable),
+							tag.td(field.position + 1, class_='nowrap'),
+							tag.td(field.name, class_='nowrap'),
+							tag.td(field.datatype_str, class_='nowrap'),
+							tag.td(field.nullable, class_='nowrap'),
 							tag.td(self.format_comment(field.description, summary=True))
 						) for field in self.dbobject.field_list
 					)),
@@ -74,23 +74,23 @@ class AliasDocument(HTMLObjectDocument):
 				table = tag.table(
 					tag.thead(
 						tag.tr(
-							tag.th('#'),
-							tag.th('Name'),
-							tag.th('Type'),
-							tag.th('Nulls'),
-							tag.th('Key Pos'),
-							tag.th('Cardinality'),
+							tag.th('#', class_='nowrap'),
+							tag.th('Name', class_='nowrap'),
+							tag.th('Type', class_='nowrap'),
+							tag.th('Nulls', class_='nowrap'),
+							tag.th('Key Pos', class_='nowrap'),
+							tag.th('Cardinality', class_='nowrap'),
 							tag.th('Description', class_='nosort')
 						)
 					),
 					tag.tbody((
 						tag.tr(
-							tag.td(field.position),
-							tag.td(field.name),
-							tag.td(field.datatype_str),
-							tag.td(field.nullable),
-							tag.td(field.key_index),
-							tag.td(field.cardinality),
+							tag.td(field.position, class_='nowrap'),
+							tag.td(field.name, class_='nowrap'),
+							tag.td(field.datatype_str, class_='nowrap'),
+							tag.td(field.nullable, class_='nowrap'),
+							tag.td(field.key_index, class_='nowrap'),
+							tag.td(field.cardinality, class_='nowrap'),
 							tag.td(self.format_comment(field.description, summary=True))
 						) for field in self.dbobject.field_list
 					)),
@@ -115,15 +115,15 @@ class AliasDocument(HTMLObjectDocument):
 					tag.table(
 						tag.thead(
 							tag.tr(
-								tag.th('Name'),
-								tag.th('Type'),
+								tag.th('Name', class_='nowrap'),
+								tag.th('Type', class_='nowrap'),
 								tag.th('Description', class_='nosort')
 							)
 						),
 						tag.tbody((
 							tag.tr(
-								tag.td(self.site.link_to(dep)),
-								tag.td(self.site.type_names[dep.__class__]),
+								tag.td(self.site.link_to(dep), class_='nowrap'),
+								tag.td(self.site.type_names[dep.__class__], class_='nowrap'),
 								tag.td(self.format_comment(dep.description, summary=True))
 							) for dep in self.dbobject.dependent_list
 						)),

@@ -80,13 +80,13 @@ class ProcedureDocument(HTMLObjectDocument):
 						tag.thead(
 							tag.tr(
 								tag.th('Prototype', class_='nosort'),
-								tag.th('Specific Name')
+								tag.th('Specific Name', class_='nowrap')
 							)
 						),
 						tag.tbody((
 							tag.tr(
 								tag.td(self.format_prototype(overload.prototype)),
-								tag.td(tag.a(overload.specific_name, href=self.site.object_document(overload).url))
+								tag.td(tag.a(overload.specific_name, href=self.site.object_document(overload).url), class_='nowrap')
 							)
 							for overload in self.dbobject.schema.procedures[self.dbobject.name]
 							if overload is not self.dbobject

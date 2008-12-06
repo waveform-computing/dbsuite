@@ -49,13 +49,13 @@ class UniqueKeyDocument(HTMLObjectDocument):
 					tag.table(
 						tag.thead(
 							tag.tr(
-								tag.th('Field'),
+								tag.th('Field', class_='nowrap'),
 								tag.th('Description', class_='nosort')
 							)
 						),
 						tag.tbody((
 							tag.tr(
-								tag.td(field.name),
+								tag.td(field.name, class_='nowrap'),
 								tag.td(self.format_comment(field.description, summary=True))
 							) for field in self.dbobject.fields
 						)),

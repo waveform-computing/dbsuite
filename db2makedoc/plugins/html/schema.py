@@ -37,15 +37,15 @@ class SchemaDocument(HTMLObjectDocument):
 					tag.table(
 						tag.thead(
 							tag.tr(
-								tag.th('Name'),
-								tag.th('Type'),
+								tag.th('Name', class_='nowrap'),
+								tag.th('Type', class_='nowrap'),
 								tag.th('Description', class_='nosort')
 							)
 						),
 						tag.tbody((
 							tag.tr(
-								tag.td(self.site.link_to(relation)),
-								tag.td(self.site.type_names[relation.__class__]),
+								tag.td(self.site.link_to(relation), class_='nowrap'),
+								tag.td(self.site.type_names[relation.__class__], class_='nowrap'),
 								tag.td(self.format_comment(relation.description, summary=True))
 							) for relation in self.dbobject.relation_list
 						)),
@@ -67,17 +67,17 @@ class SchemaDocument(HTMLObjectDocument):
 					tag.table(
 						tag.thead(
 							tag.tr(
-								tag.th('Name'),
-								tag.th('Unique'),
-								tag.th('Applies To'),
+								tag.th('Name', class_='nowrap'),
+								tag.th('Unique', class_='nowrap'),
+								tag.th('Applies To', class_='nowrap'),
 								tag.th('Description', class_='nosort')
 							)
 						),
 						tag.tbody((
 							tag.tr(
-								tag.td(self.site.link_to(index)),
-								tag.td(index.unique),
-								tag.td(self.site.link_to(index.table)),
+								tag.td(self.site.link_to(index), class_='nowrap'),
+								tag.td(index.unique, class_='nowrap'),
+								tag.td(self.site.link_to(index.table), class_='nowrap'),
 								tag.td(self.format_comment(index.description, summary=True))
 							) for index in self.dbobject.index_list
 						)),
@@ -100,19 +100,19 @@ class SchemaDocument(HTMLObjectDocument):
 					tag.table(
 						tag.thead(
 							tag.tr(
-								tag.th('Name'),
-								tag.th('Timing'),
-								tag.th('Event'),
-								tag.th('Applies To'),
+								tag.th('Name', class_='nowrap'),
+								tag.th('Timing', class_='nowrap'),
+								tag.th('Event', class_='nowrap'),
+								tag.th('Applies To', class_='nowrap'),
 								tag.th('Description', class_='nosort')
 							)
 						),
 						tag.tbody((
 							tag.tr(
-								tag.td(self.site.link_to(trigger)),
-								tag.td(times[trigger.trigger_time]),
-								tag.td(events[trigger.trigger_event]),
-								tag.td(self.site.link_to(trigger.relation)),
+								tag.td(self.site.link_to(trigger), class_='nowrap'),
+								tag.td(times[trigger.trigger_time], class_='nowrap'),
+								tag.td(events[trigger.trigger_event], class_='nowrap'),
+								tag.td(self.site.link_to(trigger.relation), class_='nowrap'),
 								tag.td(self.format_comment(trigger.description, summary=True))
 							) for trigger in self.dbobject.trigger_list
 						)),
@@ -134,17 +134,17 @@ class SchemaDocument(HTMLObjectDocument):
 					tag.table(
 						tag.thead(
 							tag.tr(
-								tag.th('Name'),
-								tag.th('Specific Name'),
-								tag.th('Type'),
+								tag.th('Name', class_='nowrap'),
+								tag.th('Specific Name', class_='nowrap'),
+								tag.th('Type', class_='nowrap'),
 								tag.th('Description', class_='nosort')
 							)
 						),
 						tag.tbody((
 							tag.tr(
-								tag.td(self.site.link_to(routine)),
-								tag.td(routine.specific_name),
-								tag.td(self.site.type_names[routine.__class__]),
+								tag.td(self.site.link_to(routine), class_='nowrap'),
+								tag.td(routine.specific_name, class_='nowrap'),
+								tag.td(self.site.type_names[routine.__class__], class_='nowrap'),
 								tag.td(self.format_comment(routine.description, summary=True))
 							) for routine in self.dbobject.routine_list
 						)),

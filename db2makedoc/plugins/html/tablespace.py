@@ -62,13 +62,13 @@ class TablespaceDocument(HTMLObjectDocument):
 					tag.table(
 						tag.thead(
 							tag.tr(
-								tag.th('Name'),
+								tag.th('Name', class_='nowrap'),
 								tag.th('Description', class_='nosort')
 							)
 						),
 						tag.tbody((
 							tag.tr(
-								tag.td(self.site.link_to(table)),
+								tag.td(self.site.link_to(table), class_='nowrap'),
 								tag.td(self.format_comment(table.description, summary=True))
 							) for table in self.dbobject.table_list
 						)),
@@ -91,15 +91,15 @@ class TablespaceDocument(HTMLObjectDocument):
 					tag.table(
 						tag.thead(
 							tag.tr(
-								tag.th('Name'),
-								tag.th('Applies To'),
+								tag.th('Name', class_='nowrap'),
+								tag.th('Applies To', class_='nowrap'),
 								tag.th('Description', class_='nosort')
 							)
 						),
 						tag.tbody((
 							tag.tr(
-								tag.td(self.site.link_to(index)),
-								tag.td(self.site.link_to(index.table)),
+								tag.td(self.site.link_to(index), class_='nowrap'),
+								tag.td(self.site.link_to(index.table), class_='nowrap'),
 								tag.td(self.format_comment(index.description, summary=True))
 							) for index in self.dbobject.index_list
 						)),

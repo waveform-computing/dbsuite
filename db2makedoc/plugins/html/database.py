@@ -25,13 +25,13 @@ class DatabaseDocument(HTMLObjectDocument):
 					tag.table(
 						tag.thead(
 							tag.tr(
-								tag.th('Name'),
+								tag.th('Name', class_='nowrap'),
 								tag.th('Description', class_='nosort')
 							)
 						),
 						tag.tbody((
 							tag.tr(
-								tag.td(self.site.link_to(schema)),
+								tag.td(self.site.link_to(schema), class_='nowrap'),
 								tag.td(self.format_comment(schema.description, summary=True))
 							) for schema in self.dbobject.schema_list
 						)),
@@ -54,13 +54,13 @@ class DatabaseDocument(HTMLObjectDocument):
 					tag.table(
 						tag.thead(
 							tag.tr(
-								tag.th('Name'),
+								tag.th('Name', class_='nowrap'),
 								tag.th('Description', class_='nosort')
 							)
 						),
 						tag.tbody((
 							tag.tr(
-								tag.td(self.site.link_to(tbspace)),
+								tag.td(self.site.link_to(tbspace), class_='nowrap'),
 								tag.td(self.format_comment(tbspace.description, summary=True))
 							) for tbspace in self.dbobject.tablespace_list
 						)),

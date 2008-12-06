@@ -145,6 +145,9 @@ table td {
 	vertical-align: top;
 }
 
+table th.nowrap,
+table td.nowrap { white-space: nowrap; }
+
 table tr.odd td { background: white; }
 table tr.even td { background: #eee; }
 

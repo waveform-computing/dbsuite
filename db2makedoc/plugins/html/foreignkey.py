@@ -69,17 +69,17 @@ class ForeignKeyDocument(HTMLObjectDocument):
 					tag.table(
 						tag.thead(
 							tag.tr(
-								tag.th('#'),
-								tag.th('Field'),
-								tag.th('Parent'),
+								tag.th('#', class_='nowrap'),
+								tag.th('Field', class_='nowrap'),
+								tag.th('Parent', class_='nowrap'),
 								tag.th('Description', class_='nosort')
 							)
 						),
 						tag.tbody((
 							tag.tr(
-								tag.td(index + 1),
-								tag.td(field1.name),
-								tag.td(field2.name),
+								tag.td(index + 1, class_='nowrap'),
+								tag.td(field1.name, class_='nowrap'),
+								tag.td(field2.name, class_='nowrap'),
 								tag.td(self.format_comment(field1.description, summary=True))
 							) for (index, (field1, field2)) in enumerate(self.dbobject.fields)
 						)),
