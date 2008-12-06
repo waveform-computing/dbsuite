@@ -419,11 +419,9 @@ class W3Article(W3Document):
 								tag.tr(
 									tag.td(),
 									tag.td(
-										tag.input(
-											tag.label(' Search %s' % self.site.title, for_='header-search-this'), id='header-search-this',
-											name='header-search-this', type='checkbox', value='doc', onclick='javascript:toggleSearch();'
-										),
-										colspan=2, class_='limiter'
+										tag.input(id='header-search-this', name='header-search-this', type='checkbox', value='doc', style='display: none'),
+										tag.label(' Search %s' % self.site.title, for_='header-search-this', style='display: none'),
+										class_='limiter', colspan=2
 									)
 								),
 								cellspacing=0, cellpadding=0, class_='header-search'
@@ -534,7 +532,7 @@ class W3Article(W3Document):
 	def generate_menu(self):
 		"""Creates the left navigation menu links."""
 
-		def link(doc, active=False, visible=True):
+		def link(doc, active=False):
 			"""Sub-routine which generates a menu link from a document."""
 			if isinstance(doc, HTMLObjectDocument) and doc.parent:
 				content = doc.dbobject.name
@@ -550,17 +548,16 @@ class W3Article(W3Document):
 				content,
 				href=doc.url,
 				title=doc.title,
-				class_=(None, 'active')[active],
-				style=('display: none;', None)[visible]
+				class_=(None, 'active')[active]
 			)
 
 		def more(above):
 			"""Sub-routine which generates a "More Items" link."""
 			return self.tag.a(
 				[u'\u2193', u'\u2191'][above] + ' More items',
+				class_='more-items',
 				href='#',
-				title='More items',
-				onclick='javascript:return showItems(this);'
+				title='More items'
 			)
 
 		def menu(doc, active=True, children=''):
@@ -569,31 +566,26 @@ class W3Article(W3Document):
 			# than 3 levels of menus)
 			if doc.level >= 3:
 				return menu(doc.parent, active, '')
-			# Build the list of links for this menu level. The count is the
-			# number of visible items before we start hiding things with "More
-			# Items"
+			# Build the list of links for this menu level
 			links = deque((link(doc, active=active), children))
-			count = 6
-			pdoc = doc.prior
-			ndoc = doc.next
-			more_above = more_below = False
-			while pdoc or ndoc:
-				if pdoc:
-					more_above = count <= 0 and doc.level > 0
-					links.appendleft(link(pdoc, visible=not more_above))
+			if doc.level:
+				if doc.prior:
+					links.appendleft(link(doc.prior))
+					if doc.prior.prior:
+						links.appendleft(more(True))
+				if doc.next:
+					links.append(link(doc.next))
+					if doc.next.next:
+						links.append(more(False))
+			else:
+				pdoc = doc.prior
+				while pdoc:
+					links.appendleft(link(pdoc))
 					pdoc = pdoc.prior
-					count -= 1
-				if ndoc:
-					more_below = count <= 0 and doc.level > 0
-					links.append(link(ndoc, visible=not more_below))
+				ndoc = doc.next
+				while ndoc:
+					links.append(link(ndoc))
 					ndoc = ndoc.next
-					count -= 1
-			# Insert "More Items" links if necessary
-			if more_above:
-				links.appendleft(more(True))
-			if more_below:
-				links.append(more(False))
-			# Wrap the list of links in a div
 			links = self.tag.div(links, class_=['top-level', 'second-level', 'third-level'][doc.level])
 			# Recurse up the document hierarchy if there are more levels
 			if doc.level:
@@ -667,7 +659,7 @@ class W3SiteNav(XMLDocument):
 			# and suffixed with a horizontal ellipsis (\u2026)
 			if len(content) > 12 and doc.parent:
 				content = content[:11] + u'\u2026'
-			return self.tag.a(content, href=doc.url, title=doc.title)
+			return self.tag.doc(href=doc.url, title=doc.title, label=content)
 
 		# Generate links for all documents
 		links = {}
@@ -698,48 +690,8 @@ class W3SiteIndex(HTMLSiteIndexDocument, W3Article):
 	def generate_body(self):
 		body = super(W3SiteIndex, self).generate_body()
 		tag = self.tag
-		# Generate the JavaScript toggles
-		body[0:0] = [
-			tag.p(id='expand-collapse-links'),
-			tag.script("""
-				$(document).ready(function() {
-				/* Collapse all definition terms and add a click handler to toggle them */
-				$('#index-list')
-					.children('dd').hide().end()
-					.children('dt').addClass('expand-link-dark').click(function() {
-						$(this)
-							.toggleClass('expand-link-dark')
-							.toggleClass('collapse-link-dark')
-							.next().slideToggle();
-					});
-					/* Add the "expand all" and "collapse all" links */
-					$('#expand-collapse-links')
-						.append(
-							$(document.createElement('a'))
-								.attr('href', '#')
-								.append('Expand all')
-								.click(function() {
-									$('#index-list')
-										.children('dd').show().end()
-										.children('dt').removeClass('expand-link-dark').addClass('collapse-link-dark');
-									return false;
-								})
-						)
-						.append(' ')
-						.append(
-							$(document.createElement('a'))
-								.attr('href', '#')
-								.append('Collapse all')
-								.click(function() {
-									$('#index-list')
-										.children('dd').hide().end()
-										.children('dt').removeClass('collapse-link-dark').addClass('expand-link-dark');
-									return false;
-								})
-						);
-				});
-			""")
-		]
+		# Generate a placeholder for the JQuery toggles
+		body[0:0] = [tag.p(id='expand-collapse-links')]
 		return body
 
 
@@ -875,7 +827,7 @@ class W3Style(StyleDocument):
 		# If local search is not enabled, ensure the local search check box is not shown
 		result = super(W3Style, self).generate()
 		if not self.site.search:
-			result += u'\ntd.limiter { display: none; }'
+			result += u'\ntd.local-search { display: none; }'
 		return result
 
 # Declare styled document and graph classes
