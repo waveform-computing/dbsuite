@@ -39,11 +39,6 @@ function addLinks(node, above) {
 	var href = (above ? node.next() : node.prev()).attr('href');
 	var target = $('[href=' + href + ']', navDoc);
 	var links = above ? target.prevAll() : target.nextAll();
-	// Limit the number of links we wish to add at once
-	if (links.length < extendBy + (extendBy / 2))
-		node.slideToggle().hide();
-	else
-		links = links.slice(0, extendBy);
 	// Create a temporary hidden div, add the links to this and insert it
 	// before or after the "More Items" node
 	var div = $(document.createElement('div')).hide();
@@ -57,6 +52,7 @@ function addLinks(node, above) {
 	// Now show the temporary owning div (for one smooth animation), then once
 	// the animation is finished, move the contained links out of the div and
 	// delete it
+	node.slideUp();
 	div.slideDown('normal', function() {
 		$(this).children().each(function() {
 			$(this).insertBefore(div);

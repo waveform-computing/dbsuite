@@ -554,7 +554,7 @@ class W3Article(W3Document):
 		def more(above):
 			"""Sub-routine which generates a "More Items" link."""
 			return self.tag.a(
-				[u'\u2193', u'\u2191'][above] + ' More items',
+				'More items ' + [u'\u2193', u'\u2191'][above],
 				class_='more-items',
 				href='#',
 				title='More items'
