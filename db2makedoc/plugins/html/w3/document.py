@@ -820,6 +820,10 @@ class W3Script(ScriptDocument):
 	def __init__(self, site):
 		super(W3Script, self).__init__(site, 'scripts.js', resource_stream(__name__, 'scripts.js'))
 
+class W3Loader(ImageDocument):
+	def __init__(self, site):
+		super(W3Loader, self).__init__(site, 'loader.gif', resource_stream(__name__, 'loader.gif'))
+
 class W3Style(StyleDocument):
 	def __init__(self, site):
 		super(W3Style, self).__init__(site, 'styles.css', resource_stream(__name__, 'styles.css'))

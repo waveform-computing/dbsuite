@@ -35,7 +35,6 @@ var extendBy = 10;
 var navDoc = undefined;
 function addLinks(node, above) {
 	// Find the links in the XML site-map that we wish to add to the tree
-	node = $(node);
 	var href = (above ? node.next() : node.prev()).attr('href');
 	var target = $('[href=' + href + ']', navDoc);
 	var links = above ? target.prevAll() : target.nextAll();
@@ -52,7 +51,9 @@ function addLinks(node, above) {
 	// Now show the temporary owning div (for one smooth animation), then once
 	// the animation is finished, move the contained links out of the div and
 	// delete it
-	node.slideUp();
+	node.slideUp('normal', function() {
+		$(this).remove();
+	});
 	div.slideDown('normal', function() {
 		$(this).children().each(function() {
 			$(this).insertBefore(div);
@@ -63,12 +64,14 @@ function addLinks(node, above) {
 
 $(document).ready(function() {
 	$('.more-items').click(function() {
-		var node = this;
-		above = $(this).is(':first-child');
+		var node = $(this);
+		var spinner = $(document.createElement('img')).attr('src', 'loader.gif');
+		above = node.is(':first-child');
 		if (navDoc) {
 			addLinks(node, above);
 		}
 		else {
+			node.append(spinner);
 			$.get('nav.xml', function(data) {
 				navDoc = data;
 				addLinks(node, above);
