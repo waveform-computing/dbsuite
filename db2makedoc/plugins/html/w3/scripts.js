@@ -1,3 +1,18 @@
+/* Add a custom parser to the tablesorter plugin to handle sorting numerics
+ * with comma thousand separators */
+
+$.tablesorter.addParser({
+	id: "digitComma",
+	is: function(s, table) {
+		var c = table.config;
+		return $.tablesorter.isDigit(s.replace(/,/, ''), c);
+	},
+	format: function(s) {
+		return $.tablesorter.formatFloat(s.replace(/,/, ''));
+	},
+	type: "numeric"
+});
+
 /* Utility routine for toggling the URL of the search form at the top of all w3
  * style articles */
 

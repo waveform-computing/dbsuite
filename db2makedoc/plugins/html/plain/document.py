@@ -53,7 +53,7 @@ class PlainElementFactory(HTMLElementFactory):
 	def table(self, *content, **attrs):
 		attrs.setdefault('cellspacing', '1')
 		table = self._element('table', *content, **attrs)
-		nosort = []
+		sorters = {}
 		try:
 			thead = self._find(table, 'thead')
 		except:
@@ -62,8 +62,11 @@ class PlainElementFactory(HTMLElementFactory):
 			for tr in thead.findall('tr'):
 				if 'id' in table.attrib:
 					for index, th in enumerate(tr.findall('th')):
-						if 'nosort' in th.attrib.get('class', '').split():
-							nosort.append(index)
+						classes = th.attrib.get('class', '').split()
+						if 'nosort' in classes:
+							sorters[index] = 'false'
+						if 'commas' in classes:
+							sorters[index] = '"digitComma"'
 		# Apply extra styles to tables with a tbody element (other tables are
 		# likely to be pure layout tables)
 		try:
@@ -76,8 +79,7 @@ class PlainElementFactory(HTMLElementFactory):
 				self._add_class(tr, ['odd', 'even'][index % 2])
 			# If there's an id on the main table element, add a script element
 			# within the table definition to activate the jQuery tablesorter
-			# plugin for this table, and scan th elements for any nosort
-			# classes to disable sorting on them
+			# plugin for this table
 			if 'id' in table.attrib and len(tbody.findall('tr')) > 1:
 				script = self.script("""
 					$(document).ready(function() {
@@ -92,7 +94,10 @@ class PlainElementFactory(HTMLElementFactory):
 					});
 				""" % (
 					table.attrib['id'],
-					', '.join('%d: {sorter:false}' % col for col in nosort)
+					', '.join(
+						'%d: {sorter: %s}' % (index, sorter)
+						for (index, sorter) in sorters.iteritems()
+					)
 				))
 				return (table, script)
 		return table
@@ -189,6 +194,7 @@ class PlainSite(WebSite):
 			# refers directly to these objects - they're referred to solely in in
 			# the plain stylesheet
 			self.plain_style = PlainStyle(self)
+			self.plain_script = PlainScript(self)
 			HeaderImage(self)
 			SortableImage(self)
 			SortAscImage(self)
@@ -231,6 +237,7 @@ class PlainDocument(HTMLDocument):
 		tag = self.tag
 		# Add styles and scripts
 		head.append(self.site.plain_style.link())
+		head.append(self.site.plain_script.link())
 		return head
 
 	def generate_search(self):
@@ -416,7 +423,23 @@ class PlainGraphDocument(GraphObjectDocument):
 		graph = super(PlainGraphDocument, self).generate()
 		graph.ratio = str(float(maxh) / float(maxw))
 		return graph
-	
+
+	def write_broken(self, msg):
+		# Called when something goes wrong in the write() method, which it
+		# often does when dealing with truly massive graphs (GraphViz sometimes
+		# crashes out or just writes garbage). This method simply logs some
+		# warnings, and moves the resulting file (if any) out of the way to
+		# prevent browsers potentially attempting to access corrupt files
+		# (which in the case of buggy browsers could crash them), while
+		# allowing investigation of the corrupt file.
+		logging.warning(msg)
+		if os.path.exists(self.filename):
+			newname = '%s.broken' % self.filename
+			logging.warning('Moving potentially corrupt image file "%s" to "%s"' % (self.filename, newname))
+			if os.path.exists(newname):
+				os.unlink(newname)
+			os.rename(self.filename, newname)
+
 	def write(self):
 		# Overridden to set the introduced "written" flag (to ensure we don't
 		# attempt to write the graph more than once due to the induced write()
@@ -429,13 +452,7 @@ class PlainGraphDocument(GraphObjectDocument):
 				try:
 					im = Image.open(self.filename)
 				except IOError, e:
-					logging.warning('Failed to open image "%s" for resizing: %s' % (self.filename, e))
-					if os.path.exists(self.filename):
-						newname = '%s.broken' % self.filename
-						logging.warning('Moving potentially corrupt image file "%s" to "%s"' % (self.filename, newname))
-						if os.path.exists(newname):
-							os.unlink(newname)
-						os.rename(self.filename, newname)
+					self.write_broken('Failed to open image "%s" for resizing: %s' % (self.filename, e))
 					return
 				(maxw, maxh) = self.site.max_graph_size
 				(w, h) = im.size
@@ -448,14 +465,18 @@ class PlainGraphDocument(GraphObjectDocument):
 					self.scale = min(float(maxw) / w, float(maxh) / h)
 					neww = int(round(w * self.scale))
 					newh = int(round(h * self.scale))
-					if w * h * 3 / 1024**2 < 500:
-						# Use a high-quality anti-aliased resize if to do so
-						# would use <500Mb of RAM (which seems a reasonable
-						# cut-off point on modern machines) - the conversion
-						# to RGB is the really memory-heavy bit
-						im = im.convert('RGB').resize((neww, newh), Image.ANTIALIAS)
-					else:
-						im = im.resize((neww, newh), Image.NEAREST)
+					try:
+						if w * h * 3 / 1024**2 < 500:
+							# Use a high-quality anti-aliased resize if to do so
+							# would use <500Mb of RAM (which seems a reasonable
+							# cut-off point on modern machines) - the conversion
+							# to RGB is the really memory-heavy bit
+							im = im.convert('RGB').resize((neww, newh), Image.ANTIALIAS)
+						else:
+							im = im.resize((neww, newh), Image.NEAREST)
+					except Exception, e:
+						self.write_broken('Failed to resize image "%s" from (%dx%d) to (%dx%d): %s' % (self.filename, w, h, neww, newh, e))
+						return
 					im.save(self.filename)
 
 	def map(self):
@@ -489,6 +510,10 @@ class PlainGraphDocument(GraphObjectDocument):
 class PlainStyle(StyleDocument):
 	def __init__(self, site):
 		super(PlainStyle, self).__init__(site, 'styles.css', resource_stream(__name__, 'styles.css'))
+
+class PlainScript(ScriptDocument):
+	def __init__(self, site):
+		super(PlainScript, self).__init__(site, 'script.js', resource_stream(__name__, 'scripts.js'))
 
 class HeaderImage(ImageDocument):
 	def __init__(self, site):

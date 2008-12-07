@@ -79,7 +79,7 @@ class AliasDocument(HTMLObjectDocument):
 							tag.th('Type', class_='nowrap'),
 							tag.th('Nulls', class_='nowrap'),
 							tag.th('Key Pos', class_='nowrap'),
-							tag.th('Cardinality', class_='nowrap'),
+							tag.th('Cardinality', class_='nowrap commas'),
 							tag.th('Description', class_='nosort')
 						)
 					),
