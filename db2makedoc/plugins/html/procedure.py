@@ -18,10 +18,10 @@ class ProcedureDocument(HTMLObjectDocument):
 			tag.div(
 				tag.h3('Description'),
 				tag.p(self.format_prototype(self.dbobject.prototype)),
-				tag.p(self.format_comment(self.dbobject.description)),
+				self.format_comment(self.dbobject.description),
 				# XXX What about the IN/OUT/INOUT state of procedure parameters?
 				tag.dl((
-					(tag.dt(param.name), tag.dd(self.format_comment(param.description)))
+					(tag.dt(param.name), tag.dd(self.format_comment(param.description, summary=True)))
 					for param in self.dbobject.param_list
 				)),
 				class_='section',

@@ -21,7 +21,7 @@ class SchemaDocument(HTMLObjectDocument):
 		body.append(
 			tag.div(
 				tag.h3('Description'),
-				tag.p(self.format_comment(self.dbobject.description)),
+				self.format_comment(self.dbobject.description),
 				class_='section',
 				id='description'
 			)
