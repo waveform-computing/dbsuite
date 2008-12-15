@@ -35,93 +35,91 @@ class CommentHighlighter(object):
 	"""
 
 	find_ref = re.compile(r'@([A-Za-z_$#@][\w$#@]*(\.[A-Za-z_$#@][\w$#@]*){0,2})\b')
-	find_fmt = re.compile(r'\B([/_*])(\w+)\1\B')
+	find_fmt = re.compile(r'(^|[\s\W])([/_*])(\w+)\2($|[\s\W])')
+
+	def start_parse(self, summary):
+		"""Stub handler for parsing start."""
+		self._content = []
+
+	def start_para(self):
+		"""Stub handler for paragraph starts."""
+		self._para = ''
 
 	def handle_text(self, text):
 		"""Stub handler for plain text."""
-		return text
+		self._para += text
 
 	def handle_strong(self, text):
 		"""Stub handler for strong/bold text."""
-		return '*%s*' % text
+		self.handle_text('*%s*' % text)
 
 	def handle_emphasize(self, text):
 		"""Stub handler for emphasized/italic text."""
-		return '/%s/' % text
+		self.handle_text('/%s/' % text)
 
 	def handle_underline(self, text):
 		"""Stub handler for underlined text."""
-		return '_%s_' % text
+		self.handle_text('_%s_' % text)
 
-	def handle_link(self, target):
-		"""Stub handler for link references."""
-		return '@%s' % target.qualified_name
-
-	def start_para(self, summary):
-		"""Stub handler for paragraph starts."""
-		return ''
-
-	def end_para(self, summary):
-		"""Stub handler for paragraph ends."""
-		if not summary:
-			return '\n\n'
-		else:
-			return ''
-	
 	def find_target(self, name):
 		"""Stub handler to find a database object given its name."""
 		return None
+
+	def handle_link(self, target):
+		"""Stub handler for link references."""
+		self.handle_text('@%s' % target.qualified_name)
+
+	def end_para(self):
+		"""Stub handler for paragraph ends."""
+		self._content.append(self._para)
+
+	def end_parse(self, summary):
+		"""Stub handler for parsing end."""
+		return '\n\n'.join(self._content)
 	
 	def parse(self, text, summary=False):
 		"""Converts the provided text into another markup language.
 
 		The summary parameter, if True, indicates that only the first line of
-		the text should be marked up and returned. Note that this base routine
-		returns a list of strings (or whatever the handler methods return) as
-		opposed to a single string in case overridden descendents wish to
-		perform further post-processing on the converted elements.
+		the text should be marked up and returned.
 		"""
+		self.start_parse(summary)
 		paras = text.split('\n')
 		if summary:
 			paras = [paras[0]]
-		result = []
 		for para in paras:
 			if len(para) == 0:
 				continue
-			result.append(self.start_para(summary))
+			self.start_para()
 			start = 0
 			while True:
 				match_ref = self.find_ref.search(para, start)
 				match_fmt = self.find_fmt.search(para, start)
-				if match_ref is not None and (match_fmt is None or match_fmt.start(0) > match_ref.start(0)):
-					result.append(self.handle_text(para[start:match_ref.start(0)]))
+				if match_ref is not None and (match_fmt is None or match_fmt.start(2) > match_ref.start(0)):
+					self.handle_text(para[start:match_ref.start(0)])
 					start = match_ref.end(0)
 					target = self.find_target(match_ref.group(1))
 					if target is None:
 						logging.warning('Failed to find database object %s referenced in comment: "%s"' % (match_ref.group(1), text))
-						result.append(self.handle_text(match_ref.group(0)))
+						self.handle_text(match_ref.group(0))
 					else:
-						result.append(self.handle_link(target))
-				elif match_fmt is not None and (match_ref is None or match_fmt.start(0) < match_ref.start(0)):
-					result.append(self.handle_text(para[start:match_fmt.start(0)]))
-					start = match_fmt.end(0)
-					if match_fmt.group(1) == '*':
-						result.append(self.handle_strong(match_fmt.group(2)))
-					elif match_fmt.group(1) == '/':
-						result.append(self.handle_emphasize(match_fmt.group(2)))
-					elif match_fmt.group(1) == '_':
-						result.append(self.handle_underline(match_fmt.group(2)))
+						self.handle_link(target)
+				elif match_fmt is not None and (match_ref is None or match_fmt.start(2) < match_ref.start(0)):
+					self.handle_text(para[start:match_fmt.start(2)])
+					start = match_fmt.start(4)
+					if match_fmt.group(2) == '*':
+						self.handle_strong(match_fmt.group(3))
+					elif match_fmt.group(2) == '/':
+						self.handle_emphasize(match_fmt.group(3))
+					elif match_fmt.group(2) == '_':
+						self.handle_underline(match_fmt.group(3))
 					else:
 						assert False
 				else:
-					result.append(self.handle_text(para[start:]))
+					self.handle_text(para[start:])
 					break
-			result.append(self.end_para(summary))
-		return result
-
-	def parse_to_string(self, text, summary=False):
-		"""Utility routine which returns the result of parse() as a single string"""
-		return ''.join(self.parse(text, summary))
+			self.end_para()
+		return self.end_parse(summary)
 
 
 class SQLHighlighter(object):

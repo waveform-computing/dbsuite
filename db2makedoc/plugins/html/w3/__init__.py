@@ -12,7 +12,7 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 	"""Output plugin for IBM Intranet w3v8 style web pages.
 
 	This output plugin supports generating XHTML documentation conforming to
-	the internal IBM w3v8 style [1]. It includes syntax highlighted SQL
+	the internal IBM w3v8 style [1]. It includes syntax highlighted SQL,
 	information on various objects in the database (views, tables, etc.) and
 	diagrams of the schema.
 

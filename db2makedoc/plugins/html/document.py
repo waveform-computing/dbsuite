@@ -25,7 +25,7 @@ from db2makedoc.db import (
 	Field, UniqueKey, PrimaryKey, ForeignKey, Check, Param
 )
 from db2makedoc.etree import (
-	fromstring, tostring, iselement, Element, flatten_html
+	fromstring, tostring, iselement, ElementFactory, flatten_html
 )
 from db2makedoc.sql.formatter import (
 	ERROR, COMMENT, KEYWORD, IDENTIFIER, LABEL, DATATYPE, REGISTER,
@@ -64,83 +64,19 @@ except ImportError:
 ) = range(3)
 
 
-class HTMLElementFactory(object):
-	"""A class inspired by Genshi for easy creation of ElementTree Elements.
-
-	The HTMLElementFactory class should rarely be used directly. Instead, use
-	the "tag" object belonging to a WebSite derived object, which is an
-	instance of HTMLElementFactory. The HTMLElementFactory class was inspired
-	by the Genshi builder unit in that it permits simple creation of Elements
-	by calling methods on the tag object named after the element you wish to
-	create. Positional arguments become content within the element, and keyword
-	arguments become attributes.
-
-	If you need an attribute or element tag that conflicts with a Python
-	keyword, simply append an underscore to the name (which will be
-	automatically stripped off).
-
-	Content can be just about anything, including booleans, integers, longs,
-	dates, times, etc. These types are all converted to strings in a manner
-	suitable for use in generating human-readable documentation (though not
-	necessarily machine-reading friendly), e.g. datetime values are
-	automatically converted to an ISO8601 string representation, which integers
-	are converted to strings containing thousand separators.
-
-	For example:
-
-	>>> tostring(tag.a('A link'))
-	'<a>A link</a>'
-	>>> tostring(tag.a('A link', class_='menuitem'))
-	'<a class="menuitem">A link</a>'
-	>>> tostring(tag.p('A ', tag.a('link', class_='menuitem')))
-	'<p>A <a class="menuitem">link</a></p>'
-	"""
+class HTMLElementFactory(ElementFactory):
+	"""Element factory class customized for HTML output."""
 
 	def __init__(self, site):
 		super(HTMLElementFactory, self).__init__()
 		assert isinstance(site, WebSite)
 		self._site = site
 
-	def _find(self, root, tagname, id=None):
-		"""Returns the first element with the specified tagname and id"""
-		if id is None:
-			result = root.find('.//%s' % tagname)
-			if result is None:
-				raise Exception('Cannot find any %s elements' % tagname)
-			else:
-				return result
-		else:
-			result = [
-				elem for elem in root.findall('.//%s' % tagname)
-				if elem.attrib.get('id', '') == id
-			]
-			if len(result) == 0:
-				raise Exception('Cannot find a %s element with id %s' % (tagname, id))
-			elif len(result) > 1:
-				raise Exception('Found multiple %s elements with id %s' % (tagname, id))
-			else:
-				return result[0]
-
 	def _format(self, content):
 		"""Reformats content into a human-readable string"""
 		if content is None:
 			# Format None as 'n/a'
 			return 'n/a'
-		elif isinstance(content, datetime.time):
-			# Format times as ISO8601
-			return content.strftime('%H:%M:%S')
-		elif isinstance(content, datetime.date):
-			# Format dates as ISO8601 (dates < 1970 can't be formatted, so treat them as None)
-			if content.year < 1970:
-				return self._format(None)
-			else:
-				return content.strftime('%Y-%m-%d')
-		elif isinstance(content, datetime.datetime):
-			# Format timestamps as ISO8601 (dates < 1970 can't be formatted, so treat them as None)
-			if content.year < 1970:
-				return self._format(None)
-			else:
-				return content.strftime('%Y-%m-%d %H:%M:%S')
 		elif isinstance(content, bool):
 			# Format booleans as Yes/No
 			return ['No', 'Yes'][content]
@@ -150,72 +86,9 @@ class HTMLElementFactory(object):
 			for i in xrange(len(s) - 3, 0, -3):
 				s = '%s,%s' % (s[:i], s[i:])
 			return s
-		elif isinstance(content, basestring):
-			# Strings are returned verbatim
-			return content
 		else:
-			# Everything else is converted to an ASCII string
-			return str(content)
-
-	def _append(self, node, content):
-		"""Adds content (string, node, node-list, etc.) to a node"""
-		if isinstance(content, basestring):
-			if content != '':
-				if len(node) == 0:
-					if node.text is None:
-						node.text = content
-					else:
-						node.text += content
-				else:
-					last = node[-1]
-					if last.tail is None:
-						last.tail = content
-					else:
-						last.tail += content
-		elif isinstance(content, (int, long, bool, datetime.datetime, datetime.date, datetime.time)):
-			# XXX This branch exists for optimization purposes only (the except
-			# branch below is expensive)
-			self._append(node, self._format(content))
-		elif iselement(content):
-			node.append(content)
-		else:
-			try:
-				for n in content:
-					self._append(node, n)
-			except TypeError:
-				self._append(node, self._format(content))
-
-	def _element(self, _name, *content, **attrs):
-		def conv(key, value):
-			# This little utility routine is used to clean up attributes:
-			# boolean True is represented as the key (as in checked="checked"),
-			# all values are converted to strings, and trailing underscores are
-			# removed from key names (convenience for names which are python
-			# keywords)
-			if not isinstance(key, basestring):
-				key = str(key)
-			else:
-				key = key.rstrip('_')
-			if value is True:
-				value = key
-			elif not isinstance(value, basestring):
-				value = str(value)
-			return key, value
-		e = Element(_name, dict(
-			conv(key, value)
-			for key, value in attrs.iteritems()
-			if value is not None and value is not False
-		))
-		for c in content:
-			self._append(e, c)
-		return e
-
-	def __getattr__(self, name):
-		elem_name = name.rstrip('_')
-		def generator(*content, **attrs):
-			return self._element(elem_name, *content, **attrs)
-		setattr(self, name, generator)
-		return generator
+			# Use the default for everything else
+			return super(HTMLElementFactory, self)._format(content)
 
 	def script(self, *content, **attrs):
 		# XXX Workaround: the script element cannot be "empty" (IE fucks up)
@@ -241,8 +114,11 @@ class HTMLElementFactory(object):
 		else:
 			return self._element('style', *content, **attrs)
 
+	compress = re.compile(r'[ \t\r\n]+')
 	def p_typed(self, content, dbobject, attrs):
-		return self.p(content % {'type': self._site.type_name(dbobject).lower()}, **attrs)
+		content = content % {'type': self._site.type_name(dbobject).lower()}
+		content = self.compress.sub(' ', content)
+		return self.p(content, **attrs)
 
 	def p_attributes(self, dbobject, **attrs):
 		# Boilerplate paragraph describing the common attributes table of a database object
@@ -325,7 +201,7 @@ class HTMLCommentHighlighter(CommentHighlighter):
 
 	This subclass of the generic comment highlighter class overrides the stub
 	methods to convert the comment into HTML. The construction of the HTML
-	elements is actually handled by the methods of the HTMLDocument object
+	elements is actually handled by the methods of the WebSite's tag object
 	passed to the constructor as opposed to the methods in this class.
 	"""
 
@@ -334,37 +210,42 @@ class HTMLCommentHighlighter(CommentHighlighter):
 		assert isinstance(site, WebSite)
 		self.site = site
 
+	def start_parse(self, summary):
+		self._content = []
+
+	def start_para(self):
+		self._para = []
+
+	def handle_text(self, text):
+		self._para.append(text)
+
 	def handle_strong(self, text):
-		"""Highlights strong text with HTML <strong> elements."""
-		return self.site.tag.strong(text)
+		self._para.append(self.site.tag.strong(text))
 
 	def handle_emphasize(self, text):
-		"""Highlights emphasized text with HTML <em> elements."""
-		return self.site.tag.em(text)
+		self._para.append(self.site.tag.em(text))
 
 	def handle_underline(self, text):
-		"""Highlights underlined text with HTML <u> elements."""
-		return self.site.tag.u(text)
+		self._para.append(self.site.tag.u(text))
 
-	def start_para(self, summary):
-		"""Emits an empty string for the start of a paragraph."""
-		return ''
-
-	def end_para(self, summary):
-		"""Emits an HTML <br>eak element for the end of a paragraph."""
-		return self.site.tag.br()
+	def find_target(self, name):
+		return self.site.database.find(name)
 
 	def handle_link(self, target):
-		"""Emits an HTML <a>nchor element linking to the object's documentation."""
 		# If the target is something we don't generate a document for (like
 		# a column), scan upwards in the hierarchy until we find a document
 		# and return a link to that document with the in between objects added
 		# as normal text suffixes
 		return self.site.link_to(target, parent=True)
 
-	def find_target(self, name):
-		"""Searches the site's associated database for the named object."""
-		return self.site.database.find(name)
+	def end_para(self):
+		self._content.append(self.site.tag.p(*self._para))
+
+	def end_parse(self, summary):
+		if summary:
+			return self._para
+		else:
+			return self._content
 
 
 class HTMLSQLHighlighter(SQLHighlighter):
