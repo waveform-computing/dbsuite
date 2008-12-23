@@ -14,7 +14,7 @@ import codecs
 import logging
 import db2makedoc.db
 import db2makedoc.plugins
-from db2makedoc.plugins.html.document import WebSite, SQLStyle
+from db2makedoc.plugins.html.document import WebSite
 from db2makedoc.graph import DEFAULT_CONVERTER
 from string import Template
 

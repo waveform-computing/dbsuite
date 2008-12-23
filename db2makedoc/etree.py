@@ -34,7 +34,7 @@ except ImportError:
 
 __all__ = ['fromstring', 'tostring', 'parse', 'iselement', 'Element',
 		'SubElement', 'Comment', 'ProcessingInstruction', 'QName', 'indent',
-		'flatten', 'flatten_html', '_namespace_map']
+		'flatten', 'flatten_html', 'html4_display', '_namespace_map']
 
 
 def indent(elem, level=0, indent_str='\t'):
@@ -239,35 +239,35 @@ class ElementFactory(object):
 			# Everything else is converted to an ASCII string
 			return str(content)
 
-	def _append(self, node, content):
+	def _append(self, node, contents):
 		"""Adds content (string, node, node-list, etc.) to a node"""
-		if isinstance(content, basestring):
-			if content != '':
+		if isinstance(contents, basestring):
+			if contents != '':
 				if len(node) == 0:
 					if node.text is None:
-						node.text = content
+						node.text = contents
 					else:
-						node.text += content
+						node.text += contents
 				else:
 					last = node[-1]
 					if last.tail is None:
-						last.tail = content
+						last.tail = contents
 					else:
-						last.tail += content
-		elif isinstance(content, (int, long, bool, datetime.datetime, datetime.date, datetime.time)):
+						last.tail += contents
+		elif isinstance(contents, (int, long, bool, datetime.datetime, datetime.date, datetime.time)):
 			# XXX This branch exists for optimization purposes only (the except
-			# branch below is expensive)
-			self._append(node, self._format(content))
-		elif iselement(content):
-			node.append(content)
+			# branch below is moderately expensive)
+			self._append(node, self._format(contents))
+		elif iselement(contents):
+			node.append(contents)
 		else:
 			try:
-				for n in content:
-					self._append(node, n)
+				for content in contents:
+					self._append(node, content)
 			except TypeError:
-				self._append(node, self._format(content))
+				self._append(node, self._format(contents))
 
-	def _element(self, _name, *content, **attrs):
+	def _element(self, _name, *contents, **attrs):
 		if self._namespace:
 			_name = '{%s}%s' % (self._namespace, _name)
 			attrs = dict(
@@ -294,8 +294,8 @@ class ElementFactory(object):
 			for key, value in attrs.iteritems()
 			if value is not None and value is not False
 		))
-		for c in content:
-			self._append(e, c)
+		for content in contents:
+			self._append(e, content)
 		return e
 
 	def __getattr__(self, name):

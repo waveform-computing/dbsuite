@@ -16,6 +16,7 @@ import threading
 
 from operator import attrgetter
 from pkg_resources import resource_stream, resource_string
+from db2makedoc.main import __version__
 from db2makedoc.highlighters import CommentHighlighter, SQLHighlighter
 from db2makedoc.plugins.html.entities import HTML_ENTITIES
 from db2makedoc.graph import Graph, Node, Edge, Cluster
@@ -47,7 +48,7 @@ except ImportError:
 	try:
 		from StringIO import StringIO
 	except ImportError:
-		raise ImportError('Unable to find a StringIO implementation')
+		raise ImportError('unable to find a StringIO implementation')
 
 # Constants for HTML versions
 (
@@ -69,7 +70,6 @@ class HTMLElementFactory(ElementFactory):
 
 	def __init__(self, site):
 		super(HTMLElementFactory, self).__init__()
-		assert isinstance(site, WebSite)
 		self._site = site
 
 	def _format(self, content):
@@ -207,7 +207,6 @@ class HTMLCommentHighlighter(CommentHighlighter):
 
 	def __init__(self, site):
 		super(HTMLCommentHighlighter, self).__init__()
-		assert isinstance(site, WebSite)
 		self.site = site
 
 	def start_parse(self, summary):
@@ -264,7 +263,6 @@ class HTMLSQLHighlighter(SQLHighlighter):
 	"""
 
 	def __init__(self, site):
-		"""Initializes an instance of the class."""
 		super(HTMLSQLHighlighter, self).__init__()
 		self.site = site
 		self.css_classes = {
@@ -315,7 +313,6 @@ class ObjectGraph(Graph):
 	"""
 
 	def __init__(self, site, id, directed=True, strict=False):
-		assert isinstance(site, WebSite)
 		super(ObjectGraph, self).__init__(id, directed, strict)
 		self.dbobjects = {}
 		self.site = site
@@ -329,7 +326,6 @@ class ObjectGraph(Graph):
 		this method if they wish to customize the attributes or add support for
 		additional database object types.
 		"""
-		assert isinstance(dbobject, DatabaseObject)
 		item = self.dbobjects.get(dbobject)
 		if item is None:
 			if isinstance(dbobject, Schema):
@@ -369,7 +365,6 @@ class WebSite(object):
 
 	def __init__(self, database, options):
 		"""Initializes an instance of the class."""
-		assert isinstance(database, Database)
 		super(WebSite, self).__init__()
 		self.database = database
 		self.urls = {}
@@ -414,8 +409,6 @@ class WebSite(object):
 		self.tbspace_list = options['tbspace_list']
 		self.indexes = options['indexes']
 		self.diagrams = options['diagrams']
-		if self.title is None:
-			self.title = '%s Documentation' % self.database.name
 		self.type_names = {
 			Alias:          'Alias',
 			Check:          'Check Constraint',
@@ -577,7 +570,6 @@ class WebSite(object):
 		object_graph() methods) if more complex associations are desired (e.g.
 		framed and non-framed versions of documents).
 		"""
-		assert isinstance(document, WebSiteDocument)
 		self.urls[document.url] = document
 		self.urls[document.absolute_url] = document
 		if isinstance(document, HTMLObjectDocument):
@@ -640,7 +632,6 @@ class WebSite(object):
 		versions).  They correspond to the args and kwargs parameters of the
 		link_to() method.
 		"""
-		assert isinstance(dbobject, DatabaseObject)
 		return self.object_docs.get(dbobject)
 
 	def object_graph(self, dbobject, *args, **kwargs):
@@ -659,7 +650,6 @@ class WebSite(object):
 		functional dependencies).  They correspond to the args and kwargs
 		parameters of the img_of() method.
 		"""
-		assert isinstance(dbobject, DatabaseObject)
 		return self.object_graphs.get(dbobject)
 
 	def type_name(self, dbobject):
@@ -702,10 +692,8 @@ class WebSite(object):
 		relayed to the object_document() method in case the site implements
 		multiple documents per object (e.g. framed and non-framed versions).
 		"""
-		assert isinstance(dbobject, DatabaseObject)
 		doc = self.object_document(dbobject, *args, **kwargs)
 		if doc:
-			assert isinstance(doc, HTMLDocument)
 			return self.tag.a(dbobject.qualified_name, href=doc.url, title=doc.title)
 		elif parent:
 			suffixes = []
@@ -737,12 +725,10 @@ class WebSite(object):
 		If the specified object is not associated with any GraphDocument, the
 		method returns some text indicating that no graph is available.
 		"""
-		assert isinstance(dbobject, DatabaseObject)
 		graph = self.object_graph(dbobject, *args, **kwargs)
 		if graph is None:
 			return self.tag.p('Graph for %s is not available' % dbobject.qualified_name)
 		else:
-			assert isinstance(graph, GraphDocument)
 			return graph.link()
 
 	def index_of(self, dbclass, letter=None, *args, **kwargs):
@@ -970,7 +956,6 @@ class WebSiteDocument(object):
 
 	def __init__(self, site, url):
 		"""Initializes an instance of the class."""
-		assert isinstance(site, WebSite)
 		super(WebSiteDocument, self).__init__()
 		self.site = site
 		self.url = url
@@ -1310,6 +1295,7 @@ class HTMLDocument(XMLDocument):
 			tag.meta(name='DC.Date', content=self.site.date, scheme='iso8601'),
 			tag.meta(name='DC.Language', content='%s-%s' % (self.site.lang, self.site.sublang), scheme='rfc1766')
 		)
+		head.append(tag.meta(name='Generator', content='db2makedoc %s' % __version__))
 		if self.site.copyright is not None:
 			head.append(tag.meta(name='DC.Rights', content=self.site.copyright))
 		if self.description is not None:

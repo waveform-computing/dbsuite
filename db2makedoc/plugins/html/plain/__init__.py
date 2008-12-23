@@ -17,7 +17,6 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 	"""
 
 	def __init__(self):
-		"""Initializes an instance of the class."""
 		super(OutputPlugin, self).__init__()
 		self.site_class = PlainSite
 		self.add_option('last_updated', default='true', convert=self.convert_bool,

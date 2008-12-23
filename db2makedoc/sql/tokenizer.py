@@ -408,9 +408,10 @@ class SQLTokenizerBase(object):
 		(without the double-quotes). The _index variable is incremented to the
 		character beyond the closing quote of the string.
 
-		Strings may not span multiple lines. If a CR, LF or NULL character is
-		encountered in the string, an exception is raised (calling methods
-		convert this exception into an ERROR token).
+		Strings may span multiple lines if multiline is True (which it should
+		be for SQL strings, but not quoted identifiers). If a CR, LF or NULL
+		character is encountered in the string, an exception is raised (calling
+		methods convert this exception into an ERROR token).
 
 		This method should be overridden in descendent classes to handle those
 		SQL dialects which permit additonal escaping mechanisms (like C
