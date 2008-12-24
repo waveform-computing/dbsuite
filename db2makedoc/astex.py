@@ -50,15 +50,13 @@ def tex(e):
 # Abstract classes
 
 class TeXNode(object):
-	__slots__ = ('text',)
-	def __init__(self, text=''):
-		self.text = text
+	__slots__ = ()
 	def __tex__(self):
-		return escape_tex(self.text)
+		return ''
 	def __xml__(self):
-		return escape_xml(self.text)
+		return ''
 
-class TeXParam(object):
+class TeXParam(TeXNode):
 	__slots__ = ('index',)
 	def __init__(self, index=1):
 		self.index = index
@@ -67,7 +65,44 @@ class TeXParam(object):
 	def __xml__(self):
 		return escape_xml('#%d' % self.index)
 
-class TeXElement(TeXNode):
+class TeXEmptyElement(TeXNode):
+	__slots__ = ('tail',)
+	def __init__(self):
+		super(TeXEmptyElement, self).__init__()
+		self.tail = ''
+	def __tex__(self):
+		return super(TeXEmptyElement, self).__tex__() + escape_tex(self.tail)
+	def __xml__(self):
+		return super(TeXEmptyElement, self).__xml__() + escape_xml(self.tail)
+
+class TeXHyphen(TeXEmptyElement):
+	__slots__ = ()
+	tag = 'hyp'
+	tex_cmd = '-'
+	def __tex__(self):
+		return r'\-' + super(TeXHyphen, self).__tex__()
+	def __xml__(self):
+		return '-' + super(TeXHyphen, self).__xml__()
+
+class TeXBreak(TeXEmptyElement):
+	__slots__ = ()
+	tag = 'br'
+	tex_cmd = r'\\'
+	def __tex__(self):
+		return '\\\\\n' + super(TeXBreak, self).__tex__()
+	def __xml__(self):
+		return '<br/>' + super(TeXBreak, self).__xml__()
+
+class TeXContent(TeXNode):
+	__slots__ = ('text',)
+	def __init__(self, text=''):
+		self.text = text
+	def __tex__(self):
+		return escape_tex(self.text)
+	def __xml__(self):
+		return escape_xml(self.text)
+
+class TeXElement(TeXContent):
 	__slots__= ('name', 'tail', 'children')
 	def __init__(self, name=None):
 		super(TeXElement, self).__init__()
@@ -103,17 +138,25 @@ class TeXElement(TeXNode):
 					return hex(value)
 				else:
 					return str(value)
-		return '<%s%s>%s</%s>%s' % (
-			self.tag,
-			''.join(
-				' %s="%s"' % (name, format_value(name, value))
-				for (name, value) in self._attrib().iteritems()
-				if format_value(name, value) is not None
-			),
-			self._content_xml(),
-			self.tag,
-			escape_xml(self.tail),
+		content = self._content_xml()
+		attrs = ''.join(
+			' %s="%s"' % (name, format_value(name, value))
+			for (name, value) in self._attrib().iteritems()
+			if format_value(name, value) is not None
 		)
+		if content:
+			return '<%s%s>%s</%s>%s' % (
+				self.tag,
+				attrs,
+				content,
+				self.tag,
+				escape_xml(self.tail),
+			)
+		else:
+			return '<%s%s/>' % (
+				self.tag,
+				attrs,
+			)
 
 class TeXEnvironment(TeXElement):
 	__slots__ = ()
@@ -133,13 +176,6 @@ class TeXParagraph(TeXElement):
 	tex_cmd = 'par'
 	def __tex__(self):
 		return '%s\n\n%s' % (self._content_tex(), escape_tex(self.tail))
-
-class TeXBreak(TeXNode):
-	__slots__ = ()
-	tag = 'br'
-	tex_cmd = ''
-	def __tex__(self):
-		return '\\\\\n'
 
 class TeXQuote(TeXElement):
 	__slots__ = ()
@@ -610,15 +646,21 @@ class TeXDocument(TeXEnvironment):
 		self.twoside = twoside
 
 	def _find(self, elem_class, root=None):
-		# Recursively (DFS) searches the tree for elements of the specified
-		# class, and yields them as a generator
+		# Recursively searches the tree for elements of the specified class,
+		# and yields them as a generator
 		if not root:
 			root = self
-		for elem in root.children:
-			for result in self._find(elem_class, elem):
-				yield result
-			if isinstance(elem, elem_class):
-				yield elem
+		if isinstance(root, TeXElement):
+			# Do a hybrid of a DFS and BFS search (performance optimization -
+			# specifically helps with the makeindex search)
+			for elem in root.children:
+				if isinstance(elem, elem_class):
+					yield elem
+			for elem in root.children:
+				for result in self._find(elem_class, elem):
+					yield result
+		if isinstance(root, elem_class):
+			yield root
 
 	def _packages(self):
 		# Yields package names and/or tuples of (package_name, package_options)
@@ -748,7 +790,7 @@ class TeXDocument(TeXEnvironment):
 tag_map = dict(
 	(c.tag, c) for c in locals().itervalues()
 	if type(c) == type(object)
-	and issubclass(c, TeXElement)
+	and issubclass(c, TeXNode)
 	and hasattr(c, 'tag')
 )
 
@@ -779,7 +821,9 @@ class TeXFactory(object):
 			# XXX This branch exists for optimization purposes only (the except
 			# branch below is moderately expensive)
 			self._append(node, self._format(contents))
-		elif isinstance(contents, (TeXNode, TeXParam)):
+		elif isinstance(contents, TeXNode):
+			if isinstance(contents, (TeXElement, TeXEmptyElement)):
+				contents.tail = ''
 			node.children.append(contents)
 		else:
 			try:

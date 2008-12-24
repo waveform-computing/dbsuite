@@ -227,6 +227,9 @@ class HTMLCommentHighlighter(CommentHighlighter):
 	def handle_underline(self, text):
 		self._para.append(self.site.tag.u(text))
 
+	def handle_quote(self, text):
+		self._para.append(self.site.tag.q(text))
+
 	def find_target(self, name):
 		return self.site.database.find(name)
 

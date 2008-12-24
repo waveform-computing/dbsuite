@@ -34,9 +34,6 @@ class CommentHighlighter(object):
 	be minimal and unobtrusive to the eye when read prior to conversion.
 	"""
 
-	find_ref = re.compile(r'@([A-Za-z_$#@][\w$#@]*(\.[A-Za-z_$#@][\w$#@]*){0,2})\b')
-	find_fmt = re.compile(r'(^|[\s\W])([/_*])(\w+)\2($|[\s\W])')
-
 	def start_parse(self, summary):
 		"""Stub handler for parsing start."""
 		self._content = []
@@ -61,6 +58,10 @@ class CommentHighlighter(object):
 		"""Stub handler for underlined text."""
 		self.handle_text('_%s_' % text)
 
+	def handle_quote(self, text):
+		"""Stub handler for quoted text."""
+		self.handle_text('"%s"' % text)
+
 	def find_target(self, name):
 		"""Stub handler to find a database object given its name."""
 		return None
@@ -77,6 +78,10 @@ class CommentHighlighter(object):
 		"""Stub handler for parsing end."""
 		return '\n\n'.join(self._content)
 	
+	find_ref = re.compile(r'@([A-Za-z_$#@][\w$#@]*(\.[A-Za-z_$#@][\w$#@]*){0,2})\b')
+	find_fmt = re.compile(r'(?:^|[\s\W])([/_*])(\w+)\1($|[\s\W])')
+	find_quote = re.compile(r'"(([^".]|\.(?! ))*)"')
+
 	def parse(self, text, summary=False):
 		"""Converts the provided text into another markup language.
 
@@ -93,26 +98,43 @@ class CommentHighlighter(object):
 			self.start_para()
 			start = 0
 			while True:
-				match_ref = self.find_ref.search(para, start)
-				match_fmt = self.find_fmt.search(para, start)
-				if match_ref is not None and (match_fmt is None or match_fmt.start(2) > match_ref.start(0)):
-					self.handle_text(para[start:match_ref.start(0)])
-					start = match_ref.end(0)
-					target = self.find_target(match_ref.group(1))
-					if target is None:
-						logging.warning('Failed to find database object %s referenced in comment: "%s"' % (match_ref.group(1), text))
-						self.handle_text(match_ref.group(0))
-					else:
-						self.handle_link(target)
-				elif match_fmt is not None and (match_ref is None or match_fmt.start(2) < match_ref.start(0)):
-					self.handle_text(para[start:match_fmt.start(2)])
-					start = match_fmt.start(4)
-					if match_fmt.group(2) == '*':
-						self.handle_strong(match_fmt.group(3))
-					elif match_fmt.group(2) == '/':
-						self.handle_emphasize(match_fmt.group(3))
-					elif match_fmt.group(2) == '_':
-						self.handle_underline(match_fmt.group(3))
+				# Get a list of all regexes that match
+				matches = [
+					(id, match) for (id, match) in (
+						('ref', self.find_ref.search(para, start)),
+						('fmt', self.find_fmt.search(para, start)),
+						('quote', self.find_quote.search(para, start)),
+					)
+					if match is not None
+				]
+				if matches:
+					# Find the first match
+					matches.sort(key=lambda x: x[1].start(0))
+					(id, match) = matches[0]
+					if id == 'ref':
+						self.handle_text(para[start:match.start(0)])
+						start = match.end(0)
+						target = self.find_target(match.group(1))
+						if target is None:
+							logging.warning('Failed to find database object %s referenced in comment: "%s"' % (match_ref.group(1), text))
+							self.handle_text(match.group(0))
+						else:
+							self.handle_link(target)
+					elif id == 'fmt':
+						self.handle_text(para[start:match.start(1)])
+						start = match.start(3)
+						if match.group(1) == '*':
+							self.handle_strong(match.group(2))
+						elif match.group(1) == '/':
+							self.handle_emphasize(match.group(2))
+						elif match.group(1) == '_':
+							self.handle_underline(match.group(2))
+						else:
+							assert False
+					elif id == 'quote':
+						self.handle_text(para[start:match.start(0)])
+						start = match.end(0)
+						self.handle_quote(match.group(1))
 					else:
 						assert False
 				else:

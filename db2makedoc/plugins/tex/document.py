@@ -6,7 +6,6 @@ This package defines a set of utility classes which make it easier to construct
 output plugins capable of producing TeX documents.
 """
 
-import pdb
 import os
 import datetime
 import logging
@@ -15,6 +14,7 @@ from operator import attrgetter
 from db2makedoc.main import __version__
 from db2makedoc.astex import tex, xml, TeXFactory
 from db2makedoc.highlighters import CommentHighlighter, SQLHighlighter
+from db2makedoc.hyphenator import hyphenate_word
 from db2makedoc.graph import Graph, Node, Edge, Cluster
 from db2makedoc.sql.formatter import (
 	ERROR, COMMENT, KEYWORD, IDENTIFIER, LABEL, DATATYPE, REGISTER,
@@ -58,6 +58,9 @@ class TeXCommentHighlighter(CommentHighlighter):
 
 	def handle_underline(self, text):
 		self._para.append(self.tag.u(text))
+
+	def handle_quote(self, text):
+		self._para.append(self.tag.q(text))
 
 	def find_target(self, name):
 		return self.database.find(name)
@@ -174,6 +177,17 @@ class TeXDocumentation(object):
 			View:           'View',
 		}
 
+	def format_name(self, name):
+		# Use the hyphenation algorithm to permit splitting of long capitalized
+		# identifiers (which are all too common in the generated documentation)
+		result = hyphenate_word(name)
+		first = True
+		for part in result:
+			if not first:
+				yield self.tag.hyp()
+			first = False
+			yield part
+
 	def format_comment(self, comment, summary=False):
 		return self.comment_highlighter.parse(comment or self.default_desc, summary)
 
@@ -215,12 +229,13 @@ class TeXDocumentation(object):
 	def generate_db(self, db):
 		tag = self.tag
 		return tag.section(
+			self.format_comment(db.description),
 			tag.subsection(
-				tag.p('The following table contains all schemas (logical object containers) in the database.'),
+				tag.p('The following table contains all schemas (logical object containers) in the database, sorted by schema name.'),
 				tag.table(
 					tag.caption('Database schemas'),
 					tag.col(nowrap=True),
-					tag.col(nowrap=False, width='25em'),
+					tag.col(nowrap=False, width='90mm'),
 					tag.thead(
 						tag.tr(
 							tag.th('Name'),
@@ -229,7 +244,7 @@ class TeXDocumentation(object):
 					),
 					tag.tbody(
 						tag.tr(
-							tag.td(schema.name),
+							tag.td(self.format_name(schema.name)),
 							tag.td(self.format_comment(schema.description, summary=True))
 						) for schema in db.schema_list
 					),
@@ -238,11 +253,11 @@ class TeXDocumentation(object):
 				title='Schemas'
 			),
 			tag.subsection(
-				tag.p('The following table contains all tablespaces (physical object containers) in the database.'),
+				tag.p('The following table contains all tablespaces (physical object containers) in the database, sorted by tablespace name.'),
 				tag.table(
 					tag.caption('Database tablespaces'),
 					tag.col(nowrap=True),
-					tag.col(nowrap=False, width='25em'),
+					tag.col(nowrap=False, width='90mm'),
 					tag.thead(
 						tag.tr(
 							tag.th('Name'),
@@ -251,7 +266,7 @@ class TeXDocumentation(object):
 					),
 					tag.tbody(
 						tag.tr(
-							tag.td(tbspace.name),
+							tag.td(self.format_name(tbspace.name)),
 							tag.td(self.format_comment(tbspace.description, summary=True))
 						) for tbspace in db.tablespace_list
 					),
@@ -266,17 +281,14 @@ class TeXDocumentation(object):
 	def generate_schema(self, schema):
 		tag = self.tag
 		return tag.section(
+			self.format_comment(schema.description),
 			tag.subsection(
-				self.format_comment(schema.description),
-				title='Description'
-			),
-			tag.subsection(
-				tag.p('The following table lists the relations (tables, views, and aliases) that belong to the schema.'),
+				tag.p('The following table lists the relations (tables, views, and aliases) that belong to the schema, sorted by relation name.'),
 				tag.table(
 					tag.caption('%s relations' % schema.name),
-					tag.col(nowrap=False, width='10em'),
+					tag.col(nowrap=False, width='40mm'),
 					tag.col(nowrap=True),
-					tag.col(nowrap=False, width='30em'),
+					tag.col(nowrap=False, width='90mm'),
 					tag.thead(
 						tag.tr(
 							tag.th('Name'),
@@ -286,7 +298,7 @@ class TeXDocumentation(object):
 					),
 					tag.tbody(
 						tag.tr(
-							tag.td(relation.name),
+							tag.td(self.format_name(relation.name)),
 							tag.td(self.type_names[type(relation)]),
 							tag.td(self.format_comment(relation.description, summary=True))
 						) for relation in schema.relation_list
