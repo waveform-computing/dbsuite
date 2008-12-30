@@ -6,11 +6,14 @@ This package defines a set of utility classes which make it easier to construct
 output plugins capable of producing TeX documents.
 """
 
+import pdb
 import os
+import re
 import datetime
 import logging
 
 from operator import attrgetter
+from itertools import chain
 from db2makedoc.main import __version__
 from db2makedoc.astex import tex, xml, TeXFactory
 from db2makedoc.highlighters import CommentHighlighter, SQLHighlighter
@@ -107,6 +110,25 @@ class TeXSQLHighlighter(SQLHighlighter):
 			tag._new_command('SQLoperator',   lambda x: x)
 			tag._new_command('SQLparameter',  lambda x: tag.em(x))
 			tag._new_command('SQLterminator', lambda x: x)
+			tag._new_environment(
+				'SQLlisting',
+				preamble=''.join((
+					r'\newcounter{SQLlinenum}',
+					r'\definecolor{linenum}{rgb}{0.6,0.6,0.6}',
+				)),
+				prefix=''.join((
+					r'\ttfamily\begin{list}{',
+					r'\footnotesize{\textcolor{linenum}{\arabic{SQLlinenum}}}',
+					r'}{',
+					r'\usecounter{SQLlinenum}',
+					r'\setlength{\rightmargin}{\leftmargin}',
+					r'\setlength{\itemsep}{0mm}',
+					r'\setlength{\parsep}{0mm}',
+					r'\setlength{\labelsep}{1em}',
+					r'}',
+				)),
+				suffix=r'\end{list}\normalfont'
+			)
 		self.tex_cmds = {
 			ERROR:      tag.SQLerror,
 			COMMENT:    tag.SQLcomment,
@@ -129,12 +151,16 @@ class TeXSQLHighlighter(SQLHighlighter):
 			tex_cmd = self.tex_cmds[(token_type, token_value)]
 		except KeyError:
 			tex_cmd = self.tex_cmds.get(token_type, None)
-		# Because we're not using verbatim environments (because we can't apply
-		# highlighting within them) we need to tweak extraneous space so it
-		# doesn't get compressed (character U+00A0 is non-breaking space which
-		# the TeXFactory class will escape into "~" which is the TeX
+		# Because we're not using {verbatim} environments (because we can't
+		# apply highlighting within them) we need to tweak extraneous space so
+		# it doesn't get compressed (character U+00A0 is non-breaking space
+		# which the TeXFactory class will escape into "~" which is the TeX
 		# non-breaking space)
-		source = re.sub(' {2,}', lambda m: u'\u00A0' * len(m.group()), source)
+		source = re.sub(' {2,}', lambda m: u' ' + (u'\u00A0' * (len(m.group()) - 1)), source)
+		# The TeXListItem class inserts its own line breaks. If we include the
+		# original line breaks, we wind up with full paragraphs in each item
+		# which causes problems. Hence, we strip line breaks here
+		source = source.replace('\n', '')
 		if tex_cmd is not None:
 			return tex_cmd(source)
 		else:
@@ -143,6 +169,33 @@ class TeXSQLHighlighter(SQLHighlighter):
 	def format_line(self, index, line):
 		return self.tag.li(self.format_token(token) for token in line)
 
+	def parse(self, sql, terminator=';', line_split=True):
+		tokens = super(TeXSQLHighlighter, self).parse(sql, terminator, line_split)
+		return self.tag.SQLlisting(tokens)
+
+
+class TeXPrettierFactory(TeXFactory):
+	def _format(self, content):
+		"""Reformats content into a human-readable string"""
+		if content is None:
+			# Format None as 'n/a'
+			return 'n/a'
+		elif isinstance(content, bool):
+			# Format booleans as Yes/No
+			return ['No', 'Yes'][content]
+		elif isinstance(content, (int, long)):
+			# Format integer number with , as a thousand separator
+			s = str(content)
+			for i in xrange(len(s) - 3, 0, -3):
+				s = '%s,%s' % (s[:i], s[i:])
+			return s
+		elif isinstance(content, datetime.datetime):
+			# Format timestamps as dates
+			return str(content.date())
+		else:
+			# Use the default for everything else
+			return super(TeXPrettierFactory, self)._format(content)
+
 
 class TeXDocumentation(object):
 	def __init__(self, database, options):
@@ -150,7 +203,7 @@ class TeXDocumentation(object):
 		self.database = database
 		self.options = options
 		self.default_desc = 'No description in the system catalog'
-		self.tag = TeXFactory()
+		self.tag = TeXPrettierFactory()
 		self.comment_highlighter = TeXCommentHighlighter(self.database, self.tag)
 		self.sql_highlighter = TeXSQLHighlighter(self.tag)
 		self.type_names = {
@@ -192,8 +245,8 @@ class TeXDocumentation(object):
 		return self.comment_highlighter.parse(comment or self.default_desc, summary)
 
 	def format_sql(self, sql, terminator=';', id=None):
-		tokens = self.sql_highlighter.parse(sql, terminator, line_split=True)
-		return self.tag.ol(tokens, id=id)
+		# XXX Do something with the id
+		return self.sql_highlighter.parse(sql, terminator, line_split=True)
 
 	def generate(self):
 		# Generate the document
@@ -206,9 +259,10 @@ class TeXDocumentation(object):
 				author_email=options['author_email'],
 				date=datetime.date.today()
 			),
-			tag.toc() if options['toc'] else '',
+			tag.toc(level=options['toc_level']) if options['toc'] else '',
 			self.generate_db(self.database),
 			(self.generate_schema(schema) for schema in self.database.schema_list),
+			(self.generate_relation(relation) for schema in self.database.schema_list for relation in schema.relation_list),
 			tag.index() if options['index'] else '',
 			# XXX Where's copyright meant to go?!
 			doc_title=options['doc_title'],
@@ -233,7 +287,6 @@ class TeXDocumentation(object):
 			tag.subsection(
 				tag.p('The following table contains all schemas (logical object containers) in the database, sorted by schema name.'),
 				tag.table(
-					tag.caption('Database schemas'),
 					tag.col(nowrap=True),
 					tag.col(nowrap=False, width='90mm'),
 					tag.thead(
@@ -255,7 +308,6 @@ class TeXDocumentation(object):
 			tag.subsection(
 				tag.p('The following table contains all tablespaces (physical object containers) in the database, sorted by tablespace name.'),
 				tag.table(
-					tag.caption('Database tablespaces'),
 					tag.col(nowrap=True),
 					tag.col(nowrap=False, width='90mm'),
 					tag.thead(
@@ -285,7 +337,6 @@ class TeXDocumentation(object):
 			tag.subsection(
 				tag.p('The following table lists the relations (tables, views, and aliases) that belong to the schema, sorted by relation name.'),
 				tag.table(
-					tag.caption('%s relations' % schema.name),
 					tag.col(nowrap=False, width='40mm'),
 					tag.col(nowrap=True),
 					tag.col(nowrap=False, width='90mm'),
@@ -310,6 +361,250 @@ class TeXDocumentation(object):
 			title='%s %s' % (self.type_names[type(schema)], schema.name),
 			id=schema.identifier
 		)
+
+	def generate_relation(self, relation):
+		return {
+			Table: self.generate_table,
+			View:  self.generate_view,
+			Alias: self.generate_alias,
+		}[type(relation)](relation)
+
+	def generate_table(self, table):
+		tag = self.tag
+		return tag.section(
+			self.format_comment(table.description),
+			tag.subsection(
+				tag.p('The following table briefly lists general attributes of the table.'),
+				tag.table(
+					tag.col(nowrap=True),
+					tag.col(nowrap=True),
+					tag.col(nowrap=True),
+					tag.col(nowrap=True),
+					tag.tbody(
+						tag.tr(
+							tag.th('Created'),
+							tag.td(table.created),
+							tag.th('Last Statistics'),
+							tag.td(table.last_stats)
+						),
+						tag.tr(
+							tag.th('Created By'),
+							tag.td(table.owner),
+							tag.th('Cardinality'),
+							tag.td(table.cardinality)
+						),
+						tag.tr(
+							tag.th('Key Columns'),
+							tag.td(len(table.primary_key.fields) if table.primary_key else 0),
+							tag.th('Columns'),
+							tag.td(len(table.field_list))
+						),
+						tag.tr(
+							tag.th('Dependent Relations'),
+							tag.td(
+								len(table.dependents) +
+								sum(len(k.dependent_list) for k in table.unique_key_list)
+							),
+							tag.th('Size'),
+							tag.td(table.size_str)
+						),
+					),
+					id='tab:table:attr:%s' % table.identifier
+				),
+				title='Attributes'
+			),
+			tag.subsection(
+				tag.p('The following two tables list the fields of the table. In the first table, the (sorted) # column lists the 1-based position of the field in the table, the Type column lists the SQL data-type of the field, and Nulls indicates whether or not the field can contain the NULL value. In the second table the Name column is sorted, and the field Description is included.'),
+				tag.table(
+					tag.col(nowrap=True),
+					tag.col(nowrap=False, width='40mm'),
+					tag.col(nowrap=True),
+					tag.col(nowrap=True),
+					tag.col(nowrap=True),
+					tag.col(nowrap=True),
+					tag.thead(
+						tag.tr(
+							tag.th('#'),
+							tag.th('Name'),
+							tag.th('Type'),
+							tag.th('Nulls'),
+							tag.th('Key Pos'),
+							tag.th('Cardinality')
+						)
+					),
+					tag.tbody(
+						tag.tr(
+							tag.td(field.position),
+							tag.td(self.format_name(field.name)),
+							tag.td(field.datatype_str),
+							tag.td(field.nullable),
+							tag.td(field.key_index),
+							tag.td(field.cardinality)
+						) for field in table.field_list
+					),
+					id='tab:table:struct:%s' % table.identifier
+				),
+				tag.table(
+					tag.col(nowrap=True),
+					tag.col(nowrap=False, width='40mm'),
+					tag.col(nowrap=False, width='90mm'),
+					tag.thead(
+						tag.tr(
+							tag.th('#'),
+							tag.th('Name'),
+							tag.th('Description')
+						)
+					),
+					tag.tbody(
+						tag.tr(
+							tag.td(field.position),
+							tag.td(self.format_name(field.name)),
+							tag.td(self.format_comment(field.description, summary=True))
+						) for field in sorted(table.field_list, key=attrgetter('name'))
+					),
+					id='tab:table:desc:%s' % table.identifier
+				),
+				title='Fields'
+			) if len(table.field_list) > 0 else '',
+			tag.subsection(
+				tag.p('The following table lists the indexes that apply to this table, whether or not the index enforces a unique rule, and the fields that the index covers.'),
+				tag.table(
+					tag.col(nowrap=False, width='40mm'),
+					tag.col(nowrap=True),
+					tag.col(nowrap=False, width='40mm'),
+					tag.col(nowrap=True),
+					tag.thead(
+						tag.tr(
+							tag.th('Name'),
+							tag.th('Unique'),
+							tag.th('Fields'),
+							tag.th('Order')
+						)
+					),
+					tag.tbody(
+						tag.tr(
+							tag.td(self.format_name(index.name) if i == 0 else ''),
+							tag.td(index.unique if i == 0 else ''),
+							tag.td(self.format_name(field.name)),
+							tag.td({
+								'A': 'Ascending',
+								'D': 'Descending',
+								'I': 'Include',
+							}[order])
+						)
+						for index in sorted(table.index_list, key=attrgetter('name'))
+						for (i, (field, order)) in enumerate(index.field_list)
+					),
+					id='tab:table:indexes:%s' % table.identifier
+				),
+				title='Indexes'
+			) if len(table.index_list) > 0 else '',
+			tag.subsection(
+				tag.p('The following table lists all constraints that apply to this table, including the fields constrained in each case.'),
+				tag.table(
+					tag.col(nowrap=False, width='50mm'),
+					tag.col(nowrap=True),
+					tag.col(nowrap=False, width='50mm'),
+					tag.thead(
+						tag.tr(
+							tag.th('Name'),
+							tag.th('Type'),
+							tag.th('Fields')
+						)
+					),
+					tag.tbody(
+						tag.tr(
+							tag.td(self.format_name(const.name) if i == 0 else ''),
+							tag.td(self.type_names[type(const)] if i == 0 else ''),
+							tag.td('FIXME')
+						)
+						for const in table.constraint_list
+						for (i, field) in enumerate(const.fields)
+					),
+					id='tab:table:consts:%s' % table.identifier
+				),
+				title='Constraints'
+			) if len(table.constraint_list) > 0 else '',
+			tag.subsection(
+				tag.p('The following table lists all triggers that fire in response to changes (insertions, updates, and/or deletions) in this table.'),
+				tag.table(
+					tag.col(nowrap=False, width='30mm'),
+					tag.col(nowrap=True),
+					tag.col(nowrap=True),
+					tag.col(nowrap=False, width='80mm'),
+					tag.thead(
+						tag.tr(
+							tag.th('Name'),
+							tag.th('Timing'),
+							tag.th('Event'),
+							tag.th('Description')
+						)
+					),
+					tag.tbody(
+						tag.tr(
+							tag.td(self.format_name(trigger.name)),
+							tag.td({
+								'A': 'After',
+								'B': 'Before',
+								'I': 'Instead of',
+							}[trigger.trigger_time]),
+							tag.td({
+								'I': 'Insert',
+								'U': 'Update',
+								'D': 'Delete',
+							}[trigger.trigger_event]),
+							tag.td(self.format_comment(trigger.description, summary=True))
+						) for trigger in table.trigger_list
+					),
+					id='tab:table:trig:%s' % table.identifier
+				),
+				title='Triggers'
+			) if len(table.trigger_list) > 0 else '',
+			tag.subsection(
+				tag.p('The following table lists all relations which depend on this table (e.g. views which reference this table in their defining query).'),
+				tag.table(
+					tag.col(nowrap=False, width='40mm'),
+					tag.col(nowrap=True),
+					tag.col(nowrap=False, width='90mm'),
+					tag.thead(
+						tag.tr(
+							tag.th('Name'),
+							tag.th('Type'),
+							tag.th('Description')
+						)
+					),
+					tag.tbody(
+						tag.tr(
+							tag.td(self.format_name(dep.qualified_name)),
+							tag.td(self.type_names[type(dep)]),
+							tag.td(self.format_comment(dep.description, summary=True))
+						) for dep in chain(
+							table.dependent_list,
+							(
+								fkey.relation
+								for ukey in table.unique_key_list
+								for fkey in ukey.dependent_list
+							)
+						)
+					),
+					id='tab:table:deps:%s' % table.identifier
+				),
+				title='Dependent Relations'
+			) if len(table.dependent_list) + sum(len(k.dependent_list) for k in table.unique_key_list) > 0 else '',
+			tag.subsection(
+				tag.p('The SQL used to define the table is given below. Note that, depending on the underlying database implementation, this SQL may not be accurate (in some cases the database does not store the original command, so the SQL is reconstructed from metadata), or even valid for the platform.'),
+				self.format_sql(table.create_sql),
+				title='SQL Definition'
+			),
+			title='%s %s' % (self.type_names[type(table)], table.qualified_name),
+			id=table.identifier
+		)
+
+	def generate_view(self, view):
+		return ''
+
+	def generate_alias(self, alias):
+		return ''
 
 	def serialize(self, content):
 		return tex(content)

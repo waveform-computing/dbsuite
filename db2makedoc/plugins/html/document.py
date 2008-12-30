@@ -86,6 +86,9 @@ class HTMLElementFactory(ElementFactory):
 			for i in xrange(len(s) - 3, 0, -3):
 				s = '%s,%s' % (s[:i], s[i:])
 			return s
+		elif isinstance(content, datetime.datetime):
+			# Format timestamps as dates
+			return str(content.date())
 		else:
 			# Use the default for everything else
 			return super(HTMLElementFactory, self)._format(content)

@@ -12,9 +12,11 @@ The class is capable of reformatting the vast majority of the DB2 SQL dialect
 (both DDL and DML commands).
 """
 
+import pdb
 import re
 import sys
 import math
+from itertools import tee, izip
 from db2makedoc.sql.dialects import *
 from db2makedoc.sql.tokenizer import *
 
@@ -100,7 +102,7 @@ def quote_str(s, qchar="'"):
 	if s == '':
 		# Special case for the empty string (the general case deliberately
 		# outputs nothing for empty strings to eliminate leading and trailing
-		# empty groups
+		# empty groups)
 		return qchar*2
 	else:
 		for index, group in enumerate(ctrlchars.split(s)):
@@ -113,11 +115,14 @@ def quote_str(s, qchar="'"):
 
 def dump(tokens):
 	"""Utility routine for debugging purposes: prints the tokens in a human readable format."""
-	print '\n'.join(format_token(token) for token in tokens)
+	print '\n'.join(dump_token(token) for token in tokens)
 
-def format_token(token):
+def dump_token(token):
 	"""Formats a token for the dump routine above."""
-	return '%-16s %-20s %-20s' % (TOKEN_LABELS[token[0]], repr(token[1]), repr(token[2]))
+	if len(token) == 3:
+		return '%-16s %-20s %-20s' % (TOKEN_LABELS[token[0]], repr(token[1]), repr(token[2]))
+	else:
+		return '%-16s %-20s %-20s (%d:%d)' % (TOKEN_LABELS[token[0]], repr(token[1]), repr(token[2]), token[3], token[4])
 
 def format_ident(name, namechars=set(db2luw_namechars), qchar='"'):
 	"""Format an SQL identifier with quotes if required.
@@ -188,6 +193,180 @@ def format_size(value, for_sql=True):
 				return "%.2f %s" % (size, suffix)
 		else:
 			return str(value)
+
+def recalc_positions(tokens):
+	"""Recalculates token positions.
+
+	This generator function recalculates the position of each token. It is
+	intended for wrapping other functions which alter the source of tokens.
+	The function accepts complete (5-tuple) tokens or partial (3-tuple) tokens
+	without the last two positional elements.
+	"""
+	line = 1
+	column = 1
+	for token in tokens:
+		yield token[:3] + (line, column)
+		for char in token[2]:
+			if char == '\n':
+				line += 1
+				column = 1
+			else:
+				column += 1
+
+def format_tokens(tokens, reformat=[], terminator=';', statement=';'):
+	"""Changes token source to a canonical format.
+
+	This generator function handles reformatting tokens into a canonical
+	representation (e.g. unquoted identifiers folded to uppercase). The
+	optional terminator parameter specifies the terminator for statements
+	within a block statement, while the optional statement parameter specifies
+	the top-level statement terminator. The reformat parameter specifies which
+	types of token will be affected by the function. Note: this function strips
+	the positional elements.
+	"""
+	for token in tokens:
+		if token[0] in reformat:
+			if token[0] in (KEYWORD, REGISTER):
+				yield (token[0], token[1], token[1])
+			elif token[0] in (IDENTIFIER, DATATYPE):
+				yield (token[0], token[1], format_ident(token[1]))
+			elif token[0] == NUMBER:
+				yield (NUMBER, token[1], str(token[1]))
+			elif token[0] == STRING:
+				yield (STRING, token[1], quote_str(token[1]))
+			elif token[0] == LABEL:
+				yield (LABEL, token[1], format_ident(token[1]) + ':')
+			elif token[0] == PARAMETER:
+				yield (PARAMETER, token[1], format_param(token[1]))
+			elif token[0] == COMMENT:
+				# XXX Need more intelligent comment handling
+				##yield (COMMENT, token[1], '/*%s*/' % (token[1]))
+				yield token[:3]
+			elif token[0] == STATEMENT:
+				yield (STATEMENT, token[1], statement)
+			elif token[0] == TERMINATOR:
+				yield (TERMINATOR, token[1], terminator)
+			else:
+				yield token[:3]
+		else:
+			yield token[:3]
+
+def convert_indent(tokens, indent='\t'):
+	"""Converts INDENT tokens into WHITESPACE.
+
+	This generator function converts INDENT tokens into WHITESPACE tokens
+	containing the characters specified by the indent parameter. Note: this
+	function strips the positional elements.
+	"""
+	for token in tokens:
+		(type, value, source) = token[:3]
+		if type == INDENT:
+			yield (WHITESPACE, None, '\n' + indent * value)
+		else:
+			yield (type, value, source)
+
+def convert_valign(tokens):
+	"""Converts VALIGN and VAPPLY tokens into WHITESPACE.
+
+	This generator function converts VALIGN and VAPPLY tokens into WHITESPACE
+	tokens.  Multiple passes are used to convert the VALIGN tokens; each pass
+	converts the first VALIGN token found on a set of lines prior to a VAPPLY
+	token into a WHITESPACE token. The final result will require recalculation
+	of positions if any tokens have been replaced.
+	"""
+	indexes = []
+	aligncol = alignline = 0
+	more = True
+	while more:
+		result = []
+		more = False
+		for i, token in enumerate(recalc_positions(tokens)):
+			line, col = token[3:]
+			result.append(token)
+			if token[0] == VALIGN:
+				if indexes and alignline == line:
+					# If we encounter more than one VALIGN on a line, remember
+					# that we need another pass
+					more = True
+				else:
+					# Remember the position of the VALIGN token in the result,
+					# adjust the alignment column if necessary, and remember
+					# the line number so we can ignore any further VALIGN
+					# tokens on this line
+					indexes.append(i)
+					aligncol = max(aligncol, col)
+					alignline = line
+			elif token[0] == VAPPLY:
+				# Convert all the remembered VALIGN tokens into WHITESPACE
+				# tokens with appropriate lengths for vertical alignment,
+				# and change the VAPPLY token into a blank WHITESPACE token
+				# (necessary to ensure consistency of remembered indexes)
+				for j in indexes:
+					line, col = result[j][3:]
+					result[j] = (WHITESPACE, None, ' ' * (aligncol - col))
+				# Remove the VAPPLY token
+				if indexes:
+					del result[-1]
+					indexes = []
+					aligncol = alignline = 0
+		# If indexes isn't blank, then we encountered VALIGNs without a
+		# corresponding VAPPLY (parser bug)
+		assert not indexes
+		tokens = result
+	return result
+
+def merge_whitespace(tokens):
+	"""Merges consecutive WHITESPACE tokens.
+
+	This generator function merges consecutive WHITESPACE tokens which can
+	result from various mechanisms (especially the VALIGN conversion).  Note it
+	also ditches WHITESPACE tokens with no source. Note: this function relies
+	on positional elements being present in the tokens.
+	"""
+	a, b = tee(tokens)
+	# Advance the second copy by one element
+	for elem in b:
+		break
+	space = ''
+	line = col = 1
+	# Iterate pairwise over the tokens
+	for last, token in izip(a, b):
+		if last[0] == WHITESPACE:
+			if token[0] == WHITESPACE:
+				space += token[2]
+			elif space:
+				yield (WHITESPACE, None, space, line, col)
+		else:
+			if token[0] == WHITESPACE:
+				(_, _, space, line, col) = token
+			yield last
+	if token[0] == WHITESPACE:
+		yield (WHITESPACE, None, space, line, col)
+	else:
+		yield token
+
+def split_lines(tokens):
+	"""Splits tokens which contain line breaks.
+
+	This generator function splits up any tokens that contain line breaks so
+	that every line has a token beginning at column 1. Note: this function
+	relies on positional elements being present in the tokens.
+	"""
+	for token in tokens:
+		(type, value, source, line, column) = token
+		while '\n' in source:
+			if isinstance(value, basestring) and '\n' in value:
+				i = value.index('\n') + 1
+				new_value, value = value[:i], value[i:]
+			else:
+				new_value = value
+			i = source.index('\n') + 1
+			new_source, source = source[:i], source[i:]
+			yield (type, new_value, new_source, line, column)
+			line += 1
+			column = 1
+		if (type != WHITESPACE) or source:
+			yield (type, value, source, line, column)
 
 class Error(Exception):
 	"""Base class for errors in this module"""
@@ -463,123 +642,27 @@ class BaseFormatter(object):
 
 	def _parse_finish(self):
 		"""Cleans up and finalizes tokens in the output."""
-		# Firstly, handle translating INDENT tokens into ordinary WHITESPACE
-		# tokens, and reformatting other tokens according to the reformat set.
-		# Note this phase also strips location information from tokens
-		output = []
-		for token in self._output:
-			token = token[:3]
-			if token[0] == INDENT and WHITESPACE in self.reformat:
-				token = (WHITESPACE, None, '\n' + self.indent * token[1])
-			elif token[0] in self.reformat:
-				if token[0] in (KEYWORD, REGISTER):
-					token = (token[0], token[1], token[1])
-				elif token[0] in (IDENTIFIER, DATATYPE):
-					token = (token[0], token[1], format_ident(token[1]))
-				elif token[0] == NUMBER:
-					token = (NUMBER, token[1], str(token[1]))
-				elif token[0] == STRING:
-					token = (STRING, token[1], quote_str(token[1]))
-				elif token[0] == LABEL:
-					token = (LABEL, token[1], format_ident(token[1]) + ':')
-				elif token[0] == PARAMETER:
-					token = (PARAMETER, token[1], format_param(token[1]))
-				elif token[0] == COMMENT:
-					# XXX Need more intelligent comment handling
-					##token = (COMMENT, token[1], '/*%s*/' % (token[1]))
-					pass
-				elif token[0] == STATEMENT:
-					token = (STATEMENT, token[1], self.statement)
-				elif token[0] == TERMINATOR:
-					token = (TERMINATOR, token[1], self.terminator)
-			output.append(token)
-		self._output = output
-		# Next, VALIGN and VAPPLY tokens are converted. Multiple passes are
-		# used to convert the VALIGN tokens; each pass converts the first
-		# VALIGN token found on a contiguous set of lines into WHITESPACE
-		# tokens and removes the trailing VAPPLY token
+		output = self._output
+		output = format_tokens(output, reformat=self.reformat,
+			terminator=self.terminator, statement=self.statement)
 		if WHITESPACE in self.reformat:
-			indexes = []
-			found = True
-			while found:
-				found = False
-				# Recalculate the positions of all tokens; earlier phases may
-				# have altered them and we need accurate positions to calculate
-				# vertical alignment positions
-				self._recalc_positions()
-				aligncol = 0
-				i = 0
-				while i < len(self._output):
-					token = self._output[i]
-					if token[0] == VALIGN:
-						# Remember the position of the VALIGN token, adjust the
-						# alignment column if necessary, and skip to the next
-						# line to ignore any further VALIGN tokens on this line
-						found = True
-						indexes.append(i)
-						(line, col) = token[3:]
-						aligncol = max(aligncol, col)
-						while (self._output[i][3] == line) and (self._output[i][0] != VAPPLY):
-							i += 1
-					elif token[0] == VAPPLY:
-						# Convert all the remembered VALIGN tokens into
-						# WHITESPACE tokens with appropriate lengths for
-						# vertical alignment, remove the VAPPLY token, and
-						# immediately return to the outer loop (to avoid
-						# deleting any subsequent VAPPLY tokens)
-						found = True
-						#assert indexes
-						for j in indexes:
-							(line, col) = self._output[j][3:]
-							self._output[j] = (WHITESPACE, None, ' ' * (aligncol - col), 0, 0)
-						indexes = []
-						aligncol = 0
-						del self._output[i]
-						break
-					else:
-						i += 1
-				# If indexes isn't blank, then we encountered VALIGNs without a
-				# corresponding VAPPLY (parser bug)
-				assert not indexes
+			output = recalc_positions(convert_valign(convert_indent(output, indent=self.indent)))
 		else:
-			# If we're not reformatting WHITESPACE tokens, just dump any
-			# VALIGN, VAPPLY or INDENT tokens in the output
-			self._output = [
-				token for token in self._output
-				if token[0] not in (VALIGN, VAPPLY, INDENT)
-			]
-		# If we're doing line splitting, break up any tokens that contain
-		# newlines so that every line has a token beginning at column 1
-		# Remove all tokens which have no source (likely to only be WHITESPACE
-		# tokens generated by the _match() postspace mechanism)
+			output = (token for token in tokens if token[0] not in (INDENT, VALIGN, VAPPLY))
+		output = merge_whitespace(output)
 		if self.line_split:
-			output = []
-			for token in self._output:
-				(type, value, source, line, column) = token
-				while '\n' in source:
-					if isinstance(value, basestring) and '\n' in value:
-						i = value.index('\n') + 1
-						newvalue = value[:i]
-						value = value[i:]
-					else:
-						newvalue = value
-					i = source.index('\n') + 1
-					newsource = source[:i]
-					source = source[i:]
-					output.append((type, newvalue, newsource, line, column))
-					line += 1
-					column = 1
-				output.append((type, value, source, line, column))
-			self._output = output
+			output = split_lines(output)
 		# Strip trailing whitespace / EOF tokens, then re-append a trailing EOF
 		# token (or simply make the output a solitary EOF token if nothing is
 		# left)
-		while self._output and (self._output[-1][0] in (WHITESPACE, EOF)):
-			del self._output[-1]
-		if self._output:
-			self._output.append((EOF, None, '') + self._output[-1][3:])
+		output = list(output)
+		while output and (output[-1][0] in (WHITESPACE, EOF)):
+			del output[-1]
+		if output:
+			output.append((EOF, None, '') + output[-1][3:])
 		else:
-			self._output = [(EOF, None, '', 1, 1)]
+			output = [(EOF, None, '', 1, 1)]
+		self._output = output
 
 	def _parse_top(self):
 		"""Top level of the parser.
@@ -588,22 +671,6 @@ class BaseFormatter(object):
 		is at the top of the parse tree).
 		"""
 		pass
-
-	def _recalc_positions(self):
-		"""Recalculates the line and col elements of all output tokens"""
-		line = 1
-		column = 1
-		newoutput = []
-		for token in self._output:
-			token = token[:3] + (line, column)
-			newoutput.append(token)
-			source = token[2]
-			while '\n' in source:
-				line += 1
-				column = 1
-				source = source[source.index('\n') + 1:]
-			column += len(source)
-		self._output = newoutput
 
 	def _newline(self, index=0, allowempty=False):
 		"""Adds an INDENT token to the output.

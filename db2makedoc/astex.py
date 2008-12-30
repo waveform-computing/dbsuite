@@ -20,7 +20,7 @@ def escape_tex(s):
 			'/':       format_cmd('slash'),
 			'\\':      format_cmd('textbackslash'),
 			'...':     format_cmd('ldots'),
-			u'\u0A00': '~',
+			u'\u00A0': '~',
 		}[m]
 	return tex_special.sub(subfn, s)
 
@@ -40,11 +40,11 @@ def format_env(name, content='', params=''):
 		r'\end{%s}' % name,
 	))
 
-def xml(e):
-	return e.__xml__()
+def xml(e, **args):
+	return e.__xml__(**args)
 
-def tex(e):
-	return e.__tex__()
+def tex(e, **args):
+	return e.__tex__(**args)
 
 
 # Abstract classes
@@ -329,9 +329,12 @@ class TeXDefinitionList(TeXEnvironment):
 	tex_env = 'description'
 
 class TeXTableOfContents(TeXElement):
-	__slots__ = ()
+	__slots__ = ('level')
 	tag = 'toc'
 	tex_cmd = 'tableofcontents'
+	def __init__(self, level=3):
+		super(TeXTableOfContents, self).__init__()
+		self.level = level
 
 class TeXTableOfFigures(TeXElement):
 	__slots__ = ()
@@ -357,7 +360,7 @@ class TeXTable(TeXEnvironment):
 	__slots__ = ('align', 'id')
 	tag = 'table'
 	tex_env = 'longtable'
-	def __init__(self, align='center', id=None):
+	def __init__(self, align='left', id=None):
 		super(TeXTable, self).__init__()
 		try:
 			self.align = {
@@ -372,10 +375,13 @@ class TeXTable(TeXEnvironment):
 			raise ValueError('invalid table alignment "%s"' % align)
 		self.id = id
 	def _params(self):
-		return '{@{}%s@{}}' % ''.join(
-			tex(child)
-			for child in self.children
-			if isinstance(child, TeXTableColumn)
+		return '[%s]{@{}%s@{}}' % (
+			self.align[0],
+			''.join(
+				tex(child)
+				for child in self.children
+				if isinstance(child, TeXTableColumn)
+			)
 		)
 	def _content_tex(self):
 		result = []
@@ -388,6 +394,19 @@ class TeXTable(TeXEnvironment):
 			and not isinstance(child, TeXTableHeader)
 			and not isinstance(child, TeXTableFooter)
 		]
+		if len(thead) == 0:
+			# If there's no thead or tfoot elements, make up blank ones (this
+			# ensures that when generating longtables the endhead and endfoot
+			# elements are always written which is necessary to prevent the
+			# occassional page split immediately after a top rule or before a
+			# bottom rule when using the booktabs package)
+			thead = [TeXTableHeader()]
+		elif len(thead) > 1:
+			raise ValueError('more than one table header element found')
+		if len(tfoot) == 0:
+			tfoot = [TeXTableFooter()]
+		elif len(tfoot) > 1:
+			raise ValueError('more than one table footer element found')
 		if len(tbody) == 0:
 			# If there's no tbody element, make one up from all row elements
 			# that are direct children (i.e. make an implicit tbody element,
@@ -400,27 +419,16 @@ class TeXTable(TeXEnvironment):
 		# Generate the table caption and anchor
 		if caption:
 			result.append(tex(caption[0]))
+			result.append(r'\\')
+		result.append(tex(thead[0]))
+		result.append(tex(tfoot[0]))
+		result.append(tex(tbody[0]))
+		return '\n'.join(result)
+	def __tex__(self):
+		result = []
 		if self.id:
 			result.append(format_cmd('label', self.id)) # Note: deliberately not escaping id
-		if caption or self.id:
-			result.append(r'\\')
-		# Generate the header
-		if len(thead) > 1:
-			raise ValueError('more than one table header element found')
-		elif len(thead) == 1:
-			result.append(tex(thead[0]))
-		else:
-			result.append(format_cmd('toprule'))
-		# Generate the footer (goes before the body like in HTML), unless
-		# there's no explicit footer in which case the bottomrule goes last
-		if len(tfoot) > 1:
-			raise ValueError('more than one table footer element found')
-		elif len(tfoot) == 1:
-			result.append(tex(tfoot[0]))
-			result.append(tex(tbody[0]))
-		else:
-			result.append(tex(tbody[0]))
-			result.append(format_cmd('bottomrule'))
+		result.append(super(TeXTable, self).__tex__())
 		return '\n'.join(result)
 
 class TeXTableCaption(TeXElement):
@@ -432,9 +440,13 @@ class TeXTableBody(TeXEnvironment):
 	__slots__ = ()
 	tag = 'tbody'
 	tex_env = 'tablebody'
-	def _rows(self):
+	def _empty(self):
+		return len(list(self._rows())) == 0
+	def _rows(self, nobreakall=False):
 		return (
-			tex(row) for row in self.children
+			# Prevent page breaks in the first and last couple of rows
+			tex(row, nobreak=nobreakall or not (2 < i < len(self.children) - 2))
+			for (i, row) in enumerate(self.children)
 			if isinstance(row, TeXTableRow)
 		)
 	def __tex__(self):
@@ -444,25 +456,38 @@ class TeXTableHeader(TeXTableBody):
 	__slots__ = ()
 	tag = 'thead'
 	tex_env = 'tablehead'
-	def __tex__(self):
-		rows = list(self._rows())
-		return '\n'.join(
-			[format_cmd('toprule')] +
-			rows + [format_cmd('midrule'), format_cmd('endfirsthead')] +
-			rows + [format_cmd('midrule'), format_cmd('endhead')]
-		)
+	def __tex__(self, longtable=True):
+		result = []
+		result.append(format_cmd('toprule'))
+		if not self._empty():
+			result.extend(self._rows())
+			result.append(format_cmd('midrule'))
+		if longtable:
+			result.append(format_cmd('endfirsthead'))
+			if not self._empty():
+				result.extend(self._rows())
+				result.append(format_cmd('midrule'))
+			result.append(format_cmd('endhead'))
+		return '\n'.join(result)
 
 class TeXTableFooter(TeXTableBody):
 	__slots__ = ()
 	tag = 'tfoot'
 	tex_env = 'tablefoot'
-	def __tex__(self):
-		rows = list(self._rows())
-		return '\n'.join(
-			[format_cmd('midrule')] +
-			rows + [format_cmd('endfoot'), format_cmd('midrule')] +
-			rows + [format_cmd('bottomrule'), format_cmd('endlastfoot')]
-		)
+	def __tex__(self, longtable=True):
+		result = []
+		if longtable:
+			if not self._empty():
+				result.append(format_cmd('midrule'))
+				result.extend(self._rows())
+			result.append(format_cmd('endfoot'))
+		if not self._empty():
+			result.append(format_cmd('midrule'))
+			result.extend(self._rows())
+		result.append(format_cmd('bottomrule'))
+		if longtable:
+			result.append(format_cmd('endlastfoot'))
+		return '\n'.join(result)
 
 class TeXTableColumn(TeXElement):
 	__slots__ = ('align', 'nowrap', 'width')
@@ -505,8 +530,9 @@ class TeXTableRow(TeXElement):
 	__slots__ = ()
 	tag = 'tr'
 	tex_cmd = 'tablerow'
-	def __tex__(self):
-		return r'%s \\' % ' & '.join(
+	def __tex__(self, nobreak=False):
+		template = r'%s \\*' if nobreak else r'%s \\'
+		return template % ' & '.join(
 			tex(cell)
 			for cell in self.children
 			if isinstance(cell, TeXTableCell)
@@ -613,7 +639,11 @@ class TeXSubSubSection(TeXSection):
 
 class TeXCustomCommand(TeXElement):
 	__slots__ = ()
-	# See TeXFactory._newcommand()
+	# See TeXFactory._new_command()
+
+class TeXCustomEnvironment(TeXEnvironment):
+	__slots__ = ()
+	# See TeXFactory._new_environment()
 
 
 class TeXDocument(TeXEnvironment):
@@ -631,17 +661,18 @@ class TeXDocument(TeXEnvironment):
 		self.binding_size = binding_size
 		self.bookmarks = bookmarks
 		self.colors = None # see TeXFactory.font()
+		self.commands = None # see TeXFactory._new_command()
 		self.creator = creator
 		self.doc_class = doc_class
 		self.doc_title = doc_title
 		self.encoding = encoding
+		self.environments = None # see TeXFactory._new_environment()
 		self.font_packages = font_packages
 		self.font_size = font_size
 		self.keywords = ','.join(keywords)
 		self.landscape = landscape
 		self.margin_size = margin_size
 		self.paper_size = paper_size
-		self.styles = None # see TeXFactory._new_command()
 		self.subject = subject
 		self.twoside = twoside
 
@@ -699,18 +730,26 @@ class TeXDocument(TeXEnvironment):
 		if any(self._find(TeXUnderline)):
 			self.uses_underline = True # see _preamble()
 			yield 'ulem'
+		for elem in self._find(TeXTableOfContents):
+			self.uses_toc = True # see _preamble()
+			self.toc_level = elem.level
+			break
 		if any(self._find(TeXIndex)):
 			self.uses_index = True # see _preamble()
 			yield 'makeidx'
 		if any(self._find(TeXTable)):
 			yield 'longtable'
 			yield 'booktabs'
+		options = ['font=small', 'labelfont=bf']
+		yield ('caption', '[%s]' % ','.join(options))
 		options = ['bookmarks=%s' % str(self.bookmarks).lower()]
 		if self.encoding == 'utf8x':
 			options.append('unicode=true')
 		yield ('hyperref', '[%s]' % ','.join(options)) # Must be last ... because
 
 	def _preamble(self):
+		self.toc_level = 3
+		self.uses_toc = False
 		self.uses_index = False
 		self.uses_underline = False
 		self.uses_unicode = False
@@ -723,14 +762,6 @@ class TeXDocument(TeXEnvironment):
 			else:
 				options = ''
 			yield format_cmd('usepackage', package, options)
-		if self.colors:
-			for name, color in self.colors.iteritems():
-				yield '%s{rgb}{%f,%f,%f}' % (
-					format_cmd('definecolor', name),
-					float((color & 0xFF0000) >> 16) / 0xFF,
-					float((color & 0x00FF00) >>  8) / 0xFF,
-					float((color & 0x0000FF) >>  0) / 0xFF,
-				)
 		# Configure the hyperref package (note: bookmarks and unicode are dealt
 		# with in _packages())
 		options = [
@@ -755,16 +786,38 @@ class TeXDocument(TeXEnvironment):
 		if self.creator:
 			options.append('pdfcreator={%s}' % escape_tex(self.creator))
 		yield format_cmd('hypersetup', ',%'.join('\n    ' + option for option in options))
-		# Define all the custom style commands
-		if self.styles:
-			for name, definition in self.styles.iteritems():
+		# Define all the custom style commands and environments
+		if self.commands:
+			for name, definition in self.commands.iteritems():
 				yield '%s[1]{%s}' % (
 					format_cmd('newcommand', '\\' + name),
 					tex(definition(TeXParam(1)))
 				)
+		if self.environments:
+			for name, (prefix, suffix, preamble) in self.environments.iteritems():
+				yield '%s\n%s%%\n{%s}%%\n{%s}' % (
+					preamble,
+					format_cmd('newenvironment', name),
+					prefix,
+					suffix
+				)
+		# Define all the custom colors (must be done after styles to ensure
+		# font calls in the styles have registered their colors before this
+		# point)
+		if self.colors:
+			for name, color in self.colors.iteritems():
+				yield '%s{rgb}{%f,%f,%f}' % (
+					format_cmd('definecolor', name),
+					float((color & 0xFF0000) >> 16) / 0xFF,
+					float((color & 0x00FF00) >>  8) / 0xFF,
+					float((color & 0x0000FF) >>  0) / 0xFF,
+				)
 		# Generate the index auxilliary file
 		if self.uses_index:
 			yield format_cmd('makeindex')
+		# Set the depth counter
+		if self.uses_toc:
+			yield format_cmd('setcounter', str(self.toc_level), '{tocdepth}')
 
 	def _content_tex(self):
 		result = super(TeXDocument, self)._content_tex()
@@ -798,6 +851,7 @@ class TeXFactory(object):
 	def __init__(self):
 		self._custom_colors = {}
 		self._custom_commands = {}
+		self._custom_environments = {}
 
 	def _format(self, content):
 		"""Reformats content into a human-readable string"""
@@ -858,6 +912,20 @@ class TeXFactory(object):
 			return self._element(elem_class, *content, **attrs)
 		setattr(self, name, generator)
 
+	def _new_environment(self, name, prefix, suffix, preamble=''):
+		# It's far too complicated to allow the definition of an environment in
+		# the same way we allow commands to be defined (i.e. by a lambda
+		# function) so we just accept raw LaTeX to include in the preamble as
+		# the environemnt's prefix and suffix
+		self._custom_environments[name] = (prefix, suffix, preamble)
+		env_class = type('TeX%s' % name, (TeXCustomEnvironment,), {
+			'tag':     name,
+			'tex_env': name,
+		})
+		def generator(*content, **attrs):
+			return self._element(env_class, *content, **attrs)
+		setattr(self, name, generator)
+
 	def __getattr__(self, name):
 		elem_name = name.rstrip('_')
 		try:
@@ -874,7 +942,8 @@ class TeXFactory(object):
 		# defined (see _new_command() and font() for more details)
 		elem = self._element(TeXDocument, *content, **attrs)
 		elem.colors = self._custom_colors
-		elem.styles = self._custom_commands
+		elem.commands = self._custom_commands
+		elem.environments = self._custom_environments
 		return elem
 
 	def font(self, *content, **attrs):

@@ -88,6 +88,10 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 		self.add_option('toc', default='true', convert=self.convert_bool,
 			doc="""Specifies whether or not to generate a Table of Contents at
 			the start of the document""")
+		self.add_option('toc_level', default='1', convert=self.convert_int,
+			doc="""Specifies the depth of headers that will be included in the
+			Table of Contents at the start of the document when "toc" is true.
+			Defaults to 1 meaning only top level headers are included""")
 		self.add_option('index', default='false', convert=self.convert_bool,
 			doc="""Specifies whether or not to generate an alphabetical index
 			at the end of the document""")
