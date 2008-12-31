@@ -332,7 +332,7 @@ def merge_whitespace(tokens):
 	# Iterate pairwise over the tokens
 	for last, token in izip(a, b):
 		if last[0] == WHITESPACE:
-			if token[0] == WHITESPACE:
+			if token[0] == last[0]:
 				space += token[2]
 			elif space:
 				yield (WHITESPACE, None, space, line, col)
@@ -365,7 +365,7 @@ def split_lines(tokens):
 			yield (type, new_value, new_source, line, column)
 			line += 1
 			column = 1
-		if (type != WHITESPACE) or source:
+		if source or type not in (WHITESPACE, COMMENT):
 			yield (type, value, source, line, column)
 
 class Error(Exception):

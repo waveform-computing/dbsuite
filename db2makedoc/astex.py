@@ -8,15 +8,15 @@ def escape_tex(s):
 	def subfn(m):
 		m = m.group(0)
 		return {
-			'#':       '\\#',
-			'$':       '\\$',
-			'%':       '\\%',
-			'^':       '\\^{}',
-			'&':       '\\&',
-			'_':       '\\_',
-			'{':       '\\{',
-			'}':       '\\}',
-			'~':       '\\~',
+			'#':       r'\#',
+			'$':       r'\$',
+			'%':       r'\%',
+			'^':       r'\^{}',
+			'&':       r'\&',
+			'_':       r'\_',
+			'{':       r'\{',
+			'}':       r'\}',
+			'~':       r'\~',
 			'/':       format_cmd('slash'),
 			'\\':      format_cmd('textbackslash'),
 			'...':     format_cmd('ldots'),
@@ -183,6 +183,36 @@ class TeXQuote(TeXElement):
 	tex_cmd = 'quote'
 	def __tex__(self):
 		return "``%s''%s" % (self._content_tex(), escape_tex(self.tail))
+
+class TeXAnchor(TeXElement):
+	__slots__ = ('id', 'href')
+	tag = 'a'
+	tex_cmd = 'label'
+	def __init__(self, id='', href=''):
+		super(TeXAnchor, self).__init__()
+		self.id = id
+		self.href = href
+	def __tex__(self):
+		result = []
+		# Note: deliberately not escaping id or href
+		if self.id:
+			result.append(format_cmd('label', self.id))
+		if self.href:
+			if self.href.startswith('http:') or self.href.startswith('https:') or self.href.startswith('ftp:'):
+				result.append(format_cmd('href', self._content_tex(), options='{%s}' % self.href))
+			else:
+				result.append(format_cmd('hyperref', self._content_tex(), options='[%s]' % self.href))
+		return '\n'.join(result)
+
+class TeXPageOf(TeXElement):
+	__slots__ = ('href',)
+	tag = 'page'
+	tex_cmd = 'pageref'
+	def __init__(self, href=''):
+		super(TeXPageOf, self).__init__()
+		self.href = href
+	def __tex__(self):
+		return format_cmd('pageref', self.href)
 
 class TeXBlockQuote(TeXEnvironment):
 	__slots__ = ()
@@ -416,9 +446,13 @@ class TeXTable(TeXEnvironment):
 				row for row in self.children
 				if isinstance(row, TeXTableRow)
 			)
-		# Generate the table caption and anchor
+		# Generate the table caption and anchor (XXX id only gets included if
+		# caption is specified - unfortunately trying to include it without the
+		# caption invariably leads to unwanted blank lines somewhere)
 		if caption:
 			result.append(tex(caption[0]))
+			if self.id:
+				result.append(format_cmd('label', self.id)) # Note: deliberately not escaping id
 			result.append(r'\\')
 		result.append(tex(thead[0]))
 		result.append(tex(tfoot[0]))
@@ -426,8 +460,6 @@ class TeXTable(TeXEnvironment):
 		return '\n'.join(result)
 	def __tex__(self):
 		result = []
-		if self.id:
-			result.append(format_cmd('label', self.id)) # Note: deliberately not escaping id
 		result.append(super(TeXTable, self).__tex__())
 		return '\n'.join(result)
 
@@ -614,6 +646,9 @@ class TeXSection(TeXEnvironment):
 		self.id = id
 	def __tex__(self):
 		result = ['', ''] # leave a couple of blank links before a new (sub)section
+		# Break the page before top level sections
+		if type(self) == TeXSection:
+			result.append(format_cmd('newpage'))
 		if not self.toc_include:
 			options = '*'
 		elif self.toc_title:

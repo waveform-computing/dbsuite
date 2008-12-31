@@ -13,7 +13,7 @@ access = {
 	'N':  'No SQL',
 	'C':  'Contains SQL',
 	'R':  'Read-only SQL',
-	'M':  'Modifies SQL',
+	'M':  'Read-write SQL',
 }
 
 class FunctionDocument(HTMLObjectDocument):

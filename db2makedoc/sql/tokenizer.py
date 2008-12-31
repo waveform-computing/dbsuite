@@ -196,17 +196,16 @@ class SQLTokenizerBase(object):
 				while '\n' in source:
 					if isinstance(value, basestring) and '\n' in value:
 						i = value.index('\n') + 1
-						newvalue = value[:i]
-						value = value[i:]
+						newvalue, value = value[:i], value[i:]
 					else:
 						newvalue = value
 					i = source.index('\n') + 1
-					newsource = source[:i]
-					source = source[i:]
+					newsource, source = source[:i], source[i:]
 					result.append((type, newvalue, newsource, line, column))
 					line += 1
 					column = 1
-				result.append((type, value, source, line, column))
+				if source or type not in (WHITESPACE, COMMENT):
+					result.append((type, value, source, line, column))
 			self._tokens = result
 		return self._tokens
 
