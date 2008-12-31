@@ -102,7 +102,7 @@ class TeXSQLHighlighter(SQLHighlighter):
 			tag._new_command('SQLcomment',    lambda x: tag.em(tag.font(x, color=0x008000)))
 			tag._new_command('SQLkeyword',    lambda x: tag.strong(tag.font(x, color=0x0000FF)))
 			tag._new_command('SQLidentifier', lambda x: x)
-			tag._new_command('SQLlabel',      lambda x: tag.strong(tag.em(tag.font(x, color=0x008080))))
+			tag._new_command('SQLlabel',      lambda x: tag.em(tag.font(x, color=0x008080)))
 			tag._new_command('SQLdatatype',   lambda x: tag.strong(tag.font(x, color=0x008000)))
 			tag._new_command('SQLregister',   lambda x: tag.strong(tag.font(x, color=0x800080)))
 			tag._new_command('SQLnumber',     lambda x: tag.font(x, color=0x800000))
@@ -121,10 +121,21 @@ class TeXSQLHighlighter(SQLHighlighter):
 					r'\footnotesize{\textcolor{linenum}{\arabic{SQLlinenum}}}',
 					r'}{',
 					r'\usecounter{SQLlinenum}',
-					r'\setlength{\rightmargin}{\leftmargin}',
+					r'\setlength{\leftmargin}{0mm}',
 					r'\setlength{\itemsep}{0mm}',
 					r'\setlength{\parsep}{0mm}',
 					r'\setlength{\labelsep}{1em}',
+					r'}',
+				)),
+				suffix=r'\end{list}\normalfont'
+			)
+			tag._new_environment(
+				'SQLclip',
+				prefix=''.join((
+					r'\ttfamily\begin{list}{}{',
+					r'\setlength{\leftmargin}{0mm}',
+					r'\setlength{\itemsep}{0mm}',
+					r'\setlength{\parsep}{0mm}',
 					r'}',
 				)),
 				suffix=r'\end{list}\normalfont'
@@ -175,7 +186,7 @@ class TeXSQLHighlighter(SQLHighlighter):
 
 	def parse_prototype(self, sql):
 		tokens = super(TeXSQLHighlighter, self).parse_prototype(sql)
-		return self.tag.font(tokens, face='monospace')
+		return self.tag.SQLclip(self.tag.li(tokens))
 
 
 class TeXPrettierFactory(TeXFactory):
@@ -390,17 +401,15 @@ class TeXDocumentation(object):
 			tag.subsection(
 				tag.p('The following table lists the triggers that belong to the schema, sorted by trigger name.'),
 				tag.table(
-					tag.col(nowrap=False, width='30mm'),
+					tag.col(nowrap=False, width='40mm'),
 					tag.col(nowrap=True),
 					tag.col(nowrap=True),
-					tag.col(nowrap=False, width='30mm'),
-					tag.col(nowrap=False, width='50mm'),
+					tag.col(nowrap=False, width='70mm'),
 					tag.thead(
 						tag.tr(
 							tag.th('Name'),
 							tag.th('Timing'),
 							tag.th('Event'),
-							tag.th('Applies To'),
 							tag.th('Description')
 						)
 					),
@@ -417,7 +426,6 @@ class TeXDocumentation(object):
 								'U': 'Update',
 								'D': 'Delete',
 							}[trigger.trigger_event]),
-							tag.td(tag.a(self.format_name(trigger.relation.qualified_name), href='sec:%s' % trigger.relation.identifier)),
 							tag.td(self.format_comment(trigger.description, summary=True))
 						) for trigger in schema.trigger_list
 					),
@@ -428,22 +436,20 @@ class TeXDocumentation(object):
 			tag.subsection(
 				tag.p('The following table lists the routines (user defined functions and stored procedures) that belong to the schema, sorted by name.'),
 				tag.table(
-					tag.col(nowrap=False, width='30mm'),
 					tag.col(nowrap=False, width='40mm'),
 					tag.col(nowrap=True),
-					tag.col(nowrap=False, width='50mm'),
+					tag.col(nowrap=False, width='80mm'),
 					tag.thead(
 						tag.tr(
 							tag.th('Name'),
-							tag.th('Specific Name'),
 							tag.th('Type'),
 							tag.th('Description')
 						)
 					),
 					tag.tbody(
 						tag.tr(
+							# XXX Find a way to include specific names for overloaded routines only
 							tag.td(tag.a(self.format_name(routine.name), href='sec:%s' % routine.identifier)),
-							tag.td(self.format_name(routine.specific_name)),
 							tag.td(self.type_names[type(routine)]),
 							tag.td(self.format_comment(routine.description, summary=True))
 						) for routine in schema.routine_list
@@ -1053,7 +1059,7 @@ class TeXDocumentation(object):
 		logging.debug('Generating function %s section' % function.qualified_name)
 		tag = self.tag
 		return tag.section(
-			tag.p(self.format_prototype(function.prototype)),
+			self.format_prototype(function.prototype),
 			self.format_comment(function.description),
 			tag.dl(
 				tag.di(self.format_comment(param.description, summary=True), term=param.name)
@@ -1166,7 +1172,90 @@ class TeXDocumentation(object):
 		)
 
 	def generate_procedure(self, procedure):
-		return ''
+		logging.debug('Generating procedure %s section' % procedure.qualified_name)
+		tag = self.tag
+		return tag.section(
+			self.format_prototype(procedure.prototype),
+			self.format_comment(procedure.description),
+			tag.dl(
+				tag.di(self.format_comment(param.description, summary=True), term=param.name)
+				for param in procedure.param_list
+			) if len(procedure.param_list) > 0 else '',
+			tag.subsection(
+				tag.p('The following table briefly lists general attributes of the procedure.'),
+				tag.table(
+					tag.col(nowrap=True),
+					tag.col(nowrap=True),
+					tag.col(nowrap=True),
+					tag.col(nowrap=True),
+					tag.tbody(
+						tag.tr(
+							tag.th('Created'),
+							tag.td(procedure.created),
+							tag.th('Created By'),
+							tag.td(procedure.owner)
+						),
+						tag.tr(
+							tag.th('SQL Access'),
+							tag.td({
+								None: 'No SQL',
+								'N':  'No SQL',
+								'C':  'Contains SQL',
+								'R':  'Read-only SQL',
+								'M':  'Read-write SQL',
+							}[procedure.sql_access]),
+							tag.th('Called on NULL'),
+							tag.td(procedure.null_call)
+						),
+						tag.tr(
+							tag.th('External Action'),
+							tag.td(procedure.external_action),
+							tag.th('Deterministic'),
+							tag.td(procedure.deterministic)
+						),
+						tag.tr(
+							tag.th('Specific Name'),
+							tag.td(procedure.specific_name),
+							tag.th(''),
+							tag.td('')
+						)
+					),
+					id='tab:attr:%s' % procedure.identifier
+				),
+				title='Attributes'
+			),
+			tag.subsection(
+				tag.p('The following table lists the overloaded versions of this procedure, that is other routines with the same name but a different parameter list typically used to provide the same functionality across a range of data types.'),
+				tag.table(
+					tag.col(nowrap=False, width='70mm'),
+					tag.col(nowrap=False, width='40mm'),
+					tag.thead(
+						tag.tr(
+							tag.th('Prototype'),
+							tag.th('Specific Name')
+						)
+					),
+					tag.tbody(
+						tag.tr(
+							tag.td(self.format_prototype(overload.prototype)),
+							tag.td(tag.a(self.format_name(overload.specific_name), href='sec:%s' % overload.identifier))
+						)
+						for overload in procedure.schema.procedures[procedure.name]
+						if overload is not procedure
+					),
+					id='tab:overloads:%s' % procedure.identifier
+				),
+				title='Overloaded Versions'
+			) if len(procedure.schema.procedures[procedure.name]) > 1 else '',
+			tag.subsection(
+				tag.p('The SQL used to define the procedure is given below. Note that, depending on the underlying database implementation, this SQL may not be accurate (in some cases the database does not store the original command, so the SQL is reconstructed from metadata), or even valid for the platform.'),
+				self.format_sql(procedure.create_sql),
+				title='SQL Definition'
+			),
+			title='%s %s' % (self.type_names[type(procedure)], procedure.qualified_name),
+			id='sec:%s' % procedure.identifier
+		)
+
 
 	def serialize(self, content):
 		return tex(content)
