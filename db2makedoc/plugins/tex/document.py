@@ -76,10 +76,9 @@ class TeXCommentHighlighter(CommentHighlighter):
 	passed to the constructor as opposed to the methods in this class.
 	"""
 
-	def __init__(self, database, tag):
+	def __init__(self, doc):
 		super(TeXCommentHighlighter, self).__init__()
-		self.database = database
-		self.tag = tag
+		self.doc = doc
 
 	def start_parse(self, summary):
 		self._content = []
@@ -91,26 +90,39 @@ class TeXCommentHighlighter(CommentHighlighter):
 		self._para.append(text)
 
 	def handle_strong(self, text):
-		self._para.append(self.tag.strong(text))
+		self._para.append(self.doc.tag.strong(text))
 
 	def handle_emphasize(self, text):
-		self._para.append(self.tag.em(text))
+		self._para.append(self.doc.tag.em(text))
 
 	def handle_underline(self, text):
-		self._para.append(self.tag.u(text))
+		self._para.append(self.doc.tag.u(text))
 
 	def handle_quote(self, text):
-		self._para.append(self.tag.q(text))
+		self._para.append(self.doc.tag.q(text))
 
 	def find_target(self, name):
-		return self.database.find(name)
+		return self.doc.database.find(name)
 
 	def handle_link(self, target):
-		# XXX Need to figure out a structure for link ids
-		return ''
+		suffixes = []
+		while not isinstance(target, (Database, Schema, Relation, Trigger, Routine)):
+			suffixes.insert(0, target.name)
+			target = target.parent
+			if isinstance(target, Database):
+				target = None
+				break
+			content = [
+				''.join('.' + s for s in suffixes),
+			]
+		if target:
+			self._para.append(self.doc.tag.a(self.doc.format_name(target.qualified_name), href='sec:%s' % target.identifier))
+			self._para.append(self.doc.format_name(''.join('.' + s for s in suffixes)))
+		else:
+			self._para.append(self.doc.format_name('.'.join(suffixes)))
 
 	def end_para(self):
-		self._content.append(self.tag.p(*self._para))
+		self._content.append(self.doc.tag.p(*self._para))
 
 	def end_parse(self, summary):
 		if summary:
@@ -129,9 +141,10 @@ class TeXSQLHighlighter(SQLHighlighter):
 	object passed to the constructor.
 	"""
 
-	def __init__(self, tag):
+	def __init__(self, doc):
 		super(TeXSQLHighlighter, self).__init__()
-		self.tag = tag
+		self.doc = doc
+		tag = self.doc.tag
 		if not hasattr(tag, 'SQLerror'):
 			# If the provided factory doesn't have custom commands defined for
 			# SQL highlighting, then add them
@@ -215,15 +228,15 @@ class TeXSQLHighlighter(SQLHighlighter):
 			return source
 
 	def format_line(self, index, line):
-		return self.tag.li(self.format_token(token) for token in line)
+		return self.doc.tag.li(self.format_token(token) for token in line)
 
 	def parse(self, sql, terminator=';', line_split=True):
 		tokens = super(TeXSQLHighlighter, self).parse(sql, terminator, line_split)
-		return self.tag.SQLlisting(tokens)
+		return self.doc.tag.SQLlisting(tokens)
 
 	def parse_prototype(self, sql):
 		tokens = super(TeXSQLHighlighter, self).parse_prototype(sql)
-		return self.tag.SQLclip(self.tag.li(tokens))
+		return self.doc.tag.SQLclip(self.doc.tag.li(tokens))
 
 
 class TeXPrettierFactory(TeXFactory):
@@ -335,8 +348,8 @@ class TeXDocumentation(object):
 		self.options = options
 		self.default_desc = 'No description in the system catalog'
 		self.tag = TeXPrettierFactory()
-		self.comment_highlighter = TeXCommentHighlighter(self.database, self.tag)
-		self.sql_highlighter = TeXSQLHighlighter(self.tag)
+		self.comment_highlighter = TeXCommentHighlighter(self)
+		self.sql_highlighter = TeXSQLHighlighter(self)
 		self.type_names = {
 			Alias:          'Alias',
 			Check:          'Check Constraint',
@@ -482,7 +495,7 @@ class TeXDocumentation(object):
 				title='Tablespaces'
 			),
 			title='%s %s' % (self.type_names[type(db)], db.name),
-			id=db.identifier
+			id='sec:%s' % db.identifier
 		)
 
 	def generate_schema(self, schema):
@@ -572,7 +585,7 @@ class TeXDocumentation(object):
 				title='Diagram'
 			) if Schema in self.options['diagrams'] else '',
 			title='%s %s' % (self.type_names[type(schema)], schema.name),
-			id=schema.identifier
+			id='sec:%s' % schema.identifier
 		)
 
 	def generate_relation(self, relation):
@@ -726,7 +739,7 @@ class TeXDocumentation(object):
 						tag.tr(
 							tag.td(self.format_name(const.name) if i == 0 else ''),
 							tag.td(self.type_names[type(const)] if i == 0 else ''),
-							tag.td('FIXME') # XXX FIXME
+							tag.td(self.format_name(field.name if not isinstance(const, ForeignKey) else field[0].name))
 						)
 						for const in table.constraint_list
 						for (i, field) in enumerate(const.fields)

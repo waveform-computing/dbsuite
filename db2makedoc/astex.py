@@ -792,7 +792,7 @@ class TeXDocument(TeXEnvironment):
 			yield 'ulem'
 		if any(self._find(TeXImage)):
 			yield 'graphicx'
-			yield 'epstopdf'
+			#yield 'epstopdf' # XXX Only needed if we're using EPS
 		for elem in self._find(TeXTableOfContents):
 			self.uses_toc = True # see _preamble()
 			self.toc_level = elem.level

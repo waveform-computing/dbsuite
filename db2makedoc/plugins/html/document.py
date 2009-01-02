@@ -241,7 +241,7 @@ class HTMLCommentHighlighter(CommentHighlighter):
 		# a column), scan upwards in the hierarchy until we find a document
 		# and return a link to that document with the in between objects added
 		# as normal text suffixes
-		return self.site.link_to(target, parent=True)
+		self._para.append(self.site.link_to(target, parent=True))
 
 	def end_para(self):
 		self._content.append(self.site.tag.p(*self._para))
@@ -715,7 +715,7 @@ class WebSite(object):
 					break
 			return [
 				self.link_to(target, False, *args, **kwargs),
-				''.join(['.' + s for s in suffixes]),
+				''.join('.' + s for s in suffixes),
 			]
 		else:
 			return dbobject.qualified_name

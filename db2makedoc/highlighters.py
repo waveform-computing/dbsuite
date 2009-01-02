@@ -116,7 +116,7 @@ class CommentHighlighter(object):
 						start = match.end(0)
 						target = self.find_target(match.group(1))
 						if target is None:
-							logging.warning('Failed to find database object %s referenced in comment: "%s"' % (match_ref.group(1), text))
+							logging.warning('Failed to find database object %s referenced in comment: "%s"' % (match.group(1), text))
 							self.handle_text(match.group(0))
 						else:
 							self.handle_link(target)
