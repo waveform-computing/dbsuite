@@ -1,6 +1,7 @@
 # vim: set noet sw=4 ts=4:
 
 import re
+import os
 import datetime
 
 tex_special = re.compile(ur'([#$%^&_{}~/\\\u00A0]|\.\.\.)')
@@ -357,6 +358,30 @@ class TeXDefinitionList(TeXEnvironment):
 	__slots__ = ()
 	tag = 'dl'
 	tex_env = 'description'
+
+class TeXImage(TeXElement):
+	__slots__ = ('src', 'width', 'height', 'scale')
+	tag = 'img'
+	tex_cmd = 'includegraphics'
+	def __init__(self, src='', width=None, height=None, scale=None):
+		super(TeXImage, self).__init__()
+		if scale and (width or height):
+			raise ValueError('you cannot specify both scale and height or width')
+		self.src = src
+		self.width = width
+		self.height = height
+		self.scale = scale
+	def __tex__(self):
+		options = ['keepaspectratio=%s' % str(not (self.width and self.height)).lower()]
+		if self.width:
+			options.append('width=%s' % self.width)
+		if self.height:
+			options.append('height=%s' % self.height)
+		if self.scale:
+			options.append('scale=%f' % self.scale)
+		return format_cmd(self.name,
+			os.path.basename(os.path.splitext(self.src)[0]), # Note: removing filename path and extension, and not escaping src
+			options='[%s]' % ','.join(options))
 
 class TeXTableOfContents(TeXElement):
 	__slots__ = ('level')
@@ -765,6 +790,9 @@ class TeXDocument(TeXEnvironment):
 		if any(self._find(TeXUnderline)):
 			self.uses_underline = True # see _preamble()
 			yield 'ulem'
+		if any(self._find(TeXImage)):
+			yield 'graphicx'
+			yield 'epstopdf'
 		for elem in self._find(TeXTableOfContents):
 			self.uses_toc = True # see _preamble()
 			self.toc_level = elem.level

@@ -97,7 +97,8 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 		logging.debug('Generating SQL')
 		self.script = []
 		self.find_cache = {}
-		database.touch(self.get_statement)
+		for dbobject in database:
+			self.get_statement(dbobject)
 		s = unicode('\n\n'.join(stmt for stmt in self.script))
 		# Finally, write the document to disk
 		logging.info('Writing output to "%s"' % self.options['filename'])

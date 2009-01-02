@@ -504,11 +504,13 @@ class WebSite(object):
 				for cls in self.indexes:
 					self.index_maps[cls] = {}
 					self.index_docs[cls] = {}
-				self.database.touch(self.index_object, self.indexes)
+				for dbobject in self.database:
+					self.index_object(dbobject, self.indexes)
 			return True
 		elif phase == 3:
 			# Build the object and index documents
-			self.database.touch(self.add_object)
+			for dbobject in self.database:
+				self.add_object(dbobject)
 			for cls in self.index_maps:
 				for letter in self.index_maps[cls]:
 					self.index_class(self, cls, letter)

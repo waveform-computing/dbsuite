@@ -1,6 +1,6 @@
 # vim: set noet sw=4 ts=4:
 
-"""Output plugin for TeX documentation."""
+"""Output plugin for LaTeX documentation."""
 
 import os
 import sys
@@ -13,13 +13,16 @@ from db2makedoc.graph import DEFAULT_CONVERTER
 from string import Template
 
 class OutputPlugin(db2makedoc.plugins.OutputPlugin):
-	"""Output plugin for TeX documentation.
+	"""Output plugin for LaTeX documentation.
 
 	This output plugin supports generating PDF documentation via the TeX
 	type-setting system, specifically the LaTeX variant (including various PDF
 	facilities). It includes syntax highlighted SQL information on various
 	objects in the database (views, tables, etc.), diagrams of the schema, and
-	hyperlinks within generated PDFs.
+	hyperlinks within generated PDFs. Note that the generated documentation
+	tends to be extremely lengthy for a printed medium. It is strongly
+	suggested that you limit the input plugin to a single schema when using
+	this output plugin.
 	"""
 
 	def __init__(self):
@@ -105,6 +108,7 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 		# Ensure the filename was specified
 		if not self.options['filename']:
 			raise db2makedoc.plugins.PluginConfigurationError('The filename option must be specified')
+		self.options['path'] = os.path.dirname(self.options['filename'])
 		# If diagrams are requested, check we can find GraphViz in the PATH
 		if self.options['diagrams']:
 			gvexe = DEFAULT_CONVERTER
@@ -120,7 +124,7 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 	def substitute(self):
 		"""Returns the list of options which can accept $-prefixed substitutions."""
 		# Override this in descendents if additional string options are introduced
-		return ('filename', 'doc_title')
+		return ('filename', 'path', 'doc_title')
 
 	def execute(self, database):
 		"""Invokes the plugin to produce documentation."""

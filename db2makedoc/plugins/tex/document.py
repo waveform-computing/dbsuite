@@ -29,6 +29,43 @@ from db2makedoc.db import (
 	Field, UniqueKey, PrimaryKey, ForeignKey, Check, Param
 )
 
+orders = {
+	'A': 'Ascending',
+	'D': 'Descending',
+	'I': 'Include',
+}
+
+times = {
+	'A': 'After',
+	'B': 'Before',
+	'I': 'Instead of',
+}
+
+events = {
+	'I': 'Insert',
+	'U': 'Update',
+	'D': 'Delete',
+}
+
+granularities = {
+	'R': 'Row',
+	'S': 'Statement',
+}
+
+function_types = {
+	'C': 'Column/Aggregate',
+	'R': 'Row',
+	'T': 'Table',
+	'S': 'Scalar',
+}
+
+access_levels = {
+	None: 'No SQL',
+	'N':  'No SQL',
+	'C':  'Contains SQL',
+	'R':  'Read-only SQL',
+	'M':  'Read-write SQL',
+}
 
 class TeXCommentHighlighter(CommentHighlighter):
 	"""Class which converts simple comment markup to TeX.
@@ -212,6 +249,85 @@ class TeXPrettierFactory(TeXFactory):
 			return super(TeXPrettierFactory, self)._format(content)
 
 
+class TeXObjectGraph(Graph):
+	"""A version of the Graph class which represents database objects.
+
+	This is the base class for graphs used in generated documents.  An add()
+	method is introduced which can be used to add database objects to the graph
+	easily.
+	"""
+
+	def __init__(self, id, directed=True, strict=False):
+		super(TeXObjectGraph, self).__init__(id, directed, strict)
+		self.dbobjects = {}
+		self.rankdir = 'LR'
+		self.margin='0.0,0.0'
+		# XXX Maximum size is based on A4 with 1in margins
+		self.size='%f,%f' % ((210 / 25.4) - 2, (297 / 25.4) - 2)
+
+	def add(self, dbobject, selected=False):
+		"""Utility method to add a database object to the graph.
+
+		This utility method adds the specified database object to the graph as
+		a node (or a cluster) and attaches custom attributes to the node to tie
+		it to the database object it represents. Descendents should override
+		this method if they wish to customize the attributes or add support for
+		additional database object types.
+		"""
+		item = self.dbobjects.get(dbobject)
+		if item is None:
+			if isinstance(dbobject, Schema):
+				item = Cluster(self, dbobject.identifier)
+				item.label = dbobject.name
+			elif isinstance(dbobject, (Relation, Trigger)):
+				cluster = self.add(dbobject.schema)
+				item = Node(cluster, dbobject.identifier)
+				item.label = dbobject.name
+			item.selected = selected
+			item.dbobject = dbobject
+			self.dbobjects[dbobject] = item
+		return item
+
+	def style(self, item):
+		# Add URLs to graph items representing certain database objects
+		if hasattr(item, 'dbobject'):
+			if isinstance(item, (Node, Edge, Cluster)) and isinstance(item.dbobject, (Relation, Trigger, Routine)):
+				item.URL = 'sec:%s' % item.dbobject.identifier
+		# Set the graph to use the same default font as the stylesheet
+		# XXX Any way to set a fallback here like in CSS?
+		if isinstance(item, (Node, Edge, Cluster)):
+			item.fontname = 'Times New Roman'
+			item.fontsize = 8.0
+		# Set shapes and color schemes on objects that represent database
+		# objects
+		if hasattr(item, 'dbobject'):
+			item.fontcolor = '#000000'
+			if isinstance(item.dbobject, Schema):
+				pass
+			elif isinstance(item.dbobject, Relation):
+				if isinstance(item.dbobject, Table):
+					item.shape = 'rectangle'
+				elif isinstance(item.dbobject, View):
+					item.shape = 'octagon'
+				elif isinstance(item.dbobject, Alias):
+					if isinstance(item.dbobject.final_relation, Table):
+						item.shape = 'rectangle'
+					else:
+						item.shape = 'octagon'
+			elif isinstance(item.dbobject, Trigger):
+				item.shape = 'hexagon'
+		# Outline the selected object more clearly
+		if isinstance(item, (Cluster, Node)):
+			item.color = '#000000'
+		elif isinstance(item, Edge):
+			item.color = '#999999'
+
+	def _get_dot(self):
+		for item in self:
+			self.style(item)
+		return super(TeXObjectGraph, self)._get_dot()
+
+
 class TeXDocumentation(object):
 	def __init__(self, database, options):
 		super(TeXDocumentation, self).__init__()
@@ -336,7 +452,7 @@ class TeXDocumentation(object):
 					),
 					tag.tbody(
 						tag.tr(
-							tag.td(self.format_name(schema.name)),
+							tag.td(tag.a(self.format_name(schema.name), href='sec:%s' % schema.identifier)),
 							tag.td(self.format_comment(schema.description, summary=True))
 						) for schema in db.schema_list
 					),
@@ -416,16 +532,8 @@ class TeXDocumentation(object):
 					tag.tbody(
 						tag.tr(
 							tag.td(tag.a(self.format_name(trigger.name), href='sec:%s' % trigger.identifier)),
-							tag.td({
-								'B': 'Before',
-								'A': 'After',
-								'I': 'Instead of',
-							}[trigger.trigger_time]),
-							tag.td({
-								'I': 'Insert',
-								'U': 'Update',
-								'D': 'Delete',
-							}[trigger.trigger_event]),
+							tag.td(times[trigger.trigger_time]),
+							tag.td(events[trigger.trigger_event]),
 							tag.td(self.format_comment(trigger.description, summary=True))
 						) for trigger in schema.trigger_list
 					),
@@ -458,6 +566,11 @@ class TeXDocumentation(object):
 				),
 				title='Routines'
 			) if len(schema.routine_list) > 0 else '',
+			tag.subsection(
+				tag.p('The following diagram illustrates this schema and the direct dependencies of its contents.'),
+				self.generate_schema_graph(schema),
+				title='Diagram'
+			) if Schema in self.options['diagrams'] else '',
 			title='%s %s' % (self.type_names[type(schema)], schema.name),
 			id=schema.identifier
 		)
@@ -587,11 +700,7 @@ class TeXDocumentation(object):
 							tag.td(self.format_name(index.name) if i == 0 else ''),
 							tag.td(index.unique if i == 0 else ''),
 							tag.td(self.format_name(field.name)),
-							tag.td({
-								'A': 'Ascending',
-								'D': 'Descending',
-								'I': 'Include',
-							}[order])
+							tag.td(orders[order])
 						)
 						for index in sorted(table.index_list, key=attrgetter('name'))
 						for (i, (field, order)) in enumerate(index.field_list)
@@ -644,16 +753,8 @@ class TeXDocumentation(object):
 					tag.tbody(
 						tag.tr(
 							tag.td(tag.a(self.format_name(trigger.name), href='sec:%s' % trigger.identifier)),
-							tag.td({
-								'A': 'After',
-								'B': 'Before',
-								'I': 'Instead of',
-							}[trigger.trigger_time]),
-							tag.td({
-								'I': 'Insert',
-								'U': 'Update',
-								'D': 'Delete',
-							}[trigger.trigger_event]),
+							tag.td(times[trigger.trigger_time]),
+							tag.td(events[trigger.trigger_event]),
 							tag.td(self.format_comment(trigger.description, summary=True))
 						) for trigger in table.trigger_list
 					),
@@ -692,6 +793,11 @@ class TeXDocumentation(object):
 				),
 				title='Dependent Relations'
 			) if len(table.dependent_list) + sum(len(k.dependent_list) for k in table.unique_key_list) > 0 else '',
+			tag.subsection(
+				tag.p('The following diagram illustrates this table and its direct dependencies and dependents.'),
+				self.generate_table_graph(table),
+				title='Diagram'
+			) if Table in self.options['diagrams'] else '',
 			tag.subsection(
 				tag.p('The SQL used to define the table is given below. Note that, depending on the underlying database implementation, this SQL may not be accurate (in some cases the database does not store the original command, so the SQL is reconstructed from metadata), or even valid for the platform.'),
 				self.format_sql(table.create_sql),
@@ -802,16 +908,8 @@ class TeXDocumentation(object):
 					tag.tbody(
 						tag.tr(
 							tag.td(tag.a(self.format_name(trigger.name), href='sec:%s' % trigger.identifier)),
-							tag.td({
-								'A': 'After',
-								'B': 'Before',
-								'I': 'Instead of',
-							}[trigger.trigger_time]),
-							tag.td({
-								'I': 'Insert',
-								'U': 'Update',
-								'D': 'Delete',
-							}[trigger.trigger_event]),
+							tag.td(times[trigger.trigger_time]),
+							tag.td(events[trigger.trigger_event]),
 							tag.td(self.format_comment(trigger.description, summary=True))
 						) for trigger in view.trigger_list
 					),
@@ -867,6 +965,11 @@ class TeXDocumentation(object):
 				),
 				title='Dependent Relations'
 			) if len(view.dependency_list) else '',
+			tag.subsection(
+				tag.p('The following diagram illustrates this view and its direct dependencies and dependents.'),
+				self.generate_view_graph(view),
+				title='Diagram'
+			) if View in self.options['diagrams'] else '',
 			tag.subsection(
 				tag.p('The SQL used to define the view is given below. Note that, depending on the underlying database implementation, this SQL may not be accurate (in some cases the database does not store the original command, so the SQL is reconstructed from metadata), or even valid for the platform.'),
 				self.format_sql(view.create_sql),
@@ -985,6 +1088,11 @@ class TeXDocumentation(object):
 				title='Dependent Relations'
 			) if len(alias.dependent_list) else '',
 			tag.subsection(
+				tag.p('The following diagram illustrates this alias and its direct dependencies and dependents.'),
+				self.generate_alias_graph(alias),
+				title='Diagram'
+			) if Alias in self.options['diagrams'] else '',
+			tag.subsection(
 				tag.p('The SQL used to define the alias is given below. Note that, depending on the underlying database implementation, this SQL may not be accurate (in some cases the database does not store the original command, so the SQL is reconstructed from metadata), or even valid for the platform.'),
 				self.format_sql(alias.create_sql),
 				title='SQL Definition'
@@ -1014,24 +1122,13 @@ class TeXDocumentation(object):
 						),
 						tag.tr(
 							tag.th('Timing'),
-							tag.td({
-								'A': 'After',
-								'B': 'Before',
-								'I': 'Instead of',
-							}[trigger.trigger_time]),
+							tag.td(times[trigger.trigger_time]),
 							tag.th('Event'),
-							tag.td({
-								'I': 'Insert',
-								'U': 'Update',
-								'D': 'Delete',
-							}[trigger.trigger_event])
+							tag.td(events[trigger.trigger_event])
 						),
 						tag.tr(
 							tag.th('Granularity'),
-							tag.td({
-								'R': 'Row',
-								'S': 'Statement',
-							}[trigger.granularity]),
+							tag.td(granularities[trigger.granularity]),
 							tag.th('Relation'),
 							tag.td(tag.a(trigger.relation.qualified_name, href='sec:%s' % trigger.relation.identifier))
 						)
@@ -1107,20 +1204,9 @@ class TeXDocumentation(object):
 						),
 						tag.tr(
 							tag.th('Type'),
-							tag.td({
-								'C': 'Column/Aggregate',
-								'R': 'Row',
-								'T': 'Table',
-								'S': 'Scalar',
-							}[function.type]),
+							tag.td(function_types[function.type]),
 							tag.th('SQL Access'),
-							tag.td({
-								None: 'No SQL',
-								'N':  'No SQL',
-								'C':  'Contains SQL',
-								'R':  'Read-only SQL',
-								'M':  'Read-write SQL',
-							}[function.sql_access])
+							tag.td(access_levels[function.sql_access])
 						),
 						tag.tr(
 							tag.th('External Action'),
@@ -1197,13 +1283,7 @@ class TeXDocumentation(object):
 						),
 						tag.tr(
 							tag.th('SQL Access'),
-							tag.td({
-								None: 'No SQL',
-								'N':  'No SQL',
-								'C':  'Contains SQL',
-								'R':  'Read-only SQL',
-								'M':  'Read-write SQL',
-							}[procedure.sql_access]),
+							tag.td(access_levels[procedure.sql_access]),
 							tag.th('Called on NULL'),
 							tag.td(procedure.null_call)
 						),
@@ -1256,6 +1336,133 @@ class TeXDocumentation(object):
 			id='sec:%s' % procedure.identifier
 		)
 
+	def generate_schema_graph(self, schema):
+		logging.debug('Generating schema %s graph' % schema.qualified_name)
+		filename = os.path.join(self.options['path'], '%s.pdf' % schema.identifier)
+		graph = TeXObjectGraph('G')
+		graph.add(schema, selected=True)
+		for relation in schema.relation_list:
+			rel_node = graph.add(relation)
+			for dependent in relation.dependent_list:
+				dep_node = graph.add(dependent)
+				dep_edge = dep_node.connect_to(rel_node)
+				dep_edge.arrowhead = 'onormal'
+			if isinstance(relation, Table):
+				for key in relation.foreign_key_list:
+					key_node = graph.add(key.ref_table)
+					key_edge = rel_node.connect_to(key_node)
+					key_edge.arrowhead = 'normal'
+				for trigger in relation.trigger_list:
+					trig_node = graph.add(trigger)
+					trig_edge = rel_node.connect_to(trig_node)
+					trig_edge.arrowhead = 'vee'
+					for dependency in trigger.dependency_list:
+						dep_node = graph.add(dependency)
+						dep_edge = trig_node.connect_to(dep_node)
+						dep_edge.arrowhead = 'onormal'
+			elif isinstance(relation, View):
+				for dependency in relation.dependency_list:
+					dep_node = graph.add(dependency)
+					dep_edge = rel_node.connect_to(dep_node)
+					dep_edge.arrowhead = 'onormal'
+			elif isinstance(relation, Alias):
+				ref_node = graph.add(relation.relation)
+				ref_edge = rel_node.connect_to(ref_node)
+				ref_edge.arrowhead = 'onormal'
+		for trigger in schema.trigger_list:
+			rel_node = graph.add(trigger.relation)
+			trig_node = graph.add(trigger)
+			trig_edge = rel_node.connect_to(trig_node)
+			trig_edge.arrowhead = 'vee'
+			for dependency in trigger.dependency_list:
+				dep_node = graph.add(dependency)
+				dep_edge = trig_node.connect_to(dep_node)
+				dep_edge.arrowhead = 'onormal'
+		graph.to_pdf(open(filename, 'wb'))
+		return self.tag.img(src=filename)
+
+	def generate_table_graph(self, table):
+		logging.debug('Generating table %s graph' % table.qualified_name)
+		filename = os.path.join(self.options['path'], '%s.pdf' % table.identifier)
+		graph = TeXObjectGraph('G')
+		table_node = graph.add(table, selected=True)
+		for dependent in table.dependent_list:
+			dep_node = graph.add(dependent)
+			dep_edge = dep_node.connect_to(table_node)
+			if isinstance(dependent, View):
+				dep_edge.label = '<uses>'
+			elif isinstance(dependent, Alias):
+				dep_edge.label = '<for>'
+			dep_edge.arrowhead = 'onormal'
+		for key in table.foreign_key_list:
+			key_node = graph.add(key.ref_table)
+			key_edge = table_node.connect_to(key_node)
+			key_edge.dbobject = key
+			key_edge.label = key.name
+			key_edge.arrowhead = 'normal'
+		for key in table.unique_key_list:
+			for dependent in key.dependent_list:
+				dep_node = graph.add(dependent.relation)
+				dep_edge = dep_node.connect_to(table_node)
+				dep_edge.dbobject = dependent
+				dep_edge.label = dependent.name
+				dep_edge.arrowhead = 'normal'
+		for trigger in table.trigger_list:
+			trig_node = graph.add(trigger)
+			trig_edge = table_node.connect_to(trig_node)
+			trig_edge.label = ('<%s %s>' % (times[trigger.trigger_time], events[trigger.trigger_event])).lower()
+			trig_edge.arrowhead = 'vee'
+			for dependency in trigger.dependency_list:
+				dep_node = graph.add(dependency)
+				dep_edge = trig_node.connect_to(dep_node)
+				dep_edge.label = '<uses>'
+				dep_edge.arrowhead = 'onormal'
+		for trigger in table.trigger_dependent_list:
+			trig_node = graph.add(trigger)
+			rel_node = graph.add(trigger.relation)
+			trig_edge = rel_node.connect_to(trig_node)
+			trig_edge.label = ('<%s %s>' % (times[trigger.trigger_time], events[trigger.trigger_event])).lower()
+			trig_edge.arrowhead = 'vee'
+			dep_edge = trig_node.connect_to(table_node)
+			dep_edge.label = '<uses>'
+			dep_edge.arrowhead = 'onormal'
+		graph.to_pdf(open(filename, 'wb'))
+		return self.tag.img(src=filename)
+
+	def generate_view_graph(self, view):
+		logging.debug('Generating view %s graph' % view.qualified_name)
+		filename = os.path.join(self.options['path'], '%s.pdf' % view.identifier)
+		graph = TeXObjectGraph('G')
+		view_node = graph.add(view, selected=True)
+		for dependent in view.dependent_list:
+			dep_node = graph.add(dependent)
+			dep_edge = dep_node.connect_to(view_node)
+			dep_edge.label = '<uses>'
+			dep_edge.arrowhead = 'onormal'
+		for dependency in view.dependency_list:
+			dep_node = graph.add(dependency)
+			dep_edge = view_node.connect_to(dep_node)
+			dep_edge.label = '<uses>'
+			dep_edge.arrowhead = 'onormal'
+		graph.to_pdf(open(filename, 'wb'))
+		return self.tag.img(src=filename)
+
+	def generate_alias_graph(self, alias):
+		logging.debug('Generating alias %s graph' % alias.qualified_name)
+		filename = os.path.join(self.options['path'], '%s.pdf' % alias.identifier)
+		graph = TeXObjectGraph('G')
+		alias_node = graph.add(alias, selected=True)
+		target_node = graph.add(alias.relation)
+		target_edge = alias_node.connect_to(target_node)
+		target_edge.label = '<for>'
+		target_edge.arrowhead = 'onormal'
+		for dependent in alias.dependent_list:
+			dep_node = graph.add(dependent)
+			dep_edge = dep_node.connect_to(alias_node)
+			dep_edge.label = '<uses>'
+			dep_edge.arrowhead = 'onormal'
+		graph.to_pdf(open(filename, 'wb'))
+		return self.tag.img(src=filename)
 
 	def serialize(self, content):
 		return tex(content)
@@ -1268,4 +1475,3 @@ class TeXDocumentation(object):
 			f.write(self.serialize(self.generate()))
 		finally:
 			f.close()
-

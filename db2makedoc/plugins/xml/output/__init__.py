@@ -64,7 +64,8 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 		# representing those objects
 		logging.debug('Constructing elements')
 		self.elements = {}
-		database.touch(self.make_element)
+		for db_object in database:
+			self.make_element(db_object)
 		# Stitch together the XML tree by adding each element to its parent
 		logging.debug('Constructing element hierarchy')
 		for db_object, element in self.elements.iteritems():

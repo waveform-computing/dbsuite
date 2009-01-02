@@ -25,9 +25,14 @@ SVG_FORMAT = 'svg'
 GIF_FORMAT = 'gif'
 PNG_FORMAT = 'png'
 PS_FORMAT = 'ps2'
+PDF_FORMAT = 'pdf'
 MAP_FORMAT = 'cmapx'
 
 # XXX Add some code to check for duplicate graph/node/edge IDs
+
+class GraphError(Exception): pass
+
+class GraphConvertError(GraphError): pass
 
 class GraphObject(object):
 	"""Base class for all objects in the module.
@@ -174,9 +179,11 @@ class Graph(GraphBase):
 			cmd_line.extend(['-E%s=%s' % (n, v) for (n, v) in edge_attr.iteritems()])
 		p = Popen(cmd_line, stdin=PIPE, stdout=PIPE, close_fds=not mswindows)
 		try:
-			output.write(p.communicate(self.dot)[0])
+			stdout, stderr = p.communicate(self.dot)
+			output.write(stdout)
 		finally:
-			p.wait()
+			if p.wait() != 0:
+				raise GraphConvertError('graphviz converter %s exited with code %d\n%s' % (converter, p.returncode, stderr))
 
 	svg_fix = re.compile(r'(style=".*font-size:\s*[0-9]*(\.[0-9]+)?)(\s*;.*")')
 	def to_svg(self, output, converter=DEFAULT_CONVERTER, graph_attr=None, node_attr=None, edge_attr=None):
@@ -203,6 +210,13 @@ class Graph(GraphBase):
 		"""
 		self._call_graphviz(output, converter, PS_FORMAT, graph_attr, node_attr, edge_attr)
 
+	def to_pdf(self, output, converter=DEFAULT_CONVERTER, graph_attr=None, node_attr=None, edge_attr=None):
+		"""Converts the Graph into a PDF document.
+
+		Parameters are identical to the to_svg() method.
+		"""
+		self._call_graphviz(output, converter, PDF_FORMAT, graph_attr, node_attr, edge_attr)
+
 	def to_png(self, output, converter=DEFAULT_CONVERTER, graph_attr=None, node_attr=None, edge_attr=None):
 		"""Converts the Graph into a PNG image (and optionally a client-side image-map).
 
@@ -223,6 +237,19 @@ class Graph(GraphBase):
 		Parameters are identical to the to_svg() method.
 		"""
 		self._call_graphviz(output, converter, MAP_FORMAT, graph_attr, node_attr, edge_attr)
+
+	def __iter__(self):
+		"""Generator method which yields every object within the graph."""
+		def iter_sub(subgraph):
+			assert isinstance(subgraph, GraphBase)
+			yield subgraph
+			for item in subgraph.children:
+				if isinstance(item, GraphBase):
+					for subitem in iter_sub(item):
+						yield subitem
+				else:
+					yield item
+		return iter_sub(self)
 	
 	def touch(self, method, *args, **kwargs):
 		"""Calls the specified method for each object within the graph.
@@ -242,20 +269,9 @@ class Graph(GraphBase):
 		evaluates to False (e.g. if it returns None which all functions do by
 		default if no return is specified), the loop continues.
 		"""
-
-		def touch_sub(subgraph, args, kwargs):
-			assert isinstance(subgraph, GraphBase)
-			if method(subgraph, *args, **kwargs):
+		for item in self:
+			if method(item, *args, **kwargs):
 				return True
-			for i in subgraph.children:
-				if isinstance(i, GraphBase):
-					if touch_sub(i, args, kwargs):
-						return True
-				else:
-					if method(i, *args, **kwargs):
-						return True
-
-		return touch_sub(self, args, kwargs)
 
 
 class Subgraph(GraphBase):
@@ -381,7 +397,7 @@ class Node(GraphObject):
 		if self.graph.directed:
 			self.graph.touch(disconnect_directed, node=node, edges=edges)
 		else:
-			self.graph_touch(disconnect_undirected, node=node, edges=edges)
+			self.graph.touch(disconnect_undirected, node=node, edges=edges)
 		for edge in edges:
 			edge.parent.children.remove(edge)
 

@@ -805,67 +805,55 @@ class Database(DatabaseObject):
 		else:
 			return None
 
-	def iterator(self):
+	def __iter__(self):
 		"""Returns a generator which iterates over all objects in the database.
 
-		The iterator() method returns a generator which yields every object in
-		the database. The iterator does not guarantee the order of objects that
-		it yields (for example, there is no guarantee that a schema will be
-		yielded prior to a table that exists within that schema).
+		Returns a generator which yields every object in the database. The
+		iterator does not guarantee the order of objects that it yields (for
+		example, there is no guarantee that a schema will be yielded prior to a
+		table that exists within that schema).
 
 		Note that certain objects in the tree are excluded for not being
-		"database objects". Specifically, function and procedure parameters are
-		not included, nor are index fields, or constraint fields. This is
-		because these are not "independent" objects, i.e. while you can add and
-		remove fields to/from a table, you cannot add and remove parameters
-		to/from a procedure (without redefining it).
+		"database objects". Specifically, index fields and constraint fields.
+		This is because these are not "independent" objects, i.e. they are
+		essentially just references to other "primary" objects.
 		"""
 		yield self
-		for schema in self.schemas.itervalues():
+		for schema in self.schema_list:
 			yield schema
-			for datatype in schema.datatypes.itervalues():
+			for datatype in schema.datatype_list:
 				yield datatype
-			for table in schema.tables.itervalues():
+			for table in schema.table_list:
 				yield table
-				for ukey in table.unique_keys.itervalues():
-					yield ukey
-				for fkey in table.foreign_keys.itervalues():
-					yield fkey
-				for check in table.checks.itervalues():
-					yield check
-				for field in table.fields.itervalues():
+				for constraint in table.constraint_list:
+					yield constraint
+				for field in table.field_list:
 					yield field
-			for view in schema.views.itervalues():
+			for view in schema.view_list:
 				yield view
-				for field in view.fields.itervalues():
+				for field in view.field_list:
 					yield field
-			for alias in schema.aliases.itervalues():
+			for alias in schema.alias_list:
 				yield alias
-				for field in alias.fields.itervalues():
+				for field in alias.field_list:
 					yield field
-			for index in schema.indexes.itervalues():
+			for index in schema.index_list:
 				yield index
-			for function in schema.specific_functions.itervalues():
+			for function in schema.function_list:
 				yield function
-			for procedure in schema.specific_procedures.itervalues():
+				for param in function.param_list:
+					yield param
+				if function.type in ('R', 'T'):
+					for param in function.return_list:
+						yield param
+			for procedure in schema.procedure_list:
 				yield procedure
-			for trigger in schema.triggers.itervalues():
+				for param in procedure.param_list:
+					yield param
+			for trigger in schema.trigger_list:
 				yield trigger
-		for tbspace in self.tablespaces.itervalues():
+		for tbspace in self.tablespace_list:
 			yield tbspace
-
-	def touch(self, method, *args, **kwargs):
-		"""Calls the specified method for each object within the database.
-
-		The touch() method can be used to perform an operation on all objects
-		or a sub-set of all objects in the database. It calls method with
-		the specified positional and/or keyword parameters for all objects
-		returned by the iterator() method.
-
-		The return value of the method is ignored.
-		"""
-		for dbobject in self.iterator():
-			method(dbobject, *args, **kwargs)
 
 	def _get_identifier(self):
 		return "db"
