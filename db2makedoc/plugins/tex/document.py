@@ -395,6 +395,16 @@ class TeXDocumentation(object):
 	def format_prototype(self, sql):
 		return self.sql_highlighter.parse_prototype(sql)
 
+	def format_key(self, dbobject):
+		# XXX Need to escape (quote) extra characters (!, @, ", etc.)
+		return self.tag.key(
+			self.format_name(dbobject.name),
+			'!',
+			self.type_names[type(dbobject)],
+			' ',
+			self.format_name(dbobject.qualified_name)
+		)
+
 	def generate(self):
 		logging.debug('Generating document')
 		tag = self.tag
@@ -451,6 +461,7 @@ class TeXDocumentation(object):
 		logging.debug('Generating database section')
 		tag = self.tag
 		return tag.section(
+			self.format_key(db) if self.options['index'] else '',
 			self.format_comment(db.description),
 			tag.subsection(
 				tag.p('The following table contains all schemas (logical object containers) in the database, sorted by schema name.'),
@@ -502,6 +513,7 @@ class TeXDocumentation(object):
 		logging.debug('Generating schema %s section' % schema.name)
 		tag = self.tag
 		return tag.section(
+			self.format_key(schema) if self.options['index'] else '',
 			self.format_comment(schema.description),
 			tag.subsection(
 				tag.p('The following table lists the relations (tables, views, and aliases) that belong to the schema, sorted by relation name.'),
@@ -599,6 +611,7 @@ class TeXDocumentation(object):
 		logging.debug('Generating table %s section' % table.qualified_name)
 		tag = self.tag
 		return tag.section(
+			self.format_key(table) if self.options['index'] else '',
 			self.format_comment(table.description),
 			tag.subsection(
 				tag.p('The following table briefly lists general attributes of the table.'),
@@ -662,7 +675,7 @@ class TeXDocumentation(object):
 					tag.tbody(
 						tag.tr(
 							tag.td(field.position),
-							tag.td(self.format_name(field.name)),
+							tag.td(self.format_name(field.name), self.format_key(field)),
 							tag.td(field.datatype_str),
 							tag.td(field.nullable),
 							tag.td(field.key_index),
@@ -685,7 +698,7 @@ class TeXDocumentation(object):
 					tag.tbody(
 						tag.tr(
 							tag.td(field.position),
-							tag.td(self.format_name(field.name)),
+							tag.td(self.format_name(field.name), self.format_key(field)),
 							tag.td(self.format_comment(field.description, summary=True))
 						) for field in sorted(table.field_list, key=attrgetter('name'))
 					),
@@ -710,7 +723,7 @@ class TeXDocumentation(object):
 					),
 					tag.tbody(
 						tag.tr(
-							tag.td(self.format_name(index.name) if i == 0 else ''),
+							tag.td((self.format_name(index.name), self.format_key(index)) if i == 0 else ''),
 							tag.td(index.unique if i == 0 else ''),
 							tag.td(self.format_name(field.name)),
 							tag.td(orders[order])
@@ -737,7 +750,7 @@ class TeXDocumentation(object):
 					),
 					tag.tbody(
 						tag.tr(
-							tag.td(self.format_name(const.name) if i == 0 else ''),
+							tag.td((self.format_name(const.name), self.format_key(const)) if i == 0 else ''),
 							tag.td(self.type_names[type(const)] if i == 0 else ''),
 							tag.td(self.format_name(field.name if not isinstance(const, ForeignKey) else field[0].name))
 						)
@@ -824,6 +837,7 @@ class TeXDocumentation(object):
 		logging.debug('Generating view %s section' % view.qualified_name)
 		tag = self.tag
 		return tag.section(
+			self.format_key(view) if self.options['index'] else '',
 			self.format_comment(view.description),
 			tag.subsection(
 				tag.p('The following table briefly lists general attributes of the view.'),
@@ -874,7 +888,7 @@ class TeXDocumentation(object):
 					tag.tbody(
 						tag.tr(
 							tag.td(field.position),
-							tag.td(self.format_name(field.name)),
+							tag.td(self.format_name(field.name), self.format_key(field)),
 							tag.td(field.datatype_str),
 							tag.td(field.nullable),
 						) for field in view.field_list
@@ -895,7 +909,7 @@ class TeXDocumentation(object):
 					tag.tbody(
 						tag.tr(
 							tag.td(field.position),
-							tag.td(self.format_name(field.name)),
+							tag.td(self.format_name(field.name), self.format_key(field)),
 							tag.td(self.format_comment(field.description, summary=True))
 						) for field in sorted(view.field_list, key=attrgetter('name'))
 					),
@@ -997,6 +1011,7 @@ class TeXDocumentation(object):
 		tag = self.tag
 		is_table = isinstance(alias.final_relation, Table)
 		return tag.section(
+			self.format_key(alias) if self.options['index'] else '',
 			self.format_comment(alias.description),
 			tag.subsection(
 				tag.p('The following table briefly lists general attributes of the alias.'),
@@ -1045,7 +1060,7 @@ class TeXDocumentation(object):
 					tag.tbody(
 						tag.tr(
 							tag.td(field.position),
-							tag.td(self.format_name(field.name)),
+							tag.td(self.format_name(field.name), self.format_key(field)),
 							tag.td(field.datatype_str),
 							tag.td(field.nullable),
 							tag.td(field.key_index) if is_table else '',
@@ -1068,7 +1083,7 @@ class TeXDocumentation(object):
 					tag.tbody(
 						tag.tr(
 							tag.td(field.position),
-							tag.td(self.format_name(field.name)),
+							tag.td(self.format_name(field.name), self.format_key(field)),
 							tag.td(self.format_comment(field.description, summary=True))
 						) for field in sorted(alias.field_list, key=attrgetter('name'))
 					),
@@ -1118,7 +1133,8 @@ class TeXDocumentation(object):
 		logging.debug('Generating trigger %s section' % trigger.qualified_name)
 		tag = self.tag
 		return tag.section(
-			tag.p(self.format_comment(trigger.description)),
+			self.format_key(trigger) if self.options['index'] else '',
+			self.format_comment(trigger.description),
 			tag.subsection(
 				tag.p('The following table briefly lists general attributes of the trigger.'),
 				tag.table(
@@ -1169,10 +1185,15 @@ class TeXDocumentation(object):
 		logging.debug('Generating function %s section' % function.qualified_name)
 		tag = self.tag
 		return tag.section(
+			self.format_key(function) if self.options['index'] else '',
 			self.format_prototype(function.prototype),
 			self.format_comment(function.description),
 			tag.dl(
-				tag.di(self.format_comment(param.description, summary=True), term=param.name)
+				tag.di(
+					self.format_comment(param.description, summary=True),
+					self.format_key(param),
+					term=param.name
+				)
 				for param in function.param_list
 			) if len(function.param_list) > 0 else '',
 			tag.subsection(
@@ -1192,7 +1213,7 @@ class TeXDocumentation(object):
 					tag.tbody(
 						tag.tr(
 							tag.td(param.position + 1),
-							tag.td(self.format_name(param.name)),
+							tag.td(self.format_name(param.name), self.format_key(param)),
 							tag.td(param.datatype_str),
 							tag.td(self.format_comment(param.description, summary=True))
 						) for param in function.return_list
@@ -1274,10 +1295,15 @@ class TeXDocumentation(object):
 		logging.debug('Generating procedure %s section' % procedure.qualified_name)
 		tag = self.tag
 		return tag.section(
+			self.format_key(procedure) if self.options['index'] else '',
 			self.format_prototype(procedure.prototype),
 			self.format_comment(procedure.description),
 			tag.dl(
-				tag.di(self.format_comment(param.description, summary=True), term=param.name)
+				tag.di(
+					self.format_comment(param.description, summary=True),
+					self.format_key(param),
+					term=param.name
+				)
 				for param in procedure.param_list
 			) if len(procedure.param_list) > 0 else '',
 			tag.subsection(

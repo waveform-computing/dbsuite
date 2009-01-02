@@ -797,9 +797,9 @@ class TeXDocument(TeXEnvironment):
 			self.uses_toc = True # see _preamble()
 			self.toc_level = elem.level
 			break
-		if any(self._find(TeXIndex)):
+		if any(self._find(TeXIndex)) or any(self._find(TeXIndexKey)):
 			self.uses_index = True # see _preamble()
-			yield 'makeidx'
+			yield 'index'
 		if any(self._find(TeXTable)):
 			yield 'longtable'
 			yield 'booktabs'
