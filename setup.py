@@ -12,7 +12,7 @@ import ez_setup
 ez_setup.use_setuptools(version='0.6c6') # install setuptools if it isn't already installed
 
 classifiers = [
-	'Development Status :: 4 - Beta',
+	'Development Status :: 5 - Production/Stable',
 	'Environment :: Console',
 	'Environment :: Web Environment',
 	'Intended Audience :: System Administrators',
@@ -20,12 +20,15 @@ classifiers = [
 	'Operating System :: Microsoft :: Windows',
 	'Operating System :: POSIX',
 	'Operating System :: Unix',
-	'Programming Language :: Python',
+	'Programming Language :: Python :: 2.5',
 	'Programming Language :: SQL',
 	'Programming Language :: JavaScript',
 	'Programming Language :: PHP',
 	'Topic :: Database',
 	'Topic :: Documentation',
+	'Topic :: Text Processing :: Markup :: XML',
+	'Topic :: Text Processing :: Markup :: HTML',
+	'Topic :: Text Processing :: Markup :: LaTeX',
 ]
 
 entry_points = {
