@@ -753,60 +753,45 @@ class W3GraphDocument(GraphObjectDocument):
 		graph.ratio = str(float(maxh) / float(maxw))
 		return graph
 	
-	def write_broken(self, msg):
-		# Called when something goes wrong in the write() method, which it
-		# often does when dealing with truly massive graphs (GraphViz sometimes
-		# crashes out or just writes garbage). This method simply logs some
-		# warnings, and moves the resulting file (if any) out of the way to
-		# prevent browsers potentially attempting to access corrupt files
-		# (which in the case of buggy browsers could crash them), while
-		# allowing investigation of the corrupt file.
-		logging.warning(msg)
-		if os.path.exists(self.filename):
-			newname = '%s.broken' % self.filename
-			logging.warning('Moving potentially corrupt image file "%s" to "%s"' % (self.filename, newname))
-			if os.path.exists(newname):
-				os.unlink(newname)
-			os.rename(self.filename, newname)
-
 	def write(self):
 		# Overridden to set the introduced "written" flag (to ensure we don't
 		# attempt to write the graph more than once due to the induced write()
 		# call in the overridden _link() method), and to handle resizing the
 		# image if it's larger than the maximum size specified in the config
-		if not self.written:
-			super(W3GraphDocument, self).write()
-			self.written = True
-			if self.usemap:
-				try:
-					im = Image.open(self.filename)
-				except IOError, e:
-					self.write_broken('Failed to open image "%s" for resizing: %s' % (self.filename, e))
-					return
-				(maxw, maxh) = self.site.max_graph_size
-				(w, h) = im.size
-				if w > maxw or h > maxh:
-					# If the graph is larger than the maximum specified size,
-					# move the original to name.full.ext and create a smaller
-					# version using PIL. The scaling factor is stored so that
-					# the overridden map() method can use it to adjust the
-					# client side image map
-					self.scale = min(float(maxw) / w, float(maxh) / h)
-					neww = int(round(w * self.scale))
-					newh = int(round(h * self.scale))
+		try:
+			if not self.written:
+				super(W3GraphDocument, self).write()
+				self.written = True
+				if self.usemap:
 					try:
-						if w * h * 3 / 1024**2 < 500:
-							# Use a high-quality anti-aliased resize if to do so
-							# would use <500Mb of RAM (which seems a reasonable
-							# cut-off point on modern machines) - the conversion
-							# to RGB is the really memory-heavy bit
-							im = im.convert('RGB').resize((neww, newh), Image.ANTIALIAS)
-						else:
-							im = im.resize((neww, newh), Image.NEAREST)
-					except Exception, e:
-						self.write_broken('Failed to resize image "%s" from (%dx%d) to (%dx%d): %s' % (self.filename, w, h, neww, newh, e))
-						return
-					im.save(self.filename)
+						im = Image.open(self.filename)
+					except IOError, e:
+						raise Exception('failed to open image "%s" for resizing: %s' % (self.filename, e))
+					(maxw, maxh) = self.site.max_graph_size
+					(w, h) = im.size
+					if w > maxw or h > maxh:
+						# If the graph is larger than the maximum specified size,
+						# move the original to name.full.ext and create a smaller
+						# version using PIL. The scaling factor is stored so that
+						# the overridden map() method can use it to adjust the
+						# client side image map
+						self.scale = min(float(maxw) / w, float(maxh) / h)
+						neww = int(round(w * self.scale))
+						newh = int(round(h * self.scale))
+						try:
+							if w * h * 3 / 1024**2 < 500:
+								# Use a high-quality anti-aliased resize if to do so
+								# would use <500Mb of RAM (which seems a reasonable
+								# cut-off point on modern machines) - the conversion
+								# to RGB is the really memory-heavy bit
+								im = im.convert('RGB').resize((neww, newh), Image.ANTIALIAS)
+							else:
+								im = im.resize((neww, newh), Image.NEAREST)
+						except Exception, e:
+							raise Exception('failed to resize image "%s" from (%dx%d) to (%dx%d): %s' % (self.filename, w, h, neww, newh, e))
+						im.save(self.filename)
+		except Exception, e:
+			self.write_broken(str(e))
 
 	def map(self):
 		# Overridden to allow generating the client-side map for the "full

@@ -1597,6 +1597,28 @@ class GraphDocument(WebSiteDocument):
 		else:
 			return super(GraphDocument, self).serialize(content)
 
+	def write_broken(self, msg):
+		# Called when something goes wrong in the write() method, which it
+		# often does when dealing with truly massive graphs (GraphViz sometimes
+		# crashes out or just writes garbage). This method simply logs some
+		# warnings, and moves the resulting file (if any) out of the way to
+		# prevent browsers potentially attempting to access corrupt files
+		# (which in the case of buggy browsers could crash them), while
+		# allowing investigation of the corrupt file.
+		logging.warning(msg)
+		if os.path.exists(self.filename):
+			newname = '%s.broken' % self.filename
+			logging.warning('Moving potentially corrupt image file "%s" to "%s"' % (self.filename, newname))
+			if os.path.exists(newname):
+				os.unlink(newname)
+			os.rename(self.filename, newname)
+
+	def write(self):
+		try:
+			super(GraphDocument, self).write()
+		except Exception, e:
+			self.write_broken('An error occurred while writing image "%s": %s' % (self.filename, e))
+
 	def link(self, *args, **kwargs):
 		if self.usemap:
 			# If the graph uses a client side image map for links a bit
