@@ -34,7 +34,8 @@ except ImportError:
 
 __all__ = ['fromstring', 'tostring', 'parse', 'iselement', 'Element',
 		'SubElement', 'Comment', 'ProcessingInstruction', 'QName', 'indent',
-		'flatten', 'flatten_html', 'html4_display', '_namespace_map']
+		'flatten', 'flatten_html', 'html4_display', '_namespace_map',
+		'ElementFactory']
 
 
 def indent(elem, level=0, indent_str='\t'):
