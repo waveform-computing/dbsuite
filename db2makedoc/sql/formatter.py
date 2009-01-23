@@ -2551,6 +2551,7 @@ class DB2LUWFormatter(BaseFormatter):
 
 	def _parse_relation(self, allowdefault=False, allowinto=False):
 		"""Parses relation generators (high precedence) in a full-select expression"""
+		# XXX Add support for the TABLE statement from the SQL standard
 		if self._match('('):
 			self._indent()
 			# No need to include allowinto here (it's only permitted in a
