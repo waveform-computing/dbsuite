@@ -260,6 +260,7 @@ class ElementFactory(object):
 			# branch below is moderately expensive)
 			self._append(node, self._format(contents))
 		elif iselement(contents):
+			contents.tail = ''
 			node.append(contents)
 		else:
 			try:
