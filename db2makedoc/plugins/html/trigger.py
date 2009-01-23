@@ -19,17 +19,15 @@ granularity = {
 
 class TriggerDocument(HTMLObjectDocument):
 	def generate_body(self):
-		body = super(TriggerDocument, self).generate_body()
 		tag = self.tag
-		body.append(
+		body = super(TriggerDocument, self).generate_body()
+		tag._append(body, (
 			tag.div(
 				tag.h3('Description'),
 				self.format_comment(self.dbobject.description),
 				class_='section',
 				id='description'
-			)
-		)
-		body.append(
+			),
 			tag.div(
 				tag.h3('Attributes'),
 				tag.p_attributes(self.dbobject),
@@ -66,17 +64,14 @@ class TriggerDocument(HTMLObjectDocument):
 				),
 				class_='section',
 				id='attributes'
-			)
-		)
-		if self.dbobject.create_sql:
-			body.append(
-				tag.div(
-					tag.h3('SQL Definition'),
-					tag.p_sql_definition(self.dbobject),
-					self.format_sql(self.dbobject.create_sql, number_lines=True, id='sql-def'),
-					class_='section',
-					id='sql'
-				)
-			)
+			),
+			tag.div(
+				tag.h3('SQL Definition'),
+				tag.p_sql_definition(self.dbobject),
+				self.format_sql(self.dbobject.create_sql, number_lines=True, id='sql-def'),
+				class_='section',
+				id='sql'
+			) if self.dbobject.create_sql else ''
+		))
 		return body
 

@@ -12,9 +12,9 @@ access = {
 
 class ProcedureDocument(HTMLObjectDocument):
 	def generate_body(self):
-		body = super(ProcedureDocument, self).generate_body()
 		tag = self.tag
-		body.append(
+		body = super(ProcedureDocument, self).generate_body()
+		tag._append(body, (
 			tag.div(
 				tag.h3('Description'),
 				tag.p(self.format_prototype(self.dbobject.prototype)),
@@ -26,9 +26,7 @@ class ProcedureDocument(HTMLObjectDocument):
 				)),
 				class_='section',
 				id='description'
-			)
-		)
-		body.append(
+			),
 			tag.div(
 				tag.h3('Attributes'),
 				tag.p_attributes(self.dbobject),
@@ -69,44 +67,38 @@ class ProcedureDocument(HTMLObjectDocument):
 				),
 				class_='section',
 				id='attributes'
-			)
-		)
-		if len(self.dbobject.schema.procedures[self.dbobject.name]) > 1:
-			body.append(
-				tag.div(
-					tag.h3('Overloaded Versions'),
-					tag.p_overloads(self.dbobject),
-					tag.table(
-						tag.thead(
-							tag.tr(
-								tag.th('Prototype', class_='nosort'),
-								tag.th('Specific Name', class_='nowrap')
-							)
-						),
-						tag.tbody((
-							tag.tr(
-								tag.td(self.format_prototype(overload.prototype)),
-								tag.td(tag.a(overload.specific_name, href=self.site.object_document(overload).url), class_='nowrap')
-							)
-							for overload in self.dbobject.schema.procedures[self.dbobject.name]
-							if overload is not self.dbobject
-						)),
-						id='overload-ts',
-						summary='Overloaded variants'
+			),
+			tag.div(
+				tag.h3('Overloaded Versions'),
+				tag.p_overloads(self.dbobject),
+				tag.table(
+					tag.thead(
+						tag.tr(
+							tag.th('Prototype', class_='nosort'),
+							tag.th('Specific Name', class_='nowrap')
+						)
 					),
-					class_='section',
-					id='overloads'
-				)
-			)
-		if self.dbobject.create_sql:
-			body.append(
-				tag.div(
-					tag.h3('SQL Definition'),
-					tag.p_sql_definition(self.dbobject),
-					self.format_sql(self.dbobject.create_sql, number_lines=True, id='sql-def'),
-					class_='section',
-					id='sql'
-				)
-			)
+					tag.tbody((
+						tag.tr(
+							tag.td(self.format_prototype(overload.prototype)),
+							tag.td(tag.a(overload.specific_name, href=self.site.object_document(overload).url), class_='nowrap')
+						)
+						for overload in self.dbobject.schema.procedures[self.dbobject.name]
+						if overload is not self.dbobject
+					)),
+					id='overload-ts',
+					summary='Overloaded variants'
+				),
+				class_='section',
+				id='overloads'
+			) if len(self.dbobject.schema.procedures[self.dbobject.name]) > 1 else '',
+			tag.div(
+				tag.h3('SQL Definition'),
+				tag.p_sql_definition(self.dbobject),
+				self.format_sql(self.dbobject.create_sql, number_lines=True, id='sql-def'),
+				class_='section',
+				id='sql'
+			) if self.dbobject.create_sql else ''
+		))
 		return body
 

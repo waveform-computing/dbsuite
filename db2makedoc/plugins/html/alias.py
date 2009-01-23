@@ -1,21 +1,20 @@
 # vim: set noet sw=4 ts=4:
 
-from db2makedoc.db import View
+from db2makedoc.db import Table
 from db2makedoc.plugins.html.document import HTMLObjectDocument, GraphObjectDocument
 
 class AliasDocument(HTMLObjectDocument):
 	def generate_body(self):
-		body = super(AliasDocument, self).generate_body()
 		tag = self.tag
-		body.append(
+		body = super(AliasDocument, self).generate_body()
+		is_table = isinstance(self.dbobject.final_relation, Table)
+		tag._append(body, (
 			tag.div(
 				tag.h3('Description'),
 				self.format_comment(self.dbobject.description),
 				class_='section',
 				id='description'
-			)
-		)
-		body.append(
+			),
 			tag.div(
 				tag.h3('Attributes'),
 				tag.p_attributes(self.dbobject),
@@ -44,42 +43,19 @@ class AliasDocument(HTMLObjectDocument):
 				),
 				class_='section',
 				id='attributes'
-			)
-		)
-		if len(self.dbobject.field_list) > 0:
-			if isinstance(self.dbobject.final_relation, View):
-				table = tag.table(
+			),
+			tag.div(
+				tag.h3('Fields'),
+				tag.p_relation_fields(self.dbobject),
+				tag.table(
 					tag.thead(
 						tag.tr(
 							tag.th('#', class_='nowrap'),
 							tag.th('Name', class_='nowrap'),
 							tag.th('Type', class_='nowrap'),
 							tag.th('Nulls', class_='nowrap'),
-							tag.th('Description', class_='nosort')
-						)
-					),
-					tag.tbody((
-						tag.tr(
-							tag.td(field.position + 1, class_='nowrap'),
-							tag.td(field.name, class_='nowrap'),
-							tag.td(field.datatype_str, class_='nowrap'),
-							tag.td(field.nullable, class_='nowrap'),
-							tag.td(self.format_comment(field.description, summary=True))
-						) for field in self.dbobject.field_list
-					)),
-					id='field-ts',
-					summary='Alias fields'
-				)
-			else:
-				table = tag.table(
-					tag.thead(
-						tag.tr(
-							tag.th('#', class_='nowrap'),
-							tag.th('Name', class_='nowrap'),
-							tag.th('Type', class_='nowrap'),
-							tag.th('Nulls', class_='nowrap'),
-							tag.th('Key Pos', class_='nowrap'),
-							tag.th('Cardinality', class_='nowrap commas'),
+							tag.th('Key Pos', class_='nowrap') if is_table else '',
+							tag.th('Cardinality', class_='nowrap commas') if is_table else '',
 							tag.th('Description', class_='nosort')
 						)
 					),
@@ -89,71 +65,57 @@ class AliasDocument(HTMLObjectDocument):
 							tag.td(field.name, class_='nowrap'),
 							tag.td(field.datatype_str, class_='nowrap'),
 							tag.td(field.nullable, class_='nowrap'),
-							tag.td(field.key_index, class_='nowrap'),
-							tag.td(field.cardinality, class_='nowrap'),
+							tag.td(field.key_index, class_='nowrap') if is_table else '',
+							tag.td(field.cardinality, class_='nowrap') if is_table else '',
 							tag.td(self.format_comment(field.description, summary=True))
 						) for field in self.dbobject.field_list
 					)),
 					id='field-ts',
 					summary='Alias fields'
-				)
-			body.append(
-				tag.div(
-					tag.h3('Fields'),
-					tag.p_relation_fields(self.dbobject),
-					table,
-					class_='section',
-					id='fields'
-				)
-			)
-		if len(self.dbobject.dependent_list) > 0:
-			body.append(
-				tag.div(
-					tag.h3('Dependent Relations'),
-					tag.p_dependent_relations(self.dbobject),
-					tag.p_tablesort(),
-					tag.table(
-						tag.thead(
-							tag.tr(
-								tag.th('Name', class_='nowrap'),
-								tag.th('Type', class_='nowrap'),
-								tag.th('Description', class_='nosort')
-							)
-						),
-						tag.tbody((
-							tag.tr(
-								tag.td(self.site.link_to(dep), class_='nowrap'),
-								tag.td(self.site.type_names[dep.__class__], class_='nowrap'),
-								tag.td(self.format_comment(dep.description, summary=True))
-							) for dep in self.dbobject.dependent_list
-						)),
-						id='dep-ts',
-						summary='Alias dependents'
+				),
+				class_='section',
+				id='fields'
+			) if len(self.dbobject.field_list) > 0 else '',
+			tag.div(
+				tag.h3('Dependent Relations'),
+				tag.p_dependent_relations(self.dbobject),
+				tag.p_tablesort(),
+				tag.table(
+					tag.thead(
+						tag.tr(
+							tag.th('Name', class_='nowrap'),
+							tag.th('Type', class_='nowrap'),
+							tag.th('Description', class_='nosort')
+						)
 					),
-					class_='section',
-					id='dependents'
-				)
-			)
-		if self.site.object_graph(self.dbobject):
-			body.append(
-				tag.div(
-					tag.h3('Diagram'),
-					tag.p_diagram(self.dbobject),
-					self.site.img_of(self.dbobject),
-					class_='section',
-					id='diagram'
-				)
-			)
-		if self.dbobject.create_sql:
-			body.append(
-				tag.div(
-					tag.h3('SQL Definition'),
-					tag.p_sql_definition(self.dbobject),
-					self.format_sql(self.dbobject.create_sql, number_lines=True, id='sql-def'),
-					class_='section',
-					id='sql'
-				)
-			)
+					tag.tbody((
+						tag.tr(
+							tag.td(self.site.link_to(dep), class_='nowrap'),
+							tag.td(self.site.type_names[dep.__class__], class_='nowrap'),
+							tag.td(self.format_comment(dep.description, summary=True))
+						) for dep in self.dbobject.dependent_list
+					)),
+					id='dep-ts',
+					summary='Alias dependents'
+				),
+				class_='section',
+				id='dependents'
+			) if len(self.dbobject.dependent_list) > 0 else '',
+			tag.div(
+				tag.h3('Diagram'),
+				tag.p_diagram(self.dbobject),
+				self.site.img_of(self.dbobject),
+				class_='section',
+				id='diagram'
+			) if self.site.object_graph(self.dbobject) else '',
+			tag.div(
+				tag.h3('SQL Definition'),
+				tag.p_sql_definition(self.dbobject),
+				self.format_sql(self.dbobject.create_sql, number_lines=True, id='sql-def'),
+				class_='section',
+				id='sql'
+			) if self.dbobject.create_sql else ''
+		))
 		return body
 
 

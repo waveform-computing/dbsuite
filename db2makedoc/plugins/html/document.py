@@ -795,8 +795,8 @@ class WebSite(object):
 		Override this in descendents if the index_docs structure is changed or
 		enhanced.
 		"""
-		# Sort the list of database classes by name and filter out those which have
-		# no index content
+		# Sort the list of database classes by name and filter out those which
+		# have no index content
 		dbclasses = [
 			dbclass for dbclass in sorted(self.index_docs.iterkeys(),
 				key=lambda dbclass: self.type_name(dbclass))

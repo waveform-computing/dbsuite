@@ -11,18 +11,16 @@ rules = {
 
 class ForeignKeyDocument(HTMLObjectDocument):
 	def generate_body(self):
-		body = super(ForeignKeyDocument, self).generate_body()
 		tag = self.tag
-		body.append(
+		body = super(ForeignKeyDocument, self).generate_body()
+		tag._append(body, (
 			tag.div(
 				tag.h3('Description'),
 				self.format_comment(self.dbobject.description),
 				class_='section',
 				id='description'
 
-			)
-		)
-		body.append(
+			),
 			tag.div(
 				tag.h3('Attributes'),
 				tag.p_attributes(self.dbobject),
@@ -59,46 +57,40 @@ class ForeignKeyDocument(HTMLObjectDocument):
 				),
 				class_='section',
 				id='attributes'
-			)
-		)
-		if len(self.dbobject.fields) > 0:
-			body.append(
-				tag.div(
-					tag.h3('Fields'),
-					tag.p_constraint_fields(self.dbobject),
-					tag.table(
-						tag.thead(
-							tag.tr(
-								tag.th('#', class_='nowrap'),
-								tag.th('Field', class_='nowrap'),
-								tag.th('Parent', class_='nowrap'),
-								tag.th('Description', class_='nosort')
-							)
-						),
-						tag.tbody((
-							tag.tr(
-								tag.td(index + 1, class_='nowrap'),
-								tag.td(field1.name, class_='nowrap'),
-								tag.td(field2.name, class_='nowrap'),
-								tag.td(self.format_comment(field1.description, summary=True))
-							) for (index, (field1, field2)) in enumerate(self.dbobject.fields)
-						)),
-						id='field-ts',
-						summary='Foreign key fields'
+			),
+			tag.div(
+				tag.h3('Fields'),
+				tag.p_constraint_fields(self.dbobject),
+				tag.table(
+					tag.thead(
+						tag.tr(
+							tag.th('#', class_='nowrap'),
+							tag.th('Field', class_='nowrap'),
+							tag.th('Parent', class_='nowrap'),
+							tag.th('Description', class_='nosort')
+						)
 					),
-					class_='section',
-					id='fields'
-				)
-			)
-		if self.dbobject.create_sql:
-			body.append(
-				tag.div(
-					tag.h3('SQL Definition'),
-					tag.p_sql_definition(self.dbobject),
-					self.format_sql(self.dbobject.create_sql, number_lines=True, id='sql-def'),
-					class_='section',
-					id='sql'
-				)
-			)
+					tag.tbody((
+						tag.tr(
+							tag.td(index + 1, class_='nowrap'),
+							tag.td(field1.name, class_='nowrap'),
+							tag.td(field2.name, class_='nowrap'),
+							tag.td(self.format_comment(field1.description, summary=True))
+						) for (index, (field1, field2)) in enumerate(self.dbobject.fields)
+					)),
+					id='field-ts',
+					summary='Foreign key fields'
+				),
+				class_='section',
+				id='fields'
+			) if len(self.dbobject.fields) > 0 else '',
+			tag.div(
+				tag.h3('SQL Definition'),
+				tag.p_sql_definition(self.dbobject),
+				self.format_sql(self.dbobject.create_sql, number_lines=True, id='sql-def'),
+				class_='section',
+				id='sql'
+			) if self.dbobject.create_sql else ''
+		))
 		return body
 

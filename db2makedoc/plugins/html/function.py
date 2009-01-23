@@ -18,9 +18,9 @@ access = {
 
 class FunctionDocument(HTMLObjectDocument):
 	def generate_body(self):
-		body = super(FunctionDocument, self).generate_body()
 		tag = self.tag
-		body.append(
+		body = super(FunctionDocument, self).generate_body()
+		tag._append(body, (
 			tag.div(
 				tag.h3('Description'),
 				tag.p(self.format_prototype(self.dbobject.prototype)),
@@ -31,37 +31,32 @@ class FunctionDocument(HTMLObjectDocument):
 				)),
 				class_='section',
 				id='description'
-			)
-		)
-		if self.dbobject.type in ('R', 'T'):
-			body.append(
-				tag.div(
-					tag.h3('Returns'),
-					tag.table(
-						tag.thead(
-							tag.tr(
-								tag.th('#', class_='nowrap'),
-								tag.th('Name', class_='nowrap'),
-								tag.th('Type', class_='nowrap'),
-								tag.th('Description', class_='nosort')
-							)
-						),
-						tag.tbody(
-							tag.tr(
-								tag.td(param.position + 1, class_='nowrap'),
-								tag.td(param.name, class_='nowrap'),
-								tag.td(param.datatype_str, class_='nowrap'),
-								tag.td(param.description)
-							) for param in self.dbobject.return_list
-						),
-						id='return-ts',
-						summary='Function returned row/table structure'
+			),
+			tag.div(
+				tag.h3('Returns'),
+				tag.table(
+					tag.thead(
+						tag.tr(
+							tag.th('#', class_='nowrap'),
+							tag.th('Name', class_='nowrap'),
+							tag.th('Type', class_='nowrap'),
+							tag.th('Description', class_='nosort')
+						)
 					),
-					class_='section',
-					id='returns'
-				)
-			)
-		body.append(
+					tag.tbody(
+						tag.tr(
+							tag.td(param.position + 1, class_='nowrap'),
+							tag.td(param.name, class_='nowrap'),
+							tag.td(param.datatype_str, class_='nowrap'),
+							tag.td(param.description)
+						) for param in self.dbobject.return_list
+					),
+					id='return-ts',
+					summary='Function returned row/table structure'
+				),
+				class_='section',
+				id='returns'
+			) if self.dbobject.type in ('R', 'T') else '',
 			tag.div(
 				tag.h3('Attributes'),
 				tag.p_attributes(self.dbobject),
@@ -104,44 +99,38 @@ class FunctionDocument(HTMLObjectDocument):
 				),
 				class_='section',
 				id='attributes'
-			)
-		)
-		if len(self.dbobject.schema.functions[self.dbobject.name]) > 1:
-			body.append(
-				tag.div(
-					tag.h3('Overloaded Versions'),
-					tag.p_overloads(self.dbobject),
-					tag.table(
-						tag.thead(
-							tag.tr(
-								tag.th('Prototype', class_='nosort'),
-								tag.th('Specific Name', class_='nowrap')
-							)
-						),
-						tag.tbody((
-							tag.tr(
-								tag.td(self.format_prototype(overload.prototype)),
-								tag.td(tag.a(overload.specific_name, href=self.site.object_document(overload).url), class_='nowrap')
-							)
-							for overload in self.dbobject.schema.functions[self.dbobject.name]
-							if overload is not self.dbobject
-						)),
-						id='overload-ts',
-						summary='Overloaded variants'
+			),
+			tag.div(
+				tag.h3('Overloaded Versions'),
+				tag.p_overloads(self.dbobject),
+				tag.table(
+					tag.thead(
+						tag.tr(
+							tag.th('Prototype', class_='nosort'),
+							tag.th('Specific Name', class_='nowrap')
+						)
 					),
-					class_='section',
-					id='overloads'
-				)
-			)
-		if self.dbobject.create_sql:
-			body.append(
-				tag.div(
-					tag.h3('SQL Definition'),
-					tag.p_sql_definition(self.dbobject),
-					self.format_sql(self.dbobject.create_sql, number_lines=True, id='sql-def'),
-					class_='section',
-					id='sql'
-				)
-			)
+					tag.tbody((
+						tag.tr(
+							tag.td(self.format_prototype(overload.prototype)),
+							tag.td(tag.a(overload.specific_name, href=self.site.object_document(overload).url), class_='nowrap')
+						)
+						for overload in self.dbobject.schema.functions[self.dbobject.name]
+						if overload is not self.dbobject
+					)),
+					id='overload-ts',
+					summary='Overloaded variants'
+				),
+				class_='section',
+				id='overloads'
+			) if len(self.dbobject.schema.functions[self.dbobject.name]) > 1 else '',
+			tag.div(
+				tag.h3('SQL Definition'),
+				tag.p_sql_definition(self.dbobject),
+				self.format_sql(self.dbobject.create_sql, number_lines=True, id='sql-def'),
+				class_='section',
+				id='sql'
+			) if self.dbobject.create_sql else ''
+		))
 		return body
 

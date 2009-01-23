@@ -4,17 +4,15 @@ from db2makedoc.plugins.html.document import HTMLObjectDocument
 
 class IndexDocument(HTMLObjectDocument):
 	def generate_body(self):
-		body = super(IndexDocument, self).generate_body()
 		tag = self.tag
-		body.append(
+		body = super(IndexDocument, self).generate_body()
+		tag._append(body, (
 			tag.div(
 				tag.h3('Description'),
 				self.format_comment(self.dbobject.description),
 				class_='section',
 				id='description'
-			)
-		)
-		body.append(
+			),
 			tag.div(
 				tag.h3('Attributes'),
 				tag.p_attributes(self.dbobject),
@@ -59,52 +57,46 @@ class IndexDocument(HTMLObjectDocument):
 				),
 				class_='section',
 				id='attributes'
-			)
-		)
-		if len(self.dbobject.field_list) > 0:
-			body.append(
-				tag.div(
-					tag.h3('Fields'),
-					tag.p("""The following table lists the fields covered by
-						the index. The # column indicates the position of the
-						field in the index (this is important as suffixes of an
-						index's fields cannot be used to optimize queries).
-						The Order column lists the ordering of the field in the
-						index (note that some indexes are bidirectional, so
-						this value may be irrelevant)."""),
-					tag.table(
-						tag.thead(
-							tag.tr(
-								tag.th('#', class_='nowrap'),
-								tag.th('Name', class_='nowrap'),
-								tag.th('Order', class_='nowrap'),
-								tag.th('Description', class_='nosort')
-							)
-						),
-						tag.tbody((
-							tag.tr(
-								tag.td(position + 1, class_='nowrap'),
-								tag.td(field.name, class_='nowrap'),
-								tag.td(ordering, class_='nowrap'),
-								tag.td(self.format_comment(field.description, summary=True))
-							) for (position, (field, ordering)) in enumerate(self.dbobject.field_list)
-						)),
-						id='field-ts',
-						summary='Index fields'
+			),
+			tag.div(
+				tag.h3('Fields'),
+				tag.p("""The following table lists the fields covered by
+					the index. The # column indicates the position of the
+					field in the index (this is important as suffixes of an
+					index's fields cannot be used to optimize queries).
+					The Order column lists the ordering of the field in the
+					index (note that some indexes are bidirectional, so
+					this value may be irrelevant)."""),
+				tag.table(
+					tag.thead(
+						tag.tr(
+							tag.th('#', class_='nowrap'),
+							tag.th('Name', class_='nowrap'),
+							tag.th('Order', class_='nowrap'),
+							tag.th('Description', class_='nosort')
+						)
 					),
-					class_='section',
-					id='fields'
-				)
-			)
-		if self.dbobject.create_sql:
-			body.append(
-				tag.div(
-					tag.h3('SQL Definition'),
-					tag.p_sql_definition(self.dbobject),
-					self.format_sql(self.dbobject.create_sql, number_lines=True, id='sql-def'),
-					class_='section',
-					id='sql'
-				)
-			)
+					tag.tbody((
+						tag.tr(
+							tag.td(position + 1, class_='nowrap'),
+							tag.td(field.name, class_='nowrap'),
+							tag.td(ordering, class_='nowrap'),
+							tag.td(self.format_comment(field.description, summary=True))
+						) for (position, (field, ordering)) in enumerate(self.dbobject.field_list)
+					)),
+					id='field-ts',
+					summary='Index fields'
+				),
+				class_='section',
+				id='fields'
+			) if len(self.dbobject.field_list) > 0 else '',
+			tag.div(
+				tag.h3('SQL Definition'),
+				tag.p_sql_definition(self.dbobject),
+				self.format_sql(self.dbobject.create_sql, number_lines=True, id='sql-def'),
+				class_='section',
+				id='sql'
+			) if self.dbobject.create_sql else ''
+		))
 		return body
 
