@@ -31,6 +31,11 @@ classifiers = [
 	'Topic :: Text Processing :: Markup :: LaTeX',
 ]
 
+install_requires = [
+	'PyDB2>=1.1.1',
+	'PIL>=1.1.5',
+]
+
 entry_points = {
 	'console_scripts': [
 		'db2makedoc = db2makedoc.main:db2makedoc_main',
@@ -55,6 +60,7 @@ def main():
 		author_email         = 'dave_hughes@uk.ibm.com',
 		url                  = 'http://faust.hursley.uk.ibm.com/trac/db2makedoc/',
 		packages             = find_packages(),
+		install_requires     = install_requires,
 		include_package_data = True,
 		platforms            = 'ALL',
 		zip_safe             = False,
