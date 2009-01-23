@@ -183,7 +183,7 @@ class Graph(GraphBase):
 			output.write(stdout)
 		finally:
 			if p.wait() != 0:
-				raise GraphConvertError('graphviz converter %s exited with code %d\n%s' % (converter, p.returncode, stderr))
+				raise GraphConvertError('graphviz converter %s exited with code %d\n%s' % (converter, p.returncode, stderr if stderr else ''))
 
 	svg_fix = re.compile(r'(style=".*font-size:\s*[0-9]*(\.[0-9]+)?)(\s*;.*")')
 	def to_svg(self, output, converter=DEFAULT_CONVERTER, graph_attr=None, node_attr=None, edge_attr=None):
