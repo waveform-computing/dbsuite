@@ -3,6 +3,7 @@
 import re
 import os
 import datetime
+from db2makedoc.util import *
 
 tex_special = re.compile(ur'([#$%^&_{}~/\\\u00A0]|\.\.\.)')
 def escape_tex(s):
@@ -205,12 +206,22 @@ class TeXAnchor(TeXElement):
 				result.append(format_cmd('hyperref', self._content_tex(), options='[%s]' % self.href))
 		return '\n'.join(result)
 
-class TeXPageOf(TeXElement):
+class TeXAutoRef(TeXElement):
+	__slots__ = ('href',)
+	tag = 'auto'
+	tex_cmd = 'autoref'
+	def __init__(self, href=''):
+		super(TeXAutoRef, self).__init__()
+		self.href = href
+	def __tex__(self):
+		return format_cmd('autoref', self.href)
+
+class TeXPageRef(TeXElement):
 	__slots__ = ('href',)
 	tag = 'page'
 	tex_cmd = 'pageref'
 	def __init__(self, href=''):
-		super(TeXPageOf, self).__init__()
+		super(TeXPageRef, self).__init__()
 		self.href = href
 	def __tex__(self):
 		return format_cmd('pageref', self.href)
@@ -288,6 +299,8 @@ class TeXPreformatted(TeXEnvironment):
 	__slots__ = ()
 	tag = 'pre'
 	tex_env = 'verbatim'
+	def _content_tex(self):
+		return self.text
 
 class TeXFont(TeXElement):
 	__slots__ = ('size', 'color', 'face')
@@ -383,23 +396,41 @@ class TeXImage(TeXElement):
 			os.path.basename(os.path.splitext(self.src)[0]), # Note: removing filename path and extension, and not escaping src
 			options='[%s]' % ','.join(options))
 
-class TeXTableOfContents(TeXElement):
-	__slots__ = ('level')
+class TeXTableOfObjects(TeXElement):
+	__slots__ = ('title', 'tocinclude', 'style')
+	def __init__(self, title=None, tocinclude=False):
+		self.title = title
+		self.tocinclude = tocinclude
+		self.style = None
+	def __tex__(self):
+		result = [format_cmd(self.name)]
+		if self.tocinclude and self.style:
+			result.append(format_cmd('addcontentsline', format_cmd(self.title_var), '{toc}{%s}' % self.style))
+		return '\n'.join(result)
+
+class TeXTableOfContents(TeXTableOfObjects):
+	__slots__ = ('level',)
 	tag = 'toc'
 	tex_cmd = 'tableofcontents'
-	def __init__(self, level=3):
-		super(TeXTableOfContents, self).__init__()
+	title_var = 'contentsname'
+	def __init__(self, title=None, tocinclude=False, level=3):
+		super(TeXTableOfContents, self).__init__(title, tocinclude)
 		self.level = level
 
-class TeXTableOfFigures(TeXElement):
-	__slots__ = ()
+class TeXTableOfFigures(TeXTableOfObjects):
 	tag = 'tof'
 	tex_cmd = 'listoffigures'
+	title_var = 'listfigurename'
 
-class TeXTableOfTables(TeXElement):
-	__slots__ = ()
+class TeXTableOfTables(TeXTableOfObjects):
 	tag = 'tot'
 	tex_cmd = 'listoftables'
+	title_var = 'listtablename'
+
+class TeXTableOfListings(TeXTableOfObjects):
+	tag = 'tol'
+	tex_cmd = 'lstlistoflistings'
+	title_var = 'lstlistlistingname'
 
 class TeXIndexKey(TeXElement):
 	__slots__ = ()
@@ -411,11 +442,41 @@ class TeXIndex(TeXElement):
 	tag = 'index'
 	tex_cmd = 'printindex'
 
+class TeXListing(TeXEnvironment):
+	__slots__ = ('language', 'id')
+	tag = 'listing'
+	tex_env = 'lstlisting'
+	def __init__(self, language=None, id=None):
+		super(TeXListing, self).__init__()
+		self.language = language
+		self.id = id
+	def _params(self):
+		params = []
+		caption = [child for child in self.children if isinstance(child, TeXCaption)]
+		if self.language:
+			params.append('language=%s' % self.language)
+		if len(caption) == 1:
+			params.append('caption={%s}' % caption[0]._content_tex())
+		elif len(caption) > 1:
+			raise ValueError('more than one caption element found')
+		if self.id:
+			params.append('label=%s' % self.id)
+		if params:
+			return '[%s]' % ','.join(params)
+		else:
+			return ''
+	def _content_tex(self):
+		caption = [child for child in self.children if isinstance(child, TeXCaption)]
+		result = self.text
+		if len(caption) == 1:
+			result += caption[0].tail
+		return result
+
 class TeXTable(TeXEnvironment):
-	__slots__ = ('align', 'id')
+	__slots__ = ('align', 'id', 'longtable')
 	tag = 'table'
 	tex_env = 'longtable'
-	def __init__(self, align='left', id=None):
+	def __init__(self, align='left', id=None, longtable=True):
 		super(TeXTable, self).__init__()
 		try:
 			self.align = {
@@ -429,18 +490,33 @@ class TeXTable(TeXEnvironment):
 		except KeyError:
 			raise ValueError('invalid table alignment "%s"' % align)
 		self.id = id
+		self.longtable = longtable
 	def _params(self):
-		return '[%s]{@{}%s@{}}' % (
-			self.align[0],
-			''.join(
-				tex(child)
-				for child in self.children
-				if isinstance(child, TeXTableColumn)
-			)
+		result = '{@{}%s@{}}' % ''.join(
+			tex(child)
+			for child in self.children
+			if isinstance(child, TeXTableColumn)
 		)
+		if self.longtable:
+			result = '[%s]' % self.align[0] + result
+		return result
+	def _content_caption(self):
+		# Generate the table caption and anchor (XXX id only gets included if
+		# caption is specified - unfortunately trying to include it without the
+		# caption invariably leads to unwanted blank lines somewhere)
+		result = []
+		caption = [child for child in self.children if isinstance(child, TeXCaption)]
+		if len(caption) == 1:
+			result.append(tex(caption[0]))
+			if self.id:
+				result.append(format_cmd('label', self.id)) # Note: deliberately not escaping id
+			if self.longtable:
+				result.append(r'\\')
+		elif len(caption) > 1:
+			raise ValueError('more than one caption element found')
+		return result
 	def _content_tex(self):
 		result = []
-		caption = [child for child in self.children if isinstance(child, TeXTableCaption)]
 		thead = [child for child in self.children if isinstance(child, TeXTableHeader)]
 		tfoot = [child for child in self.children if isinstance(child, TeXTableFooter)]
 		tbody = [
@@ -471,27 +547,42 @@ class TeXTable(TeXEnvironment):
 				row for row in self.children
 				if isinstance(row, TeXTableRow)
 			)
-		# Generate the table caption and anchor (XXX id only gets included if
-		# caption is specified - unfortunately trying to include it without the
-		# caption invariably leads to unwanted blank lines somewhere)
-		if caption:
-			result.append(tex(caption[0]))
-			if self.id:
-				result.append(format_cmd('label', self.id)) # Note: deliberately not escaping id
-			result.append(r'\\')
-		result.append(tex(thead[0]))
-		result.append(tex(tfoot[0]))
-		result.append(tex(tbody[0]))
+		if self.longtable:
+			result.extend(self._content_caption())
+		result.append(tex(thead[0], longtable=self.longtable))
+		if self.longtable:
+			result.append(tex(tfoot[0], longtable=True))
+		for b in tbody:
+			result.append(tex(b))
+		if not self.longtable:
+			result.append(tex(tfoot[0], longtable=False))
 		return '\n'.join(result)
 	def __tex__(self):
-		result = []
-		result.append(super(TeXTable, self).__tex__())
-		return '\n'.join(result)
+		if self.longtable:
+			result = format_env('longtable', self._content_tex(), self._params())
+		else:
+			result = []
+			result = [format_env('tabular', self._content_tex(), self._params())]
+			result.extend(self._content_caption())
+			result = format_env('table', '\n'.join(result), '[h!]')
+		result += escape_tex(self.tail)
+		return result
 
-class TeXTableCaption(TeXElement):
-	__slots__ = ()
+class TeXCaption(TeXElement):
+	__slots__ = ('align',)
 	tag = 'caption'
 	tex_cmd = 'caption'
+	def __init__(self, align='top'):
+		super(TeXCaption, self).__init__()
+		try:
+			self.align = {
+				't':      'top',
+				'top':    'top',
+				'b':      'bottom',
+				'bottom': 'bottom',
+			}[align.strip().lower()]
+		except KeyError:
+			raise ValueError('invalid caption alignment "%s"' % align)
 
 class TeXTableBody(TeXEnvironment):
 	__slots__ = ()
@@ -793,10 +884,18 @@ class TeXDocument(TeXEnvironment):
 		if any(self._find(TeXImage)):
 			yield 'graphicx'
 			#yield 'epstopdf' # XXX Only needed if we're using EPS
-		for elem in self._find(TeXTableOfContents):
-			self.uses_toc = True # see _preamble()
-			self.toc_level = elem.level
-			break
+		if any(self._find(TeXListing)):
+			yield 'listings'
+		for elem in self._find(TeXTableOfObjects):
+			# see _preamble()
+			if isinstance(elem, TeXTableOfContents):
+				self.toc = elem
+			elif isinstance(elem, TeXTableOfTables):
+				self.tot = elem
+			elif isinstance(elem, TeXTableOfFigures):
+				self.tof = elem
+			elif isinstance(elem, TeXTableOfListings):
+				self.tol = elem
 		if any(self._find(TeXIndex)) or any(self._find(TeXIndexKey)):
 			self.uses_index = True # see _preamble()
 			yield 'index'
@@ -808,11 +907,14 @@ class TeXDocument(TeXEnvironment):
 		options = ['bookmarks=%s' % str(self.bookmarks).lower()]
 		if self.encoding == 'utf8x':
 			options.append('unicode=true')
-		yield ('hyperref', '[%s]' % ','.join(options)) # Must be last ... because
+		yield ('hyperref', '[%s]' % ','.join(options)) # Must be (almost) last ... because.
+		yield ('hypcap', '[all]')
 
 	def _preamble(self):
-		self.toc_level = 3
-		self.uses_toc = False
+		self.toc = None
+		self.tot = None
+		self.tof = None
+		self.tol = None
 		self.uses_index = False
 		self.uses_underline = False
 		self.uses_unicode = False
@@ -869,7 +971,7 @@ class TeXDocument(TeXEnvironment):
 		# point)
 		if self.colors:
 			for name, color in self.colors.iteritems():
-				yield '%s{rgb}{%f,%f,%f}' % (
+				yield '%s{rgb}{%.2f,%.2f,%.2f}' % (
 					format_cmd('definecolor', name),
 					float((color & 0xFF0000) >> 16) / 0xFF,
 					float((color & 0x00FF00) >>  8) / 0xFF,
@@ -878,9 +980,18 @@ class TeXDocument(TeXEnvironment):
 		# Generate the index auxilliary file
 		if self.uses_index:
 			yield format_cmd('makeindex')
-		# Set the depth counter
-		if self.uses_toc:
-			yield format_cmd('setcounter', str(self.toc_level), '{tocdepth}')
+		# Set the ToC depth counter
+		if self.toc:
+			yield format_cmd('setcounter', str(self.toc.level), '{tocdepth}')
+		# Set the generate table titles
+		for t in (self.toc, self.tot, self.tof, self.tol):
+			if t:
+				if t.title:
+					yield format_cmd('renewcommand', t.title, '{%s}' % format_cmd(t.title_var))
+				# Dirty hack to "inject" the toc-entry style from the document
+				# element down the tree into the table-of element
+				if t.tocinclude:
+					t.style = 'chapter' if self.doc_class in ('book', 'report') else 'section'
 
 	def _content_tex(self):
 		result = super(TeXDocument, self)._content_tex()
@@ -1015,3 +1126,32 @@ class TeXFactory(object):
 			color = attrs['color']
 			self._custom_colors['color%06x' % color] = color
 		return elem
+
+if __name__ == '__main__':
+	tag = TeXFactory()
+	table = tag.table(
+		tag.caption('Result of ', tag.auto(href='list:fetch_first_ordered')),
+		tag.col(nowrap=True),
+		tag.col(nowrap=True),
+		tag.thead(
+			tag.tr(
+				tag.th('DEPTNO'),
+				tag.th('NAME')
+			)
+		),
+		tag.tbody(
+			tag.tr(
+				tag.td('12D'),
+				tag.td('Human Resources')
+			),
+			tag.tr(
+				tag.td('34G'),
+				tag.td('Global Services')
+			)
+		),
+		id='tab:fetch_first_ordered_result',
+		longtable=True
+	)
+	print tex(table)
+	table.longtable = False
+	print tex(table)
