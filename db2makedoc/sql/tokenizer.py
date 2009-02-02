@@ -21,6 +21,7 @@ import re
 import sys
 import codecs
 from decimal import Decimal
+from db2makedoc.util import *
 from db2makedoc.sql.dialects import *
 
 __all__ = [
@@ -50,16 +51,16 @@ utf8decode = lambda s: utf8decoder(s)[0]
 
 _tokenval = 0
 
-def new_token():
+def new_token_type():
 	"""Returns a new token value which is guaranteed to be unique"""
 	global _tokenval
 	_tokenval += 1
 	return _tokenval
 
-def new_tokens(count):
+def new_token_types(count):
 	"""Generator function for creating multiple new token values"""
 	for i in range(count):
-		yield new_token()
+		yield new_token_type()
 
 # Token constants
 (
@@ -75,7 +76,17 @@ def new_tokens(count):
 	LABEL,         # A procedural label
 	PARAMETER,     # A colon-prefixed or simple qmark parameter
 	TERMINATOR,    # A statement terminator
-) = new_tokens(12)
+) = new_token_types(12)
+
+# Declare the Token namedtuple class
+Token = namedtuple('Token', (
+	'type',
+	'value',
+	'source',
+	'line',
+	'column'
+))
+
 
 class SQLTokenizerBase(object):
 	"""Base SQL tokenizer class.
@@ -120,8 +131,11 @@ class SQLTokenizerBase(object):
 
 			(type, value, source, line, column)
 
-		Where type is one of the token constants described below, value is the
-		"value" of the token (depends on type, see below), source is the
+		The elements of the tuple can also be accessed by the names listed
+		above (tokens are instances of the Token namedtuple class).
+
+		The type element is one of the token constants described below, value
+		is the "value" of the token (depends on type, see below), source is the
 		characters from sql parsed to construct the token, and line and column
 		provide the 1-based line and column of the start of the source element
 		in sql. All source elements can be concatenated to reconstruct the
@@ -201,11 +215,11 @@ class SQLTokenizerBase(object):
 						newvalue = value
 					i = source.index('\n') + 1
 					newsource, source = source[:i], source[i:]
-					result.append((type, newvalue, newsource, line, column))
+					result.append(Token(type, newvalue, newsource, line, column))
 					line += 1
 					column = 1
 				if source or type not in (WHITESPACE, COMMENT):
-					result.append((type, value, source, line, column))
+					result.append(Token(type, value, source, line, column))
 			self._tokens = result
 		return self._tokens
 
@@ -244,7 +258,16 @@ class SQLTokenizerBase(object):
 		})
 
 	def _add_token(self, tokentype, tokenvalue):
-		self._tokens.append((
+		"""Adds the current token to the output list.
+
+		This utility method adds the token which ends at the current _index to
+		the output list (_tokens). The start of the token, and it's line and
+		column in the input is tracked  by the internal _tokenstart,
+		_tokenline, and _tokencolumn attributes and may not be specified. The
+		tokentype and tokenvalue parameters specify the type and value (first
+		and second elements of the token) respectively.
+		"""
+		self._tokens.append(Token(
 			tokentype,
 			tokenvalue,
 			self._source[self._tokenstart:self._index],
@@ -285,11 +308,11 @@ class SQLTokenizerBase(object):
 	def _mark(self):
 		"""Marks the current position in the source for later retrieval.
 
-		The mark() method is used with the markedchars property. A handler can
+		The _mark() method is used with the markedchars property. A handler can
 		call mark to save the current position in the source code, then query
 		markedchars to obtain a string of all characters from the marked
 		position to the current position (assuming the handler has moved the
-		current position forward since calling mark().
+		current position forward since calling _mark().
 
 		The markedtext property handles converting all line breaks to LF (like
 		the next() method and char/nextchar properties).
@@ -754,8 +777,7 @@ class DB2ZOSTokenizer(SQLTokenizerBase):
 		self._jump['N'] = self._handle_unistring
 		self._jump['g'] = self._handle_unistring
 		self._jump['G'] = self._handle_unistring
-		# XXX What about the hook character here ... how to encode?
-		self._jump[u'\xac'] = self._handle_not
+		self._jump[u'\xac'] = self._handle_not # Hook character (legacy "not" representation)
 
 
 class DB2LUWTokenizer(DB2ZOSTokenizer):
@@ -777,11 +799,11 @@ class DB2LUWTokenizer(DB2ZOSTokenizer):
 		# Rewrite the special values INFINITY, NAN and SNAN to their decimal
 		# counterparts with token type NUMBER
 		if self._tokens[-1][:2] == (IDENTIFIER, 'INFINITY'):
-			self._tokens[-1] = (NUMBER, Decimal('Infinity')) + self._tokens[-1][2:]
+			self._tokens[-1] = Token(NUMBER, Decimal('Infinity'), *self._tokens[-1][2:])
 		elif self._tokens[-1][:2] == (IDENTIFIER, 'NAN'):
-			self._tokens[-1] = (NUMBER, Decimal('NaN')) + self._tokens[-1][2:]
+			self._tokens[-1] = Token(NUMBER, Decimal('NaN'), *self._tokens[-1][2:])
 		elif self._tokens[-1][:2] == (IDENTIFIER, 'SNAN'):
-			self._tokens[-1] = (NUMBER, Decimal('sNaN')) + self._tokens[-1][2:]
+			self._tokens[-1] = Token(NUMBER, Decimal('sNaN'), *self._tokens[-1][2:])
 
 	def _handle_period(self):
 		"""Parses full-stop characters (".") in the source."""

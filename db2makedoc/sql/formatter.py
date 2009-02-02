@@ -57,7 +57,7 @@ __all__ = [
 	INDENT,    # Whitespace indentation at the start of a line
 	VALIGN,    # Whitespace indentation within a line to vertically align blocks of text
 	VAPPLY,    # Mark the end of a run of VALIGN tokens
-) = new_tokens(6)
+) = new_token_types(6)
 
 # Token labels used for formatting error messages and token dumps
 TOKEN_LABELS = {
@@ -120,9 +120,9 @@ def dump(tokens):
 def dump_token(token):
 	"""Formats a token for the dump routine above."""
 	if len(token) == 3:
-		return '%-16s %-20s %-20s' % (TOKEN_LABELS[token[0]], repr(token[1]), repr(token[2]))
+		return '%-16s %-20s %-20s' % (TOKEN_LABELS[token.type], repr(token.value), repr(token.source))
 	else:
-		return '%-16s %-20s %-20s (%d:%d)' % (TOKEN_LABELS[token[0]], repr(token[1]), repr(token[2]), token[3], token[4])
+		return '%-16s %-20s %-20s (%d:%d)' % (TOKEN_LABELS[token.type], repr(token.value), repr(token.source), token.line, token.column)
 
 def format_ident(name, namechars=set(db2luw_namechars), qchar='"'):
 	"""Format an SQL identifier with quotes if required.
@@ -205,7 +205,7 @@ def recalc_positions(tokens):
 	line = 1
 	column = 1
 	for token in tokens:
-		yield token[:3] + (line, column)
+		yield Token(token.type, token.value, token.source, line, column)
 		for char in token[2]:
 			if char == '\n':
 				line += 1
@@ -221,49 +221,48 @@ def format_tokens(tokens, reformat=[], terminator=';', statement=';'):
 	optional terminator parameter specifies the terminator for statements
 	within a block statement, while the optional statement parameter specifies
 	the top-level statement terminator. The reformat parameter specifies which
-	types of token will be affected by the function. Note: this function strips
+	types of token will be affected by the function. Note: this function zeros
 	the positional elements.
 	"""
 	for token in tokens:
-		if token[0] in reformat:
-			if token[0] in (KEYWORD, REGISTER):
-				yield (token[0], token[1], token[1])
-			elif token[0] in (IDENTIFIER, DATATYPE):
-				yield (token[0], token[1], format_ident(token[1]))
-			elif token[0] == NUMBER:
-				yield (NUMBER, token[1], str(token[1]))
-			elif token[0] == STRING:
-				yield (STRING, token[1], quote_str(token[1]))
-			elif token[0] == LABEL:
-				yield (LABEL, token[1], format_ident(token[1]) + ':')
-			elif token[0] == PARAMETER:
-				yield (PARAMETER, token[1], format_param(token[1]))
-			elif token[0] == COMMENT:
+		if token.type in reformat:
+			if token.type in (KEYWORD, REGISTER):
+				yield Token(token.type, token.value, token.value, 0, 0)
+			elif token.type in (IDENTIFIER, DATATYPE):
+				yield Token(token.type, token.value, format_ident(token.value), 0, 0)
+			elif token.type == NUMBER:
+				yield Token(NUMBER, token.value, str(token.value), 0, 0)
+			elif token.type == STRING:
+				yield Token(STRING, token.value, quote_str(token.value), 0, 0)
+			elif token.type == LABEL:
+				yield Token(LABEL, token.value, format_ident(token.value) + ':', 0, 0)
+			elif token.type == PARAMETER:
+				yield Token(PARAMETER, token.value, format_param(token.value), 0, 0)
+			elif token.type == COMMENT:
 				# XXX Need more intelligent comment handling
 				##yield (COMMENT, token[1], '/*%s*/' % (token[1]))
-				yield token[:3]
-			elif token[0] == STATEMENT:
-				yield (STATEMENT, token[1], statement)
-			elif token[0] == TERMINATOR:
-				yield (TERMINATOR, token[1], terminator)
+				yield Token(token.type, token.value, token.source, 0, 0)
+			elif token.type == STATEMENT:
+				yield Token(STATEMENT, token.value, statement, 0, 0)
+			elif token.type == TERMINATOR:
+				yield Token(TERMINATOR, token.value, terminator, 0, 0)
 			else:
-				yield token[:3]
+				yield Token(token.type, token.value, token.source, 0, 0)
 		else:
-			yield token[:3]
+			yield Token(token.type, token.value, token.source, 0, 0)
 
 def convert_indent(tokens, indent='\t'):
 	"""Converts INDENT tokens into WHITESPACE.
 
 	This generator function converts INDENT tokens into WHITESPACE tokens
 	containing the characters specified by the indent parameter. Note: this
-	function strips the positional elements.
+	function zeros the positional elements.
 	"""
 	for token in tokens:
-		(type, value, source) = token[:3]
-		if type == INDENT:
-			yield (WHITESPACE, None, '\n' + indent * value)
+		if token.type == INDENT:
+			yield Token(WHITESPACE, None, '\n' + indent * value, 0, 0)
 		else:
-			yield (type, value, source)
+			yield Token(token.type, token.value, token.source, 0, 0)
 
 def convert_valign(tokens):
 	"""Converts VALIGN and VAPPLY tokens into WHITESPACE.
@@ -281,9 +280,9 @@ def convert_valign(tokens):
 		result = []
 		more = False
 		for i, token in enumerate(recalc_positions(tokens)):
-			line, col = token[3:]
+			line, col = token.line, token.column
 			result.append(token)
-			if token[0] == VALIGN:
+			if token.type == VALIGN:
 				if indexes and alignline == line:
 					# If we encounter more than one VALIGN on a line, remember
 					# that we need another pass
@@ -296,14 +295,14 @@ def convert_valign(tokens):
 					indexes.append(i)
 					aligncol = max(aligncol, col)
 					alignline = line
-			elif token[0] == VAPPLY:
+			elif token.type == VAPPLY:
 				# Convert all the remembered VALIGN tokens into WHITESPACE
 				# tokens with appropriate lengths for vertical alignment,
 				# and change the VAPPLY token into a blank WHITESPACE token
 				# (necessary to ensure consistency of remembered indexes)
 				for j in indexes:
-					line, col = result[j][3:]
-					result[j] = (WHITESPACE, None, ' ' * (aligncol - col))
+					line, col = result[j].line, result[j].column
+					result[j] = Token(WHITESPACE, None, ' ' * (aligncol - col), 0, 0)
 				# Remove the VAPPLY token
 				if indexes:
 					del result[-1]
@@ -331,17 +330,17 @@ def merge_whitespace(tokens):
 	line = col = 1
 	# Iterate pairwise over the tokens
 	for last, token in izip(a, b):
-		if last[0] == WHITESPACE:
-			if token[0] == last[0]:
-				space += token[2]
+		if last.type == WHITESPACE:
+			if token.type == last.type:
+				space += token.source
 			elif space:
-				yield (WHITESPACE, None, space, line, col)
+				yield Token(WHITESPACE, None, space, line, col)
 		else:
-			if token[0] == WHITESPACE:
-				(_, _, space, line, col) = token
+			if token.type == WHITESPACE:
+				space, line, col = token[2:]
 			yield last
-	if token[0] == WHITESPACE:
-		yield (WHITESPACE, None, space, line, col)
+	if token.type == WHITESPACE:
+		yield Token(WHITESPACE, None, space, line, col)
 	else:
 		yield token
 
@@ -362,11 +361,11 @@ def split_lines(tokens):
 				new_value = value
 			i = source.index('\n') + 1
 			new_source, source = source[:i], source[i:]
-			yield (type, new_value, new_source, line, column)
+			yield Token(type, new_value, new_source, line, column)
 			line += 1
 			column = 1
 		if source or type not in (WHITESPACE, COMMENT):
-			yield (type, value, source, line, column)
+			yield Token(type, value, source, line, column)
 
 class Error(Exception):
 	"""Base class for errors in this module"""
@@ -412,7 +411,7 @@ class ParseTokenError(ParseError):
 		self.source = tokens
 		self.token = errtoken
 		# Split out the line and column of the error
-		(_, _, _, self.line, self.col) = errtoken
+		self.line, self.col = errtoken.line, errtoken.column
 		# Initialize the exception
 		ParseError.__init__(self, msg)
 
@@ -420,7 +419,7 @@ class ParseTokenError(ParseError):
 		"""Outputs a string version of the exception."""
 		# Generate a block of context with an indicator showing the error
 		context_lines = 5
-		sourcelines = ''.join(s for (_, _, s, _, _) in self.source).splitlines()
+		sourcelines = ''.join(t.source for t in self.source).splitlines()
 		lineindex = self.line - 1
 		if self.line > len(sourcelines):
 			lineindex = -1
@@ -445,6 +444,13 @@ class ParseTokenError(ParseError):
 			return token
 		elif isinstance(token, int):
 			return TOKEN_LABELS[token]
+		elif isinstance(token, Token):
+			if token.type in (EOF, WHITESPACE, TERMINATOR, STATEMENT):
+				return TOKEN_LABELS[token.type]
+			elif token.value is not None:
+				return token.value
+			else:
+				return token.source
 		elif isinstance(token, tuple):
 			if (len(token) == 1) or (token[0] in (EOF, WHITESPACE, TERMINATOR, STATEMENT)):
 				return TOKEN_LABELS[token[0]]
@@ -499,19 +505,22 @@ class BaseFormatter(object):
 	in the form of a list of tokens, where tokens are 5-element tuples with the
 	following structure:
 
-		(token_type, token_value, source, line, column)
+		(type, value, source, line, column)
+
+	The elements of the tuple can also be accessed by the names listed above
+	(tokens are instances of the Token namedtuple class).
 
 	To use the class simply pass such a list to the parse method. The method
 	will return a list of tokens (just like the list of tokens provided as
 	input, but reformatted according to the properties detailed below).
 
-	The token_type element gives the general "family" of the token (such as
-	OPERATOR, IDENTIFIER, etc), while the token_value element provides the
-	specific type of the token (e.g. "=", "OR", "DISTINCT", etc). The code in
-	these classes typically uses "partial" tokens to match against "complete"
-	tokens in the source. For example, instead of trying to match on the source
-	element (which may vary in case), this class often matches token on the
-	first two elements:
+	The type element gives the general "family" of the token (such as OPERATOR,
+	IDENTIFIER, etc), while the value element provides the specific type of the
+	token (e.g. "=", "OR", "DISTINCT", etc). The code in these classes
+	typically uses "partial" tokens to match against "complete" tokens in the
+	source. For example, instead of trying to match on the source element
+	(which may vary in case), this class often matches token on the first two
+	elements:
 
 		(KEYWORD, "OR", "or", 7, 13)[:2] == (KEYWORD, "OR")
 
@@ -610,7 +619,7 @@ class BaseFormatter(object):
 		self._parse_init(tokens)
 		while True:
 			# Ignore leading whitespace and empty statements
-			while self._token(self._index)[0] in (COMMENT, WHITESPACE, TERMINATOR):
+			while self._token(self._index).type in (COMMENT, WHITESPACE, TERMINATOR):
 				self._index += 1
 			# If not at EOF, parse a statement
 			if not self._match(EOF):
@@ -636,7 +645,7 @@ class BaseFormatter(object):
 		# input (no point parsing them if we're going to rewrite them all
 		# anyway)
 		if WHITESPACE in self.reformat:
-			self._tokens = [token for token in tokens if token[0] != WHITESPACE]
+			self._tokens = [token for token in tokens if token.type != WHITESPACE]
 		else:
 			self._tokens = tokens
 
@@ -648,7 +657,7 @@ class BaseFormatter(object):
 		if WHITESPACE in self.reformat:
 			output = recalc_positions(convert_valign(convert_indent(output, indent=self.indent)))
 		else:
-			output = (token for token in tokens if token[0] not in (INDENT, VALIGN, VAPPLY))
+			output = (token for token in tokens if token.type not in (INDENT, VALIGN, VAPPLY))
 		output = merge_whitespace(output)
 		if self.line_split:
 			output = split_lines(output)
@@ -656,12 +665,12 @@ class BaseFormatter(object):
 		# token (or simply make the output a solitary EOF token if nothing is
 		# left)
 		output = list(output)
-		while output and (output[-1][0] in (WHITESPACE, EOF)):
+		while output and (output[-1].type in (WHITESPACE, EOF)):
 			del output[-1]
 		if output:
-			output.append((EOF, None, '') + output[-1][3:])
+			output.append(Token(EOF, None, '', output[-1].line, output[-1].column))
 		else:
-			output = [(EOF, None, '', 1, 1)]
+			output = [Token(EOF, None, '', 1, 1)]
 		self._output = output
 
 	def _parse_top(self):
@@ -683,7 +692,7 @@ class BaseFormatter(object):
 
 		See _insert_output for an explanation of allowempty.
 		"""
-		token = (INDENT, self._level, '')
+		token = Token(INDENT, self._level, '', 0, 0)
 		self._insert_output(token, index, allowempty)
 
 	def _indent(self, index=0, allowempty=False):
@@ -699,12 +708,12 @@ class BaseFormatter(object):
 
 	def _valign(self, index=0):
 		"""Inserts a VALIGN token into the output."""
-		token = (VALIGN, None, '')
+		token = Token(VALIGN, None, '', 0, 0)
 		self._insert_output(token, index, True)
 
 	def _vapply(self, index=0):
 		"""Inserts a VAPPLY token into the output."""
-		token = (VAPPLY, None, '')
+		token = Token(VAPPLY, None, '', 0, 0)
 		self._insert_output(token, index, True)
 
 	def _insert_output(self, token, index, allowempty):
@@ -731,7 +740,7 @@ class BaseFormatter(object):
 		elif index < 0:
 			i = len(self._output) - 1
 			while index < 0:
-				while self._output[i][0] in (COMMENT, WHITESPACE):
+				while self._output[i].type in (COMMENT, WHITESPACE):
 					i -= 1
 				index += 1
 		else:
@@ -739,7 +748,7 @@ class BaseFormatter(object):
 		# Check that the statestack invariant (see _save_state()) is preserved
 		assert (len(self._statestack) == 0) or (i >= self._statestack[-1][2])
 		# Check for duplicates - replace if we're about to duplicate the token
-		if not allowempty and self._output[i - 1][0] == token[0] and token[0] == INDENT:
+		if not allowempty and self._output[i - 1].type == token.type and token.type == INDENT:
 			self._output[i - 1] = token
 		else:
 			self._output.insert(i, token)
@@ -802,29 +811,36 @@ class BaseFormatter(object):
 		transformations were necessary to make the match, e.g. KEYWORD to
 		IDENTIFIER).
 		"""
+		# List of token type transformations that are permitted to occur in
+		# order to obtain a successful match (e.g. if we're expecting a
+		# DATATYPE but find an IDENTIFIER, the comparison method may mutate the
+		# IDENTIFIER token into a DATATYPE token and return it, indicating a
+		# successful match)
+		transforms = {
+			KEYWORD:     (IDENTIFIER, DATATYPE, REGISTER),
+			IDENTIFIFER: (DATATYPE, REGISTER),
+			TERMINATOR:  (STATEMENT,),
+			EOF:         (STATEMENT,),
+		}
 		if isinstance(template, basestring):
-			if token[0] in (KEYWORD, OPERATOR) and token[1] == template:
+			if token.type in (KEYWORD, OPERATOR) and token.value == template:
 				return token
-			elif token[0] == IDENTIFIER and token[1] == template and token[2][0] != '"':
+			elif token.type == IDENTIFIER and token.value == template and token.source[0] != '"':
 				# Only unquoted identifiers are matched (quoted identifiers
-				# aren't used in any part of the DB2 SQL dialect)
+				# aren't used in any part of the SQL dialect)
 				return token
 		elif isinstance(template, int):
-			if token[0] == template:
+			if token.type == template:
 				return token
-			elif token[0] == KEYWORD and template == IDENTIFIER:
-				return (IDENTIFIER,) + token[1:]
-			elif token[0] in (KEYWORD, IDENTIFIER) and template in (DATATYPE, REGISTER):
-				return (template,) + token[1:]
-			elif token[0] in (TERMINATOR, EOF) and template == STATEMENT:
-				return (STATEMENT,) + token[1:]
+			elif template in transforms.get(token.type, ()):
+				return Token(template, *token[1:])
 			else:
 				return None
 		elif isinstance(template, tuple):
 			if token[:len(template)] == template:
 				return token
-			elif token[0] in (KEYWORD, IDENTIFIER) and template[0] in (DATATYPE, REGISTER) and token[1] == template[1]:
-				return (template[0],) + token[1:]
+			elif (token.value == template[1]) and (template[0] in transforms.get(token.type, ())):
+				return Token(template[0], *token[1:])
 			else:
 				return None
 		else:
@@ -921,11 +937,11 @@ class BaseFormatter(object):
 		if WHITESPACE in self.reformat:
 			if prespace is None:
 				prespace = self._prespace_default(template)
-			if prespace and not (self._output and self._output[-1][0] in (INDENT, WHITESPACE)):
-				self._output.append((WHITESPACE, None, ' ', 0, 0))
+			if prespace and not (self._output and self._output[-1].type in (INDENT, WHITESPACE)):
+				self._output.append(Token(WHITESPACE, None, ' ', 0, 0))
 		self._output.append(token)
 		self._index += 1
-		while self._token(self._index)[0] in (COMMENT, WHITESPACE):
+		while self._token(self._index).type in (COMMENT, WHITESPACE):
 			self._output.append(self._token(self._index))
 			self._index += 1
 		# If postspace is False, prevent the next _match call from adding a
@@ -935,7 +951,7 @@ class BaseFormatter(object):
 			if postspace is None:
 				postspace = self._postspace_default(template)
 			if not postspace:
-				self._output.append((WHITESPACE, None, '', 0, 0))
+				self._output.append(Token(WHITESPACE, None, '', 0, 0))
 		return token
 
 	def _match_sequence(self, templates, prespace=None, postspace=None, interspace=None):
@@ -970,7 +986,7 @@ class BaseFormatter(object):
 		# WHITESPACE tokens
 		result = [
 			token for token in self._output[self._statestack[-1][2]:]
-			if token[0] not in (COMMENT, WHITESPACE)
+			if token.type not in (COMMENT, WHITESPACE)
 		]
 		self._forget_state()
 		return result
@@ -1050,7 +1066,7 @@ class BaseFormatter(object):
 		for template in templates:
 			found.append(self._token(self._index))
 			i += 1
-			while self._token(i)[0] in (COMMENT, WHITESPACE):
+			while self._token(i).type in (COMMENT, WHITESPACE):
 				i += 1
 		raise ParseExpectedSequenceError(self._tokens, found, templates)
 
@@ -1101,11 +1117,11 @@ class DB2LUWFormatter(BaseFormatter):
 		specify SCHEMA.TABLE.COLUMN). The method returns the parsed name as a
 		tuple with 3 elements (None is used for qualifiers which are missing).
 		"""
-		result = (None, None, self._expect(IDENTIFIER)[1])
+		result = (None, None, self._expect(IDENTIFIER).value)
 		if self._match('.'):
-			result = (None, result[2], self._expect(IDENTIFIER)[1])
+			result = (None, result[2], self._expect(IDENTIFIER).value)
 			if self._match('.'):
-				result = (result[1], result[2], self._expect(IDENTIFIER)[1])
+				result = (result[1], result[2], self._expect(IDENTIFIER).value)
 		return result
 
 	_parse_column_name = _parse_subrelation_name
@@ -1124,9 +1140,9 @@ class DB2LUWFormatter(BaseFormatter):
 		name). The method returns the parsed name as a tuple with 2 elements
 		(None is used for the schema qualifier if it is missing).
 		"""
-		result = (None, self._expect(IDENTIFIER)[1])
+		result = (None, self._expect(IDENTIFIER).value)
 		if self._match('.'):
-			result = (result[1], self._expect(IDENTIFIER)[1])
+			result = (result[1], self._expect(IDENTIFIER).value)
 		return result
 
 	_parse_relation_name = _parse_subschema_name
@@ -1328,16 +1344,16 @@ class DB2LUWFormatter(BaseFormatter):
 			elif self._match_one_of([(DATATYPE, 'DEC'), (DATATYPE, 'DECIMAL')]):
 				typename = 'DECIMAL'
 				if self._match('(', prespace=False):
-					size = self._expect(NUMBER)[1]
+					size = self._expect(NUMBER).value
 					if self._match(','):
-						scale = self._expect(NUMBER)[1]
+						scale = self._expect(NUMBER).value
 					self._expect(')')
 			elif self._match_one_of([(DATATYPE, 'NUM'), (DATATYPE, 'NUMERIC')]):
 				typename = 'NUMERIC'
 				if self._match('(', prespace=False):
-					size = self._expect(NUMBER)[1]
+					size = self._expect(NUMBER).value
 					if self._match(','):
-						scale = self._expect(NUMBER)[1]
+						scale = self._expect(NUMBER).value
 					self._expect(')')
 			elif self._match_one_of([(DATATYPE, 'CHAR'), (DATATYPE, 'CHARACTER')]):
 				if self._match((DATATYPE, 'VARYING')):
@@ -1398,10 +1414,10 @@ class DB2LUWFormatter(BaseFormatter):
 			# types do not have a size or scale)
 			self._restore_state()
 			typeschema = None
-			typename = self._expect(DATATYPE)[1]
+			typename = self._expect(DATATYPE).value
 			if self._match('.'):
 				typeschema = typename
-				typename = self._expect(DATATYPE)[1]
+				typename = self._expect(DATATYPE).value
 			size = None
 			scale = None
 		else:
@@ -1420,7 +1436,7 @@ class DB2LUWFormatter(BaseFormatter):
 		"""
 		result = []
 		while True:
-			result.append(self._expect(IDENTIFIER)[1])
+			result.append(self._expect(IDENTIFIER).value)
 			if not self._match(','):
 				break
 			elif newlines:
@@ -1746,7 +1762,7 @@ class DB2LUWFormatter(BaseFormatter):
 			'SUM',
 			'VARIANCE',
 			'VAR',
-		])[1]
+		]).value
 		self._expect('(', prespace=False)
 		if aggfunc in ('COUNT', 'COUNT_BIG') and self._match('*'):
 			# COUNT and COUNT_BIG can take '*' as a sole parameter
@@ -1774,7 +1790,7 @@ class DB2LUWFormatter(BaseFormatter):
 			'LEAD',
 			'FIRST_VALUE',
 			'LAST_VALUE',
-		])[1]
+		]).value
 		self._expect('(', prespace=False)
 		if olapfunc in ('LAG', 'LEAD'):
 			self._parse_expression()
@@ -1816,7 +1832,7 @@ class DB2LUWFormatter(BaseFormatter):
 			'XMLVALIDATE',
 			'XMLTABLE',
 			'XMLTRANSFORM',
-		])[1]
+		]).value
 		self._expect('(', prespace=False)
 		if xmlfunc == 'XMLAGG':
 			self._parse_expression()
@@ -1918,7 +1934,7 @@ class DB2LUWFormatter(BaseFormatter):
 			while valid:
 				t = self._match_one_of(valid)
 				if t:
-					t = t[1]
+					t = t.value
 					valid.remove(t)
 				else:
 					break
@@ -1998,7 +2014,7 @@ class DB2LUWFormatter(BaseFormatter):
 		while valid:
 			t = self._expect_one_of(valid)
 			if t:
-				t = t[1]
+				t = t.value
 				valid.remove(t)
 			else:
 				break
@@ -2014,7 +2030,7 @@ class DB2LUWFormatter(BaseFormatter):
 		while valid:
 			t = self._expect_one_of(valid)
 			if t:
-				t = t[1]
+				t = t.value
 				valid.remove(t)
 			else:
 				break
@@ -2045,7 +2061,7 @@ class DB2LUWFormatter(BaseFormatter):
 			'POSITION',
 			'SUBSTRING',
 			'TRIM',
-		])[1]
+		]).value
 		self._expect('(', prespace=False)
 		if sqlfunc in ('CHAR_LENGTH', 'CHARACTER_LENGTH'):
 			self._parse_expression()
@@ -2476,7 +2492,7 @@ class DB2LUWFormatter(BaseFormatter):
 				self._expect('TABLE')
 				self._expect('(', prespace=False)
 				self._indent()
-				if self._expect_one_of(['INSERT', 'UPDATE'])[1] == 'INSERT':
+				if self._expect_one_of(['INSERT', 'UPDATE']).value == 'INSERT':
 					self._parse_insert_statement()
 				else:
 					self._parse_update_statement()
@@ -2488,7 +2504,7 @@ class DB2LUWFormatter(BaseFormatter):
 				self._expect('TABLE')
 				self._expect('(', prespace=False)
 				self._indent()
-				if self._expect_one_of(['UPDATE', 'DELETE'])[1] == 'DELETE':
+				if self._expect_one_of(['UPDATE', 'DELETE']).value == 'DELETE':
 					self._parse_delete_statement()
 				else:
 					self._parse_update_statement()
@@ -2662,7 +2678,7 @@ class DB2LUWFormatter(BaseFormatter):
 						self._expect(NUMBER)
 						continue
 				elif self._match('SET'):
-					t = self._expect_one_of(valid)[1]
+					t = self._expect_one_of(valid).value
 					if t != 'NO': valid.remove(t)
 					if t in validno: validno.remove(t)
 				else:
@@ -2670,7 +2686,7 @@ class DB2LUWFormatter(BaseFormatter):
 			else:
 				t = self._match_one_of(valid)
 				if t:
-					t = t[1]
+					t = t.value
 					if t != 'NO': valid.remove(t)
 					if t in validno: validno.remove(t)
 				else:
@@ -2687,7 +2703,7 @@ class DB2LUWFormatter(BaseFormatter):
 			elif t in ('CYCLE', 'ORDER'):
 				pass
 			elif t == 'NO':
-				t = self._expect_one_of(validno)[1]
+				t = self._expect_one_of(validno).value
 				validno.remove(t)
 				valid.remove(t)
 
@@ -2726,7 +2742,7 @@ class DB2LUWFormatter(BaseFormatter):
 				else:
 					self._forget_state()
 			elif self._match('GENERATED'):
-				if self._expect_one_of(['ALWAYS', 'BY'])[1] == 'BY':
+				if self._expect_one_of(['ALWAYS', 'BY']).value == 'BY':
 					self._expect('DEFAULT')
 				if self._match('AS'):
 					if self._match('IDENTITY'):
@@ -2780,7 +2796,7 @@ class DB2LUWFormatter(BaseFormatter):
 			t = ['DELETE', 'UPDATE']
 			for i in xrange(2):
 				if self._match('ON'):
-					t.remove(self._expect_one_of(t)[1])
+					t.remove(self._expect_one_of(t).value)
 					if self._match('NO'):
 						self._expect('ACTION')
 					elif self._match('SET'):
@@ -2854,7 +2870,7 @@ class DB2LUWFormatter(BaseFormatter):
 			t = ['DELETE', 'UPDATE']
 			for i in xrange(2):
 				if self._match('ON'):
-					t.remove(self._expect_one_of(t)[1])
+					t.remove(self._expect_one_of(t).value)
 					if self._match('NO'):
 						self._expect('ACTION')
 					elif self._match('SET'):
@@ -2969,7 +2985,7 @@ class DB2LUWFormatter(BaseFormatter):
 				elif self._match('INLINE'):
 					self._expect_sequence(['LENGTH', NUMBER])
 				elif self._match('GENERATED'):
-					if self._match(['BY', 'ALWAYS'])[1] == 'BY':
+					if self._match(['BY', 'ALWAYS']).value == 'BY':
 						self._expect('DEFAULT')
 					self._expect('AS')
 					if self._match('IDENTITY'):
@@ -3043,7 +3059,7 @@ class DB2LUWFormatter(BaseFormatter):
 				'DB2LBACWRITESET',
 				'DB2LBACWRITETREE',
 				'ALL'
-			])[1] == 'DB2LBACWRITEARRAY':
+			]).value == 'DB2LBACWRITEARRAY':
 				self._expect_one_of(['WRITEDOWN', 'WRITEUP'])
 			self._expect_sequence(['FOR', IDENTIFIER])
 		elif self._match_one_of([
@@ -3115,7 +3131,7 @@ class DB2LUWFormatter(BaseFormatter):
 			# round grabbing IDENTs (taking care of the special syntax for
 			# REFERENCES and UPDATE which can include a column list)
 			while True:
-				if self._expect(IDENTIFIER)[1] in ('REFERENCES', 'UPDATE'):
+				if self._expect(IDENTIFIER).value in ('REFERENCES', 'UPDATE'):
 					if self._match('('):
 						self._parse_ident_list()
 						self._expect(')')
@@ -3212,7 +3228,7 @@ class DB2LUWFormatter(BaseFormatter):
 		while valid:
 			t = self._match_one_of(valid)
 			if t:
-				t = t[1]
+				t = t.value
 				valid.remove(t)
 			else:
 				break
@@ -3339,7 +3355,7 @@ class DB2LUWFormatter(BaseFormatter):
 			while valid:
 				t = self._match_one_of(valid)
 				if t:
-					t = t[1]
+					t = t.value
 					valid.remove(t)
 				else:
 					break
@@ -3537,7 +3553,7 @@ class DB2LUWFormatter(BaseFormatter):
 		while valid:
 			t = self._match_one_of(valid)
 			if t:
-				t = t[1]
+				t = t.value
 				valid.remove(t)
 			else:
 				break
@@ -3552,7 +3568,7 @@ class DB2LUWFormatter(BaseFormatter):
 						'OBJMAINT',
 						'SECMAINT',
 						'VALIDATE'
-					])[1] == 'EXECUTE':
+					]).value == 'EXECUTE':
 						if self._match_one_of(['WITH', 'WITHOUT']):
 							self._expect('DATA')
 					self._expect('STATUS')
@@ -3575,7 +3591,7 @@ class DB2LUWFormatter(BaseFormatter):
 				while valid:
 					t = self._match_one_of(valid)
 					if t:
-						t = t[1]
+						t = t.value
 						valid.remove(t)
 					else:
 						break
@@ -3606,7 +3622,7 @@ class DB2LUWFormatter(BaseFormatter):
 			while valid:
 				t = self._match_one_of(valid)
 				if t:
-					t = t[1]
+					t = t.value
 					valid.remove(t)
 				elif 'evm-group' in valid:
 					self._save_state()
@@ -3634,7 +3650,7 @@ class DB2LUWFormatter(BaseFormatter):
 			while valid:
 				t = self._match_one_of(valid)
 				if t:
-					t = t[1]
+					t = t.value
 					valid.remove(t)
 				else:
 					break
@@ -3657,7 +3673,7 @@ class DB2LUWFormatter(BaseFormatter):
 		while valid:
 			t = self._match_one_of(valid)
 			if t:
-				t = t[1]
+				t = t.value
 				valid.remove(t)
 			else:
 				break
@@ -3705,7 +3721,7 @@ class DB2LUWFormatter(BaseFormatter):
 
 	def _parse_wlm_event_monitor(self):
 		"""Parses a wlm event monitor definition"""
-		if self._expect_one_of(['ACTIVITIES', 'STATISTICS', 'THRESHOLD'])[1] == 'THRESHOLD':
+		if self._expect_one_of(['ACTIVITIES', 'STATISTICS', 'THRESHOLD']).value == 'THRESHOLD':
 			self._expect('VIOLATIONS')
 		self._parse_evm_options()
 
@@ -3727,7 +3743,7 @@ class DB2LUWFormatter(BaseFormatter):
 		# ALTER BUFFERPOOL already matched
 		self._expect(IDENTIFIER)
 		if self._match('ADD'):
-			if self._expect_one_of(['NODEGROUP', 'DATABASE'])[1] == 'DATABASE':
+			if self._expect_one_of(['NODEGROUP', 'DATABASE']).value == 'DATABASE':
 				self._expect_sequence(['PARTITION', 'GROUP'])
 			self._expect(IDENTIFIER)
 		elif self._match('NUMBLOCKPAGES'):
@@ -4149,7 +4165,7 @@ class DB2LUWFormatter(BaseFormatter):
 			elif self._match('COMPRESS'):
 				self._expect_one_of(['YES', 'NO'])
 			elif self._match('ACTIVATE'):
-				if self._expect_one_of(['NOT', 'VALUE'])[1] == 'NOT':
+				if self._expect_one_of(['NOT', 'VALUE']).value == 'NOT':
 					self._expect_sequence(['LOGGED', 'INITIALLY'])
 					if self._match('WITH'):
 						self._expect_sequence(['EMPTY', 'TABLE'])
@@ -4598,7 +4614,7 @@ class DB2LUWFormatter(BaseFormatter):
 				t = self._match_one_of(['WHEN', 'ELSE', 'END'])
 				if t:
 					self._outdent(-1)
-					t = t[1]
+					t = t.value
 					break
 				else:
 					self._newline()
@@ -4795,7 +4811,7 @@ class DB2LUWFormatter(BaseFormatter):
 		while valid:
 			t = self._match_one_of(valid)
 			if t:
-				t = t[1]
+				t = t.value
 				valid.remove(t)
 			else:
 				break
@@ -4898,7 +4914,7 @@ class DB2LUWFormatter(BaseFormatter):
 			try:
 				t = self._match_one_of(valid)
 				if t:
-					t = t[1]
+					t = t.value
 					# Note that matches aren't removed from valid, because it's
 					# simply too complex to figure out what option disallows
 					# other options in many cases
@@ -4941,7 +4957,7 @@ class DB2LUWFormatter(BaseFormatter):
 				elif t == 'MODIFIES':
 					self._expect_sequence(['SQL', 'DATA'])
 				elif t == 'NO':
-					t = self._expect_one_of(['DBINFO', 'EXTERNAL', 'FINAL', 'SCRATCHPAD'])[1]
+					t = self._expect_one_of(['DBINFO', 'EXTERNAL', 'FINAL', 'SCRATCHPAD']).value
 					if t == 'EXTERNAL':
 						self._expect('ACTION')
 					elif t == 'FINAL':
@@ -5007,7 +5023,7 @@ class DB2LUWFormatter(BaseFormatter):
 			self._expect_sequence(['LOCK', 'REQUEST'])
 		# Parse the function body
 		self._outdent()
-		if self._expect_one_of(['BEGIN', 'RETURN'])[1] == 'BEGIN':
+		if self._expect_one_of(['BEGIN', 'RETURN']).value == 'BEGIN':
 			self._parse_dynamic_compound_statement()
 		else:
 			self._indent()
@@ -5072,7 +5088,7 @@ class DB2LUWFormatter(BaseFormatter):
 			t = self._match_one_of(valid)
 			if t:
 				self._newline(-1)
-				t = t[1]
+				t = t.value
 				valid.remove(t)
 			else:
 				break
@@ -5173,7 +5189,7 @@ class DB2LUWFormatter(BaseFormatter):
 		while True:
 			t = self._match_one_of(valid)
 			if t:
-				t = t[1]
+				t = t.value
 				# Note that matches aren't removed from valid, because it's
 				# simply too complex to figure out what option disallows other
 				# options in many cases
@@ -5227,7 +5243,7 @@ class DB2LUWFormatter(BaseFormatter):
 						'SIMPLE',
 						'JAVA',
 						'SQL'
-					])[1]
+					]).value
 					if p == 'GENERAL':
 						self._match_sequence(['WITH', 'NULLS'])
 					elif p == 'SIMPLE':
@@ -5440,7 +5456,7 @@ class DB2LUWFormatter(BaseFormatter):
 		while valid:
 			t = self._match_one_of(valid)
 			if t:
-				t = t[1]
+				t = t.value
 				valid.remove(t)
 			else:
 				break
@@ -5651,7 +5667,7 @@ class DB2LUWFormatter(BaseFormatter):
 				else:
 					t = self._match_one_of(valid)
 				if t:
-					t = t[1]
+					t = t.value
 					valid.remove(t)
 				else:
 					break
@@ -5677,7 +5693,7 @@ class DB2LUWFormatter(BaseFormatter):
 			self._outdent()
 			self._expect(')')
 		try:
-			label = self._expect(LABEL)[1]
+			label = self._expect(LABEL).value
 			self._outdent(-1)
 			self._newline()
 		except ParseError:
@@ -5705,7 +5721,7 @@ class DB2LUWFormatter(BaseFormatter):
 		while valid:
 			t = self._match_one_of(valid)
 			if t:
-				t = t[1]
+				t = t.value
 				valid.remove(t)
 			else:
 				break
@@ -5759,7 +5775,7 @@ class DB2LUWFormatter(BaseFormatter):
 		# CREATE TYPE MAPPING already matched
 		self._match(IDENTIFIER)
 		valid = set(['FROM', 'TO'])
-		t = self._expect_one_of(valid)[1]
+		t = self._expect_one_of(valid).value
 		valid.remove(t)
 		self._match_sequence(['LOCAL', 'TYPE'])
 		self._parse_datatype()
@@ -5820,7 +5836,7 @@ class DB2LUWFormatter(BaseFormatter):
 		while valid:
 			if not self._match('WITH'):
 				break
-			t = self._expect_one_of(valid)[1]
+			t = self._expect_one_of(valid).value
 			valid.remove(t)
 			if t in ('CASCADED', 'LOCAL', 'CHECK'):
 				valid.discard('CASCADED')
@@ -5944,7 +5960,7 @@ class DB2LUWFormatter(BaseFormatter):
 		while valid:
 			t = self._match_one_of(valid)
 			if t:
-				t = t[1]
+				t = t.value
 				valid.remove(t)
 			else:
 				break
@@ -6264,7 +6280,7 @@ class DB2LUWFormatter(BaseFormatter):
 					t = self._match_one_of(['ELSEIF', 'ELSE', 'END'])
 					if t:
 						self._outdent(-1)
-						t = t[1]
+						t = t.value
 						break
 					else:
 						self._newline()
@@ -6530,7 +6546,7 @@ class DB2LUWFormatter(BaseFormatter):
 			t = self._match_one_of(valid)
 			if t:
 				self._newline(-1)
-				t = t[1]
+				t = t.value
 				valid.remove(t)
 			else:
 				break
@@ -6546,7 +6562,7 @@ class DB2LUWFormatter(BaseFormatter):
 				self._expect_sequence(['FOR', NUMBER])
 				self._expect_one_of(['ROW', 'ROWS'])
 			elif t == 'WITH':
-				if self._expect_one_of(['RR', 'RS', 'CS', 'UR'])[1] in ('RR', 'RS'):
+				if self._expect_one_of(['RR', 'RS', 'CS', 'UR']).value in ('RR', 'RS'):
 					if self._match('USE'):
 						self._expect_sequence(['AND', 'KEEP'])
 						self._expect_one_of(['SHARE', 'EXCLUSIVE', 'UPDATE'])
@@ -6561,7 +6577,7 @@ class DB2LUWFormatter(BaseFormatter):
 
 		def parse_cascade_clause():
 			if self._match('CASCADE'):
-				if self._expect_one_of(['DEFERRED', 'IMMEDIATE'])[1] == 'IMMEDIATE':
+				if self._expect_one_of(['DEFERRED', 'IMMEDIATE']).value == 'IMMEDIATE':
 					if self._match('TO'):
 						if self._match('ALL'):
 							self._expect('TABLES')
@@ -6590,7 +6606,7 @@ class DB2LUWFormatter(BaseFormatter):
 			while valid:
 				t = self._match_one_of(valid)
 				if t:
-					t = t[1]
+					t = t.value
 					valid.remove(t)
 				else:
 					break
@@ -7072,7 +7088,7 @@ class DB2LUWFormatter(BaseFormatter):
 			self._parse_while_statement(inproc=False)
 		else:
 			try:
-				label = self._expect(LABEL)[1]
+				label = self._expect(LABEL).value
 			except ParseError:
 				self._parse_select_statement()
 			else:
@@ -7121,7 +7137,7 @@ class DB2LUWFormatter(BaseFormatter):
 		"""Parses a procedure statement within a procedure body"""
 		# XXX Should PREPARE be supported here?
 		try:
-			label = self._expect(LABEL)[1]
+			label = self._expect(LABEL).value
 			self._newline()
 		except ParseError:
 			label = None
@@ -7385,7 +7401,7 @@ class DB2LUWFormatter(BaseFormatter):
 		# If we're reformatting WHITESPACE, add a blank WHITESPACE token to the
 		# output - this will suppress leading whitespace in front of the first
 		# word of the statement
-		self._output.append((WHITESPACE, None, '', 0, 0))
+		self._output.append(Token(WHITESPACE, None, '', 0, 0))
 		if self._match('ALTER'):
 			if self._match('TABLE'):
 				self._parse_alter_table_statement()
@@ -7555,7 +7571,7 @@ class DB2LUWFormatter(BaseFormatter):
 					'TEMPORARY',
 					'USER',
 					'SYSTEM',
-				])[1]
+				]).value
 				if tbspacetype:
 					if tbspacetype in ('USER', 'SYSTEM'):
 						self._expect('TEMPORARY')
@@ -7654,7 +7670,7 @@ class DB2LUWFormatter(BaseFormatter):
 		# system)
 		self._parse_init(tokens)
 		# Skip leading whitespace
-		if self._token(self._index)[0] in (COMMENT, WHITESPACE):
+		if self._token(self._index).type in (COMMENT, WHITESPACE):
 			self._index += 1
 		self._parse_function_name()
 		# Parenthesized parameter list is mandatory

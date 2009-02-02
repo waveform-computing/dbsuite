@@ -171,7 +171,7 @@ class SQLHighlighter(object):
 
 	def format_token(self, token):
 		"""Stub handler for a token"""
-		return token[2]
+		return token.source
 	
 	def parse(self, sql, terminator=';', line_split=False):
 		"""Converts the provided SQL into another markup language.
@@ -190,21 +190,21 @@ class SQLHighlighter(object):
 		"""
 		def excerpt(tokens):
 			if len(tokens) > 10:
-				excerpt = tokens[:10] + [(0, None, '...', 0, 0)]
+				excerpt = tokens[:10] + [Token(0, None, '...', 0, 0)]
 			else:
 				excerpt = tokens
-			return ''.join(token[2] for token in excerpt)
+			return ''.join(token.source for token in excerpt)
 
 		self.formatter.line_split = line_split
 		tokens = self.tokenizer.parse(sql, terminator, line_split)
 		# Check for errors in the tokens
-		errors = [token for token in tokens if token[0] == ERROR]
+		errors = [token for token in tokens if token.type == ERROR]
 		if errors:
 			# If errors were found, log a warning for each error and return the
 			# SQL highlighted from the tokenized stream without reformatting
 			logging.warning('While tokenizing %s' % excerpt(tokens))
 			for error in errors:
-				logging.warning('error %s found at line %d, column %d' % (error[1], error[3], error[4]))
+				logging.warning('error %s found at line %d, column %d' % (error.value, error.line, error.column))
 		else:
 			# If the SQL tokenized successfully, attempt to reformat it nicely
 			# but if an error occurs, just warn about it and continue with the
@@ -216,11 +216,11 @@ class SQLHighlighter(object):
 				logging.warning('error %s found at line %d, column %d' % (e.message, e.line, e.col))
 		# Both the tokenizer and formatter always return at least one token (an
 		# EOF token). Hence, if the first token is EOF, the source is blank
-		if tokens[0][0] != EOF:
+		if tokens[0].type != EOF:
 			if line_split:
 				return (
-					self.format_line(line + 1, (token for token in tokens if token[3] == line + 1))
-					for line in xrange(tokens[-1][3])
+					self.format_line(line + 1, (token for token in tokens if token.line == line + 1))
+					for line in xrange(tokens[-1].line)
 				)
 			else:
 				return (self.format_token(token) for token in tokens)
