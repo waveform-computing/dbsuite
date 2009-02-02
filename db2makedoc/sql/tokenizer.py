@@ -37,6 +37,7 @@ __all__ = [
 	'LABEL',
 	'PARAMETER',
 	'TERMINATOR',
+	'Token',
 	'new_token_type',
 	'new_token_types',
 	'SQLTokenizerBase',

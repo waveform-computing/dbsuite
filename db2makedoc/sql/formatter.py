@@ -260,7 +260,7 @@ def convert_indent(tokens, indent='\t'):
 	"""
 	for token in tokens:
 		if token.type == INDENT:
-			yield Token(WHITESPACE, None, '\n' + indent * value, 0, 0)
+			yield Token(WHITESPACE, None, '\n' + indent * token.value, 0, 0)
 		else:
 			yield Token(token.type, token.value, token.source, 0, 0)
 
@@ -818,7 +818,7 @@ class BaseFormatter(object):
 		# successful match)
 		transforms = {
 			KEYWORD:     (IDENTIFIER, DATATYPE, REGISTER),
-			IDENTIFIFER: (DATATYPE, REGISTER),
+			IDENTIFIER:  (DATATYPE, REGISTER),
 			TERMINATOR:  (STATEMENT,),
 			EOF:         (STATEMENT,),
 		}
