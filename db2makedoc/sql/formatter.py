@@ -2391,6 +2391,7 @@ class DB2LUWFormatter(BaseFormatter):
 					'ON',
 					'ORDER',
 					'SET',
+					'TABLESAMPLE',
 					'UNION',
 					'USING',
 					'WHERE',
@@ -2445,9 +2446,28 @@ class DB2LUWFormatter(BaseFormatter):
 			else:
 				break
 
+	def _parse_lateral_options(self):
+		"""Parses the RETURN DATA UNTIL options of a LATERAL/TABLE reference"""
+		if self._match_sequence(['RETURN', 'DATA', 'UNTIL']):
+			while True:
+				self._expect_sequence(['FEDERATED', 'SQLSTATE'])
+				self._match('VALUE')
+				self._expect(STRING)
+				if self._match('SQLCODE'):
+					while True:
+						self._expect(NUMBER)
+						if not self._match(','):
+							break
+				if not self._match(','):
+					break
+			return True
+		else:
+			return False
+
 	def _parse_table_ref(self):
 		"""Parses literal table references or functions in a table-reference"""
 		# Ambiguity: A table or schema can be named TABLE, FINAL, OLD, etc.
+		# XXX Add support for the new UNNEST procedure specific syntax introduced in 9.5
 		reraise = False
 		self._save_state()
 		try:
@@ -2460,7 +2480,7 @@ class DB2LUWFormatter(BaseFormatter):
 					self._parse_full_select()
 					reraise = True
 					self._expect(')')
-					self._parse_table_correlation(optional=False)
+					self._parse_table_correlation(optional=True)
 				except ParseError:
 					# If it fails, rewind and try a join expression instead
 					self._restore_state()
@@ -2469,7 +2489,16 @@ class DB2LUWFormatter(BaseFormatter):
 					self._expect(')')
 				else:
 					self._forget_state()
+			elif self._match('LATERAL'):
+				self._parse_lateral_options()
+				self._expect('(', prespace=False)
+				self._indent()
+				self._parse_full_select()
+				self._outdent()
+				self._expect(')')
+				self._parse_table_correlation(optional=True)
 			elif self._match('TABLE'):
+				lateral = self._parse_lateral_options()
 				self._expect('(', prespace=False)
 				# Ambiguity: TABLE() can indicate a table-function call or a
 				# nested table expression
@@ -2482,12 +2511,13 @@ class DB2LUWFormatter(BaseFormatter):
 				except ParseError:
 					# If it fails, rewind and try a function call instead
 					self._restore_state()
+					if lateral: raise
 					self._parse_function_call()
 				else:
 					self._forget_state()
 				reraise = True
 				self._expect(')')
-				self._parse_table_correlation(optional=False)
+				self._parse_table_correlation(optional=True)
 			elif self._match_one_of(['FINAL', 'NEW']):
 				self._expect('TABLE')
 				self._expect('(', prespace=False)
@@ -2524,7 +2554,15 @@ class DB2LUWFormatter(BaseFormatter):
 			if reraise: raise
 			self._parse_table_name()
 			self._parse_table_correlation(optional=True)
-			# XXX Add support for tablesample-clause
+			if self._match('TABLESAMPLE'):
+				self._expect_one_of(['BERNOULLI', 'SYSTEM'])
+				self._expect('(')
+				self._parse_expression()
+				self._expect(')')
+				if self._match('REPEATABLE'):
+					self._expect('(')
+					self._parse_expression()
+					self._expect(')')
 		else:
 			self._forget_state()
 
