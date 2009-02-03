@@ -15,7 +15,7 @@ import db2makedoc.plugins
 import db2makedoc.highlighters
 from db2makedoc.util import *
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 # Use the user's default locale instead of C
 locale.setlocale(locale.LC_ALL, '')
