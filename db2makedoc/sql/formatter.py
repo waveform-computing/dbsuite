@@ -7612,6 +7612,8 @@ class DB2LUWFormatter(BaseFormatter):
 				self._parse_create_trusted_context_statement()
 			elif self._match_sequence(['TYPE', 'MAPPING']):
 				self._parse_create_type_mapping_statement()
+			elif self._match('TYPE'):
+				self._parse_create_type_statement()
 			elif self._match_sequence(['USER', 'MAPPING']):
 				self._parse_create_user_mapping_statement()
 			elif self._match('VARIABLE'):
