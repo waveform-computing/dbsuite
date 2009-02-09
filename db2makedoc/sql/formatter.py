@@ -202,8 +202,6 @@ def recalc_positions(tokens):
 
 	This generator function recalculates the position of each token. It is
 	intended for wrapping other functions which alter the source of tokens.
-	The function accepts complete (5-tuple) tokens or partial (3-tuple) tokens
-	without the last two positional elements.
 	"""
 	line = 1
 	column = 1
@@ -651,8 +649,9 @@ class BaseFormatter(object):
 			# Ignore leading whitespace and empty statements
 			while self._token().type in (COMMENT, WHITESPACE, TERMINATOR):
 				self._index += 1
-			# If not at EOF, parse a statement
-			if not self._match(EOF):
+			# If not at EOF, parse a statement (mustn't match the EOF otherwise
+			# we'll wind up adding it to the output list)
+			if not self._peek(EOF):
 				self._parse_top()
 				self._expect(STATEMENT) # STATEMENT converts TERMINATOR into STATEMENT
 				assert len(self._statestack) == 0
@@ -685,23 +684,13 @@ class BaseFormatter(object):
 		output = format_tokens(output, reformat=self.reformat,
 			terminator=self.terminator, statement=self.statement)
 		if WHITESPACE in self.reformat:
-			output = recalc_positions(convert_valign(convert_indent(output, indent=self.indent)))
+			output = recalc_positions(strip_whitespace(convert_valign(convert_indent(output, indent=self.indent))))
 		else:
 			output = (token for token in tokens if token.type not in (INDENT, VALIGN, VAPPLY))
 		output = merge_whitespace(output)
 		if self.line_split:
 			output = split_lines(output)
-		# Strip trailing whitespace / EOF tokens, then re-append a trailing EOF
-		# token (or simply make the output a solitary EOF token if nothing is
-		# left)
-		output = list(output)
-		while output and (output[-1].type in (WHITESPACE, EOF)):
-			del output[-1]
-		if output:
-			output.append(Token(EOF, None, '', output[-1].line, output[-1].column))
-		else:
-			output = [Token(EOF, None, '', 1, 1)]
-		self._output = output
+		self._output = list(output)
 
 	def _parse_top(self):
 		"""Top level of the parser.
@@ -917,7 +906,6 @@ class BaseFormatter(object):
 			(OPERATOR, ')'),
 			TERMINATOR,
 			STATEMENT,
-			EOF,
 		)
 
 	def _postspace_default(self, template):
