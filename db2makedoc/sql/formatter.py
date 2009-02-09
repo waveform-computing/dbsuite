@@ -16,6 +16,7 @@ import pdb
 import re
 import sys
 import math
+from decimal import Decimal
 from itertools import tee, izip
 from db2makedoc.sql.dialects import *
 from db2makedoc.sql.tokenizer import *
@@ -51,17 +52,18 @@ __all__ = [
 
 # Custom token types used by the formatter
 (
+	EOF,       # Symbolically represents the end of file (e.g. for errors)
 	DATATYPE,  # Datatypes (e.g. VARCHAR) converted from KEYWORD or IDENTIFIER
 	REGISTER,  # Special registers (e.g. CURRENT DATE) converted from KEYWORD or IDENTIFIER
 	STATEMENT, # Statement terminator
 	INDENT,    # Whitespace indentation at the start of a line
 	VALIGN,    # Whitespace indentation within a line to vertically align blocks of text
 	VAPPLY,    # Mark the end of a run of VALIGN tokens
-) = new_token_types(6)
+) = new_token_types(7)
 
 # Token labels used for formatting error messages and token dumps
 TOKEN_LABELS = {
-	EOF:        '<eof>',
+	EOF:        '<end-of-file>',
 	ERROR:      'error',
 	WHITESPACE: '<space>',
 	COMMENT:    'comment',
@@ -115,7 +117,8 @@ def quote_str(s, qchar="'"):
 
 def dump(tokens):
 	"""Utility routine for debugging purposes: prints the tokens in a human readable format."""
-	print '\n'.join(dump_token(token) for token in tokens)
+	sys.stderr.write('\n'.join(dump_token(token) for token in tokens))
+	sys.stderr.write('\n')
 
 def dump_token(token):
 	"""Formats a token for the dump routine above."""
@@ -231,7 +234,12 @@ def format_tokens(tokens, reformat=[], terminator=';', statement=';'):
 			elif token.type in (IDENTIFIER, DATATYPE):
 				yield Token(token.type, token.value, format_ident(token.value), 0, 0)
 			elif token.type == NUMBER:
-				yield Token(NUMBER, token.value, str(token.value), 0, 0)
+				# Ensure decimal values with no decimal portion keep the
+				# decimal point (fix for #49)
+				if isinstance(token.value, Decimal) and token.value.as_tuple()[-1] == 0:
+					yield Token(NUMBER, token.value, str(token.value) + '.', 0, 0)
+				else:
+					yield Token(NUMBER, token.value, str(token.value), 0, 0)
 			elif token.type == STRING:
 				yield Token(STRING, token.value, quote_str(token.value), 0, 0)
 			elif token.type == LABEL:
@@ -343,6 +351,28 @@ def merge_whitespace(tokens):
 		yield Token(WHITESPACE, None, space, line, col)
 	else:
 		yield token
+
+def strip_whitespace(tokens):
+	"""Strips leading and trailing WHITESPACE tokens.
+
+	This generator function strips leading and trailing WHITESPACE tokens from
+	the provided sequence of tokens. The final result will require
+	recalculation of positions if any tokens have been ommitted from the front
+	of the sequence.
+	"""
+	leading = True
+	buf = []
+	for t in tokens:
+		if leading:
+			if t.type != WHITESPACE:
+				leading = False
+		if not leading:
+			if t.type != WHITESPACE:
+				while buf:
+					yield buf.pop()
+				yield t
+			else:
+				buf.append(t)
 
 def split_lines(tokens):
 	"""Splits tokens which contain line breaks.
@@ -582,8 +612,8 @@ class BaseFormatter(object):
 	            either side of all arithmetic operators, one space after
 	            commas, etc).
 	
-	If other token types are included in the set (e.g. EOF, TERMINATOR, etc.)
-	they will be ignored.
+	If other token types are included in the set (e.g. TERMINATOR) they will be
+	ignored.
 	"""
 
 	def __init__(self):
@@ -619,7 +649,7 @@ class BaseFormatter(object):
 		self._parse_init(tokens)
 		while True:
 			# Ignore leading whitespace and empty statements
-			while self._token(self._index).type in (COMMENT, WHITESPACE, TERMINATOR):
+			while self._token().type in (COMMENT, WHITESPACE, TERMINATOR):
 				self._index += 1
 			# If not at EOF, parse a statement
 			if not self._match(EOF):
@@ -777,12 +807,17 @@ class BaseFormatter(object):
 		"""Destroys the saved state at the head of the save stack."""
 		self._statestack.pop()
 
-	def _token(self, index):
+	def _token(self, index=None):
 		"""Returns the token at the specified index, or an EOF token."""
 		try:
-			return self._tokens[index]
+			return self._tokens[self._index if index is None else index]
 		except IndexError:
-			return self._tokens[-1]
+			# If the current index is beyond the end of the token stream,
+			# return a "fake" EOF token to represent this
+			if self._tokens:
+				return Token(EOF, None, '', *self._tokens[-1][3:])
+			else:
+				return Token(EOF, None, '', 0, 0)
 
 	def _cmp_tokens(self, token, template):
 		"""Compares a token against a partial template.
@@ -855,7 +890,7 @@ class BaseFormatter(object):
 		the provided template). Otherwise, None is returned. The current
 		position, and the output list are never altered by this method.
 		"""
-		return self._cmp_tokens(self._token(self._index), template)
+		return self._cmp_tokens(self._token(), template)
 
 	def _peek_one_of(self, templates):
 		"""Compares the current token against several template tokens.
@@ -868,7 +903,7 @@ class BaseFormatter(object):
 		by this method.
 		"""
 		for template in templates:
-			t = self._cmp_tokens(self._token(self._index), template)
+			t = self._cmp_tokens(self._token(), template)
 			if t:
 				return t
 		return None
@@ -929,7 +964,7 @@ class BaseFormatter(object):
 		"""
 		# Compare the current token against the template. Note that the
 		# template may transform the token in order to match (see _cmp_tokens)
-		token = self._cmp_tokens(self._token(self._index), template)
+		token = self._cmp_tokens(self._token(), template)
 		if not token:
 			return None
 		# If a match was found, add a leading space (if WHITESPACE is being
@@ -941,8 +976,8 @@ class BaseFormatter(object):
 				self._output.append(Token(WHITESPACE, None, ' ', 0, 0))
 		self._output.append(token)
 		self._index += 1
-		while self._token(self._index).type in (COMMENT, WHITESPACE):
-			self._output.append(self._token(self._index))
+		while self._token().type in (COMMENT, WHITESPACE):
+			self._output.append(self._token())
 			self._index += 1
 		# If postspace is False, prevent the next _match call from adding a
 		# leading space by adding an empty WHITESPACE token. The final phase of
@@ -1055,7 +1090,7 @@ class BaseFormatter(object):
 
 	def _expected(self, template):
 		"""Raises an error explaining a token template was expected."""
-		raise ParseExpectedOneOfError(self._tokens, self._token(self._index), [template])
+		raise ParseExpectedOneOfError(self._tokens, self._token(), [template])
 
 	def _expected_sequence(self, templates):
 		"""Raises an error explaining a sequence of template tokens was expected."""
@@ -1064,7 +1099,7 @@ class BaseFormatter(object):
 		found = []
 		i = self._index
 		for template in templates:
-			found.append(self._token(self._index))
+			found.append(self._token())
 			i += 1
 			while self._token(i).type in (COMMENT, WHITESPACE):
 				i += 1
@@ -1072,7 +1107,7 @@ class BaseFormatter(object):
 
 	def _expected_one_of(self, templates):
 		"""Raises an error explaining one of several template tokens was expected."""
-		raise ParseExpectedOneOfError(self._tokens, self._token(self._index), templates)
+		raise ParseExpectedOneOfError(self._tokens, self._token(), templates)
 
 
 class DB2LUWFormatter(BaseFormatter):
@@ -7609,8 +7644,9 @@ class DB2LUWFormatter(BaseFormatter):
 					'TEMPORARY',
 					'USER',
 					'SYSTEM',
-				]).value
+				])
 				if tbspacetype:
+					tbspacetype = tbspacetype.value
 					if tbspacetype in ('USER', 'SYSTEM'):
 						self._expect('TEMPORARY')
 					elif tbspacetype == 'TEMPORARY':
@@ -7708,7 +7744,7 @@ class DB2LUWFormatter(BaseFormatter):
 		# system)
 		self._parse_init(tokens)
 		# Skip leading whitespace
-		if self._token(self._index).type in (COMMENT, WHITESPACE):
+		if self._token().type in (COMMENT, WHITESPACE):
 			self._index += 1
 		self._parse_function_name()
 		# Parenthesized parameter list is mandatory

@@ -25,7 +25,6 @@ from db2makedoc.util import *
 from db2makedoc.sql.dialects import *
 
 __all__ = [
-	'EOF',
 	'ERROR',
 	'WHITESPACE',
 	'COMMENT',
@@ -66,7 +65,6 @@ def new_token_types(count):
 
 # Token constants
 (
-	EOF,           # End of data
 	ERROR,         # Invalid/unknown token
 	WHITESPACE,    # Whitespace
 	COMMENT,       # A comment
@@ -78,7 +76,7 @@ def new_token_types(count):
 	LABEL,         # A procedural label
 	PARAMETER,     # A colon-prefixed or simple qmark parameter
 	TERMINATOR,    # A statement terminator
-) = new_token_types(12)
+) = new_token_types(11)
 
 # Declare the Token namedtuple class
 Token = namedtuple('Token', (
@@ -148,7 +146,6 @@ class SQLTokenizerBase(object):
 
 		Depending on token_type, token_value has different values:
 
-			EOF            None
 			ERROR          A descriptive error message
 			WHITESPACE     None
 			COMMENT        The content of the comment (excluding delimiters)
@@ -157,8 +154,12 @@ class SQLTokenizerBase(object):
 			               unquoted in the source, or in original case if it
 			               was quoted in some fashion in the source
 			LABEL          Same as IDENTIFIER
-			NUMBER         The value of the number. In all cases the number is
-			               returned as a Decimal to avoid range and rounding problems
+			NUMBER         The value of the number. A number with no decimal
+			               portion is converted to a python long. A number with
+			               a decimal portion is converted to Decimal, while a
+			               number with an exponent is converted to a float
+			               (regardless of presence or absence of decimal
+			               portion)
 			STRING         The content of the string (unquoted and unescaped)
 			OPERATOR       The operator
 			PARAMETER      The name of the parameter if it was a colon-prefixed
@@ -202,7 +203,6 @@ class SQLTokenizerBase(object):
 		# string)
 		while self.char != '\0':
 			self._jump.get(self.char, self._handle_default)()
-		self._add_token(EOF, None)
 		# If line_split is True, split up any tokens that cross line breaks
 		# (much easier to do it here than in the tokenizer itself)
 		if line_split:
@@ -513,17 +513,20 @@ class SQLTokenizerBase(object):
 		"""Parses numeric digits (0..9) in the source."""
 		self._mark()
 		self._next()
+		convert = long
 		validchars = set('0123456789Ee.')
 		while self.char in validchars:
 			if self.char == '.':
+				convert = Decimal
 				validchars -= set('.')
 			elif self.char in 'Ee':
+				convert = float
 				validchars -= set('Ee.')
 				if self.nextchar in '-+':
 					self._next()
 			self._next()
 		try:
-			self._add_token(NUMBER, Decimal(self.markedchars))
+			self._add_token(NUMBER, convert(self.markedchars))
 		except ValueError, e:
 			self._add_token(ERROR, str(e))
 
