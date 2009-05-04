@@ -111,6 +111,7 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 			Trigger:    self.make_trigger,
 			Function:   self.make_function,
 			Procedure:  self.make_procedure,
+			Param:      self.make_param,
 			Tablespace: self.make_tablespace,
 		}[type(db_object)](db_object)
 	
