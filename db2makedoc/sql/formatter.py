@@ -328,11 +328,9 @@ def merge_whitespace(tokens):
 	also ditches WHITESPACE tokens with no source. Note: this function relies
 	on positional elements being present in the tokens.
 	"""
-	empty = True
 	a, b = tee(tokens)
 	# Advance the second copy by one element
 	for elem in b:
-		empty = False
 		break
 	space = ''
 	line = col = 1
@@ -347,11 +345,10 @@ def merge_whitespace(tokens):
 			if token.type == WHITESPACE:
 				space, line, col = token[2:]
 			yield last
-	if not empty:
-		if token.type == WHITESPACE:
-			yield Token(WHITESPACE, None, space, line, col)
-		else:
-			yield token
+	if token.type == WHITESPACE:
+		yield Token(WHITESPACE, None, space, line, col)
+	else:
+		yield token
 
 def strip_whitespace(tokens):
 	"""Strips leading and trailing WHITESPACE tokens.

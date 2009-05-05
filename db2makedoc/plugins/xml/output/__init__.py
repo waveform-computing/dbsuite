@@ -419,10 +419,6 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 			SubElement(result, 'description').text = function.description
 		if function.sql:
 			SubElement(result, 'sql').text = function.sql
-		for param in function.param_list:
-			result.append(self.make_param(param))
-		for param in function.return_list:
-			result.append(self.make_param(param))
 		return result
 
 	def make_procedure(self, procedure):
@@ -453,8 +449,6 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 			SubElement(result, 'description').text = procedure.description
 		if procedure.sql:
 			SubElement(result, 'sql').text = procedure.sql
-		for param in procedure.param_list:
-			result.append(self.make_param(param))
 		return result
 
 	def make_param(self, param):

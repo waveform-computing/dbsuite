@@ -19,12 +19,15 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 	type-setting system, specifically the LaTeX variant (including various PDF
 	facilities). It includes syntax highlighted SQL information on various
 	objects in the database (views, tables, etc.), diagrams of the schema, and
-	hyperlinks within generated PDFs. Note that the generated documentation
-	tends to be extremely lengthy for a printed medium. It is strongly
-	suggested that you limit the input plugin to a single schema when using
-	this output plugin. An example command line for converting the output into
-	a PDF is "pdflatex -shell-escape sample.tex" (this may need to be run
-	several times to resolve references depending on what content is included).
+	hyperlinks within generated PDFs.
+	
+	Note that the generated documentation tends to be extremely lengthy for a
+	printed medium. It is strongly suggested that you limit the input plugin to
+	a single schema when using this output plugin.
+	
+	An example command line for converting the output into a PDF is "pdflatex
+	-shell-escape sample.tex" (this may need to be run several times to resolve
+	references depending on what content is included).
 	"""
 
 	def __init__(self):
