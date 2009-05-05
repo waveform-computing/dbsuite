@@ -399,6 +399,7 @@ class TeXImage(TeXElement):
 class TeXTableOfObjects(TeXElement):
 	__slots__ = ('title', 'tocinclude', 'style')
 	def __init__(self, title=None, tocinclude=False):
+		super(TeXTableOfObjects, self).__init__()
 		self.title = title
 		self.tocinclude = tocinclude
 		self.style = None

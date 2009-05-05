@@ -214,9 +214,7 @@ class SQLHighlighter(object):
 			except ParseTokenError, e:
 				logging.warning('While formatting %s' % excerpt(tokens))
 				logging.warning('error %s found at line %d, column %d' % (e.message, e.line, e.col))
-		# Both the tokenizer and formatter always return at least one token (an
-		# EOF token). Hence, if the first token is EOF, the source is blank
-		if tokens[0].type != EOF:
+		if tokens:
 			if line_split:
 				return (
 					self.format_line(line + 1, (token for token in tokens if token.line == line + 1))

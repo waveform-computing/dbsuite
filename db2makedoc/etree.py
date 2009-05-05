@@ -11,31 +11,72 @@ if 'xml' in sys.modules:
 
 import datetime
 
-# Import the ElementTree API, favouring faster versions
-#try:
-#	from lxml.etree import *
-#except ImportError:
 try:
-	from xml.etree.cElementTree import *
-	from xml.etree.ElementTree import _namespace_map
+	import xml.etree.ElementTree as etree
 except ImportError:
 	try:
-		from cElementTree import *
-		from elementtree.ElementTree import _namespace_map
+		import elementtree.ElementTree as etree
 	except ImportError:
-		try:
-			from xml.etree.ElementTree import *
-		except ImportError:
-			try:
-				from elementtree.ElementTree import *
-			except ImportError:
-				raise ImportError('Unable to find an ElementTree implementation')
+		raise ImportError('Unable to find an ElementTree implementation')
 
 
 __all__ = ['fromstring', 'tostring', 'parse', 'iselement', 'Element',
 		'SubElement', 'Comment', 'ProcessingInstruction', 'QName', 'indent',
 		'flatten', 'flatten_html', 'html4_display', '_namespace_map',
 		'ElementFactory']
+
+
+# Monkey patch ElementTree to permit production and parsing of CDATA sections.
+# Original code from http://code.activestate.com/recipes/576536/
+def CDATA(text=None):
+	element = Element(CDATA)
+	element.text = text
+	return element
+
+old_ElementTree = etree.ElementTree
+class ElementTree_CDATA(old_ElementTree):
+	def _write(self, file, node, encoding, namespaces):
+		if node.tag is CDATA:
+			text = node.text.encode(encoding)
+			file.write('<![CDATA[%s]]>' % text)
+		else:
+			old_ElementTree._write(self, file, node, encoding, namespaces)
+etree.ElementTree = ElementTree_CDATA
+
+old_XMLTreeBuilder = etree.XMLTreeBuilder
+class XMLTreeBuilder_CDATA(old_XMLTreeBuilder):
+	def __init__(self, html=0, target=None):
+		old_XMLTreeBuilder.__init__(self, html, target)
+		self._parser.StartCdataSectionHandler = self._start_cdata
+		self._parser.EndCdataSectionHandler = self._end_cdata
+		self._cdataSection = False
+		self._cdataBuffer = None
+
+	def _start_cdata(self):
+		self._cdataSection = True
+		self._cdataBuffer = []
+
+	def _end_cdata(self):
+		self._cdataSection = False
+		text = self._fixtext(''.join(self._cdataBuffer))
+		self._target.start(CDATA, {})
+		self._target.data(text)
+		self._target.end(CDATA)
+
+	def _data(self, text):
+		if self._cdataSection:
+			self._cdataBuffer.append(text)
+		else:
+			old_XMLTreeBuilder._data(self, text)
+etree.XMLTreeBuilder = XMLTreeBuilder_CDATA
+
+try:
+	from xml.etree.ElementTree import *
+	from xml.etree.ElementTree import _namespace_map
+	from xml.parsers import expat
+except ImportError:
+	from elementtree.ElementTree import *
+	from elementtree.ElementTree import _namespace_map
 
 
 def indent(elem, level=0, indent_str='\t'):

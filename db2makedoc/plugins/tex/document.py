@@ -1272,7 +1272,7 @@ class TeXDocumentation(object):
 					),
 					tag.tbody(
 						tag.tr(
-							tag.td(self.format_prototype(overload.prototype)),
+							tag.td(overload.prototype),
 							tag.td(tag.a(self.format_name(overload.specific_name), href='sec:%s' % overload.identifier))
 						)
 						for overload in function.schema.functions[function.name]
@@ -1286,7 +1286,7 @@ class TeXDocumentation(object):
 				tag.p('The SQL used to define the function is given below. Note that, depending on the underlying database implementation, this SQL may not be accurate (in some cases the database does not store the original command, so the SQL is reconstructed from metadata), or even valid for the platform.'),
 				self.format_sql(function.create_sql),
 				title='SQL Definition'
-			),
+			) if function.create_sql.strip() else '',
 			title='%s %s' % (self.type_names[type(function)], function.qualified_name),
 			id='sec:%s' % function.identifier
 		)
@@ -1356,7 +1356,7 @@ class TeXDocumentation(object):
 					),
 					tag.tbody(
 						tag.tr(
-							tag.td(self.format_prototype(overload.prototype)),
+							tag.td(overload.prototype),
 							tag.td(tag.a(self.format_name(overload.specific_name), href='sec:%s' % overload.identifier))
 						)
 						for overload in procedure.schema.procedures[procedure.name]
@@ -1370,7 +1370,7 @@ class TeXDocumentation(object):
 				tag.p('The SQL used to define the procedure is given below. Note that, depending on the underlying database implementation, this SQL may not be accurate (in some cases the database does not store the original command, so the SQL is reconstructed from metadata), or even valid for the platform.'),
 				self.format_sql(procedure.create_sql),
 				title='SQL Definition'
-			),
+			) if procedure.create_sql.strip() else '',
 			title='%s %s' % (self.type_names[type(procedure)], procedure.qualified_name),
 			id='sec:%s' % procedure.identifier
 		)

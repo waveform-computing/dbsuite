@@ -130,7 +130,7 @@ class FunctionDocument(HTMLObjectDocument):
 				self.format_sql(self.dbobject.create_sql, number_lines=True, id='sql-def'),
 				class_='section',
 				id='sql'
-			) if self.dbobject.create_sql else ''
+			) if self.dbobject.create_sql.strip() else ''
 		))
 		return body
 

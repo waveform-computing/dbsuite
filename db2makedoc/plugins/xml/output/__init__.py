@@ -5,7 +5,9 @@
 import re
 import logging
 import db2makedoc.plugins
-from db2makedoc.etree import fromstring, tostring, indent, Element, SubElement
+from db2makedoc.etree import (
+	fromstring, tostring, indent, Element, SubElement, CDATA
+)
 from db2makedoc.db import (
 	Database, Schema, Datatype, Table, View, Alias, Field, UniqueKey,
 	PrimaryKey, ForeignKey, Check, Index, Trigger, Function, Procedure,
@@ -195,7 +197,7 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 			result.attrib['readonly'] = 'readonly'
 		if view.description:
 			SubElement(result, 'description').text = view.description
-		SubElement(result, 'sql').text = view.sql
+		SubElement(result, 'sql').append(CDATA(view.sql))
 		for dependency in view.dependency_list:
 			SubElement(result, 'viewdep').attrib['ref'] = dependency.identifier
 		return result
@@ -380,7 +382,7 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 		if trigger.description:
 			SubElement(result, 'description').text = trigger.description
 		if trigger.sql:
-			SubElement(result, 'sql').text = trigger.sql
+			SubElement(result, 'sql').append(CDATA(trigger.sql))
 		for dependency in trigger.dependency_list:
 			SubElement(result, 'trigdep').attrib['ref'] = dependency.identifier
 		return result
@@ -418,7 +420,7 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 		if function.description:
 			SubElement(result, 'description').text = function.description
 		if function.sql:
-			SubElement(result, 'sql').text = function.sql
+			SubElement(result, 'sql').append(CDATA(function.sql))
 		return result
 
 	def make_procedure(self, procedure):
@@ -448,7 +450,7 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 		if procedure.description:
 			SubElement(result, 'description').text = procedure.description
 		if procedure.sql:
-			SubElement(result, 'sql').text = procedure.sql
+			SubElement(result, 'sql').append(CDATA(procedure.sql))
 		return result
 
 	def make_param(self, param):
