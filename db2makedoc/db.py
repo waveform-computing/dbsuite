@@ -799,9 +799,14 @@ class Database(DatabaseObject):
 				None)))
 		elif len(parts) == 3:
 			relation = self.schemas[parts[0]].relations[parts[1]]
-			return relation.fields.get(parts[2],
-				relation.constraints.get(parts[2],
-				None))
+			if isinstance(relation, Alias):
+				relation = relation.final_relation
+			if isinstance(relation, Table):
+				return relation.fields.get(parts[2],
+					relation.constraints.get(parts[2],
+					None))
+			else:
+				return relation.fields.get(parts[2], None)
 		else:
 			return None
 
