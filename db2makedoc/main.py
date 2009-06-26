@@ -81,8 +81,6 @@ are listed below.""")
 		logfile.setFormatter(logging.Formatter('%(asctime)s, %(levelname)s, %(message)s'))
 		logfile.setLevel(logging.DEBUG)
 		logging.getLogger().addHandler(logfile)
-	# Set up the exceptions hook for uncaught exceptions and the logging
-	# levels if --debug was given
 	if options.debug:
 		console.setLevel(logging.DEBUG)
 		logging.getLogger().setLevel(logging.DEBUG)
@@ -142,8 +140,7 @@ either case. The available command line options are listed below.""")
 	console.setFormatter(logging.Formatter('%(message)s'))
 	console.setLevel(options.loglevel)
 	logging.getLogger().addHandler(console)
-	# Set up the exceptions hook for uncaught exceptions and the logging
-	# levels if --debug was given
+	# Set up the logging levels
 	if options.debug:
 		console.setLevel(logging.DEBUG)
 		logging.getLogger().setLevel(logging.DEBUG)
