@@ -20,13 +20,13 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 	"""Output plugin for metadata storage (in XML format).
 
 	This output plugin writes all database metadata into an XML file. This is
-	intended for use in conjunction with the metadata input plugin, if you want
+	intended for use in conjunction with the xml.input plugin, if you want
 	metadata extraction and document creation to be performed separately (on
 	separate machines or at separate times), or if you wish to use db2makedoc
 	to provide metadata in a transportable format for some other application.
 	The DTD of the output is not fully documented at the present time. The best
 	way to learn it is to try the plugin with a database and check the result
-	(which is properly indented for human readability).
+	(which can be indented for human consumption; see the indent parameter).
 	"""
 
 	def __init__(self):

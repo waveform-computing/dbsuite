@@ -79,13 +79,12 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 	"""Input plugin for metadata storage (in XML format).
 
 	This input plugin extracts database metadata from an XML file. This is
-	intended for use in conjunction with the metadata output plugin, if you
-	want metadata extraction and document creation to be performed separately
-	(on separate machines or at separate times), or if you wish to use
-	db2makedoc to use metadata in a transportable format from some other
-	application.  The DTD of th einput is not fully documented at the present
-	time. The best way to learn it is to look at the output of the metadata.out
-	plugin.
+	intended for use in conjunction with the xml.output plugin, if you want
+	metadata extraction and document creation to be performed separately (on
+	separate machines or at separate times), or if you wish to use db2makedoc
+	to use metadata in a transportable format from some other application.  The
+	DTD of the input is not fully documented at the present time. The best way
+	to learn it is to look at the output of the xml.output plugin.
 	"""
 
 	def __init__(self):
