@@ -16,30 +16,24 @@ import pdb
 import re
 import sys
 import math
+import db2makedoc.sql.dialects as dialects
+from db2makedoc.sql.tokenizer import TokenTypes as TT, Token
 from decimal import Decimal
 from itertools import tee, izip
-from db2makedoc.sql.dialects import *
-from db2makedoc.sql.tokenizer import *
 
 __all__ = [
-	'EOF',
-	'ERROR',
-	'WHITESPACE',
-	'COMMENT',
-	'KEYWORD',
-	'IDENTIFIER',
-	'NUMBER',
-	'STRING',
-	'OPERATOR',
-	'LABEL',
-	'PARAMETER',
-	'TERMINATOR',
-	'DATATYPE',
-	'REGISTER',
-	'STATEMENT',
-	'INDENT',
-	'VALIGN',
-	'VAPPLY',
+	'dump',
+	'dump_token',
+	'format_ident',
+	'format_param',
+	'format_size',
+	'recalc_positions',
+	'format_tokens',
+	'convert_indent',
+	'convert_valign',
+	'merge_whitespace',
+	'strip_whitespace',
+	'split_lines',
 	'Error',
 	'ParseError',
 	'ParseBacktrack',
@@ -50,37 +44,37 @@ __all__ = [
 	'DB2LUWFormatter',
 ]
 
-# Custom token types used by the formatter
-(
-	EOF,       # Symbolically represents the end of file (e.g. for errors)
-	DATATYPE,  # Datatypes (e.g. VARCHAR) converted from KEYWORD or IDENTIFIER
-	REGISTER,  # Special registers (e.g. CURRENT DATE) converted from KEYWORD or IDENTIFIER
-	STATEMENT, # Statement terminator
-	INDENT,    # Whitespace indentation at the start of a line
-	VALIGN,    # Whitespace indentation within a line to vertically align blocks of text
-	VAPPLY,    # Mark the end of a run of VALIGN tokens
-) = new_token_types(7)
+# Add some custom token types used by the formatter
+TT.add((
+	'EOF',       # Symbolically represents the end of file (e.g. for errors)
+	'DATATYPE',  # Datatypes (e.g. VARCHAR) converted from KEYWORD or IDENTIFIER
+	'REGISTER',  # Special registers (e.g. CURRENT DATE) converted from KEYWORD or IDENTIFIER
+	'STATEMENT', # Statement terminator
+	'INDENT',    # Whitespace indentation at the start of a line
+	'VALIGN',    # Whitespace indentation within a line to vertically align blocks of text
+	'VAPPLY',    # Mark the end of a run of VALIGN tokens
+))
 
 # Token labels used for formatting error messages and token dumps
 TOKEN_LABELS = {
-	EOF:        '<end-of-file>',
-	ERROR:      'error',
-	WHITESPACE: '<space>',
-	COMMENT:    'comment',
-	KEYWORD:    'keyword',
-	IDENTIFIER: 'identifier',
-	NUMBER:     'number',
-	STRING:     'string',
-	OPERATOR:   'operator',
-	LABEL:      'label',
-	PARAMETER:  'parameter',
-	TERMINATOR: '<terminator>',
-	DATATYPE:   'datatype',
-	REGISTER:   'register',
-	STATEMENT:  '<statement-end>',
-	INDENT:     '<indent>',
-	VALIGN:     '<valign>',
-	VAPPLY:     '<vapply>',
+	TT.EOF:        '<end-of-file>',
+	TT.ERROR:      'error',
+	TT.WHITESPACE: '<space>',
+	TT.COMMENT:    'comment',
+	TT.KEYWORD:    'keyword',
+	TT.IDENTIFIER: 'identifier',
+	TT.NUMBER:     'number',
+	TT.STRING:     'string',
+	TT.OPERATOR:   'operator',
+	TT.LABEL:      'label',
+	TT.PARAMETER:  'parameter',
+	TT.TERMINATOR: '<terminator>',
+	TT.DATATYPE:   'datatype',
+	TT.REGISTER:   'register',
+	TT.STATEMENT:  '<statement-end>',
+	TT.INDENT:     '<indent>',
+	TT.VALIGN:     '<valign>',
+	TT.VAPPLY:     '<vapply>',
 }
 
 # Standard size suffixes and multipliers
@@ -127,7 +121,7 @@ def dump_token(token):
 	else:
 		return '%-16s %-20s %-20s (%d:%d)' % (TOKEN_LABELS[token.type], repr(token.value), repr(token.source), token.line, token.column)
 
-def format_ident(name, namechars=set(db2luw_namechars), qchar='"'):
+def format_ident(name, namechars=set(dialects.db2luw_namechars), qchar='"'):
 	"""Format an SQL identifier with quotes if required.
 
 	The name parameter provides the object name to format. The optional
@@ -227,31 +221,31 @@ def format_tokens(tokens, reformat=[], terminator=';', statement=';'):
 	"""
 	for token in tokens:
 		if token.type in reformat:
-			if token.type in (KEYWORD, REGISTER):
+			if token.type in (TT.KEYWORD, TT.REGISTER):
 				yield Token(token.type, token.value, token.value, 0, 0)
-			elif token.type in (IDENTIFIER, DATATYPE):
+			elif token.type in (TT.IDENTIFIER, TT.DATATYPE):
 				yield Token(token.type, token.value, format_ident(token.value), 0, 0)
-			elif token.type == NUMBER:
+			elif token.type == TT.NUMBER:
 				# Ensure decimal values with no decimal portion keep the
 				# decimal point (fix for #49)
 				if isinstance(token.value, Decimal) and token.value.as_tuple()[-1] == 0:
-					yield Token(NUMBER, token.value, str(token.value) + '.', 0, 0)
+					yield Token(TT.NUMBER, token.value, str(token.value) + '.', 0, 0)
 				else:
-					yield Token(NUMBER, token.value, str(token.value), 0, 0)
-			elif token.type == STRING:
-				yield Token(STRING, token.value, quote_str(token.value), 0, 0)
-			elif token.type == LABEL:
-				yield Token(LABEL, token.value, format_ident(token.value) + ':', 0, 0)
-			elif token.type == PARAMETER:
-				yield Token(PARAMETER, token.value, format_param(token.value), 0, 0)
-			elif token.type == COMMENT:
+					yield Token(TT.NUMBER, token.value, str(token.value), 0, 0)
+			elif token.type == TT.STRING:
+				yield Token(TT.STRING, token.value, quote_str(token.value), 0, 0)
+			elif token.type == TT.LABEL:
+				yield Token(TT.LABEL, token.value, format_ident(token.value) + ':', 0, 0)
+			elif token.type == TT.PARAMETER:
+				yield Token(TT.PARAMETER, token.value, format_param(token.value), 0, 0)
+			elif token.type == TT.COMMENT:
 				# XXX Need more intelligent comment handling
-				##yield (COMMENT, token[1], '/*%s*/' % (token[1]))
+				##yield (TT.COMMENT, token[1], '/*%s*/' % (token[1]))
 				yield Token(token.type, token.value, token.source, 0, 0)
-			elif token.type == STATEMENT:
-				yield Token(STATEMENT, token.value, statement, 0, 0)
-			elif token.type == TERMINATOR:
-				yield Token(TERMINATOR, token.value, terminator, 0, 0)
+			elif token.type == TT.STATEMENT:
+				yield Token(TT.STATEMENT, token.value, statement, 0, 0)
+			elif token.type == TT.TERMINATOR:
+				yield Token(TT.TERMINATOR, token.value, terminator, 0, 0)
 			else:
 				yield Token(token.type, token.value, token.source, 0, 0)
 		else:
@@ -265,8 +259,8 @@ def convert_indent(tokens, indent='\t'):
 	function zeros the positional elements.
 	"""
 	for token in tokens:
-		if token.type == INDENT:
-			yield Token(WHITESPACE, None, '\n' + indent * token.value, 0, 0)
+		if token.type == TT.INDENT:
+			yield Token(TT.WHITESPACE, None, '\n' + indent * token.value, 0, 0)
 		else:
 			yield Token(token.type, token.value, token.source, 0, 0)
 
@@ -288,7 +282,7 @@ def convert_valign(tokens):
 		for i, token in enumerate(recalc_positions(tokens)):
 			line, col = token.line, token.column
 			result.append(token)
-			if token.type == VALIGN:
+			if token.type == TT.VALIGN:
 				if indexes and alignline == line:
 					# If we encounter more than one VALIGN on a line, remember
 					# that we need another pass
@@ -301,14 +295,14 @@ def convert_valign(tokens):
 					indexes.append(i)
 					aligncol = max(aligncol, col)
 					alignline = line
-			elif token.type == VAPPLY:
+			elif token.type == TT.VAPPLY:
 				# Convert all the remembered VALIGN tokens into WHITESPACE
 				# tokens with appropriate lengths for vertical alignment,
 				# and change the VAPPLY token into a blank WHITESPACE token
 				# (necessary to ensure consistency of remembered indexes)
 				for j in indexes:
 					line, col = result[j].line, result[j].column
-					result[j] = Token(WHITESPACE, None, ' ' * (aligncol - col), 0, 0)
+					result[j] = Token(TT.WHITESPACE, None, ' ' * (aligncol - col), 0, 0)
 				# Remove the VAPPLY token
 				if indexes:
 					del result[-1]
@@ -338,18 +332,18 @@ def merge_whitespace(tokens):
 	line = col = 1
 	# Iterate pairwise over the tokens
 	for last, token in izip(a, b):
-		if last.type == WHITESPACE:
+		if last.type == TT.WHITESPACE:
 			if token.type == last.type:
 				space += token.source
 			elif space:
-				yield Token(WHITESPACE, None, space, line, col)
+				yield Token(TT.WHITESPACE, None, space, line, col)
 		else:
-			if token.type == WHITESPACE:
+			if token.type == TT.WHITESPACE:
 				space, line, col = token[2:]
 			yield last
 	if not empty:
-		if token.type == WHITESPACE:
-			yield Token(WHITESPACE, None, space, line, col)
+		if token.type == TT.WHITESPACE:
+			yield Token(TT.WHITESPACE, None, space, line, col)
 		else:
 			yield token
 
@@ -365,10 +359,10 @@ def strip_whitespace(tokens):
 	buf = []
 	for t in tokens:
 		if leading:
-			if t.type != WHITESPACE:
+			if t.type != TT.WHITESPACE:
 				leading = False
 		if not leading:
-			if t.type != WHITESPACE:
+			if t.type != TT.WHITESPACE:
 				while buf:
 					yield buf.pop()
 				yield t
@@ -395,24 +389,12 @@ def split_lines(tokens):
 			yield Token(type, new_value, new_source, line, column)
 			line += 1
 			column = 1
-		if source or type not in (WHITESPACE, COMMENT):
+		if source or type not in (TT.WHITESPACE, TT.COMMENT):
 			yield Token(type, value, source, line, column)
 
 class Error(Exception):
 	"""Base class for errors in this module"""
-
-	def __init__(self, msg=''):
-		"""Initializes an instance of the exception with an optional message"""
-		Exception.__init__(self, msg)
-		self.message = msg
-
-	def __repr__(self):
-		"""Outputs a representation of the exception"""
-		return 'Error(%s)' % repr(self.message)
-
-	def __str__(self):
-		"""Outputs the message of the exception"""
-		return self.message
+	pass
 
 class ParseError(Error):
 	"""Base class for errors encountered during parsing"""
@@ -425,7 +407,7 @@ class ParseBacktrack(ParseError):
 		"""Initializes an instance of the exception"""
 		# The message is irrelevant as this exception should never propogate
 		# outside the parser
-		ParseError.__init__(self, msg='')
+		ParseError.__init__(self, '')
 
 class ParseTokenError(ParseError):
 	"""Raised when a parsing error is encountered"""
@@ -442,7 +424,7 @@ class ParseTokenError(ParseError):
 		self.source = tokens
 		self.token = errtoken
 		# Split out the line and column of the error
-		self.line, self.col = errtoken.line, errtoken.column
+		self.line, self.column = errtoken.line, errtoken.column
 		# Initialize the exception
 		ParseError.__init__(self, msg)
 
@@ -454,7 +436,7 @@ class ParseTokenError(ParseError):
 		lineindex = self.line - 1
 		if self.line > len(sourcelines):
 			lineindex = -1
-		marker = ''.join({'\t': '\t'}.get(c, ' ') for c in sourcelines[lineindex][:self.col-1]) + '^'
+		marker = ''.join({'\t': '\t'}.get(c, ' ') for c in sourcelines[lineindex][:self.column - 1]) + '^'
 		sourcelines.insert(self.line, marker)
 		i = self.line - context_lines
 		if i < 0:
@@ -464,7 +446,7 @@ class ParseTokenError(ParseError):
 		return '\n'.join([
 			self.message + ':',
 			'line   : %d' % self.line,
-			'column : %d' % self.col,
+			'column : %d' % self.column,
 			'context:',
 			context
 		])
@@ -476,14 +458,14 @@ class ParseTokenError(ParseError):
 		elif isinstance(token, int):
 			return TOKEN_LABELS[token]
 		elif isinstance(token, Token):
-			if token.type in (EOF, WHITESPACE, TERMINATOR, STATEMENT):
+			if token.type in (TT.EOF, TT.WHITESPACE, TT.TERMINATOR, TT.STATEMENT):
 				return TOKEN_LABELS[token.type]
 			elif token.value is not None:
 				return token.value
 			else:
 				return token.source
 		elif isinstance(token, tuple):
-			if (len(token) == 1) or (token[0] in (EOF, WHITESPACE, TERMINATOR, STATEMENT)):
+			if (len(token) == 1) or (token[0] in (TT.EOF, TT.WHITESPACE, TT.TERMINATOR, TT.STATEMENT)):
 				return TOKEN_LABELS[token[0]]
 			elif (len(token) == 2) and (token[1] is not None):
 				return token[1]
@@ -553,7 +535,7 @@ class BaseFormatter(object):
 	(which may vary in case), this class often matches token on the first two
 	elements:
 
-		(KEYWORD, "OR", "or", 7, 13)[:2] == (KEYWORD, "OR")
+		(TT.KEYWORD, "OR", "or", 7, 13)[:2] == (TT.KEYWORD, "OR")
 
 	A set of internal utility methods are used to simplify this further. See
 	the _match and _expect methods in particular. The numerous _parse_X methods
@@ -621,17 +603,17 @@ class BaseFormatter(object):
 		super(BaseFormatter, self).__init__()
 		self.indent = ' ' * 4
 		self.reformat = set([
-			DATATYPE,
-			IDENTIFIER,
-			KEYWORD,
-			LABEL,
-			NUMBER,
-			PARAMETER,
-			REGISTER,
-			STATEMENT,
-			STRING,
-			TERMINATOR,
-			WHITESPACE,
+			TT.DATATYPE,
+			TT.IDENTIFIER,
+			TT.KEYWORD,
+			TT.LABEL,
+			TT.NUMBER,
+			TT.PARAMETER,
+			TT.REGISTER,
+			TT.STATEMENT,
+			TT.STRING,
+			TT.TERMINATOR,
+			TT.WHITESPACE,
 		])
 		self.line_split = False
 		self.statement = ';'
@@ -650,13 +632,13 @@ class BaseFormatter(object):
 		self._parse_init(tokens)
 		while True:
 			# Ignore leading whitespace and empty statements
-			while self._token().type in (COMMENT, WHITESPACE, TERMINATOR):
+			while self._token().type in (TT.COMMENT, TT.WHITESPACE, TT.TERMINATOR):
 				self._index += 1
 			# If not at EOF, parse a statement (mustn't match the EOF otherwise
 			# we'll wind up adding it to the output list)
-			if not self._peek(EOF):
+			if not self._peek(TT.EOF):
 				self._parse_top()
-				self._expect(STATEMENT) # STATEMENT converts TERMINATOR into STATEMENT
+				self._expect(TT.STATEMENT) # STATEMENT converts TERMINATOR into STATEMENT
 				assert len(self._statestack) == 0
 				# Reset the indent level and leave a blank line
 				self._level = 0
@@ -676,8 +658,8 @@ class BaseFormatter(object):
 		# If we're reformatting spaces, strip all WHITESPACE tokens from the
 		# input (no point parsing them if we're going to rewrite them all
 		# anyway)
-		if WHITESPACE in self.reformat:
-			self._tokens = [token for token in tokens if token.type != WHITESPACE]
+		if TT.WHITESPACE in self.reformat:
+			self._tokens = [token for token in tokens if token.type != TT.WHITESPACE]
 		else:
 			self._tokens = tokens
 
@@ -686,10 +668,10 @@ class BaseFormatter(object):
 		output = self._output
 		output = format_tokens(output, reformat=self.reformat,
 			terminator=self.terminator, statement=self.statement)
-		if WHITESPACE in self.reformat:
+		if TT.WHITESPACE in self.reformat:
 			output = recalc_positions(strip_whitespace(convert_valign(convert_indent(output, indent=self.indent))))
 		else:
-			output = (token for token in tokens if token.type not in (INDENT, VALIGN, VAPPLY))
+			output = (token for token in tokens if token.type not in (TT.INDENT, TT.VALIGN, TT.VAPPLY))
 		output = merge_whitespace(output)
 		if self.line_split:
 			output = split_lines(output)
@@ -714,7 +696,7 @@ class BaseFormatter(object):
 
 		See _insert_output for an explanation of allowempty.
 		"""
-		token = Token(INDENT, self._level, '', 0, 0)
+		token = Token(TT.INDENT, self._level, '', 0, 0)
 		self._insert_output(token, index, allowempty)
 
 	def _indent(self, index=0, allowempty=False):
@@ -730,12 +712,12 @@ class BaseFormatter(object):
 
 	def _valign(self, index=0):
 		"""Inserts a VALIGN token into the output."""
-		token = Token(VALIGN, None, '', 0, 0)
+		token = Token(TT.VALIGN, None, '', 0, 0)
 		self._insert_output(token, index, True)
 
 	def _vapply(self, index=0):
 		"""Inserts a VAPPLY token into the output."""
-		token = Token(VAPPLY, None, '', 0, 0)
+		token = Token(TT.VAPPLY, None, '', 0, 0)
 		self._insert_output(token, index, True)
 
 	def _insert_output(self, token, index, allowempty):
@@ -762,7 +744,7 @@ class BaseFormatter(object):
 		elif index < 0:
 			i = len(self._output) - 1
 			while index < 0:
-				while self._output[i].type in (COMMENT, WHITESPACE):
+				while self._output[i].type in (TT.COMMENT, TT.WHITESPACE):
 					i -= 1
 				index += 1
 		else:
@@ -770,7 +752,7 @@ class BaseFormatter(object):
 		# Check that the statestack invariant (see _save_state()) is preserved
 		assert (len(self._statestack) == 0) or (i >= self._statestack[-1][2])
 		# Check for duplicates - replace if we're about to duplicate the token
-		if not allowempty and self._output[i - 1].type == token.type and token.type == INDENT:
+		if not allowempty and self._output[i - 1].type == token.type and token.type == TT.INDENT:
 			self._output[i - 1] = token
 		else:
 			self._output.insert(i, token)
@@ -807,9 +789,9 @@ class BaseFormatter(object):
 			# If the current index is beyond the end of the token stream,
 			# return a "fake" EOF token to represent this
 			if self._tokens:
-				return Token(EOF, None, '', *self._tokens[-1][3:])
+				return Token(TT.EOF, None, '', *self._tokens[-1][3:])
 			else:
-				return Token(EOF, None, '', 0, 0)
+				return Token(TT.EOF, None, '', 0, 0)
 
 	def _cmp_tokens(self, token, template):
 		"""Compares a token against a partial template.
@@ -844,15 +826,15 @@ class BaseFormatter(object):
 		# IDENTIFIER token into a DATATYPE token and return it, indicating a
 		# successful match)
 		transforms = {
-			KEYWORD:     (IDENTIFIER, DATATYPE, REGISTER),
-			IDENTIFIER:  (DATATYPE, REGISTER),
-			TERMINATOR:  (STATEMENT,),
-			EOF:         (STATEMENT,),
+			TT.KEYWORD:     (TT.IDENTIFIER, TT.DATATYPE, TT.REGISTER),
+			TT.IDENTIFIER:  (TT.DATATYPE, TT.REGISTER),
+			TT.TERMINATOR:  (TT.STATEMENT,),
+			TT.EOF:         (TT.STATEMENT,),
 		}
 		if isinstance(template, basestring):
-			if token.type in (KEYWORD, OPERATOR) and token.value == template:
+			if token.type in (TT.KEYWORD, TT.OPERATOR) and token.value == template:
 				return token
-			elif token.type == IDENTIFIER and token.value == template and token.source[0] != '"':
+			elif token.type == TT.IDENTIFIER and token.value == template and token.source[0] != '"':
 				# Only unquoted identifiers are matched (quoted identifiers
 				# aren't used in any part of the SQL dialect)
 				return token
@@ -904,19 +886,19 @@ class BaseFormatter(object):
 		"""Determines the default prespace setting for a _match() template."""
 		return template not in (
 			'.', ',', ')',
-			(OPERATOR, '.'),
-			(OPERATOR, ','),
-			(OPERATOR, ')'),
-			TERMINATOR,
-			STATEMENT,
+			(TT.OPERATOR, '.'),
+			(TT.OPERATOR, ','),
+			(TT.OPERATOR, ')'),
+			TT.TERMINATOR,
+			TT.STATEMENT,
 		)
 
 	def _postspace_default(self, template):
 		"""Determines the default postspace setting for a _match() template."""
 		return template not in (
 			'.', '(',
-			(OPERATOR, '.'),
-			(OPERATOR, '('),
+			(TT.OPERATOR, '.'),
+			(TT.OPERATOR, '('),
 		)
 
 	def _match(self, template, prespace=None, postspace=None):
@@ -960,24 +942,24 @@ class BaseFormatter(object):
 			return None
 		# If a match was found, add a leading space (if WHITESPACE is being
 		# reformatted, and prespace permits it)
-		if WHITESPACE in self.reformat:
+		if TT.WHITESPACE in self.reformat:
 			if prespace is None:
 				prespace = self._prespace_default(template)
-			if prespace and not (self._output and self._output[-1].type in (INDENT, WHITESPACE)):
-				self._output.append(Token(WHITESPACE, None, ' ', 0, 0))
+			if prespace and not (self._output and self._output[-1].type in (TT.INDENT, TT.WHITESPACE)):
+				self._output.append(Token(TT.WHITESPACE, None, ' ', 0, 0))
 		self._output.append(token)
 		self._index += 1
-		while self._token().type in (COMMENT, WHITESPACE):
+		while self._token().type in (TT.COMMENT, TT.WHITESPACE):
 			self._output.append(self._token())
 			self._index += 1
 		# If postspace is False, prevent the next _match call from adding a
 		# leading space by adding an empty WHITESPACE token. The final phase of
 		# the parser removes empty tokens.
-		if WHITESPACE in self.reformat:
+		if TT.WHITESPACE in self.reformat:
 			if postspace is None:
 				postspace = self._postspace_default(template)
 			if not postspace:
-				self._output.append(Token(WHITESPACE, None, '', 0, 0))
+				self._output.append(Token(TT.WHITESPACE, None, '', 0, 0))
 		return token
 
 	def _match_sequence(self, templates, prespace=None, postspace=None, interspace=None):
@@ -1012,7 +994,7 @@ class BaseFormatter(object):
 		# WHITESPACE tokens
 		result = [
 			token for token in self._output[self._statestack[-1][2]:]
-			if token.type not in (COMMENT, WHITESPACE)
+			if token.type not in (TT.COMMENT, TT.WHITESPACE)
 		]
 		self._forget_state()
 		return result
@@ -1092,7 +1074,7 @@ class BaseFormatter(object):
 		for template in templates:
 			found.append(self._token())
 			i += 1
-			while self._token(i).type in (COMMENT, WHITESPACE):
+			while self._token(i).type in (TT.COMMENT, TT.WHITESPACE):
 				i += 1
 		raise ParseExpectedSequenceError(self._tokens, found, templates)
 
@@ -1119,17 +1101,17 @@ class DB2LUWFormatter(BaseFormatter):
 		# intra-statement terminator used by func/proc definitions
 		return super(DB2LUWFormatter, self)._prespace_default(template) and template not in (
 			']', '}', ';',
-			(OPERATOR, ']'),
-			(OPERATOR, '}'),
-			(TERMINATOR, ';'),
+			(TT.OPERATOR, ']'),
+			(TT.OPERATOR, '}'),
+			(TT.TERMINATOR, ';'),
 		)
 
 	def _postspace_default(self, template):
 		# Overridden to include array and set operators
 		return super(DB2LUWFormatter, self)._postspace_default(template) and template not in (
 			'[', '{',
-			(OPERATOR, '['),
-			(OPERATOR, '{'),
+			(TT.OPERATOR, '['),
+			(TT.OPERATOR, '{'),
 		)
 
 	# PATTERNS ###############################################################
@@ -1143,11 +1125,11 @@ class DB2LUWFormatter(BaseFormatter):
 		specify SCHEMA.TABLE.COLUMN). The method returns the parsed name as a
 		tuple with 3 elements (None is used for qualifiers which are missing).
 		"""
-		result = (None, None, self._expect(IDENTIFIER).value)
+		result = (None, None, self._expect(TT.IDENTIFIER).value)
 		if self._match('.'):
-			result = (None, result[2], self._expect(IDENTIFIER).value)
+			result = (None, result[2], self._expect(TT.IDENTIFIER).value)
 			if self._match('.'):
-				result = (result[1], result[2], self._expect(IDENTIFIER).value)
+				result = (result[1], result[2], self._expect(TT.IDENTIFIER).value)
 		return result
 
 	_parse_column_name = _parse_subrelation_name
@@ -1166,9 +1148,9 @@ class DB2LUWFormatter(BaseFormatter):
 		name). The method returns the parsed name as a tuple with 2 elements
 		(None is used for the schema qualifier if it is missing).
 		"""
-		result = (None, self._expect(IDENTIFIER).value)
+		result = (None, self._expect(TT.IDENTIFIER).value)
 		if self._match('.'):
-			result = (result[1], self._expect(IDENTIFIER).value)
+			result = (result[1], self._expect(TT.IDENTIFIER).value)
 		return result
 
 	_parse_relation_name = _parse_subschema_name
@@ -1203,7 +1185,7 @@ class DB2LUWFormatter(BaseFormatter):
 				return None
 		else:
 			self._expect('(', prespace=False)
-		size = self._expect(NUMBER)[1]
+		size = self._expect(TT.NUMBER)[1]
 		if suffix:
 			suf = self._match_one_of(suffix.keys())
 			if suf:
@@ -1213,116 +1195,116 @@ class DB2LUWFormatter(BaseFormatter):
 
 	def _parse_special_register(self):
 		"""Parses a special register (e.g. CURRENT_DATE)"""
-		if self._match((REGISTER, 'CURRENT')):
+		if self._match((TT.REGISTER, 'CURRENT')):
 			if self._match_one_of([
-				(REGISTER, 'CLIENT_ACCTNG'),
-				(REGISTER, 'CLIENT_APPLNAME'),
-				(REGISTER, 'CLIENT_USERID'),
-				(REGISTER, 'CLIENT_WRKSTNNAME'),
-				(REGISTER, 'DATE'),
-				(REGISTER, 'DBPARTITIONNUM'),
-				(REGISTER, 'DEGREE'),
-				(REGISTER, 'ISOLATION'),
-				(REGISTER, 'NODE'),
-				(REGISTER, 'PATH'),
-				(REGISTER, 'SCHEMA'),
-				(REGISTER, 'SERVER'),
-				(REGISTER, 'SQLID'),
-				(REGISTER, 'TIME'),
-				(REGISTER, 'TIMESTAMP'),
-				(REGISTER, 'TIMEZONE'),
-				(REGISTER, 'USER'),
+				(TT.REGISTER, 'CLIENT_ACCTNG'),
+				(TT.REGISTER, 'CLIENT_APPLNAME'),
+				(TT.REGISTER, 'CLIENT_USERID'),
+				(TT.REGISTER, 'CLIENT_WRKSTNNAME'),
+				(TT.REGISTER, 'DATE'),
+				(TT.REGISTER, 'DBPARTITIONNUM'),
+				(TT.REGISTER, 'DEGREE'),
+				(TT.REGISTER, 'ISOLATION'),
+				(TT.REGISTER, 'NODE'),
+				(TT.REGISTER, 'PATH'),
+				(TT.REGISTER, 'SCHEMA'),
+				(TT.REGISTER, 'SERVER'),
+				(TT.REGISTER, 'SQLID'),
+				(TT.REGISTER, 'TIME'),
+				(TT.REGISTER, 'TIMESTAMP'),
+				(TT.REGISTER, 'TIMEZONE'),
+				(TT.REGISTER, 'USER'),
 			]):
 				pass
 			elif self._match_sequence([
-				(REGISTER, 'DECFLOAT'),
-				(REGISTER, 'ROUNDING'),
-				(REGISTER, 'MODE')
+				(TT.REGISTER, 'DECFLOAT'),
+				(TT.REGISTER, 'ROUNDING'),
+				(TT.REGISTER, 'MODE')
 			]):
 				pass
 			elif self._match_sequence([
-				(REGISTER, 'DEFAULT'),
-				(REGISTER, 'TRANSFORM'),
-				(REGISTER, 'GROUP')
+				(TT.REGISTER, 'DEFAULT'),
+				(TT.REGISTER, 'TRANSFORM'),
+				(TT.REGISTER, 'GROUP')
 			]):
 				pass
-			elif self._match((REGISTER, 'EXPLAIN')):
+			elif self._match((TT.REGISTER, 'EXPLAIN')):
 				self._expect_one_of([
-					(REGISTER, 'MODE'),
-					(REGISTER, 'SNAPSHOT')
+					(TT.REGISTER, 'MODE'),
+					(TT.REGISTER, 'SNAPSHOT')
 				])
 			elif self._match_sequence([
-				(REGISTER, 'FEDERATED'),
-				(REGISTER, 'ASYNCHRONY')
+				(TT.REGISTER, 'FEDERATED'),
+				(TT.REGISTER, 'ASYNCHRONY')
 			]):
 				pass
 			elif self._match_sequence([
-				(REGISTER, 'IMPLICIT'),
-				(REGISTER, 'XMLPARSE'),
-				(REGISTER, 'OPTION')]
+				(TT.REGISTER, 'IMPLICIT'),
+				(TT.REGISTER, 'XMLPARSE'),
+				(TT.REGISTER, 'OPTION')]
 			):
 				pass
 			elif self._match_sequence([
-				(REGISTER, 'LOCK'),
-				(REGISTER, 'TIMEOUT')
+				(TT.REGISTER, 'LOCK'),
+				(TT.REGISTER, 'TIMEOUT')
 			]):
 				pass
 			elif self._match_sequence([
-				(REGISTER, 'MAINTAINED'),
-				(REGISTER, 'TABLE'),
-				(REGISTER, 'TYPES'),
-				(REGISTER, 'FOR'),
-				(REGISTER, 'OPTIMIZATION')
+				(TT.REGISTER, 'MAINTAINED'),
+				(TT.REGISTER, 'TABLE'),
+				(TT.REGISTER, 'TYPES'),
+				(TT.REGISTER, 'FOR'),
+				(TT.REGISTER, 'OPTIMIZATION')
 			]):
 				pass
 			elif self._match_sequence([
-				(REGISTER, 'MDC'),
-				(REGISTER, 'ROLLOUT'),
-				(REGISTER, 'MODE')
+				(TT.REGISTER, 'MDC'),
+				(TT.REGISTER, 'ROLLOUT'),
+				(TT.REGISTER, 'MODE')
 			]):
 				pass
 			elif self._match_sequence([
-				(REGISTER, 'OPTIMIZATION'),
-				(REGISTER, 'PROFILE')
+				(TT.REGISTER, 'OPTIMIZATION'),
+				(TT.REGISTER, 'PROFILE')
 			]):
 				pass
 			elif self._match_sequence([
-				(REGISTER, 'PACKAGE'),
-				(REGISTER, 'PATH')
+				(TT.REGISTER, 'PACKAGE'),
+				(TT.REGISTER, 'PATH')
 			]):
 				pass
 			elif self._match_sequence([
-				(REGISTER, 'QUERY'),
-				(REGISTER, 'OPTIMIZATION')
+				(TT.REGISTER, 'QUERY'),
+				(TT.REGISTER, 'OPTIMIZATION')
 			]):
 				pass
 			elif self._match_sequence([
-				(REGISTER, 'REFRESH'),
-				(REGISTER, 'AGE')
+				(TT.REGISTER, 'REFRESH'),
+				(TT.REGISTER, 'AGE')
 			]):
 				pass
 			else:
-				self._expected((REGISTER,))
-		elif self._match((REGISTER, 'CLIENT')):
+				self._expected((TT.REGISTER,))
+		elif self._match((TT.REGISTER, 'CLIENT')):
 			self._expect_one_of([
-				(REGISTER, 'ACCTNG'),
-				(REGISTER, 'APPLNAME'),
-				(REGISTER, 'USERID'),
-				(REGISTER, 'WRKSTNNAME'),
+				(TT.REGISTER, 'ACCTNG'),
+				(TT.REGISTER, 'APPLNAME'),
+				(TT.REGISTER, 'USERID'),
+				(TT.REGISTER, 'WRKSTNNAME'),
 			])
 		else:
 			self._expect_one_of([
-				(REGISTER, 'CURRENT_DATE'),
-				(REGISTER, 'CURRENT_PATH'),
-				(REGISTER, 'CURRENT_SCHEMA'),
-				(REGISTER, 'CURRENT_SERVER'),
-				(REGISTER, 'CURRENT_TIME'),
-				(REGISTER, 'CURRENT_TIMESTAMP'),
-				(REGISTER, 'CURRENT_TIMEZONE'),
-				(REGISTER, 'CURRENT_USER'),
-				(REGISTER, 'SESSION_USER'),
-				(REGISTER, 'SYSTEM_USER'),
-				(REGISTER, 'USER'),
+				(TT.REGISTER, 'CURRENT_DATE'),
+				(TT.REGISTER, 'CURRENT_PATH'),
+				(TT.REGISTER, 'CURRENT_SCHEMA'),
+				(TT.REGISTER, 'CURRENT_SERVER'),
+				(TT.REGISTER, 'CURRENT_TIME'),
+				(TT.REGISTER, 'CURRENT_TIMESTAMP'),
+				(TT.REGISTER, 'CURRENT_TIMEZONE'),
+				(TT.REGISTER, 'CURRENT_USER'),
+				(TT.REGISTER, 'SESSION_USER'),
+				(TT.REGISTER, 'SYSTEM_USER'),
+				(TT.REGISTER, 'USER'),
 			])
 
 	def _parse_datatype(self):
@@ -1346,91 +1328,91 @@ class DB2LUWFormatter(BaseFormatter):
 			size = None
 			scale = None
 			# Match the optional SYSIBM prefix
-			if self._match((DATATYPE, 'SYSIBM')):
+			if self._match((TT.DATATYPE, 'SYSIBM')):
 				self._expect('.')
-			if self._match((DATATYPE, 'SMALLINT')):
+			if self._match((TT.DATATYPE, 'SMALLINT')):
 				typename = 'SMALLINT'
-			elif self._match_one_of([(DATATYPE, 'INT'), (DATATYPE, 'INTEGER')]):
+			elif self._match_one_of([(TT.DATATYPE, 'INT'), (TT.DATATYPE, 'INTEGER')]):
 				typename = 'INTEGER'
-			elif self._match((DATATYPE, 'BIGINT')):
+			elif self._match((TT.DATATYPE, 'BIGINT')):
 				typename = 'BIGINT'
-			elif self._match((DATATYPE, 'FLOAT')):
+			elif self._match((TT.DATATYPE, 'FLOAT')):
 				size = self._parse_size(optional=True)
 				if size is None or size > 24:
 					typename = 'DOUBLE'
 				else:
 					typename = 'REAL'
-			elif self._match((DATATYPE, 'REAL')):
+			elif self._match((TT.DATATYPE, 'REAL')):
 				typename = 'REAL'
-			elif self._match((DATATYPE, 'DOUBLE')):
-				self._match((DATATYPE, 'PRECISION'))
+			elif self._match((TT.DATATYPE, 'DOUBLE')):
+				self._match((TT.DATATYPE, 'PRECISION'))
 				typename = 'DOUBLE'
-			elif self._match((DATATYPE, 'DECFLOAT')):
+			elif self._match((TT.DATATYPE, 'DECFLOAT')):
 				self._parse_size(optional=True)
-			elif self._match_one_of([(DATATYPE, 'DEC'), (DATATYPE, 'DECIMAL')]):
+			elif self._match_one_of([(TT.DATATYPE, 'DEC'), (TT.DATATYPE, 'DECIMAL')]):
 				typename = 'DECIMAL'
 				if self._match('(', prespace=False):
-					size = self._expect(NUMBER).value
+					size = self._expect(TT.NUMBER).value
 					if self._match(','):
-						scale = self._expect(NUMBER).value
+						scale = self._expect(TT.NUMBER).value
 					self._expect(')')
-			elif self._match_one_of([(DATATYPE, 'NUM'), (DATATYPE, 'NUMERIC')]):
+			elif self._match_one_of([(TT.DATATYPE, 'NUM'), (TT.DATATYPE, 'NUMERIC')]):
 				typename = 'NUMERIC'
 				if self._match('(', prespace=False):
-					size = self._expect(NUMBER).value
+					size = self._expect(TT.NUMBER).value
 					if self._match(','):
-						scale = self._expect(NUMBER).value
+						scale = self._expect(TT.NUMBER).value
 					self._expect(')')
-			elif self._match_one_of([(DATATYPE, 'CHAR'), (DATATYPE, 'CHARACTER')]):
-				if self._match((DATATYPE, 'VARYING')):
+			elif self._match_one_of([(TT.DATATYPE, 'CHAR'), (TT.DATATYPE, 'CHARACTER')]):
+				if self._match((TT.DATATYPE, 'VARYING')):
 					typename = 'VARCHAR'
 					size = self._parse_size(optional=False, suffix=SUFFIX_KMG)
 					self._match_sequence(['FOR', 'BIT', 'DATA'])
-				elif self._match_sequence([(DATATYPE, 'LARGE'), (DATATYPE, 'OBJECT')]):
+				elif self._match_sequence([(TT.DATATYPE, 'LARGE'), (TT.DATATYPE, 'OBJECT')]):
 					typename = 'CLOB'
 					size = self._parse_size(optional=True, suffix=SUFFIX_KMG)
 				else:
 					typename = 'CHAR'
 					size = self._parse_size(optional=True, suffix=SUFFIX_KMG)
 					self._match_sequence(['FOR', 'BIT', 'DATA'])
-			elif self._match((DATATYPE, 'VARCHAR')):
+			elif self._match((TT.DATATYPE, 'VARCHAR')):
 				typename = 'VARCHAR'
 				size = self._parse_size(optional=False, suffix=SUFFIX_KMG)
 				self._match_sequence(['FOR', 'BIT', 'DATA'])
-			elif self._match((DATATYPE, 'VARGRAPHIC')):
+			elif self._match((TT.DATATYPE, 'VARGRAPHIC')):
 				typename = 'VARGRAPHIC'
 				size = self._parse_size(optional=False)
-			elif self._match_sequence([(DATATYPE, 'LONG'), (DATATYPE, 'VARCHAR')]):
+			elif self._match_sequence([(TT.DATATYPE, 'LONG'), (TT.DATATYPE, 'VARCHAR')]):
 				typename = 'LONG VARCHAR'
-			elif self._match_sequence([(DATATYPE, 'LONG'), (DATATYPE, 'VARGRAPHIC')]):
+			elif self._match_sequence([(TT.DATATYPE, 'LONG'), (TT.DATATYPE, 'VARGRAPHIC')]):
 				typename = 'LONG VARGRAPHIC'
-			elif self._match((DATATYPE, 'CLOB')):
+			elif self._match((TT.DATATYPE, 'CLOB')):
 				typename = 'CLOB'
 				size = self._parse_size(optional=True, suffix=SUFFIX_KMG)
-			elif self._match((DATATYPE, 'BLOB')):
+			elif self._match((TT.DATATYPE, 'BLOB')):
 				typename = 'BLOB'
 				size = self._parse_size(optional=True, suffix=SUFFIX_KMG)
-			elif self._match_sequence([(DATATYPE, 'BINARY'), (DATATYPE, 'LARGE'), (DATATYPE, 'OBJECT')]):
+			elif self._match_sequence([(TT.DATATYPE, 'BINARY'), (TT.DATATYPE, 'LARGE'), (TT.DATATYPE, 'OBJECT')]):
 				typename = 'BLOB'
 				size = self._parse_size(optional=True, suffix=SUFFIX_KMG)
-			elif self._match((DATATYPE, 'DBCLOB')):
+			elif self._match((TT.DATATYPE, 'DBCLOB')):
 				typename = 'DBCLOB'
 				size = self._parse_size(optional=True, suffix=SUFFIX_KMG)
-			elif self._match((DATATYPE, 'GRAPHIC')):
+			elif self._match((TT.DATATYPE, 'GRAPHIC')):
 				typename = 'GRAPHIC'
 				size = self._parse_size(optional=True)
-			elif self._match((DATATYPE, 'DATE')):
+			elif self._match((TT.DATATYPE, 'DATE')):
 				typename = 'DATE'
-			elif self._match((DATATYPE, 'TIME')):
+			elif self._match((TT.DATATYPE, 'TIME')):
 				typename = 'TIME'
-			elif self._match((DATATYPE, 'TIMESTAMP')):
+			elif self._match((TT.DATATYPE, 'TIMESTAMP')):
 				typename = 'TIMESTAMP'
-			elif self._match((DATATYPE, 'DATALINK')):
+			elif self._match((TT.DATATYPE, 'DATALINK')):
 				typename = 'DATALINK'
 				size = self._parse_size(optional=True)
-			elif self._match((DATATYPE, 'XML')):
+			elif self._match((TT.DATATYPE, 'XML')):
 				typename = 'XML'
-			elif self._match((DATATYPE, 'DB2SECURITYLABEL')):
+			elif self._match((TT.DATATYPE, 'DB2SECURITYLABEL')):
 				typeschema = 'SYSPROC'
 				typename = 'DB2SECURITYLABEL'
 			else:
@@ -1440,10 +1422,10 @@ class DB2LUWFormatter(BaseFormatter):
 			# types do not have a size or scale)
 			self._restore_state()
 			typeschema = None
-			typename = self._expect(DATATYPE).value
+			typename = self._expect(TT.DATATYPE).value
 			if self._match('.'):
 				typeschema = typename
-				typename = self._expect(DATATYPE).value
+				typename = self._expect(TT.DATATYPE).value
 			size = None
 			scale = None
 		else:
@@ -1462,7 +1444,7 @@ class DB2LUWFormatter(BaseFormatter):
 		"""
 		result = []
 		while True:
-			result.append(self._expect(IDENTIFIER).value)
+			result.append(self._expect(TT.IDENTIFIER).value)
 			if not self._match(','):
 				break
 			elif newlines:
@@ -1507,7 +1489,7 @@ class DB2LUWFormatter(BaseFormatter):
 		functions, the INCLUDE portion of a SELECT-FROM-DML statement, etc.
 		"""
 		while True:
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 			self._parse_datatype()
 			if not self._match(','):
 				break
@@ -1528,18 +1510,15 @@ class DB2LUWFormatter(BaseFormatter):
 		parse_expression_list for more detail.
 		"""
 		# Opening parenthesis already matched
-		self._save_state()
-		try:
-			# Try and parse a full-select
+		if self._peek_one_of(['SELECT', 'VALUES']):
+			# Parse a full-select
 			self._indent()
 			self._parse_full_select()
 			self._outdent()
-		except ParseError:
-			# If that fails, rewind and parse a tuple of expressions
-			self._restore_state()
-			self._parse_expression_list(allowdefault)
 		else:
-			self._forget_state()
+			# Everything else (including a redundantly parenthesized
+			# full-select) can be parsed as an expression list
+			self._parse_expression_list(allowdefault)
 
 	# EXPRESSIONS and PREDICATES #############################################
 
@@ -1561,7 +1540,7 @@ class DB2LUWFormatter(BaseFormatter):
 				self._restore_state()
 				self._parse_predicate()
 				if self._match('SELECTIVITY'):
-					self._expect(NUMBER)
+					self._expect(TT.NUMBER)
 			else:
 				self._forget_state()
 			if self._match_one_of(['AND', 'OR']):
@@ -1627,12 +1606,12 @@ class DB2LUWFormatter(BaseFormatter):
 					self._expect_one_of(['NULL', 'VALIDATED'])
 			elif self._match('XMLEXISTS'):
 				self._expect('(')
-				self._expect(STRING)
+				self._expect(TT.STRING)
 				if self._match('PASSING'):
 					self._match_sequence(['BY', 'REF'])
 					while True:
 						self._parse_expression()
-						self._expect_sequence(['AS', IDENTIFIER])
+						self._expect_sequence(['AS', TT.IDENTIFIER])
 						self._match_sequence(['BY', 'REF'])
 						if not self._match(','):
 							break
@@ -1705,7 +1684,7 @@ class DB2LUWFormatter(BaseFormatter):
 				self._expect_one_of(['TOKEN', 'TIMESTAMP'])
 				self._expect('FOR')
 				self._parse_table_name()
-			elif self._match_one_of([NUMBER, STRING, PARAMETER, 'NULL']): # Literals
+			elif self._match_one_of([TT.NUMBER, TT.STRING, TT.PARAMETER, 'NULL']): # Literals
 				pass
 			else:
 				# Ambiguity: an identifier could be a register, a function
@@ -1821,15 +1800,15 @@ class DB2LUWFormatter(BaseFormatter):
 		if olapfunc in ('LAG', 'LEAD'):
 			self._parse_expression()
 			if self._match(','):
-				self._expect(NUMBER)
+				self._expect(TT.NUMBER)
 				if sel._match(','):
 					self._parse_expression()
 					if self._match(','):
-						self._expect_one_of([(STRING, 'RESPECT NULLS'), (STRING, 'IGNORE NULLS')])
+						self._expect_one_of([(TT.STRING, 'RESPECT NULLS'), (TT.STRING, 'IGNORE NULLS')])
 		elif olapfunc in ('FIRST_VALUE', 'LAST_VALUE'):
 			self._parse_expression()
 			if self._match(','):
-				self._expect_one_of([(STRING, 'RESPECT NULLS'), (STRING, 'IGNORE NULLS')])
+				self._expect_one_of([(TT.STRING, 'RESPECT NULLS'), (TT.STRING, 'IGNORE NULLS')])
 		self._expect(')')
 		self._expect('OVER')
 		self._parse_olap_window_clause()
@@ -1872,12 +1851,12 @@ class DB2LUWFormatter(BaseFormatter):
 			while True:
 				self._parse_expression()
 				if self._match('AS'):
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 				if not self._match(','):
 					break
 		elif xmlfunc == 'XMLELEMENT':
 			self._expect('NAME')
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 			if self._match(','):
 				# XXX We're not specifically checking for namespaces and
 				# attributes calls as we should here (although expression_list
@@ -1890,7 +1869,7 @@ class DB2LUWFormatter(BaseFormatter):
 				# XXX We're not specifically checking for a namespaces call as
 				# we should here (although expression will parse it just fine)
 				self._parse_expression()
-				self._match_sequence(['AS', IDENTIFIER])
+				self._match_sequence(['AS', TT.IDENTIFIER])
 				if not self._match(','):
 					break
 				if self._match('OPTION'):
@@ -1899,7 +1878,7 @@ class DB2LUWFormatter(BaseFormatter):
 			while True:
 				self._parse_expression()
 				if self._match('AS'):
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 				if not self._match(','):
 					break
 			if self._match_sequence(['ORDER', 'BY']):
@@ -1913,28 +1892,28 @@ class DB2LUWFormatter(BaseFormatter):
 		elif xmlfunc == 'XMLNAMESPACES':
 			while True:
 				if self._match('DEFAULT'):
-					self._expect(STRING)
+					self._expect(TT.STRING)
 				elif self._match('NO'):
-					self._expect_sequence(['DEFAULT', STRING])
+					self._expect_sequence(['DEFAULT', TT.STRING])
 				else:
-					self._expect_sequence([STRING, 'AS', IDENTIFIER])
+					self._expect_sequence([TT.STRING, 'AS', TT.IDENTIFIER])
 				if not self._match(','):
 					break
 		elif xmlfunc == 'XMLPARSE':
-			self._expect_sequence(['DOCUMENT', STRING])
+			self._expect_sequence(['DOCUMENT', TT.STRING])
 			if self._match_one_of(['STRIP', 'PRESERVE']):
 				self._expect('WHITESPACE')
 		elif xmlfunc == 'XMLPI':
-			self._expect_sequence(['NAME', IDENTIFIER])
+			self._expect_sequence(['NAME', TT.IDENTIFIER])
 			if self._match(','):
-				self._expect(STRING)
+				self._expect(TT.STRING)
 		elif xmlfunc == 'XMLQUERY':
-			self._expect(STRING)
+			self._expect(TT.STRING)
 			if self._match('PASSING'):
 				self._match_sequence(['BY', 'REF'])
 				while True:
 					self._parse_expression()
-					self._expect_sequence(['AS', IDENTIFIER])
+					self._expect_sequence(['AS', TT.IDENTIFIER])
 					self._match_sequence(['BY', 'REF'])
 					if not self._match(','):
 						break
@@ -1945,7 +1924,7 @@ class DB2LUWFormatter(BaseFormatter):
 		elif xmlfunc == 'XMLROW':
 			while True:
 				self._parse_expression()
-				self._match_sequence(['AS', IDENTIFIER])
+				self._match_sequence(['AS', TT.IDENTIFIER])
 				if not self._match(','):
 					break
 			if self._match('OPTION'):
@@ -1965,7 +1944,7 @@ class DB2LUWFormatter(BaseFormatter):
 				else:
 					break
 				if t == 'VERSION':
-					self._expect(STRING)
+					self._expect(TT.STRING)
 				elif t == 'INCLUDING':
 					valid.remove('EXCLUDING')
 					self._expect('XMLDECLARATION')
@@ -1979,32 +1958,32 @@ class DB2LUWFormatter(BaseFormatter):
 				self._expect_sequence(['TO', 'XMLSCHEMA'])
 				self._parse_xml_schema_identification()
 				if self._match('NAMESPACE'):
-					self._expect(STRING)
+					self._expect(TT.STRING)
 				elif self._match('NO'):
 					self._expect('NAMESPACE')
-				self._match_sequence(['ELEMENT', IDENTIFIER])
+				self._match_sequence(['ELEMENT', TT.IDENTIFIER])
 		elif xmlfunc == 'XMLTABLE':
 			self._parse_expression()
 			if self._match(','):
-				self._expect(STRING)
+				self._expect(TT.STRING)
 			if self._match('PASSING'):
 				self._match_sequence(['BY', 'REF'])
 				while True:
 					self._parse_expression()
-					self._expect_sequence(['AS', IDENTIFIER])
+					self._expect_sequence(['AS', TT.IDENTIFIER])
 					self._match_sequence(['BY', 'REF'])
 					if not self._match(','):
 						break
 			if self._match('COLUMNS'):
 				while True:
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 					if not self._match_sequence(['FOR', 'ORDINALITY']):
 						self._parse_datatype()
 						self._match_sequence(['BY', 'REF'])
 						if self._match('DEFAULT'):
 							self._parse_expression()
 						if self._match('PATH'):
-							self._expect(STRING)
+							self._expect(TT.STRING)
 					if not self._match(','):
 						break
 		elif xmlfunc == 'XMLTRANSFORM':
@@ -2024,12 +2003,12 @@ class DB2LUWFormatter(BaseFormatter):
 			self._parse_subschema_name()
 		else:
 			if self._match('URI'):
-				self._expect(STRING)
+				self._expect(TT.STRING)
 			elif self._match('NO'):
 				self._expect('NAMESPACE')
 			else:
 				self._expected_one_of(['ID', 'URI', 'NO'])
-			self._match_sequence(['LOCATION', STRING])
+			self._match_sequence(['LOCATION', TT.STRING])
 
 	def _parse_xml_row_option(self, allowroot=False):
 		"""Parses an XML OPTION suffix for rows in certain XML function calls"""
@@ -2045,7 +2024,7 @@ class DB2LUWFormatter(BaseFormatter):
 			else:
 				break
 			if t in ('ROW', 'ROOT'):
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 			elif t == 'AS':
 				self._expect('ATTRIBUTES')
 
@@ -2119,7 +2098,7 @@ class DB2LUWFormatter(BaseFormatter):
 			self._expect_one_of(['CODEUNITS16', 'CODEUNITS32', 'OCTETS'])
 		elif sqlfunc == 'TRIM':
 			if self._match_one_of(['BOTH', 'B', 'LEADING', 'L', 'TRAILING', 'T']):
-				self._match(STRING)
+				self._match(TT.STRING)
 				self._expect('FROM')
 			self._parse_expression()
 		self._expect(')')
@@ -2137,10 +2116,10 @@ class DB2LUWFormatter(BaseFormatter):
 		# [ROWS|RANGE] already matched
 		if self._match('CURRENT'):
 			self._expect('ROW')
-		elif self._match_one_of(['UNBOUNDED', NUMBER]):
+		elif self._match_one_of(['UNBOUNDED', TT.NUMBER]):
 			self._expect_one_of(['PRECEDING', 'FOLLOWING'])
 		elif not optional:
-			self._expected_one_of(['CURRENT', 'UNBOUNDED', NUMBER])
+			self._expected_one_of(['CURRENT', 'UNBOUNDED', TT.NUMBER])
 		else:
 			return False
 		return True
@@ -2241,16 +2220,16 @@ class DB2LUWFormatter(BaseFormatter):
 
 	def _parse_column_expression(self):
 		"""Parses an expression representing a column in a SELECT expression"""
-		if not self._match_sequence([IDENTIFIER, '.', '*']):
+		if not self._match_sequence([TT.IDENTIFIER, '.', '*']):
 			self._parse_expression()
 			# Parse optional column alias
 			if self._match('AS'):
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 			# Ambiguity: FROM and INTO can legitimately appear in this
 			# position as a KEYWORD (which the IDENTIFIER match below would
 			# accept)
 			elif not self._peek_one_of(['FROM', 'INTO']):
-				self._match(IDENTIFIER)
+				self._match(TT.IDENTIFIER)
 
 	def _parse_grouping_expression(self):
 		"""Parses a grouping-expression in a GROUP BY clause"""
@@ -2378,7 +2357,7 @@ class DB2LUWFormatter(BaseFormatter):
 			self._outdent()
 		if self._match('FETCH'):
 			self._expect('FIRST')
-			self._match(NUMBER) # Row count is optional (defaults to 1)
+			self._match(TT.NUMBER) # Row count is optional (defaults to 1)
 			self._expect_one_of(['ROW', 'ROWS'])
 			self._expect('ONLY')
 
@@ -2399,7 +2378,7 @@ class DB2LUWFormatter(BaseFormatter):
 				self._forget_state()
 		else:
 			if self._match('AS'):
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 			# Ambiguity: Several KEYWORDs can legitimately appear in this
 			# position. XXX This is horrible - there /must/ be a cleaner way of
 			# doing this with states and backtracking
@@ -2423,7 +2402,7 @@ class DB2LUWFormatter(BaseFormatter):
 					'WHERE',
 					'WITH',
 				]):
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 			# Parse optional column aliases
 			if self._match('('):
 				self._parse_ident_list()
@@ -2478,10 +2457,10 @@ class DB2LUWFormatter(BaseFormatter):
 			while True:
 				self._expect_sequence(['FEDERATED', 'SQLSTATE'])
 				self._match('VALUE')
-				self._expect(STRING)
+				self._expect(TT.STRING)
 				if self._match('SQLCODE'):
 					while True:
-						self._expect(NUMBER)
+						self._expect(TT.NUMBER)
 						if not self._match(','):
 							break
 				if not self._match(','):
@@ -2625,7 +2604,7 @@ class DB2LUWFormatter(BaseFormatter):
 					break
 		if self._match('FETCH'):
 			self._expect('FIRST')
-			self._match(NUMBER) # Row count is optional (defaults to 1)
+			self._match(TT.NUMBER) # Row count is optional (defaults to 1)
 			self._expect_one_of(['ROW', 'ROWS'])
 			self._expect('ONLY')
 
@@ -2651,7 +2630,7 @@ class DB2LUWFormatter(BaseFormatter):
 		# Parse the optional common-table-expression
 		if self._match('WITH'):
 			while True:
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 				# Parse the optional column-alias list
 				if self._match('('):
 					self._indent()
@@ -2739,7 +2718,7 @@ class DB2LUWFormatter(BaseFormatter):
 			if alter == 'COLUMN':
 				if self._match('RESTART'):
 					if self._match('WITH'):
-						self._expect(NUMBER)
+						self._expect(TT.NUMBER)
 						continue
 				elif self._match('SET'):
 					t = self._expect_one_of(valid).value
@@ -2756,14 +2735,14 @@ class DB2LUWFormatter(BaseFormatter):
 				else:
 					break
 			if t == 'START':
-				self._expect_sequence(['WITH', NUMBER])
+				self._expect_sequence(['WITH', TT.NUMBER])
 			elif t == 'RESTART':
 				if self._match('WITH'):
-					self._expect(NUMBER)
+					self._expect(TT.NUMBER)
 			elif t == 'INCREMENT':
-				self._expect_sequence(['BY', NUMBER])
+				self._expect_sequence(['BY', TT.NUMBER])
 			elif t in ('MINVALUE', 'MAXVALUE', 'CACHE'):
-				self._expect(NUMBER)
+				self._expect(TT.NUMBER)
 			elif t in ('CYCLE', 'ORDER'):
 				pass
 			elif t == 'NO':
@@ -2774,7 +2753,7 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_column_definition(self, aligntypes=False, alignoptions=False, federated=False):
 		"""Parses a column definition in a CREATE TABLE statement"""
 		# Parse a column definition
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		if aligntypes:
 			self._valign()
 		self._parse_datatype()
@@ -2821,13 +2800,13 @@ class DB2LUWFormatter(BaseFormatter):
 				else:
 					self._expect_sequence(['FOR', 'EACH', 'ROW', 'ON', 'UPDATE', 'AS', 'ROW', 'CHANGE', 'TIMESTAMP'])
 			elif self._match('INLINE'):
-				self._expect_sequence(['LENGTH', NUMBER])
+				self._expect_sequence(['LENGTH', TT.NUMBER])
 			elif self._match('COMPRESS'):
 				self._expect_sequence(['SYSTEM', 'DEFAULT'])
 			elif self._match('COLUMN'):
-				self._expect_sequence(['SECURED', 'WITH', IDENTIFIER])
+				self._expect_sequence(['SECURED', 'WITH', TT.IDENTIFIER])
 			elif self._match('SECURED'):
-				self._expect_sequence(['WITH', IDENTIFIER])
+				self._expect_sequence(['WITH', TT.IDENTIFIER])
 			elif self._match('IMPLICITLY'):
 				self._expect('HIDDEN')
 			elif federated and self._match('OPTIONS'):
@@ -2846,7 +2825,7 @@ class DB2LUWFormatter(BaseFormatter):
 		"""Parses a constraint attached to a specific column in a CREATE TABLE statement"""
 		# Parse the optional constraint name
 		if self._match('CONSTRAINT'):
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 		# Parse the constraint definition
 		if self._match('PRIMARY'):
 			self._expect('KEY')
@@ -2855,7 +2834,7 @@ class DB2LUWFormatter(BaseFormatter):
 		elif self._match('REFERENCES'):
 			self._parse_table_name()
 			if self._match('(', prespace=False):
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 				self._expect(')')
 			t = ['DELETE', 'UPDATE']
 			for i in xrange(2):
@@ -2889,13 +2868,13 @@ class DB2LUWFormatter(BaseFormatter):
 					self._parse_ident_list()
 					self._expect(')')
 				else:
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 				self._expect_sequence(['DETERMINED', 'BY'])
 				if self._match('('):
 					self._parse_ident_list()
 					self._expect(')')
 				else:
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 			else:
 				self._forget_state()
 			self._expect(')')
@@ -2911,7 +2890,7 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_table_constraint(self):
 		"""Parses a constraint attached to a table in a CREATE TABLE statement"""
 		if self._match('CONSTRAINT'):
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 		if self._match('PRIMARY'):
 			self._expect('KEY')
 			self._expect('(')
@@ -2963,13 +2942,13 @@ class DB2LUWFormatter(BaseFormatter):
 					self._parse_ident_list()
 					self._expect(')')
 				else:
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 				self._expect_sequence(['DETERMINED', 'BY'])
 				if self._match('('):
 					self._parse_ident_list()
 					self._expect(')')
 				else:
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 			else:
 				self._forget_state()
 			self._expect(')')
@@ -3011,7 +2990,7 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_constraint_alteration(self):
 		"""Parses a constraint-alteration in an ALTER TABLE statement"""
 		# FOREIGN KEY/CHECK already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		if self._match_one_of(['ENABLE', 'DISABLE']):
 			self._expect_sequence(['QUERY', 'OPTIMIZATION'])
 		else:
@@ -3020,7 +2999,7 @@ class DB2LUWFormatter(BaseFormatter):
 
 	def _parse_column_alteration(self):
 		"""Parses a column-alteration in an ALTER TABLE statement"""
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		if self._match('DROP'):
 			self._expect_one_of([
 				'IDENTITY',
@@ -3047,7 +3026,7 @@ class DB2LUWFormatter(BaseFormatter):
 					self._parse_expression()
 					self._expect(')')
 				elif self._match('INLINE'):
-					self._expect_sequence(['LENGTH', NUMBER])
+					self._expect_sequence(['LENGTH', TT.NUMBER])
 				elif self._match('GENERATED'):
 					if self._match(['BY', 'ALWAYS']).value == 'BY':
 						self._expect('DEFAULT')
@@ -3074,11 +3053,11 @@ class DB2LUWFormatter(BaseFormatter):
 
 	def _parse_federated_column_alteration(self):
 		"""Parses a column-alteration in an ALTER NICKNAME statement"""
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		while True:
 			if self._match('LOCAL'):
 				if self._match('NAME'):
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 				elif self._match('TYPE'):
 					self._parse_datatype()
 			elif self._match('OPTIONS'):
@@ -3092,7 +3071,7 @@ class DB2LUWFormatter(BaseFormatter):
 		while True:
 			if not self._match('PUBLIC'):
 				self._match_one_of(['USER', 'GROUP', 'ROLE'])
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 			if not self._match(','):
 				break
 
@@ -3125,13 +3104,13 @@ class DB2LUWFormatter(BaseFormatter):
 				'ALL'
 			]).value == 'DB2LBACWRITEARRAY':
 				self._expect_one_of(['WRITEDOWN', 'WRITEUP'])
-			self._expect_sequence(['FOR', IDENTIFIER])
+			self._expect_sequence(['FOR', TT.IDENTIFIER])
 		elif self._match_one_of([
 			'ALTERIN',
 			'CREATEIN',
 			'DROPIN',
 		]):
-			self._expect_sequence(['ON', 'SCHEMA', IDENTIFIER])
+			self._expect_sequence(['ON', 'SCHEMA', TT.IDENTIFIER])
 		elif self._match('CONTROL'):
 			self._expect('ON')
 			if self._match('INDEX'):
@@ -3144,7 +3123,7 @@ class DB2LUWFormatter(BaseFormatter):
 			if self._match('SEQUENCE'):
 				self._parse_sequence_name()
 			elif self._match('WORKLOAD'):
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 			else:
 				self._expected_one_of(['SEQUENCE', 'WORKLOAD'])
 		elif self._match('ALTER'):
@@ -3163,11 +3142,11 @@ class DB2LUWFormatter(BaseFormatter):
 				self._match('TABLE')
 				self._parse_table_name()
 		elif self._match('USE'):
-			self._expect_sequence(['OF', 'TABLESPACE', IDENTIFIER])
+			self._expect_sequence(['OF', 'TABLESPACE', TT.IDENTIFIER])
 		elif self._match_sequence(['EXECUTE', 'ON']):
 			if self._match_one_of(['FUNCTION', 'PROCEDURE']):
 				# Ambiguity: Can use schema.* or schema.name(prototype) here
-				if not self._match('*') and not self._match_sequence([IDENTIFIER, '.', '*']):
+				if not self._match('*') and not self._match_sequence([TT.IDENTIFIER, '.', '*']):
 					self._parse_routine_name()
 					if self._match('(', prespace=False):
 						self._parse_datatype_list()
@@ -3178,16 +3157,16 @@ class DB2LUWFormatter(BaseFormatter):
 			else:
 				self._expected_one_of(['FUNCTION', 'PROCEDURE', 'SPECIFIC'])
 		elif self._match('PASSTHRU'):
-			self._expect_sequence(['ON', 'SERVER', IDENTIFIER])
+			self._expect_sequence(['ON', 'SERVER', TT.IDENTIFIER])
 		elif self._match_sequence(['SECURITY', 'LABEL']):
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 			seclabel = grant
 		elif self._match('ROLE'):
 			self._parse_ident_list()
 		elif self._match('SETSESSIONUSER'):
 			self._expect('ON')
 			if not self._match('PUBLIC'):
-				self._expect_sequence(['USER', IDENTIFIER])
+				self._expect_sequence(['USER', TT.IDENTIFIER])
 		else:
 			# Ambiguity: Here we could be matching table privs (SELECT, INSERT,
 			# et al.) or variable privs (READ, WRITE), or arbitrary IDENTIFIERs
@@ -3195,7 +3174,7 @@ class DB2LUWFormatter(BaseFormatter):
 			# round grabbing IDENTs (taking care of the special syntax for
 			# REFERENCES and UPDATE which can include a column list)
 			while True:
-				if self._expect(IDENTIFIER).value in ('REFERENCES', 'UPDATE'):
+				if self._expect(TT.IDENTIFIER).value in ('REFERENCES', 'UPDATE'):
 					if self._match('('):
 						self._parse_ident_list()
 						self._expect(')')
@@ -3226,14 +3205,14 @@ class DB2LUWFormatter(BaseFormatter):
 		if self._match('AUTORESIZE'):
 			self._expect_one_of(['NO', 'YES'])
 		if self._match('INTIALSIZE'):
-			self._expect(NUMBER)
+			self._expect(TT.NUMBER)
 			self._expect_one_of(['K', 'M', 'G'])
 		if self._match('INCREASESIZE'):
-			self._expect(NUMBER)
+			self._expect(TT.NUMBER)
 			self._expect_one_of(['K', 'M', 'G', 'PERCENT'])
 		if self._match('MAXSIZE'):
 			if not self._match('NONE'):
-				self._expect(NUMBER)
+				self._expect(TT.NUMBER)
 				self._expect_one_of(['K', 'M', 'G'])
 
 	def _parse_database_container_clause(self, size=True):
@@ -3241,9 +3220,9 @@ class DB2LUWFormatter(BaseFormatter):
 		self._expect('(')
 		while True:
 			self._expect_one_of(['FILE', 'DEVICE'])
-			self._expect(STRING)
+			self._expect(TT.STRING)
 			if size:
-				self._expect(NUMBER)
+				self._expect(TT.NUMBER)
 				self._match_one_of(['K', 'M', 'G'])
 			if not self._match(','):
 				break
@@ -3253,7 +3232,7 @@ class DB2LUWFormatter(BaseFormatter):
 		"""Parses a container clause for an SMS tablespace"""
 		self._expect('(')
 		while True:
-			self._expect(STRING)
+			self._expect(TT.STRING)
 			if not self._match(','):
 				break
 		self._expect(')')
@@ -3268,10 +3247,10 @@ class DB2LUWFormatter(BaseFormatter):
 		])
 		self._expect('(')
 		while True:
-			self._expect(NUMBER)
-			self._match_sequence(['TO', NUMBER])
+			self._expect(TT.NUMBER)
+			self._match_sequence(['TO', TT.NUMBER])
 			if size:
-				self._expect_sequence(['SIZE', NUMBER])
+				self._expect_sequence(['SIZE', TT.NUMBER])
 			if not self._match(','):
 				break
 		self._expect(')')
@@ -3285,7 +3264,7 @@ class DB2LUWFormatter(BaseFormatter):
 		self._expect('WHEN')
 		self._match_one_of(['=', '<>', '<', '>', '<=', '>='])
 		if self._match('EXPRESSION'):
-			self._expect_sequence(['AS', IDENTIFIER])
+			self._expect_sequence(['AS', TT.IDENTIFIER])
 		else:
 			self._parse_expression()
 		valid = ['SEARCH', 'FILTER']
@@ -3304,7 +3283,7 @@ class DB2LUWFormatter(BaseFormatter):
 				self._parse_index_name()
 				self._expect('WHEN')
 				while True:
-					self._expect_sequence(['KEY', '(', IDENTIFIER, ')', 'USE', IDENTIFIER, '('])
+					self._expect_sequence(['KEY', '(', TT.IDENTIFIER, ')', 'USE', TT.IDENTIFIER, '('])
 					self._parse_ident_list()
 					self._expect(')')
 					if not self._match('WHEN'):
@@ -3327,14 +3306,14 @@ class DB2LUWFormatter(BaseFormatter):
 		self._expect('(')
 		while True:
 			if alter and self._match('DROP'):
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 			else:
 				if alter:
 					self._match_one_of('ADD', 'SET')
 				else:
 					self._match('ADD')
-				self._expect(IDENTIFIER)
-				self._expect(STRING)
+				self._expect(TT.IDENTIFIER)
+				self._expect(TT.STRING)
 			if not self._match(','):
 				break
 		self._expect(')')
@@ -3343,28 +3322,28 @@ class DB2LUWFormatter(BaseFormatter):
 		"""Parses a remote server specification"""
 		# SERVER already matched
 		if self._match('TYPE'):
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 			if self._match('VERSION'):
 				self._parse_server_version()
 				if self._match('WRAPPER'):
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 		else:
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 			if self._match('VERSION'):
 				self._parse_server_version()
 
 	def _parse_server_version(self):
 		"""Parses a federated server version"""
 		# VERSION already matched
-		if self._match(NUMBER):
+		if self._match(TT.NUMBER):
 			if self._match('.'):
-				self._expect(NUMBER)
+				self._expect(TT.NUMBER)
 				if self._match('.'):
-					self._expect(NUMBER)
-		elif self._match(STRING):
+					self._expect(TT.NUMBER)
+		elif self._match(TT.STRING):
 			pass
 		else:
-			self._expected_one_of([NUMBER, STRING])
+			self._expected_one_of([TT.NUMBER, TT.STRING])
 
 	def _parse_partition_boundary(self):
 		"""Parses a partition boundary in a PARTITION clause"""
@@ -3372,23 +3351,23 @@ class DB2LUWFormatter(BaseFormatter):
 			self._match('FROM')
 			if self._match('('):
 				while True:
-					self._expect_one_of([NUMBER, 'MINVALUE', 'MAXVALUE'])
+					self._expect_one_of([TT.NUMBER, 'MINVALUE', 'MAXVALUE'])
 					if not self._match(','):
 						break
 				self._expect(')')
 			else:
-				self._expect_one_of([NUMBER, 'MINVALUE', 'MAXVALUE'])
+				self._expect_one_of([TT.NUMBER, 'MINVALUE', 'MAXVALUE'])
 			self._match_one_of(['INCLUSIVE', 'EXCLUSIVE'])
 		self._expect('ENDING')
 		self._match('AT')
 		if self._match('('):
 			while True:
-				self._expect_one_of([NUMBER, 'MINVALUE', 'MAXVALUE'])
+				self._expect_one_of([TT.NUMBER, 'MINVALUE', 'MAXVALUE'])
 				if not self._match(','):
 					break
 			self._expect(')')
 		else:
-			self._expect_one_of([NUMBER, 'MINVALUE', 'MAXVALUE'])
+			self._expect_one_of([TT.NUMBER, 'MINVALUE', 'MAXVALUE'])
 		self._match_one_of(['INCLUSIVE', 'EXCLUSIVE'])
 
 	def _parse_copy_options(self):
@@ -3444,7 +3423,7 @@ class DB2LUWFormatter(BaseFormatter):
 			if self._match_one_of(['WITH', 'WITHOUT']):
 				self._expect('NESTED')
 			self._expect('TO')
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 		elif self._match('WHEN'):
 			self._parse_threshold_predicate()
 			self._parse_threshold_exceeded_actions()
@@ -3471,21 +3450,21 @@ class DB2LUWFormatter(BaseFormatter):
 			'ESTIMATEDSQLCOST',
 			'SQLROWSRETURNED',
 		]):
-			self._expect_sequence(['>', NUMBER])
+			self._expect_sequence(['>', TT.NUMBER])
 		elif self._match('TOTALSCPARTITIONCONNECTIONS'):
-			self._expect_sequence(['>', NUMBER])
+			self._expect_sequence(['>', TT.NUMBER])
 			if self._match('QUEUEDCONNECTIONS'):
 				if self._match('>'):
-					self._expect(NUMBER)
+					self._expect(TT.NUMBER)
 				elif self._match('UNBOUNDED'):
 					pass
 				else:
 					self._expected_one_of(['>', 'UNBOUNDED'])
 		elif self._match('CONCURRENTDBCOORDACTIVITIES'):
-			self._expect_sequence(['>', NUMBER])
+			self._expect_sequence(['>', TT.NUMBER])
 			if self._match('QUEUEDACTIVITIES'):
 				if self._match('>'):
-					self._expect(NUMBER)
+					self._expect(TT.NUMBER)
 				elif self._match('UNBOUNDED'):
 					pass
 				else:
@@ -3494,7 +3473,7 @@ class DB2LUWFormatter(BaseFormatter):
 			'CONNECTIONIDLETIME',
 			'ACTIVITYTOTALTIME',
 		]):
-			self._expect_sequence(['>', NUMBER])
+			self._expect_sequence(['>', TT.NUMBER])
 			self._expect_one_of([
 				'DAY',
 				'DAYS',
@@ -3504,7 +3483,7 @@ class DB2LUWFormatter(BaseFormatter):
 				'MINUTES'
 			])
 		elif self._match('SQLTEMPSPACE'):
-			self._expect_sequence(['>', NUMBER])
+			self._expect_sequence(['>', TT.NUMBER])
 			self._expect_one_of(['K', 'M', 'G'])
 
 	def _parse_threshold_exceeded_actions(self):
@@ -3541,7 +3520,7 @@ class DB2LUWFormatter(BaseFormatter):
 		if self._match('ACTIVITY'):
 			self._expect_one_of(['LIFETIME', 'QUEUETIME', 'EXECUTETIME', 'ESIMATEDCOST', 'INTERARRIVALTIME'])
 			self._expect_sequence(['HISTOGRAM', 'TEMPLATE'])
-			self._expect_one_of(['SYSDEFAULTHISTOGRAM', IDENTIFIER])
+			self._expect_one_of(['SYSDEFAULTHISTOGRAM', TT.IDENTIFIER])
 
 	def _parse_work_attributes(self):
 		"""Parses a work attributes clause in a WORK CLASS"""
@@ -3566,9 +3545,9 @@ class DB2LUWFormatter(BaseFormatter):
 			self._expect_sequence(['UNITS', 'UNBOUNDED'])
 		else:
 			self._expect_one_of(['TIMERONCOST', 'CARDINALITY'])
-			self._expect_sequence(['FROM', NUMBER])
+			self._expect_sequence(['FROM', TT.NUMBER])
 			if self._match('TO'):
-				self._expect_one_of(['UNBOUNDED', NUMBER])
+				self._expect_one_of(['UNBOUNDED', TT.NUMBER])
 
 	def _parse_routines_in_schema_clause(self, alter=False):
 		"""Parses a schema clause in a WORK CLASS definition"""
@@ -3576,15 +3555,15 @@ class DB2LUWFormatter(BaseFormatter):
 		if alter and self._match('ALL'):
 			pass
 		else:
-			self._expect_sequence(['IN', 'SCHEMA', IDENTIFIER])
+			self._expect_sequence(['IN', 'SCHEMA', TT.IDENTIFIER])
 
 	def _parse_position_clause(self):
 		"""Parses a POSITION clause in a WORK CLASS definition"""
 		# POSITION already matched
 		if self._match('AT'):
-			self._expect(NUMBER)
+			self._expect(TT.NUMBER)
 		elif self._match_one_of(['BEFORE', 'AFTER']):
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 		elif self._match('LAST'):
 			pass
 		else:
@@ -3592,22 +3571,22 @@ class DB2LUWFormatter(BaseFormatter):
 
 	def _parse_connection_attributes(self):
 		"""Parses connection attributes in a WORKLOAD"""
-		if self._match_one_of([(REGISTER, 'APPLNAME'), (REGISTER, 'SYSTEM_USER')]):
+		if self._match_one_of([(TT.REGISTER, 'APPLNAME'), (TT.REGISTER, 'SYSTEM_USER')]):
 			pass
-		elif self._match((REGISTER, 'SESSION_USER')):
+		elif self._match((TT.REGISTER, 'SESSION_USER')):
 			self._match('GROUP')
 		elif self._match('CURRENT'):
 			self._expect_one_of([
-				(REGISTER, 'CLIENT_USERID'),
-				(REGISTER, 'CLIENT_APPLNAME'),
-				(REGISTER, 'CLIENT_WRKSTNNAME'),
-				(REGISTER, 'CLIENT_ACCTNG')
+				(TT.REGISTER, 'CLIENT_USERID'),
+				(TT.REGISTER, 'CLIENT_APPLNAME'),
+				(TT.REGISTER, 'CLIENT_WRKSTNNAME'),
+				(TT.REGISTER, 'CLIENT_ACCTNG')
 			])
 		else:
 			self._expected_one_of(['APPLNAME', 'SYSTEM_USER', 'SESSION_USER', 'CURRENT'])
 		self._expect('(')
 		while True:
-			if not self._match(STRING):
+			if not self._match(TT.STRING):
 				self._expect(')')
 				break
 
@@ -3649,7 +3628,7 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_evm_group(self):
 		"""Parses an event monitor group in a non-wlm event monitor definition"""
 		while True:
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 			if self._match('('):
 				valid = set(['TABLE', 'IN', 'PCTDEACTIVATE', 'TRUNC', 'INCLUDES', 'EXCLUDES'])
 				while valid:
@@ -3662,15 +3641,15 @@ class DB2LUWFormatter(BaseFormatter):
 					if t == 'TABLE':
 						self._parse_table_name()
 					elif t == 'IN':
-						self._expect(IDENTIFIER)
+						self._expect(TT.IDENTIFIER)
 					elif t == 'PCTDEACTIVATE':
-						self._expect(NUMBER)
+						self._expect(TT.NUMBER)
 					elif t == 'TRUNC':
 						pass
 					elif t == 'INCLUDES' or t == 'EXCLUDES':
 						self._expect('(')
 						while True:
-							self._expect(IDENTIFIER)
+							self._expect(TT.IDENTIFIER)
 							if not self._match(','):
 								break
 						self._expect(')')
@@ -3701,15 +3680,15 @@ class DB2LUWFormatter(BaseFormatter):
 				else:
 					break
 				if t == 'BUFFERSIZE':
-					self._expect(NUMBER)
+					self._expect(TT.NUMBER)
 				elif t == 'BLOCKED':
 					valid.remove('NONBLOCKED')
 				elif t == 'NONBLOCKED':
 					valid.remove('BLOCKED')
 		elif self._match('PIPE'):
-			self._expect(STRING)
+			self._expect(TT.STRING)
 		elif self._match('FILE'):
-			self._expect(STRING)
+			self._expect(TT.STRING)
 			valid = set(['MAXFILES', 'MAXFILESIZE', 'BUFFERSIZE', 'BLOCKED', 'NONBLOCKED', 'APPEND', 'REPLACE'])
 			while valid:
 				t = self._match_one_of(valid)
@@ -3719,7 +3698,7 @@ class DB2LUWFormatter(BaseFormatter):
 				else:
 					break
 				if t == 'MAXFILES' or t == 'MAXFILESIZE':
-					self._expect_one_of(['NONE', NUMBER])
+					self._expect_one_of(['NONE', TT.NUMBER])
 				elif t == 'BLOCKED':
 					valid.remove('NONBLOCKED')
 				elif t == 'NONBLOCKED':
@@ -3750,7 +3729,7 @@ class DB2LUWFormatter(BaseFormatter):
 				valid.remove('AUTOSTART')
 			elif t == 'ON':
 				self._expect_one_of(['NODE', 'DBPARTITIONNUM'])
-				self._expect(NUMBER)
+				self._expect(TT.NUMBER)
 			elif t == 'LOCAL':
 				valid.remove('GLOBAL')
 			elif t == 'GLOBAL':
@@ -3794,7 +3773,7 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_allocate_cursor_statement(self):
 		"""Parses an ALLOCATE CURSOR statement in a procedure"""
 		# ALLOCATE already matched
-		self._expect_sequence([IDENTIFIER, 'CURSOR', 'FOR', 'RESULT', 'SET', IDENTIFIER])
+		self._expect_sequence([TT.IDENTIFIER, 'CURSOR', 'FOR', 'RESULT', 'SET', TT.IDENTIFIER])
 
 	def _parse_alter_audit_policy_statement(self):
 		"""Parses an ALTER AUDIT POLICY statement"""
@@ -3805,17 +3784,17 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_alter_bufferpool_statement(self):
 		"""Parses an ALTER BUFFERPOOL statement"""
 		# ALTER BUFFERPOOL already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		if self._match('ADD'):
 			if self._expect_one_of(['NODEGROUP', 'DATABASE']).value == 'DATABASE':
 				self._expect_sequence(['PARTITION', 'GROUP'])
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 		elif self._match('NUMBLOCKPAGES'):
-			self._expect(NUMBER)
+			self._expect(TT.NUMBER)
 			if self._match('BLOCKSIZE'):
-				self._expect(NUMBER)
+				self._expect(TT.NUMBER)
 		elif self._match('BLOCKSIZE'):
-			self._expect(NUMBER)
+			self._expect(TT.NUMBER)
 		elif self._match('NOT'):
 			self._expect_sequence(['EXTENDED', 'STORAGE'])
 		elif self._match('EXTENDED'):
@@ -3823,22 +3802,22 @@ class DB2LUWFormatter(BaseFormatter):
 		else:
 			self._match_one_of(['IMMEDIATE', 'DEFERRED'])
 			if self._match_one_of(['DBPARTITIONNUM', 'NODE']):
-				self._expect(NUMBER)
+				self._expect(TT.NUMBER)
 			self._expect('SIZE')
-			if self._match(NUMBER):
+			if self._match(TT.NUMBER):
 				self._match('AUTOMATIC')
 			else:
-				self._expect_one_of([NUMBER, 'AUTOMATIC'])
+				self._expect_one_of([TT.NUMBER, 'AUTOMATIC'])
 
 	def _parse_alter_database_statement(self):
 		"""Parses an ALTER DATABASE statement"""
 		# ALTER DATABASE already matched
 		if not self._match('ADD'):
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 			self._expect('ADD')
 		self._expect_sequence(['STORAGE', 'ON'])
 		while True:
-			self._expect(STRING)
+			self._expect(TT.STRING)
 			if not self._match(','):
 				break
 
@@ -3854,7 +3833,7 @@ class DB2LUWFormatter(BaseFormatter):
 		while True:
 			if self._match('EXTERNAL'):
 				self._expect('NAME')
-				self._expect_one_of([STRING, IDENTIFIER])
+				self._expect_one_of([TT.STRING, TT.IDENTIFIER])
 			elif self._match('NOT'):
 				self._expect_one_of(['FENCED', 'THREADSAFE'])
 			elif self._match_one_of(['FENCED', 'THREADSAFE']):
@@ -3873,13 +3852,13 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_alter_partition_group_statement(self):
 		"""Parses an ALTER DATABASE PARTITION GROUP statement"""
 		# ALTER [DATABASE PARTITION GROUP|NODEGROUP] already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		while True:
 			if self._match('ADD'):
 				self._parse_db_partitions_clause(size=False)
 				if self._match('LIKE'):
 					self._expect_one_of(['DBPARTITIONNUM', 'NODE'])
-					self._expect(NUMBER)
+					self._expect(TT.NUMBER)
 				elif self._match('WITHOUT'):
 					self._expect('TABLESPACES')
 			elif self._match('DROP'):
@@ -3892,7 +3871,7 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_alter_histogram_template_statement(self):
 		"""Parses an ALTER HISTOGRAM TEMPLATE statement"""
 		# ALTER HISTOGRAM TEMPLATE already matched
-		self._expect_sequence([IDENTIFIER, 'HIGH', 'BIN', 'VALUE', NUMBER])
+		self._expect_sequence([TT.IDENTIFIER, 'HIGH', 'BIN', 'VALUE', TT.NUMBER])
 
 	def _parse_alter_nickname_statement(self):
 		"""Parses an ALTER NICKNAME statement"""
@@ -3924,9 +3903,9 @@ class DB2LUWFormatter(BaseFormatter):
 				if self._match('PRIMARY'):
 					self._expect('KEY')
 				elif self._match('FOREIGN'):
-					self._expect_sequence(['KEY', IDENTIFIER])
+					self._expect_sequence(['KEY', TT.IDENTIFIER])
 				elif self._match_one_of(['UNIQUE', 'CHECK', 'CONSTRAINT']):
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 				else:
 					self._expected_one_of(['PRIMARY', 'FOREIGN', 'CHECK', 'CONSTRAINT'])
 			elif self._match_one_of(['ALLOW', 'DISALLOW']):
@@ -3947,7 +3926,7 @@ class DB2LUWFormatter(BaseFormatter):
 		while True:
 			if self._match('EXTERNAL'):
 				if self._match('NAME'):
-					self._expect([STRING, IDENTIFIER])
+					self._expect([TT.STRING, TT.IDENTIFIER])
 				elif self._match('ACTION'):
 					pass
 				else:
@@ -3961,7 +3940,7 @@ class DB2LUWFormatter(BaseFormatter):
 			elif self._match('NEW'):
 				self._expect_sequence(['SAVEPOINT', 'LEVEL'])
 			elif self._match('ALTER'):
-				self._expect_sequence(['PARAMETER', IDENTIFIER, 'SET', 'DATA', 'TYPE'])
+				self._expect_sequence(['PARAMETER', TT.IDENTIFIER, 'SET', 'DATA', 'TYPE'])
 				self._parse_datatype()
 			elif first:
 				self._expected_one_of([
@@ -3980,16 +3959,16 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_alter_security_label_component_statement(self):
 		"""Parses an ALTER SECURITY LABEL COMPONENT statement"""
 		# ALTER SECURITY LABEL COMPONENT already matched
-		self._expect_sequence(IDENTIFIER, 'ADD', 'ELEMENT', STRING)
+		self._expect_sequence(TT.IDENTIFIER, 'ADD', 'ELEMENT', TT.STRING)
 		if self._match_one_of(['BEFORE', 'AFTER']):
-			self._expect(STRING)
+			self._expect(TT.STRING)
 		elif self._match('ROOT'):
 			pass
 		elif self._match('UNDER'):
-			self._expect(STRING)
+			self._expect(TT.STRING)
 			if self._match('OVER'):
 				while True:
-					self._expect(STRING)
+					self._expect(TT.STRING)
 					if not self._match(','):
 						break
 					self._expect('OVER')
@@ -3997,10 +3976,10 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_alter_security_policy_statement(self):
 		"""Parses an ALTER SECURITY POLICY statement"""
 		# ALTER SECURITY POLICY
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		while True:
 			if self._match('ADD'):
-				self._expect_sequence(['SECURITY', 'LABEL', 'COMPONENT', IDENTIFIER])
+				self._expect_sequence(['SECURITY', 'LABEL', 'COMPONENT', TT.IDENTIFIER])
 			elif self._match_one_of(['OVERRIDE', 'RESTRICT']):
 				self._expect_sequence(['NOT', 'AUTHORIZED', 'WRITE', 'SECURITY', 'LABEL'])
 			elif self._match_one_of(['USE', 'IGNORE']):
@@ -4025,20 +4004,20 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_alter_service_class_statement(self):
 		"""Parses an ALTER SERVICE CLASS statement"""
 		# ALTER SERVICE CLASS already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		if self._match('UNDER'):
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 		first = True
 		while True:
 			if self._match('AGENT'):
 				self._expect('PRIORITY')
-				self._expect_one_of(['DEFAULT', NUMBER])
+				self._expect_one_of(['DEFAULT', TT.NUMBER])
 			elif self._match('PREFETCH'):
 				self._expect('PRIORITY')
 				self._expect_one_of(['LOW', 'MEDIUM', 'HIGH', 'DEFAULT'])
 			elif self._match('OUTBOUND'):
 				self._expect('CORRELATOR')
-				self._expect_one_of(['NONE', STRING])
+				self._expect_one_of(['NONE', TT.STRING])
 			elif self._match('COLLECT'):
 				if self._match('ACTIVITY'):
 					self._expect('DATA')
@@ -4069,9 +4048,9 @@ class DB2LUWFormatter(BaseFormatter):
 					self._expected_one_of(['ACTIVITY', 'AGGREGATE'])
 			elif self._match('ACTIVITY'):
 				self._expect_one_of(['LIFETIME', 'QUEUETIME', 'EXECUTETIME', 'ESTIMATEDCOST', 'INTERARRIVALTIME'])
-				self._expect_sequence(['HISTOGRAM', 'TEMPLATE', IDENTIFIER])
+				self._expect_sequence(['HISTOGRAM', 'TEMPLATE', TT.IDENTIFIER])
 			elif self._match('REQUEST'):
-				self._expect_sequence(['EXECUTETIME', 'HISTOGRAM', 'TEMPLATE', IDENTIFIER])
+				self._expect_sequence(['EXECUTETIME', 'HISTOGRAM', 'TEMPLATE', TT.IDENTIFIER])
 			elif self._match_one_of(['ENABLE', 'DISABLE']):
 				pass
 			elif not first:
@@ -4101,7 +4080,7 @@ class DB2LUWFormatter(BaseFormatter):
 					# Ambiguity: optional partition name
 					self._save_state()
 					try:
-						self._match(IDENTIFIER)
+						self._match(TT.IDENTIFIER)
 						self._parse_partition_boundary()
 					except ParseError:
 						self._restore_state()
@@ -4109,10 +4088,10 @@ class DB2LUWFormatter(BaseFormatter):
 					else:
 						self._forget_state()
 					if self._match('IN'):
-						self._expect(IDENTIFIER)
+						self._expect(TT.IDENTIFIER)
 					if self._match('LONG'):
 						self._expect('IN')
-						self._expect(IDENTIFIER)
+						self._expect(TT.IDENTIFIER)
 				elif self._match('MATERIALIZED'):
 					self._expect('QUERY')
 					self._expect('(')
@@ -4138,7 +4117,7 @@ class DB2LUWFormatter(BaseFormatter):
 					self._parse_column_definition()
 				elif self._match('SECURITY'):
 					self._expect('POLICY')
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 				else:
 					self._save_state()
 					try:
@@ -4155,7 +4134,7 @@ class DB2LUWFormatter(BaseFormatter):
 				# Ambiguity: optional partition name
 				self._save_state()
 				try:
-					self._match(IDENTIFIER)
+					self._match(TT.IDENTIFIER)
 					self._parse_partition_boundary()
 				except ParseError:
 					self._restore_state()
@@ -4165,7 +4144,7 @@ class DB2LUWFormatter(BaseFormatter):
 				self._expect('FROM')
 				self._parse_table_name()
 			elif self._match('DETACH'):
-				self._expect_sequence(['PARTITION', IDENTIFIER, 'FROM'])
+				self._expect_sequence(['PARTITION', TT.IDENTIFIER, 'FROM'])
 				self._parse_table_name()
 			elif self._match('ALTER'):
 				if self._match('FOREIGN'):
@@ -4188,11 +4167,11 @@ class DB2LUWFormatter(BaseFormatter):
 				if self._match('PRIMARY'):
 					self._expect('KEY')
 				elif self._match('FOREIGN'):
-					self._expect_sequence(['KEY', IDENTIFIER])
+					self._expect_sequence(['KEY', TT.IDENTIFIER])
 				elif self._match_one_of(['UNIQUE', 'CHECK', 'CONSTRAINT']):
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 				elif self._match('COLUMN'):
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 					self._match_one_of(['CASCADE', 'RESTRICT'])
 				elif self._match('RESTRICT'):
 					self._expect_sequence(['ON', 'DROP'])
@@ -4205,7 +4184,7 @@ class DB2LUWFormatter(BaseFormatter):
 				elif self._match('SECURITY'):
 					self._expect('POLICY')
 				else:
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 					self._match_one_of(['CASCADE', 'RESTRICT'])
 			elif self._match('DATA'):
 				self._expect('CAPTURE')
@@ -4216,7 +4195,7 @@ class DB2LUWFormatter(BaseFormatter):
 				else:
 					self._expected_one_of(['NONE', 'CHANGES'])
 			elif self._match('PCTFREE'):
-				self._expect(NUMBER)
+				self._expect(TT.NUMBER)
 			elif self._match('LOCKSIZE'):
 				self._expect_one_of(['ROW', 'BLOCKINSERT', 'TABLE'])
 			elif self._match('APPEND'):
@@ -4245,12 +4224,12 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_alter_tablespace_statement(self):
 		"""Parses an ALTER TABLESPACE statement"""
 		# ALTER TABLESPACE already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		first = True
 		while True:
 			if self._match('ADD'):
 				if self._match('TO'):
-					self._expect_sequence(['STRIPE', 'SET', IDENTIFIER])
+					self._expect_sequence(['STRIPE', 'SET', TT.IDENTIFIER])
 					self._parse_database_container_clause()
 					if self._match('ON'):
 						self._parse_db_partitions_clause(size=False)
@@ -4292,7 +4271,7 @@ class DB2LUWFormatter(BaseFormatter):
 					self._expect_sequence(['(', 'ALL'])
 					reraise = True
 					self._match('CONTAINERS')
-					self._expect(NUMBER)
+					self._expect(TT.NUMBER)
 					self._match_one_of(['K', 'M', 'G'])
 					self._expect(')')
 				except ParseError:
@@ -4306,14 +4285,14 @@ class DB2LUWFormatter(BaseFormatter):
 					self._parse_db_partitions_clause(size=False)
 			elif self._match('PREFETCHSIZE'):
 				if not self._match('AUTOMATIC'):
-					self._expect(NUMBER)
+					self._expect(TT.NUMBER)
 					self._match_one_of(['K', 'M', 'G'])
 			elif self._match('BUFFERPOOL'):
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 			elif self._match('OVERHEAD'):
-				self._expect(NUMBER)
+				self._expect(TT.NUMBER)
 			elif self._match('TRANSFERRATE'):
-				self._expect(NUMBER)
+				self._expect(TT.NUMBER)
 			elif self._match('NO'):
 				self._expect_sequence(['FILE', 'SYSTEM', 'CACHING'])
 			elif self._match('FILE'):
@@ -4324,11 +4303,11 @@ class DB2LUWFormatter(BaseFormatter):
 			elif self._match('SWITCH'):
 				self._expect('ONLINE')
 			elif self._match('INCREASESIZE'):
-				self._expect(NUMBER)
+				self._expect(TT.NUMBER)
 				self._expect_one_of(['K', 'M', 'G', 'PERCENT'])
 			elif self._match('MAXSIZE'):
 				if not self_match('NONE'):
-					self._expect(NUMBER)
+					self._expect(TT.NUMBER)
 					self._expect_one_of(['K', 'M', 'G'])
 			elif self._match('CONVERT'):
 				self._expect_sequence(['TO', 'LARGE'])
@@ -4358,7 +4337,7 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_alter_threshold_statement(self):
 		"""Parses an ALTER THRESHOLD statement"""
 		# ALTER THRESHOLD already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		while True:
 			if self._match('WHEN'):
 				self._parse_threshold_predicate()
@@ -4369,16 +4348,16 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_alter_trusted_context_statement(self):
 		"""Parses an ALTER TRUSTED CONTEXT statement"""
 		# ALTER TRUSTED CONTEXT already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		first = True
 		while True:
 			if self._match('ADD'):
 				if self._match('ATTRIBUTES'):
 					self._expect('(')
 					while True:
-						self._expect_sequence(['ADDRESS', STRING])
+						self._expect_sequence(['ADDRESS', TT.STRING])
 						if self._match('WITH'):
-							self._expect_sequence(['ENCRYPTION', STRING])
+							self._expect_sequence(['ENCRYPTION', TT.STRING])
 						if not self._match(','):
 							break
 					self._expect(')')
@@ -4386,8 +4365,8 @@ class DB2LUWFormatter(BaseFormatter):
 					self._expect('FOR')
 					while True:
 						if not self._match('PUBLIC'):
-							self._expect(IDENTIFIER)
-							self._match_sequence(['ROLE', IDENTIFIER])
+							self._expect(TT.IDENTIFIER)
+							self._match_sequence(['ROLE', TT.IDENTIFIER])
 							if self._match_one_of(['WITH', 'WITHOUT']):
 								self._expect('AUTHENTICATION')
 						if not self._match(','):
@@ -4398,7 +4377,7 @@ class DB2LUWFormatter(BaseFormatter):
 				if self._match('ATTRIBUTES'):
 					self._expect('(')
 					while True:
-						self._expect_sequence(['ADDRESS', STRING])
+						self._expect_sequence(['ADDRESS', TT.STRING])
 						if not self._match(','):
 							break
 					self._expect(')')
@@ -4406,7 +4385,7 @@ class DB2LUWFormatter(BaseFormatter):
 					self._expect('FOR')
 					while True:
 						if not self._match('PUBLIC'):
-							self._expect(IDENTIFIER)
+							self._expect(TT.IDENTIFIER)
 						if not self._match(','):
 							break
 				else:
@@ -4414,27 +4393,27 @@ class DB2LUWFormatter(BaseFormatter):
 			elif self._match('ALTER'):
 				while True:
 					if self._match('SYSTEM'):
-						self._expect_sequence(['AUTHID', IDENTIFIER])
+						self._expect_sequence(['AUTHID', TT.IDENTIFIER])
 					elif self._match('ATTRIBUTES'):
 						self._expect('(')
 						while True:
 							self._expect_one_of(['ADDRESS', 'ENCRYPTION'])
-							self._expect(STRING)
+							self._expect(TT.STRING)
 							if not self._match(','):
 								break
 						self._expect(')')
 					elif self._match('NO'):
 						self._expect_sequence(['DEFAULT', 'ROLE'])
 					elif self._match('DEFAULT'):
-						self._expect_sequence(['ROLE', IDENTIFIER])
+						self._expect_sequence(['ROLE', TT.IDENTIFIER])
 					elif not self._match_one_of(['ENABLE', 'DISABLE']):
 						break
 			elif self._match('REPLACE'):
 				self._expect_sequence(['USE', 'FOR'])
 				while True:
 					if not self._match('PUBLIC'):
-						self._expect(IDENTIFIER)
-						self._match_sequence(['ROLE', IDENTIFIER])
+						self._expect(TT.IDENTIFIER)
+						self._match_sequence(['ROLE', TT.IDENTIFIER])
 						if self._match_one_of(['WITH', 'WITHOUT']):
 							self._expect('AUTHENTICATION')
 					if not self._match(','):
@@ -4449,7 +4428,7 @@ class DB2LUWFormatter(BaseFormatter):
 		"""Parses an ALTER USER MAPPING statement"""
 		# ALTER USER MAPPING already matched
 		if not self._match('USER'):
-			self._expect_sequence([IDENTIFIER, 'SERVER', IDENTIFIER, 'OPTIONS'])
+			self._expect_sequence([TT.IDENTIFIER, 'SERVER', TT.IDENTIFIER, 'OPTIONS'])
 			self._parse_federated_options(alter=True)
 
 	def _parse_alter_view_statement(self):
@@ -4462,24 +4441,24 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_alter_work_action_set_statement(self):
 		"""Parses an ALTER WORK ACTION SET statement"""
 		# ALTER WORK ACTION SET already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		first = True
 		while True:
 			if self._match('ADD'):
 				self._match_sequence(['WORK', 'ACTION'])
-				self._expect_sequence([IDENTIFIER, 'ON', 'WORK', 'CLASS', IDENTIFIER])
+				self._expect_sequence([TT.IDENTIFIER, 'ON', 'WORK', 'CLASS', TT.IDENTIFIER])
 				self._parse_action_types_clause()
 				self._parse_histogram_template_clause()
 				self._match_one_of(['ENABLE', 'DISABLE'])
 			elif self._match('ALTER'):
 				self._match_sequence(['WORK', 'ACTION'])
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 				while True:
 					if self._match('SET'):
-						self._expect_sequence(['WORK', 'CLASS', IDENTIFIER])
+						self._expect_sequence(['WORK', 'CLASS', TT.IDENTIFIER])
 					elif self._match('ACTIVITY'):
 						self._expect_one_of(['LIFETIME', 'QUEUETIME', 'EXECUTETIME', 'ESIMATEDCOST', 'INTERARRIVALTIME'])
-						self._expect_sequence(['HISTOGRAM', 'TEMPLATE', IDENTIFIER])
+						self._expect_sequence(['HISTOGRAM', 'TEMPLATE', TT.IDENTIFIER])
 					elif self._match_one_of(['ENABLE', 'DISABLE']):
 						pass
 					else:
@@ -4495,7 +4474,7 @@ class DB2LUWFormatter(BaseFormatter):
 							self._forget_state()
 			elif self._match('DROP'):
 				self._match_sequence(['WORK', 'ACTION'])
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 			elif self._match_one_of(['ENABLE', 'DISABLE']):
 				pass
 			elif first:
@@ -4507,18 +4486,18 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_alter_work_class_set_statement(self):
 		"""Parses an ALTER WORK CLASS SET statement"""
 		# ALTER WORK CLASS SET already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		outer = True
 		while True:
 			if self._match('ADD'):
 				self._match_sequence(['WORK', 'CLASS'])
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 				self._parse_work_attributes()
 				self._expect('POSITION')
 				self._parse_position_clause()
 			elif self._match('ALTER'):
 				self._match_sequence(['WORK', 'CLASS'])
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 				inner = True
 				while True:
 					if self._match('FOR'):
@@ -4534,7 +4513,7 @@ class DB2LUWFormatter(BaseFormatter):
 					inner = False
 			elif self._match('DROP'):
 				self._match_sequence(['WORK', 'CLASS'])
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 			elif outer:
 				self._expected_one_of(['ADD', 'ALTER', 'DROP'])
 			else:
@@ -4543,7 +4522,7 @@ class DB2LUWFormatter(BaseFormatter):
 
 	def _parse_alter_workload_statement(self):
 		"""Parses an ALTER WORKLOAD statement"""
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		first = True
 		while True:
 			if self._match('ADD'):
@@ -4555,9 +4534,9 @@ class DB2LUWFormatter(BaseFormatter):
 			elif self._match_one_of(['ENABLE', 'DISABLE']):
 				pass
 			elif self._match('SERVICE'):
-				self._expect_sequence(['CLASS', IDENTIFIER])
+				self._expect_sequence(['CLASS', TT.IDENTIFIER])
 				if self._match('UNDER'):
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 			elif self._match('POSITION'):
 				self._parse_position_clause()
 			elif self._match_sequence(['COLLECT', 'ACTIVITY', 'DATA']):
@@ -4581,7 +4560,7 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_alter_wrapper_statement(self):
 		"""Parses an ALTER WRAPPER statement"""
 		# ALTER WRAPPER already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		self._expect('OPTIONS')
 		self._parse_federated_options(alter=True)
 
@@ -4613,9 +4592,9 @@ class DB2LUWFormatter(BaseFormatter):
 			elif self._match('TABLE'):
 				self._parse_table_name()
 			elif self._match_sequence(['TRUSTED', 'CONTEXT']):
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 			elif self._match_one_of(['USER', 'GROUP', 'ROLE']):
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 			else:
 				self._expected_one_of([
 					'DATABASE',
@@ -4634,7 +4613,7 @@ class DB2LUWFormatter(BaseFormatter):
 			if not self._match(','):
 				break
 		if self._match_one_of(['USING', 'REPLACE']):
-			self._expect_sequence(['POLICY', IDENTIFIER])
+			self._expect_sequence(['POLICY', TT.IDENTIFIER])
 		elif not self._match_sequence(['REMOVE', 'POLICY']):
 			self._expected_one_of(['USING', 'REPLACE', 'REMOVE'])
 
@@ -4674,7 +4653,7 @@ class DB2LUWFormatter(BaseFormatter):
 					self._parse_procedure_statement()
 				else:
 					self._parse_routine_statement()
-				self._expect((TERMINATOR, ';'))
+				self._expect((TT.TERMINATOR, ';'))
 				t = self._match_one_of(['WHEN', 'ELSE', 'END'])
 				if t:
 					self._outdent(-1)
@@ -4692,7 +4671,7 @@ class DB2LUWFormatter(BaseFormatter):
 					self._parse_procedure_statement()
 				else:
 					self._parse_routine_statement()
-				self._expect((TERMINATOR, ';'))
+				self._expect((TT.TERMINATOR, ';'))
 				if self._match('END'):
 					self._outdent(-1)
 					break
@@ -4704,7 +4683,7 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_close_statement(self):
 		"""Parses a CLOSE cursor statement"""
 		# CLOSE already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		self._match_sequence(['WITH', 'RELEASE'])
 
 	def _parse_comment_statement(self):
@@ -4719,9 +4698,9 @@ class DB2LUWFormatter(BaseFormatter):
 			self._expect('(')
 			self._indent()
 			while True:
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 				self._valign()
-				self._expect_sequence(['IS', STRING])
+				self._expect_sequence(['IS', TT.STRING])
 				reraise = True
 				if self._match(','):
 					self._newline()
@@ -4738,7 +4717,7 @@ class DB2LUWFormatter(BaseFormatter):
 				self._parse_subschema_name()
 			elif self._match('TYPE'):
 				if self._match('MAPPING'):
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 				else:
 					self._parse_subschema_name()
 			elif self._match('PACKAGE'):
@@ -4747,44 +4726,44 @@ class DB2LUWFormatter(BaseFormatter):
 				# XXX Ambiguity: IDENTIFIER will match "IS" below. How to solve
 				# this? Only double-quoted identifiers are actually permitted
 				# here (or strings)
-				self._match_one_of([IDENTIFIER, STRING])
+				self._match_one_of([TT.IDENTIFIER, TT.STRING])
 			elif self._match_one_of(['DISTINCT', 'DATA']):
 				self._expect('TYPE')
 				self._parse_type_name()
 			elif self._match_one_of(['COLUMN', 'CONSTRAINT']):
 				self._parse_subrelation_name()
 			elif self._match_one_of(['SCHEMA', 'TABLESPACE', 'WRAPPER', 'WORKLOAD', 'NODEGROUP', 'ROLE', 'THRESHOLD']):
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 			elif self._match_sequence(['DATABASE', 'PARTITION', 'GROUP']):
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 			elif self._match_sequence(['AUDIT', 'POLICY']):
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 			elif self._match_sequence(['SECURITY', 'POLICY']):
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 			elif self._match_sequence(['SECURITY', 'LABEL']):
 				self._match('COMPONENT')
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 			elif self._match('SERVER'):
 				if self._match('OPTION'):
-					self._expect_sequence([IDENTIFIER, 'FOR'])
+					self._expect_sequence([TT.IDENTIFIER, 'FOR'])
 					self._parse_remote_server()
 				else:
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 			elif self._match('SERVICE'):
 				self._expect('CLASS')
-				self._expect(IDENTIFIER)
-				self._match_sequence(['UNDER', IDENTIFIER])
+				self._expect(TT.IDENTIFIER)
+				self._match_sequence(['UNDER', TT.IDENTIFIER])
 			elif self._match_sequence(['TRUSTED', 'CONTEXT']):
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 			elif self._match_sequence(['HISTOGRAM', 'TEMPLATE']):
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 			elif self._match_sequence(['WORK', 'ACTION', 'SET']):
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 			elif self._match_sequence(['WORK', 'CLASS', 'SET']):
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 			elif self._match('FUNCTION'):
 				if self._match('MAPPING'):
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 				else:
 					self._parse_routine_name()
 					if self._match('(', prespace=False):
@@ -4829,7 +4808,7 @@ class DB2LUWFormatter(BaseFormatter):
 					'WORKLOAD',
 					'WRAPPER',
 				])
-			self._expect_sequence(['IS', STRING])
+			self._expect_sequence(['IS', TT.STRING])
 		else:
 			self._forget_state()
 
@@ -4848,13 +4827,13 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_create_audit_policy_statement(self):
 		"""Parses a CREATE AUDIT POLICY statement"""
 		# CREATE AUDIT POLICY already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		self._parse_audit_policy()
 
 	def _parse_create_bufferpool_statement(self):
 		"""Parses a CREATE BUFFERPOOL statement"""
 		# CREATE BUFFERPOOL already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		self._match_one_of(['IMMEDIATE', 'DEFERRED'])
 		if self._match('ALL'):
 			self._expect('DBPARTITIONNUMS')
@@ -4864,12 +4843,12 @@ class DB2LUWFormatter(BaseFormatter):
 		elif self._match('NODEGROUP'):
 			self._parse_ident_list()
 		self._expect('SIZE')
-		if self._match(NUMBER):
+		if self._match(TT.NUMBER):
 			self._match('AUTOMATIC')
 		elif self._match('AUTOMATIC'):
 			pass
 		else:
-			self._expected_one_of([NUMBER, 'AUTOMATIC'])
+			self._expected_one_of([TT.NUMBER, 'AUTOMATIC'])
 		# Parse function options (which can appear in any order)
 		valid = set(['NUMBLOCKPAGES', 'PAGESIZE', 'EXTENDED', 'EXCEPT', 'NOT'])
 		while valid:
@@ -4883,11 +4862,11 @@ class DB2LUWFormatter(BaseFormatter):
 				self._expect('ON')
 				self._parse_db_partitions_clause(size=True)
 			elif t == 'NUMBLOCKPAGES':
-				self._expect(NUMBER)
+				self._expect(TT.NUMBER)
 				if self._match('BLOCKSIZE'):
-					self._expect(NUMBER)
+					self._expect(TT.NUMBER)
 			elif t == 'PAGESIZE':
-				self._expect(NUMBER)
+				self._expect(TT.NUMBER)
 				self._match('K')
 			elif t == 'EXTENDED':
 				self._expect('STORAGE')
@@ -4899,7 +4878,7 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_create_database_partition_group_statement(self):
 		"""Parses an CREATE DATABASE PARTITION GROUP statement"""
 		# CREATE [DATABASE PARTITION GROUP|NODEGROUP] already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		if self._match('ON'):
 			if self._match('ALL'):
 				self._expect_one_of(['DBPARTITIONNUMS', 'NODES'])
@@ -4909,7 +4888,7 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_create_event_monitor_statement(self):
 		"""Parses a CREATE EVENT MONITOR statement"""
 		# CREATE EVENT MONITOR already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		self._expect('FOR')
 		self._save_state()
 		try:
@@ -4930,7 +4909,7 @@ class DB2LUWFormatter(BaseFormatter):
 			while True:
 				self._save_state()
 				try:
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 					self._parse_datatype()
 				except ParseError:
 					self._restore_state()
@@ -4993,7 +4972,7 @@ class DB2LUWFormatter(BaseFormatter):
 				elif t == 'CALLED':
 					self._expect_sequence(['ON', 'NULL', 'INPUT'])
 				elif t == 'CARDINALITY':
-					self._expect(NUMBER)
+					self._expect(TT.NUMBER)
 				elif t == 'CONTAINS':
 					self._expect('SQL')
 				elif t == 'DBINFO':
@@ -5004,7 +4983,7 @@ class DB2LUWFormatter(BaseFormatter):
 					self._expect('PARALLEL')
 				elif t == 'EXTERNAL':
 					if self._match('NAME'):
-						self._expect_one_of([STRING, IDENTIFIER])
+						self._expect_one_of([TT.STRING, TT.IDENTIFIER])
 					else:
 						self._expect('ACTION')
 				elif t == 'FENCED':
@@ -5044,7 +5023,7 @@ class DB2LUWFormatter(BaseFormatter):
 					elif self._match_one_of(['ROW', 'TABLE']):
 						self._expect('(')
 						while True:
-							self._expect(IDENTIFIER)
+							self._expect(TT.IDENTIFIER)
 							self._parse_datatype()
 							self._match_sequence(['AS', 'LOCATOR'])
 							if not self._match(','):
@@ -5056,15 +5035,15 @@ class DB2LUWFormatter(BaseFormatter):
 							self._parse_datatype()
 						self._match_sequence(['AS', 'LOCATOR'])
 				elif t == 'SCRATCHPAD':
-					self._expect(NUMBER)
+					self._expect(TT.NUMBER)
 				elif t == 'SPECIFIC':
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 				elif t == 'STATIC':
 					self._expect('DISPATCH')
 				elif t == 'THREADSAFE':
 					pass
 				elif t == 'TRANSFORM':
-					self._expect_sequence(['GROUP', IDENTIFIER])
+					self._expect_sequence(['GROUP', TT.IDENTIFIER])
 				elif t == 'VARIANT':
 					pass
 				self._newline()
@@ -5098,7 +5077,7 @@ class DB2LUWFormatter(BaseFormatter):
 		"""Parses a CREATE FUNCTION MAPPING statement"""
 		# CREATE FUNCTION MAPPING already matched
 		if not self._match('FOR'):
-			self._expect_sequence([IDENTIFIER, 'FOR'])
+			self._expect_sequence([TT.IDENTIFIER, 'FOR'])
 		if not self._match('SPECIFIC'):
 			self._parse_function_name()
 			self._expect('(', prespace=False)
@@ -5115,7 +5094,7 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_create_histogram_template_statement(self):
 		"""Parses a CREATE HISTOGRAM TEMPLATE statement"""
 		# CREATE HISTOGRAM TEMPLATE already matched
-		self._expect_sequence([IDENTIFIER, 'HIGH', 'BIN', 'VALUE', NUMBER])
+		self._expect_sequence([TT.IDENTIFIER, 'HIGH', 'BIN', 'VALUE', TT.NUMBER])
 
 	def _parse_create_index_statement(self, unique):
 		"""Parses a CREATE INDEX statement"""
@@ -5127,7 +5106,7 @@ class DB2LUWFormatter(BaseFormatter):
 		self._expect('(')
 		self._indent()
 		while True:
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 			self._match_one_of(['ASC', 'DESC'])
 			if not self._match(','):
 				break
@@ -5135,7 +5114,7 @@ class DB2LUWFormatter(BaseFormatter):
 				self._newline()
 		self._outdent()
 		self._expect(')')
-		self._match_sequence(['IN', IDENTIFIER])
+		self._match_sequence(['IN', TT.IDENTIFIER])
 		valid = set([
 			'SPECIFICATION',
 			'INCLUDE',
@@ -5167,9 +5146,9 @@ class DB2LUWFormatter(BaseFormatter):
 			elif t == 'CLUSTER':
 				pass
 			elif t == 'PCTFREE' or t == 'MINPCTUSED':
-				self._expect(NUMBER)
+				self._expect(TT.NUMBER)
 			elif t == 'LEVEL2':
-				self._expect_sequence(['PCTFREE', NUMBER])
+				self._expect_sequence(['PCTFREE', TT.NUMBER])
 			elif t == 'ALLOW' or t == 'DISALLOW':
 				valid.discard('ALLOW')
 				valid.discard('DISALLOW')
@@ -5190,7 +5169,7 @@ class DB2LUWFormatter(BaseFormatter):
 			self._parse_remote_object_name()
 		else:
 			self._parse_table_definition(aligntypes=True, alignoptions=True, federated=True)
-			self._expect_sequence(['FOR', 'SERVER', IDENTIFIER])
+			self._expect_sequence(['FOR', 'SERVER', TT.IDENTIFIER])
 		if self._match('OPTIONS'):
 			self._parse_federated_options()
 
@@ -5203,17 +5182,17 @@ class DB2LUWFormatter(BaseFormatter):
 			if self._match('(', prespace=False):
 				self._expect(')')
 			elif self._match('NUMBER'):
-				self._expect_sequence(['OF', 'PARAMETERS', NUMBER])
+				self._expect_sequence(['OF', 'PARAMETERS', TT.NUMBER])
 			if self._match('UNIQUE'):
-				self._expect(STRING)
-			self.expect_sequence(['FOR', 'SERVER', IDENTIFIER])
+				self._expect(TT.STRING)
+			self.expect_sequence(['FOR', 'SERVER', TT.IDENTIFIER])
 		elif self._match('(', prespace=False):
 			if not self._match(')'):
 				while True:
 					self._match_one_of(['IN', 'OUT', 'INOUT'])
 					self._save_state()
 					try:
-						self._expect(IDENTIFIER)
+						self._expect(TT.IDENTIFIER)
 						self._parse_datatype()
 					except ParseError:
 						self._restore_state()
@@ -5268,10 +5247,10 @@ class DB2LUWFormatter(BaseFormatter):
 			elif t == 'DETERMINISTIC':
 				pass
 			elif t == 'DYNAMIC':
-				self._expect_sequence(['RESULT', 'SETS', NUMBER])
+				self._expect_sequence(['RESULT', 'SETS', TT.NUMBER])
 			elif t == 'EXTERNAL':
 				if self._match('NAME'):
-					self._expect_one_of([STRING, IDENTIFIER])
+					self._expect_one_of([TT.STRING, TT.IDENTIFIER])
 				else:
 					self._expect('ACTION')
 			elif t == 'FENCED':
@@ -5319,9 +5298,9 @@ class DB2LUWFormatter(BaseFormatter):
 			elif t == 'READS':
 				self._expect_sequence(['SQL', 'DATA'])
 			elif t == 'RESULT':
-				self._expect_sequence(['SETS', NUMBER])
+				self._expect_sequence(['SETS', TT.NUMBER])
 			elif t == 'SPECIFIC':
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 			elif t == 'THREADSAFE':
 				pass
 			elif t == 'WITH':
@@ -5336,17 +5315,17 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_create_role_statement(self):
 		"""Parses a CREATE ROLE statement"""
 		# CREATE ROLE already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 
 	def _parse_create_schema_statement(self):
 		"""Parses a CREATE SCHEMA statement"""
 		# CREATE SCHEMA already matched
 		if self._match('AUTHORIZATION'):
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 		else:
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 			if self._match('AUTHORIZATION'):
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 		# Parse CREATE/COMMENT/GRANT statements
 		while True:
 			if self._match('CREATE'):
@@ -5370,25 +5349,25 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_create_security_label_component_statement(self):
 		"""Parses a CREATE SECURITY LABEL COMPONENT statement"""
 		# CREATE SECURITY LABEL COMPONENT already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		if self._match('ARRAY'):
 			self._expect('[', prespace=False)
 			while True:
-				self._expect(STRING)
+				self._expect(TT.STRING)
 				if not self._match(','):
 					break
 			self._expect(']')
 		elif self._match('SET'):
 			self._expect('{', prespace=False)
 			while True:
-				self._expect(STRING)
+				self._expect(TT.STRING)
 				if not self._match(','):
 					break
 			self._expect('}')
 		elif self._match('TREE'):
-			self._expect_sequence(['(', STRING, 'ROOT'], prespace=False)
+			self._expect_sequence(['(', TT.STRING, 'ROOT'], prespace=False)
 			while self._match(','):
-				self._expect_sequence([STRING, 'UNDER', STRING])
+				self._expect_sequence([TT.STRING, 'UNDER', TT.STRING])
 			self._expect(')')
 
 	def _parse_create_security_label_statement(self):
@@ -5396,8 +5375,8 @@ class DB2LUWFormatter(BaseFormatter):
 		# CREATE SECURITY LABEL already matched
 		self._parse_security_label_name()
 		while True:
-			self._expect_sequence(['COMPONENT', IDENTIFIER, STRING])
-			while self._match_sequence([',', STRING]):
+			self._expect_sequence(['COMPONENT', TT.IDENTIFIER, TT.STRING])
+			while self._match_sequence([',', TT.STRING]):
 				pass
 			if not self._match(','):
 				break
@@ -5405,9 +5384,9 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_create_security_policy_statement(self):
 		"""Parses a CREATE SECURITY POLICY statement"""
 		# CREATE SECURITY POLICY already matched
-		self._expect_sequence([IDENTIFIER, 'COMPONENTS'])
+		self._expect_sequence([TT.IDENTIFIER, 'COMPONENTS'])
 		while True:
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 			if not self._match(','):
 				break
 		self._expect_sequence(['WITH', 'DB2LBACRULES'])
@@ -5425,15 +5404,15 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_create_service_class_statement(self):
 		"""Parses a CREATE SERVICE CLASS statement"""
 		# CREATE SERVICE CLASS already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		if self._match('UNDER'):
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 		if self._match_sequence(['AGENT', 'PRIORITY']):
-			self._expect_one_of(['DEFAULT', NUMBER])
+			self._expect_one_of(['DEFAULT', TT.NUMBER])
 		if self._match_sequence(['PREFETCH', 'PRIORITY']):
 			self._expect_one_of(['DEFAULT', 'HIGH', 'MEDIUM', 'LOW'])
 		if self._match_sequence(['OUTBOUND', 'CORRELATOR']):
-			self._expect_one_of(['NONE', STRING])
+			self._expect_one_of(['NONE', TT.STRING])
 		if self._match_sequence(['COLLECT', 'ACTIVITY', 'DATA']):
 			self._parse_collect_activity_data_clause(alter=True)
 		if self._match_sequence(['COLLECT', 'AGGREGATE', 'ACTIVITY', 'DATA']):
@@ -5446,15 +5425,15 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_create_server_statement(self):
 		"""Parses a CREATE SERVER statement"""
 		# CREATE SERVER already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		if self._match('TYPE'):
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 		if self._match('VERSION'):
 			self._parse_server_version()
 		if self._match('WRAPPER'):
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 		if self._match('AUTHORIZATION'):
-			self._expect_sequence([IDENTIFIER, 'PASSWORD', IDENTIFIER])
+			self._expect_sequence([TT.IDENTIFIER, 'PASSWORD', TT.IDENTIFIER])
 		if self._match('OPTIONS'):
 			self._parse_federated_options()
 
@@ -5529,13 +5508,13 @@ class DB2LUWFormatter(BaseFormatter):
 				if self._match_sequence(['KEY', 'SEQUENCE']):
 					self._expect('(')
 					while True:
-						self._expect(IDENTIFIER)
+						self._expect(TT.IDENTIFIER)
 						if self._match('STARTING'):
 							self._match('FROM')
-							self._expect(NUMBER)
+							self._expect(TT.NUMBER)
 						self._expect('ENDING')
 						self._match('AT')
-						self._expect(NUMBER)
+						self._expect(TT.NUMBER)
 						if not self._match(','):
 							break
 					self._expect(')')
@@ -5551,7 +5530,7 @@ class DB2LUWFormatter(BaseFormatter):
 							self._parse_ident_list()
 							self._expect(')')
 						else:
-							self._expect(IDENTIFIER)
+							self._expect(TT.IDENTIFIER)
 						if not self._match(','):
 							break
 			elif t == 'DATA':
@@ -5567,7 +5546,7 @@ class DB2LUWFormatter(BaseFormatter):
 				self._expect('IN')
 				self._parse_ident_list()
 			elif t == 'INDEX':
-				self._expect_sequence(['IN', IDENTIFIER])
+				self._expect_sequence(['IN', TT.IDENTIFIER])
 			elif t == 'DISTRIBUTE':
 				self._expect('BY')
 				if self._match('REPLICATION'):
@@ -5582,7 +5561,7 @@ class DB2LUWFormatter(BaseFormatter):
 				self._match('RANGE')
 				self._expect('(')
 				while True:
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 					if self._match('NULLS'):
 						self._expect_one_of(['FIRST', 'LAST'])
 					if not self._match(','):
@@ -5590,17 +5569,17 @@ class DB2LUWFormatter(BaseFormatter):
 				self._expect_sequence([')', '('])
 				while True:
 					if self._match('PARTITION'):
-						self._expect(IDENTIFIER)
+						self._expect(TT.IDENTIFIER)
 					self._parse_partition_boundary()
 					if self._match('IN'):
-						self._expect(IDENTIFIER)
+						self._expect(TT.IDENTIFIER)
 					elif self._match('EVERY'):
 						if self._match('('):
-							self._expect(NUMBER)
+							self._expect(TT.NUMBER)
 							self._parse_duration_label()
 							self._expect(')')
 						else:
-							self._expect(NUMBER)
+							self._expect(TT.NUMBER)
 							self._parse_duration_label()
 					if not self._match(','):
 						break
@@ -5615,22 +5594,22 @@ class DB2LUWFormatter(BaseFormatter):
 			elif t == 'CCSID':
 				self._expect_one_of(['ASCII', 'UNICODE'])
 			elif t == 'SECURITY':
-				self._expect_sequence(['POLICY', IDENTIFIER])
+				self._expect_sequence(['POLICY', TT.IDENTIFIER])
 			elif t == 'OPTIONS':
 				self._parse_federated_options(alter=False)
 
 	def _parse_create_tablespace_statement(self, tbspacetype='REGULAR'):
 		"""Parses a CREATE TABLESPACE statement"""
 		# CREATE TABLESPACE already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		if self._match('IN'):
 			if self._match('DATABASE'):
 				self._expect_sequence(['PARTITION', 'GROUP'])
 			elif self._match('NODEGROUP'):
 				pass
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 		if self._match('PAGESIZE'):
-			self._expect(NUMBER)
+			self._expect(TT.NUMBER)
 			self._match('K')
 		if self._match('MANAGED'):
 			self._expect('BY')
@@ -5657,21 +5636,21 @@ class DB2LUWFormatter(BaseFormatter):
 			else:
 				self._expected_one_of(['AUTOMATIC', 'DATABASE', 'SYSTEM'])
 		if self._match('EXTENTSIZE'):
-			self._expect(NUMBER)
+			self._expect(TT.NUMBER)
 			self._match_one_of(['K', 'M'])
 		if self._match('PREFETCHSIZE'):
-			self._expect(NUMBER)
+			self._expect(TT.NUMBER)
 			self._match_one_of(['K', 'M', 'G'])
 		if self._match('BUFFERPOOL'):
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 		if self._match('OVERHEAD'):
-			self._expect(NUMBER)
+			self._expect(TT.NUMBER)
 		if self._match('NO'):
 			self._expect_sequence(['FILE', 'SYSTEM', 'CACHING'])
 		elif self._match('FILE'):
 			self._expect_sequence(['SYSTEM', 'CACHING'])
 		if self._match('TRANSFERRATE'):
-			self._expect(NUMBER)
+			self._expect(TT.NUMBER)
 		if self._match('DROPPED'):
 			self._expect_sequence(['TABLE', 'RECOVERY'])
 			self._expect_one_of(['ON', 'OFF'])
@@ -5679,13 +5658,13 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_create_threshold_statement(self):
 		"""Parses a CREATE THRESHOLD statement"""
 		# CREATE THRESHOLD already matched
-		self._expect_sequence([IDENTIFIER, 'FOR'])
+		self._expect_sequence([TT.IDENTIFIER, 'FOR'])
 		if self._match('SERVICE'):
-			self._expect_sequence(['CLASS', IDENTIFIER])
+			self._expect_sequence(['CLASS', TT.IDENTIFIER])
 			if self._match('UNDER'):
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 		elif self._match('WORKLOAD'):
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 		elif not self._match('DATABASE'):
 			self._expected_one_of(['SERVICE', 'WORKLOAD', 'DATABASE'])
 		self._expect_sequence(['ACTIVITIES', 'ENFORCEMENT'])
@@ -5742,7 +5721,7 @@ class DB2LUWFormatter(BaseFormatter):
 					if 'OLD' in valid: valid.remove('OLD')
 					if 'NEW' in valid: valid.remove('NEW')
 				self._match('AS')
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 		self._newline()
 		self._expect_sequence(['FOR', 'EACH'])
 		self._expect_one_of(['ROW', 'STATEMENT'])
@@ -5757,7 +5736,7 @@ class DB2LUWFormatter(BaseFormatter):
 			self._outdent()
 			self._expect(')')
 		try:
-			label = self._expect(LABEL).value
+			label = self._expect(TT.LABEL).value
 			self._outdent(-1)
 			self._newline()
 		except ParseError:
@@ -5772,7 +5751,7 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_create_trusted_context_statement(self):
 		"""Parses a CREATE TRUSTED CONTEXT statement"""
 		# CREATE TRUSTED CONTEXT already matched
-		self._expect_sequence([IDENTIFIER, 'BASED', 'UPON', 'CONNECTION', 'USING'])
+		self._expect_sequence([TT.IDENTIFIER, 'BASED', 'UPON', 'CONNECTION', 'USING'])
 		valid = set([
 			'SYSTEM',
 			'ATTRIBUTES',
@@ -5790,15 +5769,15 @@ class DB2LUWFormatter(BaseFormatter):
 			else:
 				break
 			if t == 'SYSTEM':
-				self._expect_sequence(['AUTHID', IDENTIFIER])
+				self._expect_sequence(['AUTHID', TT.IDENTIFIER])
 			elif t == 'ATTRIBUTES':
 				self._expect('(')
 				if self._match('ADDRESS'):
-					self._expect(STRING)
+					self._expect(TT.STRING)
 					if self._match('WITH'):
-						self._expect_sequence(['ENCRYPTION', STRING])
+						self._expect_sequence(['ENCRYPTION', TT.STRING])
 				elif self._match('ENCRYPTION'):
-					self._expect(STRING)
+					self._expect(TT.STRING)
 				if not self._match(','):
 					break
 				self._expect(')')
@@ -5807,7 +5786,7 @@ class DB2LUWFormatter(BaseFormatter):
 				self._expect_sequence(['DEFAULT', 'ROLE'])
 			elif t == 'DEFAULT':
 				valid.remove('NO')
-				self._expect_sequence(['ROLE', IDENTIFIER])
+				self._expect_sequence(['ROLE', TT.IDENTIFIER])
 			elif t == 'DISABLE':
 				valid.remove('ENABLE')
 			elif t == 'ENABLE':
@@ -5815,9 +5794,9 @@ class DB2LUWFormatter(BaseFormatter):
 			elif t == 'WITH':
 				self._expect_sequence(['USE', 'FOR'])
 				if not self._match('PUBLIC'):
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 					if self._match('ROLE'):
-						self._expect(IDENTIFIER)
+						self._expect(TT.IDENTIFIER)
 				if self._match_one_of(['WITH', 'WITHOUT']):
 					self._expect('AUTHENTICATION')
 
@@ -5829,7 +5808,7 @@ class DB2LUWFormatter(BaseFormatter):
 		self._parse_datatype()
 		if self._match('ARRAY'):
 			self._expect('[', prespace=False)
-			self._match(NUMBER)
+			self._match(TT.NUMBER)
 			self._expect(']')
 		else:
 			self._match_sequence(['WITH', 'COMPARISONS'])
@@ -5837,7 +5816,7 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_create_type_mapping_statement(self):
 		"""Parses a CREATE TYPE MAPPING statement"""
 		# CREATE TYPE MAPPING already matched
-		self._match(IDENTIFIER)
+		self._match(TT.IDENTIFIER)
 		valid = set(['FROM', 'TO'])
 		t = self._expect_one_of(valid).value
 		valid.remove(t)
@@ -5852,16 +5831,16 @@ class DB2LUWFormatter(BaseFormatter):
 			self._expect_sequence(['BIT', 'DATA'])
 		elif self._match('(', prespace=False):
 			if self._match('['):
-				self._expect_sequence([NUMBER, '..', NUMBER], interspace=False)
+				self._expect_sequence([TT.NUMBER, '..', TT.NUMBER], interspace=False)
 				self._expect(']')
 			else:
-				self._expect(NUMBER)
+				self._expect(TT.NUMBER)
 			if self._match(','):
 				if self._match('['):
-					self._expect_sequence([NUMBER, '..', NUMBER], interspace=False)
+					self._expect_sequence([TT.NUMBER, '..', TT.NUMBER], interspace=False)
 					self._expect(']')
 				else:
-					self._expect(NUMBER)
+					self._expect(TT.NUMBER)
 			self._expect(')')
 			if self._match('P'):
 				self._expect_one_of(['=', '>', '<', '>=', '<=', '<>'])
@@ -5871,8 +5850,8 @@ class DB2LUWFormatter(BaseFormatter):
 		"""Parses a CREATE USER MAPPING statement"""
 		# CREATE USER MAPPING already matched
 		self._expect('FOR')
-		self._expect_one_of(['USER', IDENTIFIER])
-		self._expect_sequence(['SERVER', IDENTIFIER])
+		self._expect_one_of(['USER', TT.IDENTIFIER])
+		self._expect_sequence(['SERVER', TT.IDENTIFIER])
 		self._expect('OPTIONS')
 		self._parse_federated_options(alter=False)
 
@@ -5919,19 +5898,19 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_create_work_action_set_statement(self):
 		"""Parses a CREATE WORK ACTION SET statement"""
 		# CREATE WORK ACTION SET already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		self._expect('FOR')
 		if self._match('SERVICE'):
-			self._expect_sequence(['CLASS', IDENTIFIER])
+			self._expect_sequence(['CLASS', TT.IDENTIFIER])
 		elif self._match('DATABASE'):
 			pass
 		else:
 			self._expected_one_of(['SERVICE', 'DATABASE'])
-		self._expect_sequence(['USING', 'WORK', 'CLASS', 'SET', IDENTIFIER])
+		self._expect_sequence(['USING', 'WORK', 'CLASS', 'SET', TT.IDENTIFIER])
 		if self._match('('):
 			self._indent()
 			while True:
-				self._expect_sequence(['WORK', 'ACTION', IDENTIFIER, 'ON', 'WORK', 'CLASS', IDENTIFIER])
+				self._expect_sequence(['WORK', 'ACTION', TT.IDENTIFIER, 'ON', 'WORK', 'CLASS', TT.IDENTIFIER])
 				self._parse_action_types_clause()
 				self._parse_histogram_template_clause()
 				self._match_one_of(['ENABLE', 'DISABLE'])
@@ -5946,12 +5925,12 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_create_work_class_set_statement(self):
 		"""Parses a CREATE WORK CLASS SET statement"""
 		# CREATE WORK CLASS SET already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		if self._match('('):
 			self._indent()
 			while True:
 				self._match_sequence(['WORK', 'CLASS'])
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 				self._parse_work_attributes()
 				if self._match('POSITION'):
 					self._parse_position_clause()
@@ -5965,7 +5944,7 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_create_workload_statement(self):
 		"""Parses a CREATE WORKLOAD statement"""
 		# CREATE WORKLOAD statement
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		first = True
 		while True:
 			# Repeatedly try and match connection attributes. Only raise a
@@ -5982,8 +5961,8 @@ class DB2LUWFormatter(BaseFormatter):
 			self._expect_sequence(['DB', 'ACCESS'])
 		if self._match_sequence(['SERVICE', 'CLASS']):
 			if not self._match('SYSDEFAULTUSERCLASS'):
-				self._expect(IDENTIFIER)
-				self._match_sequence(['UNDER', IDENTIFIER])
+				self._expect(TT.IDENTIFIER)
+				self._match_sequence(['UNDER', TT.IDENTIFIER])
 		if self._match('POSITION'):
 			self._parse_position_clause()
 		if self._match_sequence(['COLLECT', 'ACTIVITY', 'DATA']):
@@ -5992,16 +5971,16 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_create_wrapper_statement(self):
 		"""Parses a CREATE WRAPPER statement"""
 		# CREATE WRAPPER already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		if self._match('LIBRARY'):
-			self._expect(STRING)
+			self._expect(TT.STRING)
 		if self._match('OPTIONS'):
 			self._parse_federated_options(alter=False)
 
 	def _parse_declare_cursor_statement(self):
 		"""Parses a top-level DECLARE CURSOR statement"""
 		# DECLARE already matched
-		self._expect_sequence([IDENTIFIER, 'CURSOR'])
+		self._expect_sequence([TT.IDENTIFIER, 'CURSOR'])
 		self._match_sequence(['WITH', 'HOLD'])
 		self._expect('FOR')
 		self._newline()
@@ -6041,7 +6020,7 @@ class DB2LUWFormatter(BaseFormatter):
 			elif t == 'WITH':
 				self._expect('REPLACE')
 			elif t == 'IN':
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 			elif t == 'PARTITIONING':
 				self._expect('KEY')
 				self._expect('(')
@@ -6128,9 +6107,9 @@ class DB2LUWFormatter(BaseFormatter):
 		elif self._match('SEQUENCE'):
 			self._parse_sequence_name()
 		elif self._match_sequence(['SERVICE', 'CLASS']):
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 			if self._match('UNDER'):
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 		elif self._match_one_of(['TABLESPACE', 'TABLESPACES']):
 			self._parse_ident_list()
 		elif self._match_one_of(['DATA', 'DISTINCT']):
@@ -6142,8 +6121,8 @@ class DB2LUWFormatter(BaseFormatter):
 			self._parse_type_name()
 		elif self._match_sequence(['USER', 'MAPPING']):
 			self._expect('FOR')
-			self._expect_one_of(['USER', IDENTIFIER])
-			self._expect_sequence(['SERVER', IDENTIFIER])
+			self._expect_one_of(['USER', TT.IDENTIFIER])
+			self._expect_sequence(['SERVER', TT.IDENTIFIER])
 		elif (self._match_sequence(['AUDIT', 'POLICY']) or
 			self._match('BUFFERPOOL') or
 			self._match_sequence(['EVENT', 'MONITOR']) or
@@ -6163,7 +6142,7 @@ class DB2LUWFormatter(BaseFormatter):
 			self._match_sequence(['WORK', 'CLASS', 'SET']) or
 			self._match('WORKLOAD') or
 			self._match('WRAPPER')):
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 		else:
 			self._expected_one_of([
 				'ALIAS',
@@ -6218,8 +6197,8 @@ class DB2LUWFormatter(BaseFormatter):
 		if self._match_one_of(['FOR', 'WITH']):
 			self._expect('SNAPSHOT')
 		self._match_sequence(['WITH', 'REOPT', 'ONCE'])
-		self._match_sequence(['SET', 'QUERYNO', '=', NUMBER])
-		self._match_sequence(['SET', 'QUEYRTAG', '=', STRING])
+		self._match_sequence(['SET', 'QUERYNO', '=', TT.NUMBER])
+		self._match_sequence(['SET', 'QUEYRTAG', '=', TT.STRING])
 		self._expect('FOR')
 		if self._match('DELETE'):
 			self._parse_delete_statement()
@@ -6240,12 +6219,12 @@ class DB2LUWFormatter(BaseFormatter):
 		"""Parses a FETCH FROM statement in a procedure"""
 		# FETCH already matched
 		self._match('FROM')
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		if self._match('INTO'):
 			self._parse_ident_list()
 		elif self._match('USING'):
 			self._expect('DESCRIPTOR')
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 		else:
 			self._expected_one_of(['INTO', 'USING'])
 
@@ -6258,14 +6237,14 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_for_statement(self, inproc, label=None):
 		"""Parses a FOR-loop in a dynamic compound statement"""
 		# FOR already matched
-		self._expect_sequence([IDENTIFIER, 'AS'])
+		self._expect_sequence([TT.IDENTIFIER, 'AS'])
 		if inproc:
 			reraise = False
 			self._indent()
 			# Ambiguity: IDENTIFIER vs. select-statement
 			self._save_state()
 			try:
-				self._expect_sequence([IDENTIFIER, 'CURSOR'])
+				self._expect_sequence([TT.IDENTIFIER, 'CURSOR'])
 				reraise = True
 				if self._match_one_of(['WITH', 'WITHOUT']):
 					self._expect('HOLD')
@@ -6288,14 +6267,14 @@ class DB2LUWFormatter(BaseFormatter):
 				self._parse_procedure_statement()
 			else:
 				self._parse_routine_statement()
-			self._expect((TERMINATOR, ';'))
+			self._expect((TT.TERMINATOR, ';'))
 			self._newline()
 			if self._match('END'):
 				break
 		self._outdent(-1)
 		self._expect('FOR')
 		if label:
-			self._match((IDENTIFIER, label))
+			self._match((TT.IDENTIFIER, label))
 
 	def _parse_free_locator_statement(self):
 		"""Parses a FREE LOCATOR statement"""
@@ -6306,20 +6285,20 @@ class DB2LUWFormatter(BaseFormatter):
 		"""Parses a GET DIAGNOSTICS statement in a dynamic compound statement"""
 		# GET DIAGNOSTICS already matched
 		if self._match('EXCEPTION'):
-			self._expect((NUMBER, 1))
+			self._expect((TT.NUMBER, 1))
 			while True:
-				self._expect_sequence([IDENTIFIER, '='])
+				self._expect_sequence([TT.IDENTIFIER, '='])
 				self._expect_one_of(['MESSAGE_TEXT', 'DB2_TOKEN_STRING'])
 				if not self._match(','):
 					break
 		else:
-			self._expect_sequence([IDENTIFIER, '='])
+			self._expect_sequence([TT.IDENTIFIER, '='])
 			self._expect(['ROW_COUNT', 'DB2_RETURN_STATUS'])
 
 	def _parse_goto_statement(self):
 		"""Parses a GOTO statement in a procedure"""
 		# GOTO already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 
 	def _parse_grant_statement(self):
 		"""Parses a GRANT statement"""
@@ -6340,7 +6319,7 @@ class DB2LUWFormatter(BaseFormatter):
 						self._parse_procedure_statement()
 					else:
 						self._parse_routine_statement()
-					self._expect((TERMINATOR, ';'))
+					self._expect((TT.TERMINATOR, ';'))
 					t = self._match_one_of(['ELSEIF', 'ELSE', 'END'])
 					if t:
 						self._outdent(-1)
@@ -6355,7 +6334,7 @@ class DB2LUWFormatter(BaseFormatter):
 						self._parse_procedure_statement()
 					else:
 						self._parse_routine_statement()
-					self._expect((TERMINATOR, ';'))
+					self._expect((TT.TERMINATOR, ';'))
 					if self._match('END'):
 						self._outdent(-1)
 						break
@@ -6400,12 +6379,12 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_iterate_statement(self):
 		"""Parses an ITERATE statement within a loop"""
 		# ITERATE already matched
-		self._match(IDENTIFIER)
+		self._match(TT.IDENTIFIER)
 
 	def _parse_leave_statement(self):
 		"""Parses a LEAVE statement within a loop"""
 		# LEAVE already matched
-		self._match(IDENTIFIER)
+		self._match(TT.IDENTIFIER)
 
 	def _parse_lock_table_statement(self):
 		"""Parses a LOCK TABLE statement"""
@@ -6424,7 +6403,7 @@ class DB2LUWFormatter(BaseFormatter):
 				self._parse_procedure_statement()
 			else:
 				self._parse_routine_statement()
-			self._expect((TERMINATOR, ';'))
+			self._expect((TT.TERMINATOR, ';'))
 			if self._match('END'):
 				self._outdent(-1)
 				break
@@ -6432,7 +6411,7 @@ class DB2LUWFormatter(BaseFormatter):
 				self._newline()
 		self._expect('LOOP')
 		if label:
-			self._match((IDENTIFIER, label))
+			self._match((TT.IDENTIFIER, label))
 
 	def _parse_merge_statement(self):
 		# MERGE already matched
@@ -6485,7 +6464,7 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_open_statement(self):
 		"""Parses an OPEN cursor statement"""
 		# OPEN already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 
 	def _parse_refresh_table_statement(self):
 		"""Parses a REFRESH TABLE statement"""
@@ -6513,12 +6492,12 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_release_savepoint_statement(self):
 		"""Parses a RELEASE SAVEPOINT statement"""
 		# RELEASE [TO] SAVEPOINT already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 
 	def _parse_rename_tablespace_statement(self):
 		"""Parses a RENAME TABLESPACE statement"""
 		# RENAME TABLESPACE already matched
-		self._expect_sequence([IDENTIFIER, 'TO', IDENTIFIER])
+		self._expect_sequence([TT.IDENTIFIER, 'TO', TT.IDENTIFIER])
 
 	def _parse_rename_statement(self):
 		"""Parses a RENAME statement"""
@@ -6528,7 +6507,7 @@ class DB2LUWFormatter(BaseFormatter):
 		else:
 			self._match('TABLE')
 			self._parse_table_name()
-		self._expect_sequence(['TO', IDENTIFIER])
+		self._expect_sequence(['TO', TT.IDENTIFIER])
 
 	def _parse_repeat_statement(self, inproc, label=None):
 		"""Parses a REPEAT-loop in a procedure"""
@@ -6539,7 +6518,7 @@ class DB2LUWFormatter(BaseFormatter):
 				self._parse_procedure_statement()
 			else:
 				self._parse_routine_statement()
-			self._expect((TERMINATOR, ';'))
+			self._expect((TT.TERMINATOR, ';'))
 			self._newline()
 			if self._match('UNTIL'):
 				break
@@ -6549,16 +6528,16 @@ class DB2LUWFormatter(BaseFormatter):
 		self._parse_search_condition()
 		self._expect_sequence(['END', 'REPEAT'])
 		if label:
-			self._match((IDENTIFIER, label))
+			self._match((TT.IDENTIFIER, label))
 
 	def _parse_resignal_statement(self):
 		"""Parses a RESIGNAL statement in a dynamic compound statement"""
 		# SIGNAL already matched
 		if self._match('SQLSTATE'):
 			self._match('VALUE')
-			self._expect_one_of([IDENTIFIER, STRING])
+			self._expect_one_of([TT.IDENTIFIER, TT.STRING])
 		else:
-			if not self._match(IDENTIFIER):
+			if not self._match(TT.IDENTIFIER):
 				return
 		if self._match('SET'):
 			self._expect_sequence(['MESSAGE_TEXT', '='])
@@ -6589,12 +6568,12 @@ class DB2LUWFormatter(BaseFormatter):
 		self._match('WORK')
 		if self._match('TO'):
 			self._expect('SAVEPOINT')
-			self._match(IDENTIFIER)
+			self._match(TT.IDENTIFIER)
 
 	def _parse_savepoint_statement(self):
 		"""Parses a SAVEPOINT statement"""
 		# SAVEPOINT already matched
-		self._expect(IDENTIFIER)
+		self._expect(TT.IDENTIFIER)
 		self._match('UNIQUE')
 		self._expect_sequence(['ON', 'ROLLBACK', 'RETAIN', 'CURSORS'])
 		self._match_sequence(['ON', 'ROLLBACK', 'RETAIN', 'LOCKS'])
@@ -6623,7 +6602,7 @@ class DB2LUWFormatter(BaseFormatter):
 				else:
 					self._expected_one_of(['READ', 'FETCH', 'UPDATE'])
 			elif t == 'OPTIMIZE':
-				self._expect_sequence(['FOR', NUMBER])
+				self._expect_sequence(['FOR', TT.NUMBER])
 				self._expect_one_of(['ROW', 'ROWS'])
 			elif t == 'WITH':
 				if self._expect_one_of(['RR', 'RS', 'CS', 'UR']).value in ('RR', 'RS'):
@@ -6676,7 +6655,7 @@ class DB2LUWFormatter(BaseFormatter):
 					break
 				if t == 'INCREMENTAL':
 					valid.remove('NOT')
-				elif t == (KEYWORD, 'NOT'):
+				elif t == (TT.KEYWORD, 'NOT'):
 					self._expect('INCREMENTAL')
 					valid.remove('INCREMENTAL')
 				elif t == 'FORCE':
@@ -6779,32 +6758,32 @@ class DB2LUWFormatter(BaseFormatter):
 		# SET [CURRENT] LOCK TIMEOUT already matched
 		self._match('=')
 		if self._match('WAIT'):
-			self._match(NUMBER)
+			self._match(TT.NUMBER)
 		elif self._match('NOT'):
 			self._expect('WAIT')
 		elif self._match('NULL'):
 			pass
-		elif self._match(NUMBER):
+		elif self._match(TT.NUMBER):
 			pass
 		else:
-			self._expected_one_of(['WAIT', 'NOT', 'NULL', NUMBER])
+			self._expected_one_of(['WAIT', 'NOT', 'NULL', TT.NUMBER])
 
 	def _parse_set_path_statement(self):
 		"""Parses a SET PATH statement"""
 		# SET [CURRENT] PATH already matched
 		self._match('=')
 		while True:
-			if self._match_sequence([(REGISTER, 'SYSTEM'), (REGISTER, 'PATH')]):
+			if self._match_sequence([(TT.REGISTER, 'SYSTEM'), (TT.REGISTER, 'PATH')]):
 				pass
-			elif self._match((REGISTER, 'USER')):
+			elif self._match((TT.REGISTER, 'USER')):
 				pass
-			elif self._match((REGISTER, 'CURRENT')):
-				self._match((REGISTER, 'PACKAGE'))
-				self._expect((REGISTER, 'PATH'))
-			elif self._match((REGISTER, 'CURRENT_PATH')):
+			elif self._match((TT.REGISTER, 'CURRENT')):
+				self._match((TT.REGISTER, 'PACKAGE'))
+				self._expect((TT.REGISTER, 'PATH'))
+			elif self._match((TT.REGISTER, 'CURRENT_PATH')):
 				pass
 			else:
-				self._expect_one_of([IDENTIFIER, STRING])
+				self._expect_one_of([TT.IDENTIFIER, TT.STRING])
 			if not self._match(','):
 				break
 
@@ -6813,12 +6792,12 @@ class DB2LUWFormatter(BaseFormatter):
 		# SET [CURRENT] SCHEMA already matched
 		self._match('=')
 		self._expect_one_of([
-			(REGISTER, 'USER'),
-			(REGISTER, 'SESSION_USER'),
-			(REGISTER, 'SYSTEM_USER'),
-			(REGISTER, 'CURRENT_USER'),
-			IDENTIFIER,
-			STRING,
+			(TT.REGISTER, 'USER'),
+			(TT.REGISTER, 'SESSION_USER'),
+			(TT.REGISTER, 'SYSTEM_USER'),
+			(TT.REGISTER, 'CURRENT_USER'),
+			TT.IDENTIFIER,
+			TT.STRING,
 		])
 
 	def _parse_set_session_auth_statement(self):
@@ -6826,11 +6805,11 @@ class DB2LUWFormatter(BaseFormatter):
 		# SET SESSION AUTHORIZATION already matched
 		self._match('=')
 		self._expect_one_of([
-			(REGISTER, 'USER'),
-			(REGISTER, 'SYSTEM_USER'),
-			(REGISTER, 'CURRENT_USER'),
-			IDENTIFIER,
-			STRING,
+			(TT.REGISTER, 'USER'),
+			(TT.REGISTER, 'SYSTEM_USER'),
+			(TT.REGISTER, 'CURRENT_USER'),
+			TT.IDENTIFIER,
+			TT.STRING,
 		])
 		self._match_sequence(['ALLOW', 'ADMINISTRATION'])
 
@@ -6846,11 +6825,11 @@ class DB2LUWFormatter(BaseFormatter):
 					'ROUND_DOWN',
 					'ROUND_HALF_EVEN',
 					'ROUND_HALF_UP',
-					STRING,
+					TT.STRING,
 				])
 			if self._match('DEGREE'):
 				self._match('=')
-				self._expect(STRING)
+				self._expect(TT.STRING)
 			elif self._match('EXPLAIN'):
 				if self._match('MODE'):
 					self._match('=')
@@ -6873,10 +6852,10 @@ class DB2LUWFormatter(BaseFormatter):
 					self._expected_one_of(['MODE', 'SNAPSHOT'])
 			elif self._match_sequence(['FEDERATED', 'ASYNCHRONY']):
 				self._match('=')
-				self._expect_one_of(['ANY', NUMBER])
+				self._expect_one_of(['ANY', TT.NUMBER])
 			elif self._match_sequence(['IMPLICIT', 'XMLPARSE', 'OPTION']):
 				self._match('=')
-				self._expect(STRING)
+				self._expect(TT.STRING)
 			elif self._match('ISOLATION'):
 				self._parse_set_isolation_statement()
 			elif self._match_sequence(['LOCK', 'TIMEOUT']):
@@ -6902,14 +6881,14 @@ class DB2LUWFormatter(BaseFormatter):
 				self._expect_one_of(['NONE', 'IMMEDATE', 'DEFERRED'])
 			elif self._match_sequence(['OPTIMIZATION', 'PROFILE']):
 				self._match('=')
-				if not self._match(STRING) and not self._match('NULL'):
+				if not self._match(TT.STRING) and not self._match('NULL'):
 					self._parse_subschema_name()
 			elif self._match_sequence(['QUERY', 'OPTIMIZATION']):
 				self._match('=')
-				self._expect(NUMBER)
+				self._expect(TT.NUMBER)
 			elif self._match_sequence(['REFRESH', 'AGE']):
 				self._match('=')
-				self._expect_one_of(['ANY', NUMBER])
+				self._expect_one_of(['ANY', TT.NUMBER])
 			elif self._match('PATH'):
 				self._parse_set_path_statement()
 			elif self._match('SCHEMA'):
@@ -6928,30 +6907,30 @@ class DB2LUWFormatter(BaseFormatter):
 				])
 		elif self._match_sequence(['COMPILATION', 'ENVIRONMENT']):
 			self._match('=')
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 		elif self._match('ISOLATION'):
 			self._parse_set_isolation_statement()
 		elif self._match_sequence(['ENCRYPTION', 'PASSWORD']):
 			self._match('=')
-			self._expect(STRING)
+			self._expect(TT.STRING)
 		elif self._match_sequence(['EVENT', 'MONITOR']):
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 			self._expect('STATE')
 			self._match('=')
-			self._expect(NUMBER)
+			self._expect(TT.NUMBER)
 		elif self._match('PASSTHRU'):
-			self._expect_one_of(['RESET', IDENTIFIER])
+			self._expect_one_of(['RESET', TT.IDENTIFIER])
 		elif self._match('PATH'):
 			self._parse_set_path_statement()
 		elif self._match('ROLE'):
 			self._match('=')
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 		elif self._match('CURRENT_PATH'):
 			self._parse_set_path_statement()
 		elif self._match('SCHEMA'):
 			self._parse_set_schema_statement()
 		elif self._match_sequence(['SERVER', 'OPTION']):
-			self._expect_sequence([IDENTIFIER, 'TO', STRING, 'FOR', 'SERVER', IDENTIFIER])
+			self._expect_sequence([TT.IDENTIFIER, 'TO', TT.STRING, 'FOR', 'SERVER', TT.IDENTIFIER])
 		elif self._match_sequence(['SESSION', 'AUTHORIZATION']):
 			self._parse_set_session_auth_statement()
 		elif self._match('SESSION_USER'):
@@ -6964,9 +6943,9 @@ class DB2LUWFormatter(BaseFormatter):
 		# SIGNAL already matched
 		if self._match('SQLSTATE'):
 			self._match('VALUE')
-			self._expect_one_of([IDENTIFIER, STRING])
+			self._expect_one_of([TT.IDENTIFIER, TT.STRING])
 		else:
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 		if self._match('SET'):
 			self._expect_sequence(['MESSAGE_TEXT', '='])
 			self._parse_expression()
@@ -7008,7 +6987,7 @@ class DB2LUWFormatter(BaseFormatter):
 			self._match('SCHEMA') or
 			self._match('TABLESPACE') or
 			self._match('TRIGGER')):
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 		else:
 			self._expected_one_of([
 				'ALIAS',
@@ -7031,12 +7010,12 @@ class DB2LUWFormatter(BaseFormatter):
 				'VIEW',
 			])
 		if self._match('USER'):
-			self._expect(IDENTIFIER)
+			self._expect(TT.IDENTIFIER)
 		else:
 			self._expect_one_of([
-				(REGISTER, 'USER'),
-				(REGISTER, 'SESSION_USER'),
-				(REGISTER, 'SYSTEM_USER'),
+				(TT.REGISTER, 'USER'),
+				(TT.REGISTER, 'SESSION_USER'),
+				(TT.REGISTER, 'SYSTEM_USER'),
 			])
 		self._expect_sequence(['PERSERVE', 'PRIVILEGES'])
 
@@ -7106,7 +7085,7 @@ class DB2LUWFormatter(BaseFormatter):
 				self._parse_procedure_statement()
 			else:
 				self._parse_routine_statement()
-			self._expect((TERMINATOR, ';'))
+			self._expect((TT.TERMINATOR, ';'))
 			if self._match('END'):
 				self._outdent(-1)
 				break
@@ -7114,7 +7093,7 @@ class DB2LUWFormatter(BaseFormatter):
 				self._newline()
 		self._expect('WHILE')
 		if label:
-			self._match((IDENTIFIER, label))
+			self._match((TT.IDENTIFIER, label))
 
 	# COMPOUND STATEMENTS ####################################################
 
@@ -7152,7 +7131,7 @@ class DB2LUWFormatter(BaseFormatter):
 			self._parse_while_statement(inproc=False)
 		else:
 			try:
-				label = self._expect(LABEL).value
+				label = self._expect(TT.LABEL).value
 			except ParseError:
 				self._parse_select_statement()
 			else:
@@ -7176,32 +7155,32 @@ class DB2LUWFormatter(BaseFormatter):
 					self._expect('FOR')
 					if self._match('SQLSTATE'):
 						self._match('VALUE')
-					self._expect(STRING)
+					self._expect(TT.STRING)
 				else:
 					self._parse_datatype()
 					if self._match('DEFAULT'):
 						self._parse_expression()
-				self._expect((TERMINATOR, ';'))
+				self._expect((TT.TERMINATOR, ';'))
 				self._newline()
 				if not self._match('DECLARE'):
 					break
 		# Parse routine statements
 		while True:
 			self._parse_routine_statement()
-			self._expect((TERMINATOR, ';'))
+			self._expect((TT.TERMINATOR, ';'))
 			if self._match('END'):
 				break
 			else:
 				self._newline()
 		self._outdent(-1)
 		if label:
-			self._match((IDENTIFIER, label))
+			self._match((TT.IDENTIFIER, label))
 
 	def _parse_procedure_statement(self):
 		"""Parses a procedure statement within a procedure body"""
 		# XXX Should PREPARE be supported here?
 		try:
-			label = self._expect(LABEL).value
+			label = self._expect(TT.LABEL).value
 			self._newline()
 		except ParseError:
 			label = None
@@ -7326,12 +7305,12 @@ class DB2LUWFormatter(BaseFormatter):
 				if self._match('SQLSTATE'):
 					reraise = True
 					self._expect_one_of(['CHAR', 'CHARACTER'])
-					self._expect_sequence(['(', (NUMBER, 5), ')'], prespace=False)
-					self._match_sequence(['DEFAULT', STRING])
+					self._expect_sequence(['(', (TT.NUMBER, 5), ')'], prespace=False)
+					self._match_sequence(['DEFAULT', TT.STRING])
 				elif self._match('SQLCODE'):
 					reraise = True
 					self._expect_one_of(['INT', 'INTEGER'])
-					self._match_sequence(['DEFAULT', NUMBER])
+					self._match_sequence(['DEFAULT', TT.NUMBER])
 				else:
 					count = len(self._parse_ident_list())
 					if count == 1 and self._match('CONDITION'):
@@ -7339,13 +7318,13 @@ class DB2LUWFormatter(BaseFormatter):
 						self._expect('FOR')
 						if self._match('SQLSTATE'):
 							self._match('VALUE')
-						self._expect(STRING)
+						self._expect(TT.STRING)
 					else:
 						self._parse_datatype()
 						if self._match('DEFAULT'):
 							reraise = True
 							self._parse_expression()
-				self._expect((TERMINATOR, ';'))
+				self._expect((TT.TERMINATOR, ';'))
 				self._newline()
 			except ParseError:
 				self._restore_state()
@@ -7362,7 +7341,7 @@ class DB2LUWFormatter(BaseFormatter):
 				self._parse_ident_list()
 				self._expect('STATEMENT')
 				reraise = True
-				self._expect((TERMINATOR, ';'))
+				self._expect((TT.TERMINATOR, ';'))
 				self._newline()
 			except ParseError:
 				self._restore_state()
@@ -7375,7 +7354,7 @@ class DB2LUWFormatter(BaseFormatter):
 			reraise = False
 			self._save_state()
 			try:
-				self._expect_sequence(['DECLARE', IDENTIFIER, 'CURSOR'])
+				self._expect_sequence(['DECLARE', TT.IDENTIFIER, 'CURSOR'])
 				reraise = True
 				if self._match('WITH'):
 					if self._match('RETURN'):
@@ -7396,10 +7375,10 @@ class DB2LUWFormatter(BaseFormatter):
 				except ParseError:
 					# If that fails, rewind and parse a simple statement name
 					self._restore_state()
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 				else:
 					self._forget_state()
-				self._expect((TERMINATOR, ';'))
+				self._expect((TT.TERMINATOR, ';'))
 				self._newline()
 			except ParseError:
 				self._restore_state()
@@ -7431,15 +7410,15 @@ class DB2LUWFormatter(BaseFormatter):
 					while True:
 						if self._match('SQLSTATE'):
 							self._match('VALUE')
-							self._expect(STRING)
+							self._expect(TT.STRING)
 						else:
-							self._expect(IDENTIFIER)
+							self._expect(TT.IDENTIFIER)
 						if not self._match(','):
 							break
 				else:
 					self._forget_state()
 				self._parse_procedure_statement()
-				self._expect((TERMINATOR, ';'))
+				self._expect((TT.TERMINATOR, ';'))
 				self._newline()
 			except ParseError:
 				self._restore_state()
@@ -7450,14 +7429,14 @@ class DB2LUWFormatter(BaseFormatter):
 		# Parse procedure statements
 		while True:
 			self._parse_procedure_statement()
-			self._expect((TERMINATOR, ';'))
+			self._expect((TT.TERMINATOR, ';'))
 			if self._match('END'):
 				break
 			else:
 				self._newline()
 		self._outdent(-1)
 		if label:
-			self._match((IDENTIFIER, label))
+			self._match((TT.IDENTIFIER, label))
 
 	def _parse_statement(self):
 		"""Parses a top-level statement in an SQL script"""
@@ -7465,7 +7444,7 @@ class DB2LUWFormatter(BaseFormatter):
 		# If we're reformatting WHITESPACE, add a blank WHITESPACE token to the
 		# output - this will suppress leading whitespace in front of the first
 		# word of the statement
-		self._output.append(Token(WHITESPACE, None, '', 0, 0))
+		self._output.append(Token(TT.WHITESPACE, None, '', 0, 0))
 		if self._match('ALTER'):
 			if self._match('TABLE'):
 				self._parse_alter_table_statement()
@@ -7737,7 +7716,7 @@ class DB2LUWFormatter(BaseFormatter):
 		# system)
 		self._parse_init(tokens)
 		# Skip leading whitespace
-		if self._token().type in (COMMENT, WHITESPACE):
+		if self._token().type in (TT.COMMENT, TT.WHITESPACE):
 			self._index += 1
 		self._parse_function_name()
 		# Parenthesized parameter list is mandatory
@@ -7747,7 +7726,7 @@ class DB2LUWFormatter(BaseFormatter):
 				self._match_one_of(['IN', 'OUT', 'INOUT'])
 				self._save_state()
 				try:
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 					self._parse_datatype()
 				except ParseError:
 					self._restore_state()

@@ -19,26 +19,13 @@ DB2ZOSTokenizer  -- IBM DB2 for z/OS
 
 import re
 import sys
-import codecs
+import db2makedoc.sql.dialects as dialects
 from decimal import Decimal
 from db2makedoc.util import *
-from db2makedoc.sql.dialects import *
 
 __all__ = [
-	'ERROR',
-	'WHITESPACE',
-	'COMMENT',
-	'KEYWORD',
-	'IDENTIFIER',
-	'NUMBER',
-	'STRING',
-	'OPERATOR',
-	'LABEL',
-	'PARAMETER',
-	'TERMINATOR',
 	'Token',
-	'new_token_type',
-	'new_token_types',
+	'TokenTypes',
 	'SQLTokenizerBase',
 	'SQL92Tokenizer',
 	'SQL99Tokenizer',
@@ -47,36 +34,45 @@ __all__ = [
 	'DB2ZOSTokenizer',
 ]
 
-utf8decoder = codecs.getdecoder('UTF-8')
-utf8decode = lambda s: utf8decoder(s)[0]
+class Error(Exception):
+	"""Base class for errors in this module."""
+	pass
 
-_tokenval = 0
+class TokenizeError(Error):
+	"""Class for errors during tokenization of a stream."""
 
-def new_token_type():
-	"""Returns a new token value which is guaranteed to be unique"""
-	global _tokenval
-	_tokenval += 1
-	return _tokenval
+class TokenTypes(object):
+	"""Simple utility class for defining token type constants."""
+	def __init__(self):
+		super(TokenTypes, self).__init__()
+		self._counter = 0
+	def add(self, new_types):
+		if isinstance(new_types, basestring):
+			new_types = (new_types,)
+		for new_type in new_types:
+			if hasattr(self, new_type):
+				raise ValueError('%s is already registered as a token type' % new_type)
+			setattr(self, new_type, self._counter)
+			self._counter += 1
 
-def new_token_types(count):
-	"""Generator function for creating multiple new token values"""
-	for i in range(count):
-		yield new_token_type()
+# Replace the class with an instance of itself and a conveniently short alias
+TokenTypes = TokenTypes()
+TT = TokenTypes
 
-# Token constants
-(
-	ERROR,         # Invalid/unknown token
-	WHITESPACE,    # Whitespace
-	COMMENT,       # A comment
-	KEYWORD,       # A reserved keyword (SELECT/UPDATE/INSERT/etc.)
-	IDENTIFIER,    # A quoted or unquoted identifier
-	NUMBER,        # A numeric literal
-	STRING,        # A string literal
-	OPERATOR,      # An operator
-	LABEL,         # A procedural label
-	PARAMETER,     # A colon-prefixed or simple qmark parameter
-	TERMINATOR,    # A statement terminator
-) = new_token_types(11)
+# Define the set of tokens required by the tokenizers below
+TokenTypes.add((
+	'ERROR',         # Invalid/unknown token
+	'WHITESPACE',    # Whitespace
+	'COMMENT',       # A comment
+	'KEYWORD',       # A reserved keyword (SELECT/UPDATE/INSERT/etc.)
+	'IDENTIFIER',    # A quoted or unquoted identifier
+	'NUMBER',        # A numeric literal
+	'STRING',        # A string literal
+	'OPERATOR',      # An operator
+	'LABEL',         # A procedural label
+	'PARAMETER',     # A colon-prefixed or simple qmark parameter
+	'TERMINATOR',    # A statement terminator
+))
 
 # Declare the Token namedtuple class
 Token = namedtuple('Token', (
@@ -114,8 +110,8 @@ class SQLTokenizerBase(object):
 	"""
 
 	def __init__(self):
-		self.keywords = set(sql92_keywords)
-		self.identchars = set(sql92_identchars)
+		self.keywords = set(dialects.sql92_keywords)
+		self.identchars = set(dialects.sql92_identchars)
 		self.spacechars = ' \t\r\n'
 		self.sql_comments = True
 		self.c_comments = False
@@ -220,7 +216,7 @@ class SQLTokenizerBase(object):
 					result.append(Token(type, newvalue, newsource, line, column))
 					line += 1
 					column = 1
-				if source or type not in (WHITESPACE, COMMENT):
+				if source or type not in (TT.WHITESPACE, TT.COMMENT):
 					result.append(Token(type, value, source, line, column))
 			self._tokens = result
 		return self._tokens
@@ -462,28 +458,28 @@ class SQLTokenizerBase(object):
 	def _handle_apos(self):
 		"""Parses single quote characters (') in the source."""
 		try:
-			self._add_token(STRING, self._extract_string(self.multiline_str))
+			self._add_token(TT.STRING, self._extract_string(self.multiline_str))
 		except ValueError, e:
-			self._add_token(ERROR, str(e))
+			self._add_token(TT.ERROR, str(e))
 
 	def _handle_asterisk(self):
 		"""Parses an asterisk character ("*") in the source."""
 		self._next()
-		self._add_token(OPERATOR, '*')
+		self._add_token(TT.OPERATOR, '*')
 
 	def _handle_bar(self):
 		"""Parses a vertical bar character ("|") in the source."""
 		self._next()
 		if self.char == '|':
 			self._next()
-			self._add_token(OPERATOR, '||')
+			self._add_token(TT.OPERATOR, '||')
 		else:
-			self._add_token(ERROR, 'Invalid operator |')
+			self._add_token(TT.ERROR, 'Invalid operator |')
 
 	def _handle_close_parens(self):
 		"""Parses a closing parenthesis character (")") in the source."""
 		self._next()
-		self._add_token(OPERATOR, ')')
+		self._add_token(TT.OPERATOR, ')')
 
 	def _handle_colon(self):
 		"""Parses a colon character (":") in the source."""
@@ -491,23 +487,23 @@ class SQLTokenizerBase(object):
 		self._next()
 		if self.char in ['"', "'"]:
 			try:
-				self._add_token(PARAMETER, self._extract_string(False))
+				self._add_token(TT.PARAMETER, self._extract_string(False))
 			except ValueError, e:
-				self._add_token(ERROR, str(e))
+				self._add_token(TT.ERROR, str(e))
 		else:
 			self._mark()
 			while self.char in self.identchars: self._next()
-			self._add_token(PARAMETER, self.markedchars)
+			self._add_token(TT.PARAMETER, self.markedchars)
 
 	def _handle_comma(self):
 		"""Parses a comma character (",") in the source."""
 		self._next()
-		self._add_token(OPERATOR, ',')
+		self._add_token(TT.OPERATOR, ',')
 
 	def _handle_default(self):
 		"""Parses unexpected characters, returning an error."""
 		self._next()
-		self._add_token(ERROR, 'Unexpected character %s' % (self.char))
+		self._add_token(TT.ERROR, 'Unexpected character %s' % (self.char))
 
 	def _handle_digit(self):
 		"""Parses numeric digits (0..9) in the source."""
@@ -526,23 +522,23 @@ class SQLTokenizerBase(object):
 					self._next()
 			self._next()
 		try:
-			self._add_token(NUMBER, convert(self.markedchars))
+			self._add_token(TT.NUMBER, convert(self.markedchars))
 		except ValueError, e:
-			self._add_token(ERROR, str(e))
+			self._add_token(TT.ERROR, str(e))
 
 	def _handle_equal(self):
 		"""Parses equality characters ("=") in the source."""
 		self._next()
-		self._add_token(OPERATOR, '=')
+		self._add_token(TT.OPERATOR, '=')
 
 	def _handle_greater(self):
 		"""Parses greater-than characters (">") in the source."""
 		self._next()
 		if self.char == '=':
 			self._next()
-			self._add_token(OPERATOR, '>=')
+			self._add_token(TT.OPERATOR, '>=')
 		else:
-			self._add_token(OPERATOR, '>')
+			self._add_token(TT.OPERATOR, '>')
 
 	def _handle_ident(self):
 		"""Parses unquoted identifier characters (variable) in the source."""
@@ -552,23 +548,23 @@ class SQLTokenizerBase(object):
 		ident = self.markedchars.upper()
 		if self.char == ':':
 			self._next()
-			self._add_token(LABEL, ident)
+			self._add_token(TT.LABEL, ident)
 		elif ident in self.keywords:
-			self._add_token(KEYWORD, ident)
+			self._add_token(TT.KEYWORD, ident)
 		else:
-			self._add_token(IDENTIFIER, ident)
+			self._add_token(TT.IDENTIFIER, ident)
 
 	def _handle_less(self):
 		"""Parses less-than characters ("<") in the source."""
 		self._next()
 		if self.char == '=':
 			self._next()
-			self._add_token(OPERATOR, '<=')
+			self._add_token(TT.OPERATOR, '<=')
 		elif self.char == '>':
 			self._next()
-			self._add_token(OPERATOR, '<>')
+			self._add_token(TT.OPERATOR, '<>')
 		else:
-			self._add_token(OPERATOR, '<')
+			self._add_token(TT.OPERATOR, '<')
 
 	def _handle_minus(self):
 		"""Parses minus characters ("-") in the source."""
@@ -579,14 +575,14 @@ class SQLTokenizerBase(object):
 			while not self.char in '\0\n': self._next()
 			content = self.markedchars
 			self._next()
-			self._add_token(COMMENT, content)
+			self._add_token(TT.COMMENT, content)
 		else:
-			self._add_token(OPERATOR, '-')
+			self._add_token(TT.OPERATOR, '-')
 
 	def _handle_open_parens(self):
 		"""Parses open parenthesis characters ("(") in the source."""
 		self._next()
-		self._add_token(OPERATOR, '(')
+		self._add_token(TT.OPERATOR, '(')
 
 	def _handle_period(self):
 		"""Parses full-stop characters (".") in the source."""
@@ -595,17 +591,17 @@ class SQLTokenizerBase(object):
 			self._handle_digit()
 		else:
 			self._next()
-			self._add_token(OPERATOR, '.')
+			self._add_token(TT.OPERATOR, '.')
 
 	def _handle_plus(self):
 		"""Parses plus characters ("+") in the source."""
 		self._next()
-		self._add_token(OPERATOR, '+')
+		self._add_token(TT.OPERATOR, '+')
 
 	def _handle_question(self):
 		"""Parses question marks ("?") in the source."""
 		self._next()
-		self._add_token(PARAMETER, None)
+		self._add_token(TT.PARAMETER, None)
 
 	def _handle_quote(self):
 		"""Parses double quote characters (") in the source."""
@@ -613,16 +609,16 @@ class SQLTokenizerBase(object):
 			ident = self._extract_string(False)
 			if self.char == ':':
 				self._next()
-				self._add_token(LABEL, ident)
+				self._add_token(TT.LABEL, ident)
 			else:
-				self._add_token(IDENTIFIER, ident)
+				self._add_token(TT.IDENTIFIER, ident)
 		except ValueError, e:
 			self._add_token(ERROR, str(e))
 
 	def _handle_semicolon(self):
 		"""Parses semi-colon characters (;) in the source."""
 		self._next()
-		self._add_token(TERMINATOR, ';')
+		self._add_token(TT.TERMINATOR, ';')
 
 	def _handle_slash(self):
 		"""Parses forward-slash characters ("/") in the source."""
@@ -633,7 +629,7 @@ class SQLTokenizerBase(object):
 			while not self.char in '\0\n':
 				self._next()
 			content = self.markedchars
-			self._add_token(COMMENT, content)
+			self._add_token(TT.COMMENT, content)
 		elif self.c_comments and (self.char == '*'):
 			self._next()
 			self._mark()
@@ -644,20 +640,20 @@ class SQLTokenizerBase(object):
 					elif (self.char == '*') and (self.nextchar == '/'):
 						content = self.markedchars
 						self._next(2)
-						self._add_token(COMMENT, content)
+						self._add_token(TT.COMMENT, content)
 						break
 					else:
 						self._next()
 			except ValueError, e:
-				self._add_token(ERROR, str(e))
+				self._add_token(TT.ERROR, str(e))
 		else:
-			self._add_token(OPERATOR, '/')
+			self._add_token(TT.OPERATOR, '/')
 
 	def _handle_terminator(self):
 		"""Parses statement terminator characters (variable) in the source."""
 		if self._source.startswith(self._terminator, self._index):
 			self._next(len(self._terminator))
-			self._add_token(TERMINATOR, self._terminator)
+			self._add_token(TT.TERMINATOR, self._terminator)
 		elif self._savedhandler is not None:
 			self._savedhandler()
 
@@ -669,7 +665,7 @@ class SQLTokenizerBase(object):
 				break
 			else:
 				self._next()
-		self._add_token(WHITESPACE, None)
+		self._add_token(TT.WHITESPACE, None)
 
 
 class SQL92Tokenizer(SQLTokenizerBase):
@@ -682,8 +678,8 @@ class SQL99Tokenizer(SQLTokenizerBase):
 
 	def __init__(self):
 		super(SQL99Tokenizer, self).__init__()
-		self.keywords = set(sql99_keywords)
-		self.identchars = set(sql99_identchars)
+		self.keywords = set(dialects.sql99_keywords)
+		self.identchars = set(dialects.sql99_identchars)
 
 
 class SQL2003Tokenizer(SQLTokenizerBase):
@@ -691,8 +687,8 @@ class SQL2003Tokenizer(SQLTokenizerBase):
 
 	def __init__(self):
 		super(SQL2003Tokenizer, self).__init__()
-		self.keywords = set(sql2003_keywords)
-		self.identchars = set(sql2003_identchars)
+		self.keywords = set(dialects.sql2003_keywords)
+		self.identchars = set(dialects.sql2003_identchars)
 
 
 class DB2ZOSTokenizer(SQLTokenizerBase):
@@ -700,8 +696,8 @@ class DB2ZOSTokenizer(SQLTokenizerBase):
 
 	def __init__(self):
 		super(DB2ZOSTokenizer, self).__init__()
-		self.keywords = set(db2zos_keywords)
-		self.identchars = set(db2zos_identchars)
+		self.keywords = set(dialects.db2zos_keywords)
+		self.identchars = set(dialects.db2zos_identchars)
 
 	def _handle_not(self):
 		"""Parses characters meaning "NOT" (! and ^) in the source."""
@@ -713,10 +709,10 @@ class DB2ZOSTokenizer(SQLTokenizerBase):
 				'<': '>=',
 			}[self.char]
 		except KeyError:
-			self._add_token(ERROR, "Expected >, <, or =, but found %s" % (self.char))
+			self._add_token(TT.ERROR, "Expected >, <, or =, but found %s" % (self.char))
 		else:
 			self._next()
-			self._add_token(OPERATOR, negatedop)
+			self._add_token(TT.OPERATOR, negatedop)
 
 	def _handle_hexstring(self):
 		"""Parses a hexstring literal in the source."""
@@ -728,9 +724,9 @@ class DB2ZOSTokenizer(SQLTokenizerBase):
 					raise ValueError('Hex-string must have an even length')
 				s = ''.join(chr(int(s[i:i + 2], 16)) for i in xrange(0, len(s), 2))
 			except ValueError, e:
-				self._add_token(ERROR, str(e))
+				self._add_token(TT.ERROR, str(e))
 			else:
-				self._add_token(STRING, s)
+				self._add_token(TT.STRING, s)
 		else:
 			self._handle_ident()
 
@@ -746,9 +742,9 @@ class DB2ZOSTokenizer(SQLTokenizerBase):
 						raise ValueError('Unicode hex-string must have a length which is a multiple of 4')
 					s = ''.join(unichr(int(s[i:i + 4], 16)) for i in xrange(0, len(s), 4))
 				except ValueError, e:
-					self._add_token(ERROR, str(e))
+					self._add_token(TT.ERROR, str(e))
 				else:
-					self._add_token(STRING, s)
+					self._add_token(TT.STRING, s)
 			else:
 				self._handle_ident()
 		else:
@@ -764,9 +760,9 @@ class DB2ZOSTokenizer(SQLTokenizerBase):
 				# SBCS/MBCS file?!)
 				s = unicode(self._extract_string(self.multiline_str))
 			except ValueError, e:
-				self._add_token(ERROR, str(e))
+				self._add_token(TT.ERROR, str(e))
 			else:
-				self._add_token(STRING, s)
+				self._add_token(TT.STRING, s)
 		elif self.char.upper() == 'G' and self.nextchar.upper() == 'X':
 			self._handle_unihexstring()
 		else:
@@ -794,8 +790,8 @@ class DB2LUWTokenizer(DB2ZOSTokenizer):
 
 	def __init__(self):
 		super(DB2LUWTokenizer, self).__init__()
-		self.keywords = set(db2luw_keywords)
-		self.identchars = set(db2luw_identchars)
+		self.keywords = set(dialects.db2luw_keywords)
+		self.identchars = set(dialects.db2luw_identchars)
 		# Support for C-style /*..*/ comments add in DB2 UDB v8 FP9
 		self.c_comments = True
 
@@ -803,37 +799,37 @@ class DB2LUWTokenizer(DB2ZOSTokenizer):
 		super(DB2LUWTokenizer, self)._handle_ident()
 		# Rewrite the special values INFINITY, NAN and SNAN to their decimal
 		# counterparts with token type NUMBER
-		if self._tokens[-1][:2] == (IDENTIFIER, 'INFINITY'):
-			self._tokens[-1] = Token(NUMBER, Decimal('Infinity'), *self._tokens[-1][2:])
-		elif self._tokens[-1][:2] == (IDENTIFIER, 'NAN'):
-			self._tokens[-1] = Token(NUMBER, Decimal('NaN'), *self._tokens[-1][2:])
-		elif self._tokens[-1][:2] == (IDENTIFIER, 'SNAN'):
-			self._tokens[-1] = Token(NUMBER, Decimal('sNaN'), *self._tokens[-1][2:])
+		if self._tokens[-1][:2] == (TT.IDENTIFIER, 'INFINITY'):
+			self._tokens[-1] = Token(TT.NUMBER, Decimal('Infinity'), *self._tokens[-1][2:])
+		elif self._tokens[-1][:2] == (TT.IDENTIFIER, 'NAN'):
+			self._tokens[-1] = Token(TT.NUMBER, Decimal('NaN'), *self._tokens[-1][2:])
+		elif self._tokens[-1][:2] == (TT.IDENTIFIER, 'SNAN'):
+			self._tokens[-1] = Token(TT.NUMBER, Decimal('sNaN'), *self._tokens[-1][2:])
 
 	def _handle_period(self):
 		"""Parses full-stop characters (".") in the source."""
 		# Override the base method to handle DB2 UDB's method qualifiers (..)
 		if self.nextchar == '.':
-			self._add_token(OPERATOR, '..')
+			self._add_token(TT.OPERATOR, '..')
 			self._next(2)
 		else:
 			super(DB2LUWTokenizer, self)._handle_period()
 
 	def _handle_open_bracket(self):
 		self._next()
-		self._add_token(OPERATOR, '[')
+		self._add_token(TT.OPERATOR, '[')
 
 	def _handle_close_bracket(self):
 		self._next()
-		self._add_token(OPERATOR, ']')
+		self._add_token(TT.OPERATOR, ']')
 
 	def _handle_open_brace(self):
 		self._next()
-		self._add_token(OPERATOR, '{')
+		self._add_token(TT.OPERATOR, '{')
 
 	def _handle_close_brace(self):
 		self._next()
-		self._add_token(OPERATOR, '}')
+		self._add_token(TT.OPERATOR, '}')
 
 	# XXX Support for UESCAPE needed at some point. This probably can't be
 	# implemented directly in the tokenizer. Instead, add a separate token type
@@ -846,7 +842,7 @@ class DB2LUWTokenizer(DB2ZOSTokenizer):
 		if self.nextchar == "&":
 			self._next(2)
 			if not self.char == "'":
-				self._add_token(ERROR, 'Expecting \'')
+				self._add_token(TT.ERROR, 'Expecting \'')
 			else:
 				def utf8sub(match):
 					if match.group(1) == '\\':
@@ -858,9 +854,9 @@ class DB2LUWTokenizer(DB2ZOSTokenizer):
 				try:
 					s = self._extract_string(self.multiline_str)
 				except ValueError, e:
-					self._add_token(ERROR, str(e))
+					self._add_token(TT.ERROR, str(e))
 				else:
-					self._add_token(STRING, utf8re.sub(utf8sub, utf8decode(s)))
+					self._add_token(TT.STRING, utf8re.sub(utf8sub, s.decode('UTF-8')))
 		elif self.nextchar.upper() == 'X':
 			self._handle_unihexstring()
 		else:

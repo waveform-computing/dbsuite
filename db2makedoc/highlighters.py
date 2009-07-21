@@ -10,8 +10,8 @@ descendent classes to implement a specific markup language (e.g. HTML).
 
 import re
 import logging
-from db2makedoc.sql.tokenizer import *
-from db2makedoc.sql.formatter import *
+from db2makedoc.sql.tokenizer import DB2LUWTokenizer, Token, TokenTypes as TT
+from db2makedoc.sql.formatter import DB2LUWFormatter, ParseTokenError
 
 class CommentHighlighter(object):
 	"""Implements a generic class for parsing simple prefix-based markup.
@@ -198,7 +198,7 @@ class SQLHighlighter(object):
 		self.formatter.line_split = line_split
 		tokens = self.tokenizer.parse(sql, terminator, line_split)
 		# Check for errors in the tokens
-		errors = [token for token in tokens if token.type == ERROR]
+		errors = [token for token in tokens if token.type == TT.ERROR]
 		if errors:
 			# If errors were found, log a warning for each error and return the
 			# SQL highlighted from the tokenized stream without reformatting
@@ -213,7 +213,7 @@ class SQLHighlighter(object):
 				tokens = self.formatter.parse(tokens)
 			except ParseTokenError, e:
 				logging.warning('While formatting %s' % excerpt(tokens))
-				logging.warning('error %s found at line %d, column %d' % (e.message, e.line, e.col))
+				logging.warning('error %s found at line %d, column %d' % (e.message, e.line, e.column))
 		if tokens:
 			if line_split:
 				return (

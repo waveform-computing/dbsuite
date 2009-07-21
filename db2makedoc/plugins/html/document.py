@@ -20,6 +20,7 @@ from db2makedoc.main import __version__
 from db2makedoc.highlighters import CommentHighlighter, SQLHighlighter
 from db2makedoc.plugins.html.entities import HTML_ENTITIES
 from db2makedoc.graph import Graph, Node, Edge, Cluster
+from db2makedoc.sql.tokenizer import TokenTypes as TT
 from db2makedoc.db import (
 	DatabaseObject, Relation, Routine, Constraint, Database, Tablespace,
 	Schema, Table, View, Alias, Index, Trigger, Function, Procedure, Datatype,
@@ -27,10 +28,6 @@ from db2makedoc.db import (
 )
 from db2makedoc.etree import (
 	fromstring, tostring, iselement, ElementFactory, flatten_html
-)
-from db2makedoc.sql.formatter import (
-	ERROR, COMMENT, KEYWORD, IDENTIFIER, LABEL, DATATYPE, REGISTER,
-	NUMBER, STRING, OPERATOR, PARAMETER, TERMINATOR, STATEMENT
 )
 
 # Import the xapian bindings
@@ -272,34 +269,33 @@ class HTMLSQLHighlighter(SQLHighlighter):
 		super(HTMLSQLHighlighter, self).__init__()
 		self.site = site
 		self.css_classes = {
-			ERROR:      'sql-error',
-			COMMENT:    'sql-comment',
-			KEYWORD:    'sql-keyword',
-			IDENTIFIER: 'sql-identifier',
-			LABEL:      'sql-label',
-			DATATYPE:   'sql-datatype',
-			REGISTER:   'sql-register',
-			NUMBER:     'sql-number',
-			STRING:     'sql-string',
-			OPERATOR:   'sql-operator',
-			PARAMETER:  'sql-parameter',
-			TERMINATOR: 'sql-terminator',
-			STATEMENT:  'sql-terminator',
+			TT.ERROR:      'sql-error',
+			TT.COMMENT:    'sql-comment',
+			TT.KEYWORD:    'sql-keyword',
+			TT.IDENTIFIER: 'sql-identifier',
+			TT.LABEL:      'sql-label',
+			TT.DATATYPE:   'sql-datatype',
+			TT.REGISTER:   'sql-register',
+			TT.NUMBER:     'sql-number',
+			TT.STRING:     'sql-string',
+			TT.OPERATOR:   'sql-operator',
+			TT.PARAMETER:  'sql-parameter',
+			TT.TERMINATOR: 'sql-terminator',
+			TT.STATEMENT:  'sql-terminator',
 		}
 
 	def format_token(self, token):
-		(token_type, token_value, source, _, _) = token
 		try:
-			css_class = self.css_classes[(token_type, token_value)]
+			css_class = self.css_classes[(token.type, token.value)]
 		except KeyError:
-			css_class = self.css_classes.get(token_type, None)
+			css_class = self.css_classes.get(token.type, None)
 		# XXX Disgusting hack because IE's too thick to handle pre-formatted
 		# whitespace in anything except <pre>
-		source = re.sub(' {2,}', lambda m: u'\u00A0' * len(m.group()), source)
+		s = re.sub(' {2,}', lambda m: u'\u00A0' * len(m.group()), token.source)
 		if css_class is not None:
-			return self.site.tag.span(source, class_=css_class)
+			return self.site.tag.span(s, class_=css_class)
 		else:
-			return source
+			return s
 
 	def format_line(self, index, line):
 		return self.site.tag.li(self.format_token(token) for token in line)

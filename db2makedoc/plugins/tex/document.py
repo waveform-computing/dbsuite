@@ -19,10 +19,7 @@ from db2makedoc.astex import tex, xml, TeXFactory
 from db2makedoc.highlighters import CommentHighlighter, SQLHighlighter
 from db2makedoc.hyphenator import hyphenate_word
 from db2makedoc.graph import Graph, Node, Edge, Cluster
-from db2makedoc.sql.formatter import (
-	ERROR, COMMENT, KEYWORD, IDENTIFIER, LABEL, DATATYPE, REGISTER,
-	NUMBER, STRING, OPERATOR, PARAMETER, TERMINATOR, STATEMENT
-)
+from db2makedoc.sql.tokenizer import TokenTypes as TT
 from db2makedoc.db import (
 	DatabaseObject, Relation, Routine, Constraint, Database, Tablespace,
 	Schema, Table, View, Alias, Index, Trigger, Function, Procedure, Datatype,
@@ -191,41 +188,40 @@ class TeXSQLHighlighter(SQLHighlighter):
 				suffix=r'\end{list}\normalfont'
 			)
 		self.tex_cmds = {
-			ERROR:      tag.SQLerror,
-			COMMENT:    tag.SQLcomment,
-			KEYWORD:    tag.SQLkeyword,
-			IDENTIFIER: tag.SQLidentifier,
-			LABEL:      tag.SQLlabel,
-			DATATYPE:   tag.SQLdatatype,
-			REGISTER:   tag.SQLregister,
-			NUMBER:     tag.SQLnumber,
-			STRING:     tag.SQLstring,
-			OPERATOR:   tag.SQLoperator,
-			PARAMETER:  tag.SQLparameter,
-			TERMINATOR: tag.SQLterminator,
-			STATEMENT:  tag.SQLterminator,
+			TT.ERROR:      tag.SQLerror,
+			TT.COMMENT:    tag.SQLcomment,
+			TT.KEYWORD:    tag.SQLkeyword,
+			TT.IDENTIFIER: tag.SQLidentifier,
+			TT.LABEL:      tag.SQLlabel,
+			TT.DATATYPE:   tag.SQLdatatype,
+			TT.REGISTER:   tag.SQLregister,
+			TT.NUMBER:     tag.SQLnumber,
+			TT.STRING:     tag.SQLstring,
+			TT.OPERATOR:   tag.SQLoperator,
+			TT.PARAMETER:  tag.SQLparameter,
+			TT.TERMINATOR: tag.SQLterminator,
+			TT.STATEMENT:  tag.SQLterminator,
 		}
 
 	def format_token(self, token):
-		(token_type, token_value, source, _, _) = token
 		try:
-			tex_cmd = self.tex_cmds[(token_type, token_value)]
+			tex_cmd = self.tex_cmds[(token.type, token.value)]
 		except KeyError:
-			tex_cmd = self.tex_cmds.get(token_type, None)
+			tex_cmd = self.tex_cmds.get(token.type, None)
 		# Because we're not using {verbatim} environments (because we can't
 		# apply highlighting within them) we need to tweak extraneous space so
 		# it doesn't get compressed (character U+00A0 is non-breaking space
 		# which the TeXFactory class will escape into "~" which is the TeX
 		# non-breaking space)
-		source = re.sub(' {2,}', lambda m: u' ' + (u'\u00A0' * (len(m.group()) - 1)), source)
+		s = re.sub(' {2,}', lambda m: u' ' + (u'\u00A0' * (len(m.group()) - 1)), token.source)
 		# The TeXListItem class inserts its own line breaks. If we include the
 		# original line breaks, we wind up with full paragraphs in each item
 		# which causes problems. Hence, we strip line breaks here
-		source = source.replace('\n', '')
+		s = s.replace('\n', '')
 		if tex_cmd is not None:
-			return tex_cmd(source)
+			return tex_cmd(s)
 		else:
-			return source
+			return s
 
 	def format_line(self, index, line):
 		return self.doc.tag.li(self.format_token(token) for token in line)
