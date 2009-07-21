@@ -5,7 +5,7 @@ PYTHON=python
 PYFLAGS=
 #LYNX=lynx
 #LYNXFLAGS=-nonumbers -justify
-LYNX=links
+LYNX=elinks
 LYNXFLAGS=-no-numbering -no-references
 
 # Calculate the base names of the distribution, the location of all source,
@@ -89,21 +89,24 @@ tags: $(SOURCE)
 
 README.txt: FORCE
 	echo "Generated from the db2makedoc wiki at:" > README.txt
-	echo "http://faust.hursley.uk.ibm.com/trac/db2makedoc/wiki/" >> README.txt
+	echo "http://faust.hursley.uk.ibm.com/trac/db2makedoc/wiki" >> README.txt
 	for page in Requirements Install Tutorial; do \
 		$(LYNX) $(LYNXFLAGS) -dump http://faust.hursley.uk.ibm.com/trac/db2makedoc/wiki/$$page | awk '\
 			BEGIN {printing=0;} \
-			/^ *\* Last Change *$$/ {printing=1; next;} \
+			/^ *\*.*Last Change *$$/ {printing=1; next;} \
 			/^ *Terms of use *$$/ {printing=0;} \
-			{if (printing) print;}' >> README.txt; done
+			{if (printing) print;}' >> README.txt; \
+	done
 
 TODO.txt: FORCE
 	echo "Generated from the db2makedoc wiki at:" > TODO.txt
-	echo "http://faust.hursley.uk.ibm.com/trac/db2makedoc/wiki/" >> TODO.txt
-	$(LYNX) $(LYNXFLAGS) -dump http://faust.hursley.uk.ibm.com/trac/db2makedoc/wiki/KnownIssues | awk '\
-		BEGIN {printing=0;} \
-		/^ *\* Last Change *$$/ {printing=1; next;} \
-		/^ *Terms of use *$$/ {printing=0;} \
-		{if (printing) print;}' >> TODO.txt; done
+	echo "http://faust.hursley.uk.ibm.com/trac/db2makedoc/wiki" >> TODO.txt
+	for page in KnownIssues; do \
+		$(LYNX) $(LYNXFLAGS) -dump http://faust.hursley.uk.ibm.com/trac/db2makedoc/wiki/$$page | awk '\
+			BEGIN {printing=0;} \
+			/^ *\*.*Last Change *$$/ {printing=1; next;} \
+			/^ *Terms of use *$$/ {printing=0;} \
+			{if (printing) print;}' >> TODO.txt; \
+	done
 
 FORCE:
