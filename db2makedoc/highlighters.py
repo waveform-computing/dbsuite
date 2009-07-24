@@ -164,6 +164,7 @@ class SQLHighlighter(object):
 		# there's not much point until other formatters are developed ;-)
 		self.tokenizer = DB2LUWTokenizer()
 		self.formatter = DB2LUWFormatter()
+		self.tokenizer.raise_errors = False
 	
 	def format_line(self, index, line):
 		"""Stub handler for a line of tokens"""

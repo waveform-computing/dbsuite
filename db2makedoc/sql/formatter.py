@@ -17,7 +17,7 @@ import re
 import sys
 import math
 import db2makedoc.sql.dialects as dialects
-from db2makedoc.sql.tokenizer import TokenTypes as TT, Token
+from db2makedoc.sql.tokenizer import TokenTypes as TT, Token, Error, TokenError
 from decimal import Decimal
 from itertools import tee, izip
 
@@ -45,37 +45,16 @@ __all__ = [
 ]
 
 # Add some custom token types used by the formatter
-TT.add((
-	'EOF',       # Symbolically represents the end of file (e.g. for errors)
-	'DATATYPE',  # Datatypes (e.g. VARCHAR) converted from KEYWORD or IDENTIFIER
-	'REGISTER',  # Special registers (e.g. CURRENT DATE) converted from KEYWORD or IDENTIFIER
-	'STATEMENT', # Statement terminator
-	'INDENT',    # Whitespace indentation at the start of a line
-	'VALIGN',    # Whitespace indentation within a line to vertically align blocks of text
-	'VAPPLY',    # Mark the end of a run of VALIGN tokens
-))
-
-# Token labels used for formatting error messages and token dumps
-TOKEN_LABELS = {
-	TT.EOF:        '<end-of-file>',
-	TT.ERROR:      'error',
-	TT.WHITESPACE: '<space>',
-	TT.COMMENT:    'comment',
-	TT.KEYWORD:    'keyword',
-	TT.IDENTIFIER: 'identifier',
-	TT.NUMBER:     'number',
-	TT.STRING:     'string',
-	TT.OPERATOR:   'operator',
-	TT.LABEL:      'label',
-	TT.PARAMETER:  'parameter',
-	TT.TERMINATOR: '<terminator>',
-	TT.DATATYPE:   'datatype',
-	TT.REGISTER:   'register',
-	TT.STATEMENT:  '<statement-end>',
-	TT.INDENT:     '<indent>',
-	TT.VALIGN:     '<valign>',
-	TT.VAPPLY:     '<vapply>',
-}
+for (type, name) in (
+	('EOF',       '<end-of-file>'),    # Symbolically represents the end of file (e.g. for errors)
+	('DATATYPE',  '<datatype>'),       # Datatypes (e.g. VARCHAR) converted from KEYWORD or IDENTIFIER
+	('REGISTER',  '<register>'),       # Special registers (e.g. CURRENT DATE) converted from KEYWORD or IDENTIFIER
+	('STATEMENT', '<statement-end>'),  # Statement terminator
+	('INDENT',    None),               # Whitespace indentation at the start of a line
+	('VALIGN',    None),               # Whitespace indentation within a line to vertically align blocks of text
+	('VAPPLY',    None),               # Mark the end of a run of VALIGN tokens
+):
+	TT.add(type, name)
 
 # Standard size suffixes and multipliers
 SUFFIX_KMG = {
@@ -117,9 +96,9 @@ def dump(tokens):
 def dump_token(token):
 	"""Formats a token for the dump routine above."""
 	if len(token) == 3:
-		return '%-16s %-20s %-20s' % (TOKEN_LABELS[token.type], repr(token.value), repr(token.source))
+		return '%-16s %-20s %-20s' % (TT.names[token.type], repr(token.value), repr(token.source))
 	else:
-		return '%-16s %-20s %-20s (%d:%d)' % (TOKEN_LABELS[token.type], repr(token.value), repr(token.source), token.line, token.column)
+		return '%-16s %-20s %-20s (%d:%d)' % (TT.names[token.type], repr(token.value), repr(token.source), token.line, token.column)
 
 def format_ident(name, namechars=set(dialects.db2luw_namechars), qchar='"'):
 	"""Format an SQL identifier with quotes if required.
@@ -392,81 +371,38 @@ def split_lines(tokens):
 		if source or type not in (TT.WHITESPACE, TT.COMMENT):
 			yield Token(type, value, source, line, column)
 
-class Error(Exception):
-	"""Base class for errors in this module"""
-	pass
-
 class ParseError(Error):
-	"""Base class for errors encountered during parsing"""
+	"""Raised when a parsing error is found."""
 	pass
 
 class ParseBacktrack(ParseError):
-	"""Fake exception class raised internally when the parser needs to backtrack"""
+	"""Fake exception class raised internally when the parser needs to backtrack."""
 
 	def __init__(self):
-		"""Initializes an instance of the exception"""
+		"""Initializes an instance of the exception."""
 		# The message is irrelevant as this exception should never propogate
 		# outside the parser
 		ParseError.__init__(self, '')
 
-class ParseTokenError(ParseError):
-	"""Raised when a parsing error is encountered"""
-
-	def __init__(self, tokens, errtoken, msg):
-		"""Initializes an instance of the exception.
-
-		The parameters are as follows:
-		tokens -- The tokens forming the source being parsed
-		errtoken -- The token at which the error occurred
-		msg -- The descriptive error message
-		"""
-		# Store the error token and source
-		self.source = tokens
-		self.token = errtoken
-		# Split out the line and column of the error
-		self.line, self.column = errtoken.line, errtoken.column
-		# Initialize the exception
-		ParseError.__init__(self, msg)
-
-	def __str__(self):
-		"""Outputs a string version of the exception."""
-		# Generate a block of context with an indicator showing the error
-		context_lines = 5
-		sourcelines = ''.join(t.source for t in self.source).splitlines()
-		lineindex = self.line - 1
-		if self.line > len(sourcelines):
-			lineindex = -1
-		marker = ''.join({'\t': '\t'}.get(c, ' ') for c in sourcelines[lineindex][:self.column - 1]) + '^'
-		sourcelines.insert(self.line, marker)
-		i = self.line - context_lines
-		if i < 0:
-			i = 0
-		context = '\n'.join(sourcelines[i:self.line + context_lines])
-		# Format the message with the context
-		return '\n'.join([
-			self.message + ':',
-			'line   : %d' % self.line,
-			'column : %d' % self.column,
-			'context:',
-			context
-		])
+class ParseTokenError(TokenError, ParseError):
+	"""Raised when a parsing error including token details is encountered."""
 
 	def token_name(self, token):
 		"""Formats a token for display in an error message string"""
 		if isinstance(token, basestring):
 			return token
 		elif isinstance(token, int):
-			return TOKEN_LABELS[token]
+			return TT.names[token]
 		elif isinstance(token, Token):
 			if token.type in (TT.EOF, TT.WHITESPACE, TT.TERMINATOR, TT.STATEMENT):
-				return TOKEN_LABELS[token.type]
+				return TT.names[token.type]
 			elif token.value is not None:
 				return token.value
 			else:
 				return token.source
 		elif isinstance(token, tuple):
 			if (len(token) == 1) or (token[0] in (TT.EOF, TT.WHITESPACE, TT.TERMINATOR, TT.STATEMENT)):
-				return TOKEN_LABELS[token[0]]
+				return TT.names[token[0]]
 			elif (len(token) == 2) and (token[1] is not None):
 				return token[1]
 			else:
@@ -474,39 +410,42 @@ class ParseTokenError(ParseError):
 		else:
 			return None
 
-class ParseExpectedOneOfError(ParseTokenError):
-	"""Raised when the parser didn't find a token it was expecting"""
 
-	def __init__(self, tokens, errtoken, expected):
+class ParseExpectedOneOfError(ParseTokenError):
+	"""Raised when the parser didn't find a token it was expecting."""
+
+	def __init__(self, source, token, expected):
 		"""Initializes an instance of the exception.
 
 		The parameters are as follows:
-		tokens -- The tokens forming the source being parsed
-		errtoken -- The unexpected token that was found
+		source -- The source being parsed
+		token -- The unexpected token that was found
 		expected -- A list of alternative tokens that was expected at this location
 		"""
+		self.expected = expected
 		msg = 'Expected %s but found "%s"' % (
 			', '.join(['"%s"' % (self.token_name(t),) for t in expected]),
-			self.token_name(errtoken)
+			self.token_name(token)
 		)
-		ParseTokenError.__init__(self, tokens, errtoken, msg)
+		ParseTokenError.__init__(self, source, token, msg)
 
 class ParseExpectedSequenceError(ParseTokenError):
 	"""Raised when the parser didn't find a sequence of tokens it was expecting"""
 
-	def __init__(self, tokens, errtokens, expected):
+	def __init__(self, source, tokens, expected):
 		"""Initializes an instance of the exception.
 
 		The parameters are as follows:
-		tokens -- The tokens forming the source being parsed
-		errtokens -- The unexpected sequenced of tokens that was found
+		source -- The source being parsed
+		tokens -- The unexpected sequenced of tokens that was found
 		expected -- A sequence of tokens that was expected at this location
 		"""
+		self.expected = expected
 		msg = 'Expected "%s" but found "%s"' % (
 			' '.join([self.token_name(t) for t in expected]),
-			' '.join([self.token_name(t) for t in errtokens])
+			' '.join([self.token_name(t) for t in tokens])
 		)
-		ParseTokenError.__init__(self, tokens, errtokens[0], msg)
+		ParseTokenError.__init__(self, source, tokens[0], msg)
 
 class BaseFormatter(object):
 	"""Base class for parsers.
@@ -518,7 +457,7 @@ class BaseFormatter(object):
 	in the form of a list of tokens, where tokens are 5-element tuples with the
 	following structure:
 
-		(type, value, source, line, column)
+	    (type, value, source, line, column)
 
 	The elements of the tuple can also be accessed by the names listed above
 	(tokens are instances of the Token namedtuple class).
@@ -535,19 +474,19 @@ class BaseFormatter(object):
 	(which may vary in case), this class often matches token on the first two
 	elements:
 
-		(TT.KEYWORD, "OR", "or", 7, 13)[:2] == (TT.KEYWORD, "OR")
+	    (TT.KEYWORD, "OR", "or", 7, 13)[:2] == (TT.KEYWORD, "OR")
 
 	A set of internal utility methods are used to simplify this further. See
 	the _match and _expect methods in particular. The numerous _parse_X methods
 	in each class define the grammar of the SQL language being parsed.
 	
-	The following options are available for customizing the reformatting performed
-	by the class:
+	The following options are available for customizing the reformatting
+	performed by the class:
 
 	reformat    A set of token types to undergo reformatting. By default this
 	            set includes all token types output by the parser.  See below
 	            for the specific types of reformatting performed by token type.
-	indent      If WHITESPACE is present in the reformat set, this is the
+	indent      If TT.WHITESPACE is present in the reformat set, this is the
 	            indentation that should be used in the output. Defaults to 4
 	            spaces.
 	line_split  When False (the default), multi-line tokens (e.g. comments,
@@ -572,15 +511,15 @@ class BaseFormatter(object):
 	KEYWORD     All keywords will be folded to uppercase.
 	REGISTER    All special register keywords will be folded to uppercase.
 	IDENTIFIER  All identifiers capable of being represented unquoted (not
-	            containing lowercase characters, symbols, etc.) will be folded
-	            to uppercase.
+	            containing lowercase characters, symbols, etc.) will be
+	            unquoted (if originally quoted), and folded to uppercase.
 	DATATYPE    Same as IDENTIFIER.
 	LABEL       Same as IDENTIFIER, with a colon suffix.
 	PARAMETER   Same as IDENTIFIER, with a colon prefix for named parameters.
 	NUMBER      All numbers will be formatted without extraneous leading or
 	            trailing zeros (or decimal portions), and uppercase signed
 	            exponents (where the original had an exponent). Extraneous
-	            unary plus operators will be included where present in the
+	            unary plus operators (+) will be included where present in the
 	            original source.
 	STRING      All string literals will be formatted into a minimal safe
 	            representation, e.g. if a hexstring contains no control
@@ -639,7 +578,7 @@ class BaseFormatter(object):
 			if not self._peek(TT.EOF):
 				self._parse_top()
 				self._expect(TT.STATEMENT) # STATEMENT converts TERMINATOR into STATEMENT
-				assert len(self._statestack) == 0
+				assert len(self._states) == 0
 				# Reset the indent level and leave a blank line
 				self._level = 0
 				self._newline()
@@ -651,10 +590,13 @@ class BaseFormatter(object):
 
 	def _parse_init(self, tokens):
 		"""Sets up the parser with the specified tokens as input."""
-		self._statestack = []
+		self._states = []
 		self._index = 0
 		self._output = []
 		self._level = 0
+		# Reconstruct a copy of the source; this is only used for exceptions
+		# which use the original source string for context reporting
+		self._source = ''.join(token.source for token in tokens)
 		# If we're reformatting spaces, strip all WHITESPACE tokens from the
 		# input (no point parsing them if we're going to rewrite them all
 		# anyway)
@@ -750,7 +692,7 @@ class BaseFormatter(object):
 		else:
 			assert False
 		# Check that the statestack invariant (see _save_state()) is preserved
-		assert (len(self._statestack) == 0) or (i >= self._statestack[-1][2])
+		assert (len(self._states) == 0) or (i >= self._states[-1][2])
 		# Check for duplicates - replace if we're about to duplicate the token
 		if not allowempty and self._output[i - 1].type == token.type and token.type == TT.INDENT:
 			self._output[i - 1] = token
@@ -770,16 +712,24 @@ class BaseFormatter(object):
 		# the state was last saved, this also maintains the invariant (the
 		# _insert_output() method includes an assertion to ensure this is the
 		# case).
-		self._statestack.append((self._index, self._level, len(self._output)))
+		self._states.append((
+			self._index,
+			self._level,
+			len(self._output)
+		))
 
 	def _restore_state(self):
 		"""Restores the state of the parser from the head of the save stack."""
-		(self._index, self._level, output_len) = self._statestack.pop()
+		(
+			self._index,
+			self._level,
+			output_len
+		) = self._states.pop()
 		del self._output[output_len:]
 
 	def _forget_state(self):
 		"""Destroys the saved state at the head of the save stack."""
-		self._statestack.pop()
+		self._states.pop()
 
 	def _token(self, index=None):
 		"""Returns the token at the specified index, or an EOF token."""
@@ -993,7 +943,7 @@ class BaseFormatter(object):
 		# we've added to the output and strip out all the COMMENT and
 		# WHITESPACE tokens
 		result = [
-			token for token in self._output[self._statestack[-1][2]:]
+			token for token in self._output[self._states[-1][2]:]
 			if token.type not in (TT.COMMENT, TT.WHITESPACE)
 		]
 		self._forget_state()
@@ -1063,7 +1013,7 @@ class BaseFormatter(object):
 
 	def _expected(self, template):
 		"""Raises an error explaining a token template was expected."""
-		raise ParseExpectedOneOfError(self._tokens, self._token(), [template])
+		raise ParseExpectedOneOfError(self._source, self._token(), [template])
 
 	def _expected_sequence(self, templates):
 		"""Raises an error explaining a sequence of template tokens was expected."""
@@ -1076,11 +1026,11 @@ class BaseFormatter(object):
 			i += 1
 			while self._token(i).type in (TT.COMMENT, TT.WHITESPACE):
 				i += 1
-		raise ParseExpectedSequenceError(self._tokens, found, templates)
+		raise ParseExpectedSequenceError(self._source, found, templates)
 
 	def _expected_one_of(self, templates):
 		"""Raises an error explaining one of several template tokens was expected."""
-		raise ParseExpectedOneOfError(self._tokens, self._token(), templates)
+		raise ParseExpectedOneOfError(self._source, self._token(), templates)
 
 
 class DB2LUWFormatter(BaseFormatter):
