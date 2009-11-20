@@ -1,14 +1,5 @@
 # vim: set noet sw=4 ts=4:
 
-# XXX This is an extremely dirty hack which works around problems with relative
-# imports. This should no longer be necessary in Python 2.6 and above, when
-# absolute imports become the default (see PEP328). However, until then, this
-# fixes the problem of having a package named 'xml' in the standard library,
-# and as a plugin name.
-import sys
-if 'xml' in sys.modules:
-	del sys.modules['xml']
-
 import datetime
 
 try:

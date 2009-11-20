@@ -14,15 +14,28 @@ import os
 import sys
 import logging
 import datetime
+import imp
 import re
+import fnmatch
 import db2makedoc.db
-from fnmatch import fnmatchcase as fnmatch
 from itertools import chain, groupby, ifilter
 from db2makedoc.util import *
 from db2makedoc.tuples import (
 	ConstraintRef, IndexRef, RelationDep, RelationRef, RoutineRef, TableRef,
 	TablespaceRef, TriggerDep, TriggerRef
 )
+
+
+__all__ = [
+	'PluginError',
+	'PluginLoadError',
+	'PluginConfigurationError',
+	'Plugin',
+	'InputPlugin',
+	'OutputPlugin',
+	'get_plugins',
+	'load_plugin',
+]
 
 
 class PluginError(Exception):
@@ -104,6 +117,21 @@ class Plugin(object):
 			for (base, classes) in self.__abstracts.iteritems()
 			if classes
 		)
+
+	@classmethod
+	def description(cls, summary=False):
+		"""Retrieves the description of the plugin.
+
+		A plugin's description is stored in its classes' docstring. The first
+		line of the docstring is assumed to be the summary text. Leading
+		indentation is stripped from all lines. If the optional summary
+		parameter is True, the first line of the description is returned.
+		"""
+		s = [line.lstrip() for line in cls.__doc__.split('\n')]
+		if summary:
+			return s[0]
+		else:
+			return '\n'.join(s)
 
 	def add_option(self, name, default=None, doc=None, convert=None):
 		"""Adds a new option to the configuration directory.
@@ -952,11 +980,11 @@ class InputPlugin(Plugin):
 		result = items
 		if self.include:
 			def include_predicate(item):
-				return any(fnmatch(key(item), pattern) for pattern in self.include)
+				return any(fnmatch.fnmatchcase(key(item), pattern) for pattern in self.include)
 			result = ifilter(include_predicate, result)
 		if self.exclude:
 			def exclude_predicate(item):
-				return not any(fnmatch(key(item), pattern) for pattern in self.exclude)
+				return not any(fnmatch.fnmatchcase(key(item), pattern) for pattern in self.exclude)
 			result = ifilter(exclude_predicate, result)
 		return result
 
@@ -985,7 +1013,6 @@ class InputPlugin(Plugin):
 		#	# memory usage (memory is cheap - bandwidth ain't)
 		for row in cursor.fetchall():
 			yield row
-
 
 	@cachedproperty
 	def schemas(self):
@@ -1196,4 +1223,79 @@ class InputPlugin(Plugin):
 		result = sorted(self.indexes, key=attrgetter('tbspace', 'schema', 'name'))
 		result = groupby(result, key=attrgetter('tbspace'))
 		return dict((TablespaceRef(tbspace), list(indexes)) for (tbspace, indexes) in result)
+
+
+_plugin_root = 'db2makedoc.plugins'
+def get_plugins(root=None, name=None):
+	"""Generator returning all input and output plugins in a package.
+
+	Given a root package (root), this generator function recursively searches
+	all paths in the package for modules which contain a callable (function or
+	class definition) named InputPlugin or OutputPlugin. It yields a 2-tuple
+	containing the plugin's qualified module name (minus the plugin root's
+	name) and the plugin class itself.
+	"""
+	if root is None:
+		root = sys.modules[_plugin_root]
+	if name is None:
+		name = root.__name__
+	logging.debug('Retrieving all plugins in %s' % name)
+	path = os.path.sep.join(root.__path__)
+	files = os.listdir(path)
+	dirs = (
+		(i, True) for i in files
+		if os.path.isdir(os.path.join(path, i)) and i != 'CVS' and i != '.svn'
+	)
+	files = (
+		(i[:-3], False) for i in fnmatch.filter(files, '*.py')
+		if os.path.isfile(os.path.join(path, i)) and i != '__init__.py'
+	)
+	for (i, recurse) in chain(files, dirs):
+		mod_name = '.'.join((name, i))
+		plugin_name = mod_name[len(_plugin_root) + 1:]
+		logging.debug('Attempting to import module/package %s' % mod_name)
+		try:
+			__import__(mod_name)
+		except ImportError, e:
+			logging.debug(str(e))
+			continue
+		try:
+			module = sys.modules[mod_name]
+		except KeyError:
+			continue
+		try:
+			yield (plugin_name, module.InputPlugin)
+		except AttributeError:
+			pass
+		try:
+			yield (plugin_name, module.OutputPlugin)
+		except AttributeError:
+			pass
+		if recurse:
+			for (n, m) in get_plugins(module, mod_name):
+				yield (n, m)
+
+def load_plugin(name, root=None):
+	"""Given a name relative to the plugin root, load an input or output plugin."""
+	logging.info('Loading plugin "%s"' % name)
+	if root is None:
+		root = _plugin_root
+	mod_name = '.'.join((root, name))
+	if not mod_name in sys.modules:
+		try:
+			__import__(mod_name)
+		except ImportError, e:
+			raise PluginLoadError(e)
+	try:
+		module = sys.modules[mod_name]
+	except KeyError:
+		raise PluginLoadError('module %s imported successfully, but was not found subsequently in the global modules list' % mod_name)
+	try:
+		return module.InputPlugin
+	except AttributeError:
+		pass
+	try:
+		return module.OutputPlugin
+	except AttributeError:
+		raise PluginLoadError('unable to find an InputPlugin or OutputPlugin class in %s' % mod_name)
 
