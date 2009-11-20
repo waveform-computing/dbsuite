@@ -188,7 +188,7 @@ def namedslice(cls, obj):
 
 	Note that it doesn't matter if the target type has a different number of
 	fields to the source object. Fields which exist in the source object but
-	not the target class will simply be ommitted in the result, while fields
+	not the target class will simply be omitted in the result, while fields
 	which exist in the target class but not the source object will be None in
 	the result.
 	"""
