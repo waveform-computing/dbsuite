@@ -5,8 +5,8 @@ PYTHON=python
 PYFLAGS=
 #LYNX=lynx
 #LYNXFLAGS=-nonumbers -justify
-LYNX=elinks
-LYNXFLAGS=-no-numbering -no-references
+LYNX=links
+LYNXFLAGS=
 
 # Calculate the base names of the distribution, the location of all source,
 # documentation and executable script files
@@ -18,6 +18,7 @@ SOURCE:=$(shell \
 	$(PYTHON) $(PYFLAGS) setup.py egg_info >/dev/null 2>&1 && \
 	cat $(NAME).egg-info/SOURCES.txt)
 DOCS:=README.txt TODO.txt
+WIKI:="http://www.waveform.org.uk/trac/db2makedoc/wiki"
 
 # Calculate the name of all distribution archives / installers
 DIST_EGG=dist/$(BASE)-$(PYVER).egg
@@ -33,7 +34,7 @@ build: $(DOCS)
 install: $(DOCS)
 	$(PYTHON) $(PYFLAGS) setup.py install
 
-develop: $(DOCS) $(HOME)/bin/python tags
+develop: $(DOCS) tags
 	$(PYTHON) $(PYFLAGS) setup.py develop
 	@echo
 	@echo "Please run the following to remove any redundant hash entries:"
@@ -79,19 +80,14 @@ $(DIST_TAR): $(SOURCE) $(DOCS)
 $(DIST_ZIP): $(SOURCE) $(DOCS)
 	$(PYTHON) $(PYFLAGS) setup.py sdist --formats=zip
 
-$(HOME)/bin/python:
-	wget http://peak.telecommunity.com/dist/virtual-python.py
-	$(PYTHON) $(PYFLAGS) virtual-python.py
-	rm virtual-python.py
-
 tags: $(SOURCE)
 	ctags -R --exclude="build/*" --languages="Python"
 
 README.txt: FORCE
 	echo "Generated from the db2makedoc wiki at:" > README.txt
-	echo "http://faust.hursley.uk.ibm.com/trac/db2makedoc/wiki" >> README.txt
+	echo "$(WIKI)" >> README.txt
 	for page in Requirements Install Tutorial; do \
-		$(LYNX) $(LYNXFLAGS) -dump http://faust.hursley.uk.ibm.com/trac/db2makedoc/wiki/$$page | awk '\
+		$(LYNX) $(LYNXFLAGS) -dump $(WIKI)/$$page | awk '\
 			BEGIN {printing=0;} \
 			/^ *\*.*Last Change *$$/ {printing=1; next;} \
 			/^ *Terms of use *$$/ {printing=0;} \
@@ -100,9 +96,9 @@ README.txt: FORCE
 
 TODO.txt: FORCE
 	echo "Generated from the db2makedoc wiki at:" > TODO.txt
-	echo "http://faust.hursley.uk.ibm.com/trac/db2makedoc/wiki" >> TODO.txt
+	echo "$(WIKI)" >> TODO.txt
 	for page in KnownIssues; do \
-		$(LYNX) $(LYNXFLAGS) -dump http://faust.hursley.uk.ibm.com/trac/db2makedoc/wiki/$$page | awk '\
+		$(LYNX) $(LYNXFLAGS) -dump $(WIKI)/$$page | awk '\
 			BEGIN {printing=0;} \
 			/^ *\*.*Last Change *$$/ {printing=1; next;} \
 			/^ *Terms of use *$$/ {printing=0;} \
