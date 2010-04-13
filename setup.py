@@ -9,7 +9,7 @@ support other databases) in a variety of formats. The application is
 modular including a plugin framework for input and output."""
 
 import ez_setup
-ez_setup.use_setuptools(version='0.6c6') # install setuptools if it isn't already installed
+ez_setup.use_setuptools() # install setuptools if it isn't already installed
 
 classifiers = [
 	'Development Status :: 5 - Production/Stable',
@@ -34,6 +34,7 @@ classifiers = [
 entry_points = {
 	'console_scripts': [
 		'db2makedoc = db2makedoc.main:db2makedoc_main',
+		'db2convdoc = db2makedoc.main:db2convdoc_main',
 		'db2tidysql = db2makedoc.main:db2tidysql_main',
 	]
 }
