@@ -61,7 +61,7 @@ cleanall: clean
 
 dist: bdist sdist
 
-bdist: $(DIST_WININST) $(DIST_RPM) $(DIST_EGG)
+bdist: $(DIST_WININST) $(DIST_EGG)
 
 sdist: $(DIST_TAR) $(DIST_ZIP)
 
@@ -70,9 +70,6 @@ $(DIST_EGG): $(SOURCE) $(DOCS)
 
 $(DIST_WININST): $(SOURCE) $(DOCS)
 	$(PYTHON) $(PYFLAGS) setup.py bdist_wininst
-
-$(DIST_RPM): $(SOURCE) $(DOCS)
-	$(PYTHON) $(PYFLAGS) setup.py bdist_rpm --source-only
 
 $(DIST_TAR): $(SOURCE) $(DOCS)
 	$(PYTHON) $(PYFLAGS) setup.py sdist --formats=gztar
