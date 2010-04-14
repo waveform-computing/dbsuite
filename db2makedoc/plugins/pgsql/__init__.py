@@ -16,34 +16,114 @@ from db2makedoc.tuples import (
 )
 
 
-class InputPlugin(db2makedoc.plugins.InputPlugin):
-	"""Input plugin for IBM DB2 for Linux/UNIX/Windows.
+def connect(database=None, username=None, password=None, host=None, port=None, unix_socket=None, ssl=False):
+	"""Create a connection to the specified database.
 
-	This input plugin supports extracting documentation information from IBM
-	DB2 for Linux/UNIX/Windows version 8 or above. If the DOCCAT schema (see
-	the doccat_create.sql script in the contrib/db2/luw directory) is present,
-	it will be used to source documentation data instead of SYSCAT.
+	This utility method attempts to connect to the specified database using the
+	username and password provided. The method attempts to use a variety of
+	connection frameworks (current pg8000 or Psycopg2 PyDB2) depending on the
+	underlying platform.
+	"""
+	logging.info('Connecting to database "%s"' % database)
+	# Try the pg8000 driver
+	try:
+		from pg8000 import dbapi
+	except ImportError:
+		pass
+	else:
+		logging.info('Using pg8000 driver')
+		if unix_socket:
+			return dbapi.connect(database=database, user=username, password=password, unix_sock=unix_socket, ssl=ssl)
+		else:
+			return dbapi.connect(database=database, user=username, password=password, host=host, port=port, ssl=ssl)
+	# Try the Psycopg2 driver
+	try:
+		import psycopg2
+		import psycopg2.extensions
+	except ImportError:
+		pass
+	else:
+		logging.info('Using Psycopg2 driver')
+		# Dirty hack for using UNIX sockets: Psycopg2 doesn't allow us to
+		# specify which UNIX socket to connect to, just uses the client
+		# library's compiled in default. Meanwhile, pg8000 requires
+		# specification of the exact socket if UNIX socket connectivity is
+		# wanted. If one looks at the client library's PQconnect function UNIX
+		# socket connectivity is actually specified at the C level by passing a
+		# pathname as the host parameter so in order to make Psycopg2 act a bit
+		# like pg8000 that's what we do here as Psycopg2 doesn't actually do
+		# anything with the parameters beyond pass them onto the client lib
+		if unix_socket:
+			host = os.path.dirname(unix_socket)
+			port = None
+		ssl = {
+			False: 'prefer',
+			True:  'require',
+		}[ssl]
+		# Ensure strings are returned as unicode objects
+		conn = psycopg2.connect(database=database, user=username, password=password, host=host, port=port, ssl=ssl)
+		psycopg2.extensions.register_type(psycopg2.extensions.UNICODE, conn)
+		return conn
+	# Try the pyodbc driver
+	try:
+		import pyodbc
+	except ImportError:
+		pass
+	else:
+		logging.info('Using pyodbc driver')
+		# XXX Check whether escaping/quoting is required
+		# XXX Need a way to specify the driver name. Given that on unixODBC the
+		# driver alias is specified in odbcinst.ini
+		if username is not None:
+			return pyodbc.connect('driver=???;dsn=%s;uid=%s;pwd=%s' % (dsn, username, password))
+		else:
+			return pyodbc.connect('driver=???;dsn=%s' % dsn)
+	raise ImportError('Unable to find a suitable connection framework; please install pg8000, Psycopg2, or pyodbc')
+
+
+class InputPlugin(db2makedoc.plugins.InputPlugin):
+	"""Input plugin for PostgreSQL.
+
+	This input plugin supports extracting documentation information from
+	PostgreSQL databases.
 	"""
 
 	def __init__(self):
 		super(InputPlugin, self).__init__()
+		self.add_option('host', default='localhost',
+			doc="""The hostname of the machine hosting the PostgreSQL server""")
+		self.add_option('port', default='5432',
+			convert=lambda value: self.convert_int(value, minvalue=1, maxvalue=65535),
+			doc="""The port on which the PostgreSQL server is listening""")
+		self.add_option('unix_socket', default=None,
+			doc="""The UNIX socket to connect to (if specified a TCP/IP
+			connection will not be attempted)""")
 		self.add_option('database', default='',
-			doc="""The locally cataloged name of the database to connect to""")
+			doc="""The name of the database to connect to on the specified host/socket""")
 		self.add_option('username', default=None,
-			doc="""The username to connect with (if ommitted, an implicit
-			connection will be made as the current user)""")
+			doc="""The username to connect with""")
 		self.add_option('password', default=None,
 			doc="""The password associated with the user given by the username
-			option (mandatory if username is supplied)""")
+			option (optional; implicit authentication is attempted if not supplied)""")
+		self.add_option('ssl', default='false', convert=self.convert_bool,
+			doc="""If true, attempt SSL negotiation using PostgreSQL's "require"
+			setting""")
+		self.add_option('block_size', default='8192', convert=self.convert_int,
+			doc="""The block size being used by the PostgreSQL server, used to
+			calculate approximate sizes of objects on disk""")
 
 	def configure(self, config):
 		"""Loads the plugin configuration."""
 		super(InputPlugin, self).configure(config)
 		# Check for missing stuff
+		if not self.options['username']:
+			raise db2makedoc.plugins.PluginConfigurationError('The username option must be specified')
+		if not self.options['host'] and not self.options['unix_socket']:
+			raise db2makedoc.plugins.PluginConfigurationError('Either "host" or "unix_socket" must be specified')
+		# If database is not specified it's equal to username
 		if not self.options['database']:
-			raise db2makedoc.plugins.PluginConfigurationError('The database option must be specified')
-		if self.options['username'] is not None and self.options['password'] is None:
-			raise db2makedoc.plugins.PluginConfigurationError('If the username option is specified, the password option must also be specified')
+			self.options['database'] = self.options['username']
+		self.block_size = self.options['block_size']
 
 	def open(self):
 		"""Opens the database connection for data retrieval."""
@@ -51,68 +131,13 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		self.connection = connect(
 			self.options['database'],
 			self.options['username'],
-			self.options['password']
+			self.options['password'],
+			self.options['host'],
+			self.options['port'],
+			self.options['unix_socket'],
+			self.options['ssl']
 		)
 		self.name = self.options['database']
-		# Test whether the DOCCAT extension is installed
-		cursor = self.connection.cursor()
-		cursor.execute("""
-			SELECT COUNT(*)
-			FROM SYSCAT.SCHEMATA
-			WHERE SCHEMANAME = 'DOCCAT'
-			WITH UR""")
-		doccat = bool(cursor.fetchall()[0][0])
-		logging.info([
-			'DOCCAT extension schema not found, using SYSCAT',
-			'DOCCAT extension schema found, using DOCCAT instead of SYSCAT'
-		][doccat])
-		# Test which version of the system catalog is installed. The following
-		# progression is used to determine version:
-		#
-		# Base level (70)
-		# SYSCAT.ROUTINES introduced in v8 (80)
-		# SYSCAT.TABLES.OWNER introduced in v9 (90)
-		# SYSCAT.VARIABLES introduced in v9.5 (95)
-		cursor = self.connection.cursor()
-		schemaver = 70
-		cursor.execute("""
-			SELECT COUNT(*)
-			FROM SYSCAT.TABLES
-			WHERE TABSCHEMA = 'SYSCAT'
-			AND TABNAME = 'ROUTINES'
-			WITH UR""")
-		if bool(cursor.fetchall()[0][0]):
-			schemaver = 80
-			cursor.execute("""
-				SELECT COUNT(*)
-				FROM SYSCAT.COLUMNS
-				WHERE TABSCHEMA = 'SYSCAT'
-				AND TABNAME = 'TABLES'
-				AND COLNAME = 'OWNER'
-				WITH UR""")
-			if bool(cursor.fetchall()[0][0]):
-				schemaver = 90
-				cursor.execute("""
-					SELECT COUNT(*)
-					FROM SYSCAT.TABLES
-					WHERE TABSCHEMA = 'SYSCAT'
-					AND TABNAME = 'VARIABLES'
-					WITH UR""")
-				if bool(cursor.fetchall()[0][0]):
-					schemaver = 95
-		logging.info({
-			70: 'Detected v7 (or below) catalog layout',
-			80: 'Detected v8.2 catalog layout',
-			90: 'Detected v9.1 catalog layout',
-			95: 'Detected v9.5 (or above) catalog layout',
-		}[schemaver])
-		if schemaver < 80:
-			raise db2makedoc.plugins.PluginError('DB2 server must be v8.2 or above')
-		# Set up a generic query substitution dictionary
-		self.query_subst = {
-			'schema': ['SYSCAT', 'DOCCAT'][doccat],
-			'owner': ['DEFINER', 'OWNER'][schemaver >= 90],
-		}
 
 	def close(self):
 		"""Closes the database connection and cleans up any resources."""
@@ -140,33 +165,22 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(SCHEMANAME) AS NAME,
-				RTRIM(OWNER)      AS OWNER,
+				nsp.nspname                              AS name,
+				own.rolname                              AS owner,
 				CASE
-					WHEN SCHEMANAME LIKE 'SYS%%' THEN 'Y'
-					WHEN SCHEMANAME = 'SQLJ' THEN 'Y'
-					WHEN SCHEMANAME = 'NULLID' THEN 'Y'
-					ELSE 'N'
-				END               AS SYSTEM,
-				CHAR(CREATE_TIME) AS CREATED,
-				REMARKS           AS DESCRIPTION
+					WHEN nsp.nspname LIKE 'pg_%' THEN true
+					WHEN nsp.nspname = 'information_schema' THEN true
+					ELSE false
+				END                                      AS system,
+				CAST(NULL AS TIMESTAMP)                  AS created,
+				obj_description(nsp.oid, 'pg_namespace') AS description
 			FROM
-				%(schema)s.SCHEMATA
-			WITH UR""" % self.query_subst)
-		for (
-				name,
-				owner,
-				system,
-				created,
-				desc,
-			) in self.fetch_some(cursor):
-			yield Schema(
-				make_str(name),
-				make_str(owner),
-				make_bool(system),
-				make_datetime(created),
-				make_str(desc),
-			)
+				pg_catalog.pg_namespace nsp
+				INNER JOIN pg_catalog.pg_authid own
+					ON nsp.nspowner = own.oid
+		""")
+		for row in self.fetch_some(cursor):
+			yield Schema(*row)
 
 	def get_datatypes(self):
 		"""Retrieves the details of datatypes stored in the database.
@@ -196,50 +210,42 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(TYPESCHEMA)   AS TYPESCHEMA,
-				RTRIM(TYPENAME)     AS TYPENAME,
-				RTRIM(%(owner)s)    AS OWNER,
-				CASE METATYPE
-					WHEN 'S' THEN 'Y'
-					ELSE 'N'
-				END                 AS SYSTEM,
-				CHAR(CREATE_TIME)   AS CREATED,
-				REMARKS             AS DESCRIPTION,
-				RTRIM(SOURCESCHEMA) AS SOURCESCHEMA,
-				RTRIM(SOURCENAME)   AS SOURCENAME,
-				NULLIF(LENGTH, 0)   AS SIZE,
-				SCALE               AS SCALE
+				nst.nspname                         AS typeschema,
+				typ.typname                         AS typename,
+				own.rolname                         AS owner,
+				CASE typ.typtype
+					WHEN 'b' THEN true
+					ELSE false
+				END                                 AS system,
+				CAST(NULL AS TIMESTAMP)             AS created,
+				obj_description(typ.oid, 'pg_type') AS description,
+				false                               AS variable_size,
+				false                               AS variable_scale,
+				CASE typ.typtype
+					WHEN 'd' THEN nsb.nspname
+				END                                 AS sourceschema,
+				CASE typ.typtype
+					WHEN 'd' THEN bas.typname
+				END                                 AS sourcename,
+				CAST(NULL AS INTEGER)               AS size,
+				CAST(NULL AS INTEGER)               AS scale
 			FROM
-				%(schema)s.DATATYPES
-			WHERE INSTANTIABLE = 'Y'
-			WITH UR""" % self.query_subst)
-		for (
-				schema,
-				name,
-				owner,
-				system,
-				created,
-				desc,
-				source_schema,
-				source_name,
-				size,
-				scale,
-			) in self.fetch_some(cursor):
-			system = make_bool(system)
-			yield Datatype(
-				make_str(schema),
-				make_str(name),
-				make_str(owner),
-				system,
-				make_datetime(created),
-				make_str(desc),
-				system and not size and (name not in ('XML', 'REFERENCE')),
-				system and (name == 'DECIMAL'),
-				make_str(source_schema),
-				make_str(source_name),
-				make_int(size),
-				make_int(scale),
-			)
+				pg_catalog.pg_type typ
+				INNER JOIN pg_catalog.pg_namespace nst
+					ON typ.typnamespace = nst.oid
+				INNER JOIN pg_catalog.pg_authid own
+					ON typ.typowner = own.oid
+				LEFT OUTER JOIN pg_catalog.pg_type bas
+					ON typ.typbasetype = bas.oid
+				LEFT OUTER JOIN pg_catalog.pg_namespace nsb
+					ON bas.typnamespace = nsb.oid
+			WHERE
+				typ.typtype IN ('b', 'd', 'e')
+				AND typ.typelem = 0
+				AND typ.typisdefined
+		""")
+		for row in self.fetch_some(cursor):
+			yield Datatype(*row)
 
 	def get_tables(self):
 		"""Retrieves the details of tables stored in the database.
@@ -266,24 +272,40 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(T.TABSCHEMA)                          AS TABSCHEMA,
-				RTRIM(T.TABNAME)                            AS TABNAME,
-				RTRIM(T.%(owner)s)                          AS OWNER,
-				CHAR('N')                                   AS SYSTEM,
-				CHAR(T.CREATE_TIME)                         AS CREATED,
-				T.REMARKS                                   AS DESCRIPTION,
-				COALESCE(RTRIM(T.TBSPACE), 'NICKNAMESPACE') AS TBSPACE,
-				CHAR(T.STATS_TIME)                          AS LASTSTATS,
-				NULLIF(T.CARD, -1)                          AS CARDINALITY,
-				BIGINT(NULLIF(T.FPAGES, -1)) * TS.PAGESIZE  AS SIZE
+				nsp.nspname                                 AS tabschema,
+				cls.relname                                 AS tabname,
+				own.rolname                                 AS owner,
+				CASE
+					WHEN nsp.nspname LIKE 'pg_%' THEN true
+					WHEN nsp.nspname = 'information_schema' THEN true
+					ELSE false
+				END                                         AS system,
+				CAST(NULL AS TIMESTAMP)                     AS created,
+				obj_description(cls.oid, 'pg_class')        AS description,
+				CASE cls.reltablespace
+					WHEN 0 THEN dbs.spcname
+					ELSE tbs.spcname
+				END                                         AS tbspace,
+				CAST(NULL AS TIMESTAMP)                     AS laststats,
+				CAST(cls.reltuples AS BIGINT)               AS cardinality,
+				cls.relpages                                AS size
 			FROM
-				%(schema)s.TABLES T
-				LEFT OUTER JOIN %(schema)s.TABLESPACES TS
-					ON T.TBSPACEID = TS.TBSPACEID
+				pg_catalog.pg_class cls
+				INNER JOIN pg_catalog.pg_namespace nsp
+					ON cls.relnamespace = nsp.oid
+				INNER JOIN pg_catalog.pg_authid own
+					ON cls.relowner = own.oid
+				LEFT OUTER JOIN pg_catalog.pg_tablespace tbs
+					ON cls.reltablespace = tbs.oid
+					AND cls.reltablespace <> 0
+				INNER JOIN pg_catalog.pg_database db
+					ON db.datname = current_database()
+				INNER JOIN pg_catalog.pg_tablespace dbs
+					ON db.dattablespace = dbs.oid
 			WHERE
-				T.TYPE IN ('T', 'N')
-				AND T.STATUS <> 'X'
-			WITH UR""" % self.query_subst)
+				NOT cls.relistemp
+				AND cls.relkind = 'r'
+		""")
 		for (
 				schema,
 				name,
@@ -297,16 +319,16 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				size,
 			) in self.fetch_some(cursor):
 			yield Table(
-				make_str(schema),
-				make_str(name),
-				make_str(owner),
-				make_bool(system),
-				make_datetime(created),
-				make_str(desc),
-				make_str(tbspace),
-				make_datetime(laststats),
-				make_int(cardinality),
-				make_int(size),
+				schema,
+				name,
+				owner,
+				system,
+				created,
+				desc,
+				tbspace,
+				laststats,
+				cardinality,
+				size * self.block_size,
 			)
 
 	def get_views(self):
