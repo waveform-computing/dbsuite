@@ -354,43 +354,43 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(V.VIEWSCHEMA)   AS VIEWSCHEMA,
-				RTRIM(V.VIEWNAME)     AS VIEWNAME,
-				RTRIM(V.%(owner)s)    AS OWNER,
-				CHAR('N')             AS SYSTEM,
-				CHAR(T.CREATE_TIME)   AS CREATED,
-				T.REMARKS             AS DESCRIPTION,
-				V.READONLY            AS READONLY,
-				V.TEXT                AS SQL
+				nsp.nspname                          AS viewschema,
+				cls.relname                          AS viewname,
+				own.rolname                          AS owner,
+				CASE
+					WHEN nsp.nspname LIKE 'pg_%' THEN true
+					WHEN nsp.nspname = 'information_schema' THEN true
+					ELSE false
+				END                                  AS system,
+				CAST(NULL AS TIMESTAMP)              AS created,
+				obj_description(cls.oid, 'pg_class') AS description,
+				CASE
+					WHEN rul.ev_class IS NULL THEN true
+					ELSE false
+				END                                  AS readonly,
+				pg_get_viewdef(cls.oid, true)        AS sql
 			FROM
-				%(schema)s.TABLES T
-				INNER JOIN %(schema)s.VIEWS V
-					ON T.TABSCHEMA = V.VIEWSCHEMA
-					AND T.TABNAME = V.VIEWNAME
-					AND T.TYPE = 'V'
+				pg_catalog.pg_class cls
+				INNER JOIN pg_catalog.pg_namespace nsp
+					ON cls.relnamespace = nsp.oid
+				INNER JOIN pg_catalog.pg_authid own
+					ON cls.relowner = own.oid
+				LEFT OUTER JOIN (
+					SELECT DISTINCT
+						ev_class
+					FROM
+						pg_catalog.pg_rewrite rul
+					WHERE
+						ev_type <> '1'
+						AND ev_enabled <> 'D'
+				) AS rul
+					ON cls.oid = rul.ev_class
 			WHERE
-				V.VALID <> 'X'
-			WITH UR""" % self.query_subst)
-		for (
-				schema,
-				name,
-				owner,
-				system,
-				created,
-				desc,
-				readonly,
-				sql,
-			) in self.fetch_some(cursor):
-			yield View(
-				make_str(schema),
-				make_str(name),
-				make_str(owner),
-				make_bool(system),
-				make_datetime(created),
-				make_str(desc),
-				make_bool(readonly),
-				make_str(sql),
-			)
+				NOT relistemp
+				AND relkind = 'v'
+		""")
+		for row in self.fetch_some(cursor):
+			yield View(*row)
 
 	def get_aliases(self):
 		"""Retrieves the details of aliases stored in the database.
@@ -413,42 +413,6 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		"""
 		for row in  super(InputPlugin, self).get_aliases():
 			yield row
-		cursor = self.connection.cursor()
-		cursor.execute("""
-			SELECT
-				RTRIM(TABSCHEMA)      AS ALIASSCHEMA,
-				RTRIM(TABNAME)        AS ALIASNAME,
-				RTRIM(%(owner)s)      AS OWNER,
-				CHAR('N')             AS SYSTEM,
-				CHAR(CREATE_TIME)     AS CREATED,
-				REMARKS               AS DESCRIPTION,
-				RTRIM(BASE_TABSCHEMA) AS BASESCHEMA,
-				RTRIM(BASE_TABNAME)   AS BASETABLE
-			FROM
-				%(schema)s.TABLES
-			WHERE
-				TYPE = 'A'
-			WITH UR""" % self.query_subst)
-		for (
-				schema,
-				name,
-				owner,
-				system,
-				created,
-				desc,
-				base_schema,
-				base_table,
-			) in self.fetch_some(cursor):
-			yield Alias(
-				make_str(schema),
-				make_str(name),
-				make_str(owner),
-				make_bool(system),
-				make_datetime(created),
-				make_str(desc),
-				make_str(base_schema),
-				make_str(base_table),
-			)
 
 	def get_view_dependencies(self):
 		"""Retrieves the details of view dependencies.
@@ -467,33 +431,36 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			yield row
 		cursor = self.connection.cursor()
 		cursor.execute("""
-			SELECT
-				RTRIM(T.TABSCHEMA) AS VIEWSCHEMA,
-				RTRIM(T.TABNAME)   AS VIEWNAME,
-				RTRIM(T.BSCHEMA)   AS DEPSCHEMA,
-				RTRIM(T.BNAME)     AS DEPNAME
+			SELECT DISTINCT
+				nv.nspname   AS viewschema,
+				v.relname    AS viewname,
+				nt.nspname   AS depschema,
+				t.relname    AS depname
 			FROM
-				%(schema)s.TABDEP T
-				INNER JOIN %(schema)s.VIEWS V
-					ON T.TABSCHEMA = V.VIEWSCHEMA
-					AND T.TABNAME = V.VIEWNAME
+				pg_namespace nv
+				INNER JOIN pg_class v
+					ON v.relnamespace = nv.oid
+					AND v.relkind = 'v'
+				INNER JOIN pg_depend dv
+					ON dv.refobjid = v.oid
+					AND dv.deptype = 'i'
+					AND dv.classid = 'pg_rewrite'::regclass::oid
+					AND dv.refclassid = 'pg_class'::regclass::oid
+				INNER JOIN pg_depend dt
+					ON dt.objid = dv.objid
+					AND dt.refobjid <> dv.refobjid
+					AND dt.classid = 'pg_rewrite'::regclass::oid
+					AND dt.refclassid = 'pg_class'::regclass::oid
+				INNER JOIN pg_class t
+					ON t.oid = dt.refobjid
+					AND t.relkind IN ('r', 'v')
+				INNER JOIN pg_namespace nt
+					ON nt.oid = t.relnamespace
 			WHERE
-				T.DTYPE = 'V'
-				AND T.BTYPE IN ('A', 'N', 'T', 'V')
-				AND V.VALID <> 'X'
-			WITH UR""" % self.query_subst)
-		for (
-				schema,
-				name,
-				depschema,
-				depname,
-			) in self.fetch_some(cursor):
-			yield RelationDep(
-				make_str(schema),
-				make_str(name),
-				make_str(depschema),
-				make_str(depname),
-			)
+				pg_has_role(t.relowner, 'USAGE')
+		""")
+		for row in self.fetch_some(cursor):
+			yield RelationDep(*row)
 
 	def get_indexes(self):
 		"""Retrieves the details of indexes stored in the database.
@@ -523,35 +490,39 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(I.INDSCHEMA)                           AS INDSCHEMA,
-				RTRIM(I.INDNAME)                             AS INDNAME,
-				RTRIM(I.%(owner)s)                           AS OWNER,
-				CASE USER_DEFINED
-					WHEN 0 THEN 'Y'
-					ELSE 'N'
-				END                                          AS SYSTEM,
-				CHAR(I.CREATE_TIME)                          AS CREATED,
-				I.REMARKS                                    AS DESCRIPTION,
-				RTRIM(I.TABSCHEMA)                           AS TABSCHEMA,
-				RTRIM(I.TABNAME)                             AS TABNAME,
-				COALESCE(RTRIM(TS.TBSPACE), 'NICKNAMESPACE') AS TBSPACE,
-				CHAR(I.STATS_TIME)                           AS LASTSTATS,
-				NULLIF(I.FULLKEYCARD, -1)                    AS CARD,
-				BIGINT(NULLIF(I.NLEAF, -1)) * TS.PAGESIZE    AS SIZE,
-				CASE I.UNIQUERULE
-					WHEN 'D' THEN 'N'
-					ELSE 'Y'
-				END                                          AS UNIQUE
+				nsp.nspname                                  AS indschema,
+				cls.relname                                  AS indname,
+				own.rolname                                  AS owner,
+				CASE
+					WHEN nsp.nspname LIKE 'pg_%' THEN true
+					WHEN nsp.nspname = 'information_schema' THEN true
+					ELSE false
+				END                                          AS system,
+				CAST(NULL AS TIMESTAMP)                      AS created,
+				obj_description(cls.oid, 'pg_class')         AS description,
+				tns.nspname                                  AS tabschema,
+				tcl.relname                                  AS tabname,
+				CAST(NULL AS TIMESTAMP)                      AS laststats,
+				CAST(cls.reltuples AS BIGINT)                AS cardinality,
+				cls.relpages                                 AS size,
+				ind.indisunique                              AS unique
 			FROM
-				%(schema)s.INDEXES I
-				INNER JOIN %(schema)s.TABLES T
-					ON I.TABSCHEMA = T.TABSCHEMA
-					AND I.TABNAME = T.TABNAME
-				LEFT OUTER JOIN %(schema)s.TABLESPACES TS
-					ON I.TBSPACEID = TS.TBSPACEID
+				pg_catalog.pg_class cls
+				INNER JOIN pg_catalog.pg_namespace nsp
+					ON cls.relnamespace = nsp.oid
+				INNER JOIN pg_catalog.pg_authid own
+					ON cls.relowner = own.oid
+				INNER JOIN pg_catalog.pg_index ind
+					ON cls.oid = ind.indexrelid
+				INNER JOIN pg_catalog.pg_class tcl
+					ON ind.indrelid = tcl.oid
+				INNER JOIN pg_catalog.pg_namespace tns
+					ON tcl.relnamespace = tns.oid
 			WHERE
-				T.STATUS <> 'X'
-			WITH UR""" % self.query_subst)
+				cls.relkind = 'i'
+				AND ind.indisvalid
+				AND ind.indisready
+		""")
 		for (
 				schema,
 				name,
@@ -568,19 +539,19 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				unique,
 			) in self.fetch_some(cursor):
 			yield Index(
-				make_str(schema),
-				make_str(name),
-				make_str(owner),
-				make_bool(system),
-				make_datetime(created),
-				make_str(desc),
-				make_str(tabschema),
-				make_str(tabname),
-				make_str(tbspace),
-				make_datetime(laststats),
-				make_int(card),
-				make_int(size),
-				make_bool(unique),
+				schema,
+				name,
+				owner,
+				system,
+				created,
+				desc,
+				tabschema,
+				tabname,
+				tbspace,
+				laststats,
+				card,
+				size * self.block_size,
+				unique,
 			)
 
 	def get_index_cols(self):
@@ -607,37 +578,32 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(IC.INDSCHEMA) AS INDSCHEMA,
-				RTRIM(IC.INDNAME)   AS INDNAME,
-				RTRIM(IC.COLNAME)   AS COLNAME,
-				IC.COLORDER         AS COLORDER
+				nsp.nspname         AS indschema,
+				cls.relname         AS indname,
+				att.attname         AS colname,
+				CASE ind.indoption[att.attnum - 1]
+					WHEN 3 THEN 'D'
+					ELSE 'A'
+				END                 AS colorder
 			FROM
-				%(schema)s.INDEXCOLUSE IC
-				INNER JOIN %(schema)s.INDEXES I
-					ON IC.INDSCHEMA = I.INDSCHEMA
-					AND IC.INDNAME = I.INDNAME
-				INNER JOIN %(schema)s.TABLES T
-					ON I.TABSCHEMA = T.TABSCHEMA
-					AND I.TABNAME = T.TABNAME
+				pg_catalog.pg_class cls
+				INNER JOIN pg_catalog.pg_namespace nsp
+					ON cls.relnamespace = nsp.oid
+				INNER JOIN pg_catalog.pg_attribute att
+					ON cls.oid = att.attrelid
+				INNER JOIN pg_catalog.pg_index ind
+					ON cls.oid = ind.indexrelid
 			WHERE
-				T.STATUS <> 'X'
+				cls.relkind = 'i'
+				AND ind.indisvalid
+				AND ind.indisready
 			ORDER BY
-				IC.INDSCHEMA,
-				IC.INDNAME,
-				IC.COLSEQ
-			WITH UR""" % self.query_subst)
-		for (
-				schema,
-				name,
-				colname,
-				colorder,
-			) in self.fetch_some(cursor):
-			yield IndexCol(
-				make_str(schema),
-				make_str(name),
-				make_str(colname),
-				make_str(colorder),
-			)
+				nsp.nspname,
+				cls.relname,
+				att.attnum
+		""")
+		for row in self.fetch_some(cursor):
+			yield IndexCol(*row)
 
 	def get_relation_cols(self):
 		"""Retrieves the list of columns belonging to relations.
@@ -683,82 +649,71 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(C.TABSCHEMA)                 AS TABSCHEMA,
-				RTRIM(C.TABNAME)                   AS TABNAME,
-				RTRIM(C.COLNAME)                   AS COLNAME,
-				RTRIM(C.TYPESCHEMA)                AS TYPESCHEMA,
-				RTRIM(C.TYPENAME)                  AS TYPENAME,
-				NULLIF(C.LENGTH, 0)                AS SIZE,
-				C.SCALE                            AS SCALE,
-				-- XXX 0 is a legitimate codepage (e.g. FOR BIT DATA columns)
-				NULLIF(C.CODEPAGE, 0)              AS CODEPAGE,
-				CASE C.IDENTITY
-					WHEN 'Y' THEN 'Y'
-					ELSE 'N'
-				END                                AS IDENTITY,
-				C.NULLS                            AS NULLABLE,
-				NULLIF(NULLIF(C.COLCARD, -1), -2)  AS CARDINALITY,
-				NULLIF(C.NUMNULLS, -1)             AS NULLCARD,
-				CASE C.GENERATED
-					WHEN 'A' THEN 'A'
-					WHEN 'D' THEN 'D'
-					ELSE 'N'
-				END                                AS GENERATED,
-				COALESCE(CASE C.GENERATED
-					WHEN '' THEN C.DEFAULT
-					ELSE C.TEXT
-				END, '')                           AS DEFAULT,
-				C.REMARKS                          AS DESCRIPTION
+				nsp.nspname                          AS tabschema,
+				cls.relname                          AS tabname,
+				att.attname                          AS colname,
+				tns.nspname                          AS typeschema,
+				typ.typname                          AS typename,
+				CASE att.atttypid
+					WHEN 1042 THEN att.atttypmod - 4 /* char */
+					WHEN 1043 THEN att.atttypmod - 4 /* varchar */
+					WHEN 1560 THEN att.atttypmod     /* bit */
+					WHEN 1562 THEN att.atttypmod     /* varbit */
+					WHEN 21   THEN 2                 /* int2 */
+					WHEN 23   THEN 4                 /* int4 */
+					WHEN 20   THEN 8                 /* int8 */
+					WHEN 1700 THEN ((NULLIF(att.atttypmod, -1) - 4) >> 16) & 65535 /* numeric */
+					WHEN 700  THEN 4                 /* float4 */
+					WHEN 701  THEN 8                 /* float8 */
+				END                                  AS size,
+				CASE att.atttypid
+					WHEN 1700 THEN (NULLIF(att.atttypmod, -1) - 4) & 65535
+				END                                  AS scale,
+				CASE att.atttypid
+					WHEN 1042 THEN pg_encoding_to_char(db.encoding)
+					WHEN 1043 THEN pg_encoding_to_char(db.encoding)
+				END                                  AS codepage,
+				false                                AS identity,
+				not att.attnotnull                   AS nullable,
+				CASE
+					WHEN stt.n_distinct > 0 THEN stt.n_distinct
+					WHEN stt.n_distinct < 0 THEN -stt.n_distinct * cls.reltuples
+				END                                  AS cardinality,
+				stt.null_frac * cls.reltuples        AS nullcard,
+				'N'                                  AS generated,
+				pg_get_expr(def.adbin, cls.oid)      AS default,
+				col_description(cls.oid, att.attnum) AS description
 			FROM
-				%(schema)s.COLUMNS C
-				INNER JOIN %(schema)s.TABLES T
-					ON C.TABSCHEMA = T.TABSCHEMA
-					AND C.TABNAME = T.TABNAME
+				pg_catalog.pg_attribute att
+				INNER JOIN pg_catalog.pg_class cls
+					ON att.attrelid = cls.oid
+				INNER JOIN pg_catalog.pg_namespace nsp
+					ON nsp.oid = cls.relnamespace
+				INNER JOIN pg_catalog.pg_type typ
+					ON att.atttypid = typ.oid
+				INNER JOIN pg_catalog.pg_namespace tns
+					ON typ.typnamespace = tns.oid
+				LEFT OUTER JOIN pg_catalog.pg_attrdef def
+					ON att.attrelid = def.adrelid
+					AND att.attnum = def.adnum
+				INNER JOIN pg_catalog.pg_stats stt
+					ON nsp.nspname = stt.schemaname
+					AND cls.relname = stt.tablename
+					AND att.attname = stt.attname
+				INNER JOIN pg_catalog.pg_database db
+					ON db.datname = current_database()
 			WHERE
-				C.HIDDEN <> 'S'
-				AND T.TYPE IN ('A', 'N', 'T', 'V')
-				AND T.STATUS <> 'X'
+				NOT att.attisdropped
+				AND att.attnum > 0
+				AND cls.relkind IN ('r', 'v')
+				AND NOT pg_is_other_temp_schema(nsp.oid)
 			ORDER BY
-				C.TABSCHEMA,
-				C.TABNAME,
-				C.COLNO
-			WITH UR""" % self.query_subst)
-		for (
-				schema,
-				name,
-				colname,
-				typeschema,
-				typename,
-				size,
-				scale,
-				codepage,
-				identity,
-				nullable,
-				cardinality,
-				nullcard,
-				generated,
-				default,
-				desc,
-			) in self.fetch_some(cursor):
-			if generated != 'N':
-				default = re.sub(r'^\s*AS\s*', '', str(default))
-			yield RelationCol(
-				make_str(schema),
-				make_str(name),
-				make_str(colname),
-				make_str(typeschema),
-				make_str(typename),
-				make_int(size),
-				make_int(scale),
-				make_int(codepage),
-				make_bool(identity),
-				make_bool(nullable),
-				make_int(cardinality),
-				make_int(nullcard),
-				make_str(generated),
-				make_str(default),
-				make_str(desc),
-			)
+				nsp.nspname,
+				cls.relname,
+				att.attnum
+		""")
+		for row in self.fetch_some(cursor):
+			yield RelationCol(*row)
 
 	def get_unique_keys(self):
 		"""Retrieves the details of unique keys stored in the database.
