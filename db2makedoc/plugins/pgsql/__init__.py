@@ -108,9 +108,6 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		self.add_option('ssl', default='false', convert=self.convert_bool,
 			doc="""If true, attempt SSL negotiation using PostgreSQL's "require"
 			setting""")
-		self.add_option('block_size', default='8192', convert=self.convert_int,
-			doc="""The block size being used by the PostgreSQL server, used to
-			calculate approximate sizes of objects on disk""")
 
 	def configure(self, config):
 		"""Loads the plugin configuration."""
@@ -123,7 +120,6 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		# If database is not specified it's equal to username
 		if not self.options['database']:
 			self.options['database'] = self.options['username']
-		self.block_size = self.options['block_size']
 
 	def open(self):
 		"""Opens the database connection for data retrieval."""
@@ -178,6 +174,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				pg_catalog.pg_namespace nsp
 				INNER JOIN pg_catalog.pg_authid own
 					ON nsp.nspowner = own.oid
+			WHERE
+				NOT pg_is_other_temp_schema(nsp.oid)
 		""")
 		for row in self.fetch_some(cursor):
 			yield Schema(*row)
@@ -243,6 +241,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				typ.typtype IN ('b', 'd', 'e')
 				AND typ.typelem = 0
 				AND typ.typisdefined
+				AND NOT pg_is_other_temp_schema(nst.oid)
 		""")
 		for row in self.fetch_some(cursor):
 			yield Datatype(*row)
@@ -288,7 +287,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				END                                         AS tbspace,
 				CAST(NULL AS TIMESTAMP)                     AS laststats,
 				CAST(cls.reltuples AS BIGINT)               AS cardinality,
-				cls.relpages                                AS size
+				pg_relation_size(cls.oid)                   AS size
 			FROM
 				pg_catalog.pg_class cls
 				INNER JOIN pg_catalog.pg_namespace nsp
@@ -305,31 +304,10 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			WHERE
 				NOT cls.relistemp
 				AND cls.relkind = 'r'
+				AND NOT pg_is_other_temp_schema(nsp.oid)
 		""")
-		for (
-				schema,
-				name,
-				owner,
-				system,
-				created,
-				desc,
-				tbspace,
-				laststats,
-				cardinality,
-				size,
-			) in self.fetch_some(cursor):
-			yield Table(
-				schema,
-				name,
-				owner,
-				system,
-				created,
-				desc,
-				tbspace,
-				laststats,
-				cardinality,
-				size * self.block_size,
-			)
+		for row in self.fetch_some(cursor):
+			yield Table(*row)
 
 	def get_views(self):
 		"""Retrieves the details of views stored in the database.
@@ -388,6 +366,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			WHERE
 				NOT relistemp
 				AND relkind = 'v'
+				AND NOT pg_is_other_temp_schema(nsp.oid)
 		""")
 		for row in self.fetch_some(cursor):
 			yield View(*row)
@@ -437,27 +416,28 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				nt.nspname   AS depschema,
 				t.relname    AS depname
 			FROM
-				pg_namespace nv
-				INNER JOIN pg_class v
+				pg_class v
+				INNER JOIN pg_namespace nv
 					ON v.relnamespace = nv.oid
-					AND v.relkind = 'v'
+				INNER JOIN pg_class t
+					ON t.oid = dt.refobjid
+				INNER JOIN pg_namespace nt
+					ON nt.oid = t.relnamespace
 				INNER JOIN pg_depend dv
 					ON dv.refobjid = v.oid
 					AND dv.deptype = 'i'
-					AND dv.classid = 'pg_rewrite'::regclass::oid
-					AND dv.refclassid = 'pg_class'::regclass::oid
+					AND dv.classid = 'pg_catalog.pg_rewrite'::regclass::oid
+					AND dv.refclassid = 'pg_catalog.pg_class'::regclass::oid
 				INNER JOIN pg_depend dt
 					ON dt.objid = dv.objid
 					AND dt.refobjid <> dv.refobjid
-					AND dt.classid = 'pg_rewrite'::regclass::oid
-					AND dt.refclassid = 'pg_class'::regclass::oid
-				INNER JOIN pg_class t
-					ON t.oid = dt.refobjid
-					AND t.relkind IN ('r', 'v')
-				INNER JOIN pg_namespace nt
-					ON nt.oid = t.relnamespace
+					AND dt.classid = 'pg_catalog.pg_rewrite'::regclass::oid
+					AND dt.refclassid = 'pg_catalog.pg_class'::regclass::oid
 			WHERE
-				pg_has_role(t.relowner, 'USAGE')
+				v.relkind = 'v'
+				AND t.relkind IN ('r', 'v')
+				AND NOT pg_is_other_temp_schema(nv.oid)
+				AND NOT pg_is_other_temp_schema(nt.oid)
 		""")
 		for row in self.fetch_some(cursor):
 			yield RelationDep(*row)
@@ -504,7 +484,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				tcl.relname                                  AS tabname,
 				CAST(NULL AS TIMESTAMP)                      AS laststats,
 				CAST(cls.reltuples AS BIGINT)                AS cardinality,
-				cls.relpages                                 AS size,
+				pg_relation_size(cls.oid)                    AS size,
 				ind.indisunique                              AS unique
 			FROM
 				pg_catalog.pg_class cls
@@ -522,37 +502,10 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 				cls.relkind = 'i'
 				AND ind.indisvalid
 				AND ind.indisready
+				AND NOT pg_is_other_temp_schema(tns.oid)
 		""")
-		for (
-				schema,
-				name,
-				owner,
-				system,
-				created,
-				desc,
-				tabschema,
-				tabname,
-				tbspace,
-				laststats,
-				card,
-				size,
-				unique,
-			) in self.fetch_some(cursor):
-			yield Index(
-				schema,
-				name,
-				owner,
-				system,
-				created,
-				desc,
-				tabschema,
-				tabname,
-				tbspace,
-				laststats,
-				card,
-				size * self.block_size,
-				unique,
-			)
+		for row in self.fetch_some(cursor):
+			yield Index(*row)
 
 	def get_index_cols(self):
 		"""Retrieves the list of columns belonging to indexes.
@@ -593,10 +546,13 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 					ON cls.oid = att.attrelid
 				INNER JOIN pg_catalog.pg_index ind
 					ON cls.oid = ind.indexrelid
+				INNER JOIN pg_catalog.pg_class tcl
+					ON ind.indrelid = tcl.oid
 			WHERE
 				cls.relkind = 'i'
 				AND ind.indisvalid
 				AND ind.indisready
+				AND NOT pg_is_other_temp_schema(tcl.relnamespace)
 			ORDER BY
 				nsp.nspname,
 				cls.relname,
@@ -738,22 +694,34 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(TABSCHEMA)        AS TABSCHEMA,
-				RTRIM(TABNAME)          AS TABNAME,
-				RTRIM(CONSTNAME)        AS KEYNAME,
-				RTRIM(%(owner)s)        AS OWNER,
-				CHAR('N')               AS SYSTEM,
-				CAST(NULL AS TIMESTAMP) AS CREATED,
-				REMARKS                 AS DESCRIPTION,
-				CASE TYPE
-					WHEN 'P' THEN 'Y'
-					ELSE 'N'
-				END                     AS PRIMARY
+				nsp.nspname                               AS tabname,
+				cls.relname                               AS tabname,
+				con.conname                               AS keyname,
+				own.rolname                               AS owner,
+				CASE
+					WHEN nsp.nspname LIKE 'pg_%' THEN true
+					WHEN nsp.nspname = 'information_schema' THEN true
+					ELSE false
+				END                                       AS system,
+				CAST(NULL AS TIMESTAMP)                   AS created,
+				obj_description(con.oid, 'pg_constraint') AS description,
+				CASE contype
+					WHEN 'p' THEN true
+					ELSE false
+				END                                       AS primary
 			FROM
-				%(schema)s.TABCONST
+				pg_catalog.pg_constraint con
+				INNER JOIN pg_catalog.pg_class cls
+					ON con.conrelid = cls.oid
+				INNER JOIN pg_catalog.pg_namespace nsp
+					ON cls.relnamespace = nsp.oid
+				INNER JOIN pg_catalog.pg_authid own
+					ON cls.relowner = own.oid
 			WHERE
-				TYPE IN ('U', 'P')
-			WITH UR""" % self.query_subst)
+				cls.relkind = 'r'
+				AND con.contype IN ('p', 'u')
+				AND NOT pg_is_other_temp_schema(nsp.oid)
+		""")
 		for (
 				schema,
 				name,
@@ -792,30 +760,37 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(TABSCHEMA) AS TABSCHEMA,
-				RTRIM(TABNAME)   AS TABNAME,
-				RTRIM(CONSTNAME) AS KEYNAME,
-				RTRIM(COLNAME)   AS COLNAME
+				nsp.nspname      AS tabschema,
+				cls.relname      AS tabname,
+				con.conname      AS keyname,
+				att.attname      AS colname
 			FROM
-				%(schema)s.KEYCOLUSE
+				(
+					SELECT
+						generate_subscripts(c.conkey, 1) AS i, c.*
+					FROM
+						pg_catalog.pg_constraint c
+				) AS con
+				INNER JOIN pg_catalog.pg_class cls
+					ON con.conrelid = cls.oid
+				INNER JOIN pg_catalog.pg_namespace nsp
+					ON cls.relnamespace = nsp.oid
+				INNER JOIN pg_catalog.pg_attribute att
+					ON att.attrelid = cls.oid
+					AND att.attnum = con.conkey[con.i]
+			WHERE
+				con.conrelid <> 0
+				AND cls.relkind = 'r'
+				AND con.contype IN ('p', 'u')
+				AND NOT pg_is_other_temp_schema(nsp.oid)
 			ORDER BY
-				TABSCHEMA,
-				TABNAME,
-				CONSTNAME,
-				COLSEQ
-			WITH UR""" % self.query_subst)
-		for (
-				schema,
-				name,
-				keyname,
-				colname
-			) in self.fetch_some(cursor):
-			yield UniqueKeyCol(
-				make_str(schema),
-				make_str(name),
-				make_str(keyname),
-				make_str(colname),
-			)
+				nsp.nspname,
+				cls.relname,
+				con.conname,
+				con.i
+		""")
+		for row in self.fetch_some(cursor):
+			yield UniqueKeyCol(*row)
 
 	def get_foreign_keys(self):
 		"""Retrieves the details of foreign keys stored in the database.
