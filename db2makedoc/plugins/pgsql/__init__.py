@@ -813,11 +813,13 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		                     'A' = No action
 		                     'C' = Cascade
 		                     'N' = Set NULL
+							 'D' = Set DEFAULT
 		                     'R' = Restrict
 		update_rule       -- The action to take on update of a parent key:
 		                     'A' = No action
 		                     'C' = Cascade
 		                     'N' = Set NULL
+							 'D' = Set DEFAULT
 		                     'R' = Restrict
 
 		* Optional (can be None)
@@ -827,54 +829,47 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(T.TABSCHEMA)    AS TABSCHEMA,
-				RTRIM(T.TABNAME)      AS TABNAME,
-				RTRIM(T.CONSTNAME)    AS KEYNAME,
-				RTRIM(T.%(owner)s)    AS OWNER,
-				CHAR('N')             AS SYSTEM,
-				CHAR(R.CREATE_TIME)   AS CREATED,
-				T.REMARKS             AS DESCRIPTION,
-				RTRIM(R.REFTABSCHEMA) AS REFTABSCHEMA,
-				RTRIM(R.REFTABNAME)   AS REFTABNAME,
-				RTRIM(R.REFKEYNAME)   AS REFKEYNAME,
-				R.DELETERULE          AS DELETERULE,
-				R.UPDATERULE          AS UPDATERULE
+				nsp.nspname                               AS tabname,
+				cls.relname                               AS tabname,
+				con.conname                               AS keyname,
+				own.rolname                               AS owner,
+				CASE
+					WHEN nsp.nspname LIKE 'pg_%' THEN true
+					WHEN nsp.nspname = 'information_schema' THEN true
+					ELSE false
+				END                                       AS system,
+				CAST(NULL AS TIMESTAMP)                   AS created,
+				obj_description(con.oid, 'pg_constraint') AS description,
+				rnsp.nspname                              AS reftabschema,
+				rcls.relname                              AS reftabname,
+				rcon.conname                              AS refkeyname,
+				con.confdeltype                           AS deleterule,
+				con.confupdtype                           AS updaterule
 			FROM
-				%(schema)s.TABCONST T
-				INNER JOIN %(schema)s.REFERENCES R
-					ON T.TABSCHEMA = R.TABSCHEMA
-					AND T.TABNAME = R.TABNAME
-					AND T.CONSTNAME = R.CONSTNAME
-					AND T.TYPE = 'F'
-			WITH UR""" % self.query_subst)
-		for (
-				schema,
-				name,
-				keyname,
-				owner,
-				system,
-				created,
-				desc,
-				refschema,
-				refname,
-				refkeyname,
-				deleterule,
-				updaterule,
-			) in self.fetch_some(cursor):
-			yield ForeignKey(
-				make_str(schema),
-				make_str(name),
-				make_str(keyname),
-				make_str(owner),
-				make_bool(system),
-				make_datetime(created),
-				make_str(desc),
-				make_str(refschema),
-				make_str(refname),
-				make_str(refkeyname),
-				make_str(deleterule),
-				make_str(updaterule),
-			)
+				pg_catalog.pg_constraint con
+				INNER JOIN pg_catalog.pg_class cls
+					ON con.conrelid = cls.oid
+				INNER JOIN pg_catalog.pg_namespace nsp
+					ON cls.relnamespace = nsp.oid
+				INNER JOIN pg_catalog.pg_authid own
+					ON cls.relowner = own.oid
+				INNER JOIN pg_catalog.pg_constraint rcon
+					ON con.confrelid = rcon.conrelid
+					AND con.confkey @> rcon.conkey
+					AND con.confkey <@ rcon.conkey
+				INNER JOIN pg_catalog.pg_class rcls
+					ON rcon.conrelid = rcls.oid
+				INNER JOIN pg_catalog.pg_namespace rnsp
+					ON rcls.relnamespace = rnsp.oid
+			WHERE
+				cls.relkind = 'r'
+				AND rcls.relkind = 'r'
+				AND con.contype = 'f'
+				AND NOT pg_is_other_temp_schema(nsp.oid)
+				AND NOT pg_is_other_temp_schema(rnsp.oid)
+		""")
+		for row in self.fetch_some(cursor):
+			yield ForeignKey(*row)
 
 	def get_foreign_key_cols(self):
 		"""Retrieves the list of columns belonging to foreign keys.
@@ -895,43 +890,47 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(R.TABSCHEMA) AS TABSCHEMA,
-				RTRIM(R.TABNAME)   AS TABNAME,
-				RTRIM(R.CONSTNAME) AS KEYNAME,
-				RTRIM(KF.COLNAME)  AS COLNAME,
-				RTRIM(KP.COLNAME)  AS REFCOLNAME
+				nsp.nspname      AS tabschema,
+				cls.relname      AS tabname,
+				con.conname      AS keyname,
+				att.attname      AS colname,
+				ratt.attname     AS refcolname
 			FROM
-				%(schema)s.REFERENCES R
-				INNER JOIN %(schema)s.KEYCOLUSE KF
-					ON R.TABSCHEMA = KF.TABSCHEMA
-					AND R.TABNAME = KF.TABNAME
-					AND R.CONSTNAME = KF.CONSTNAME
-				INNER JOIN %(schema)s.KEYCOLUSE KP
-					ON R.REFTABSCHEMA = KP.TABSCHEMA
-					AND R.REFTABNAME = KP.TABNAME
-					AND R.REFKEYNAME = KP.CONSTNAME
+				(
+					SELECT
+						generate_subscripts(c.conkey, 1) AS i, c.*
+					FROM
+						pg_catalog.pg_constraint c
+				) AS con
+				INNER JOIN pg_catalog.pg_class cls
+					ON con.conrelid = cls.oid
+				INNER JOIN pg_catalog.pg_namespace nsp
+					ON cls.relnamespace = nsp.oid
+				INNER JOIN pg_catalog.pg_attribute att
+					ON att.attrelid = cls.oid
+					AND att.attnum = con.conkey[con.i]
+				INNER JOIN pg_catalog.pg_class rcls
+					ON con.confrelid = rcls.oid
+				INNER JOIN pg_catalog.pg_namespace rnsp
+					ON rcls.relnamespace = rnsp.oid
+				INNER JOIN pg_catalog.pg_attribute ratt
+					ON ratt.attrelid = rcls.oid
+					AND ratt.attnum = con.confkey[con.i]
 			WHERE
-				KF.COLSEQ = KP.COLSEQ
+				con.conrelid <> 0
+				AND cls.relkind = 'r'
+				AND rcls.relkind = 'r'
+				AND con.contype = 'f'
+				AND NOT pg_is_other_temp_schema(nsp.oid)
+				AND NOT pg_is_other_temp_schema(rnsp.oid)
 			ORDER BY
-				R.TABSCHEMA,
-				R.TABNAME,
-				R.CONSTNAME,
-				KF.COLSEQ
-			WITH UR""" % self.query_subst)
-		for (
-				schema,
-				name,
-				keyname,
-				colname,
-				refcolname
-			) in self.fetch_some(cursor):
-			yield ForeignKeyCol(
-				make_str(schema),
-				make_str(name),
-				make_str(keyname),
-				make_str(colname),
-				make_str(refcolname),
-			)
+				nsp.nspname,
+				cls.relname,
+				con.conname,
+				con.i
+		""")
+		for row in self.fetch_some(cursor):
+			yield ForeignKeyCol(*row)
 
 	def get_checks(self):
 		"""Retrieves the details of checks stored in the database.
@@ -954,47 +953,37 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		for row in super(InputPlugin, self).get_checks():
 			yield row
 		cursor = self.connection.cursor()
-		cursor.execute("""
+		cursor.execute(r"""
 			SELECT
-				RTRIM(T.TABSCHEMA)    AS TABSCHEMA,
-				RTRIM(T.TABNAME)      AS TABNAME,
-				RTRIM(T.CONSTNAME)    AS CHECKNAME,
-				RTRIM(T.%(owner)s)    AS OWNER,
+				nsp.nspname                               AS tabname,
+				cls.relname                               AS tabname,
+				con.conname                               AS checkname,
+				own.rolname                               AS owner,
 				CASE
-					WHEN C.TYPE IN ('A', 'S') THEN 'Y'
-					ELSE 'N'
-				END                   AS SYSTEM,
-				CHAR(C.CREATE_TIME)   AS CREATED,
-				T.REMARKS             AS DESCRIPTION,
-				C.TEXT                AS SQL
+					WHEN nsp.nspname LIKE 'pg_%' THEN true
+					WHEN nsp.nspname = 'information_schema' THEN true
+					ELSE false
+				END                                       AS system,
+				CAST(NULL AS TIMESTAMP)                   AS created,
+				obj_description(con.oid, 'pg_constraint') AS description,
+				regexp_replace(
+					pg_get_constraintdef(con.oid),
+					E'^CHECK\\s*\\((.*)\\)$', E'\\1')     AS sql
 			FROM
-				%(schema)s.TABCONST T
-				INNER JOIN %(schema)s.CHECKS C
-					ON T.TABSCHEMA = C.TABSCHEMA
-					AND T.TABNAME = C.TABNAME
-					AND T.CONSTNAME = C.CONSTNAME
-					AND T.TYPE = 'K'
-			WITH UR""" % self.query_subst)
-		for (
-				schema,
-				name,
-				checkname,
-				owner,
-				system,
-				created,
-				desc,
-				sql,
-			) in self.fetch_some(cursor):
-			yield Check(
-				make_str(schema),
-				make_str(name),
-				make_str(checkname),
-				make_str(owner),
-				make_bool(system),
-				make_datetime(created),
-				make_str(desc),
-				make_str(sql),
-			)
+				pg_catalog.pg_constraint con
+				INNER JOIN pg_catalog.pg_class cls
+					ON con.conrelid = cls.oid
+				INNER JOIN pg_catalog.pg_namespace nsp
+					ON cls.relnamespace = nsp.oid
+				INNER JOIN pg_catalog.pg_authid own
+					ON cls.relowner = own.oid
+			WHERE
+				cls.relkind = 'r'
+				AND con.contype = 'c'
+				AND NOT pg_is_other_temp_schema(nsp.oid)
+		""")
+		for row in self.fetch_some(cursor):
+			yield Check(*row)
 
 	def get_check_cols(self):
 		"""Retrieves the list of columns belonging to checks.
@@ -1013,25 +1002,32 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(TABSCHEMA) AS TABSCHEMA,
-				RTRIM(TABNAME)   AS TABNAME,
-				RTRIM(CONSTNAME) AS CHECKNAME,
-				RTRIM(COLNAME)   AS COLNAME
+				nsp.nspname      AS tabschema,
+				cls.relname      AS tabname,
+				con.conname      AS keyname,
+				att.attname      AS colname
 			FROM
-				%(schema)s.COLCHECKS
-			WITH UR""" % self.query_subst)
-		for (
-				schema,
-				name,
-				chkname,
-				colname
-			) in self.fetch_some(cursor):
-			yield CheckCol(
-				make_str(schema),
-				make_str(name),
-				make_str(chkname),
-				make_str(colname),
-			)
+				(
+					SELECT
+						generate_subscripts(c.conkey, 1) AS i, c.*
+					FROM
+						pg_catalog.pg_constraint c
+				) AS con
+				INNER JOIN pg_catalog.pg_class cls
+					ON con.conrelid = cls.oid
+				INNER JOIN pg_catalog.pg_namespace nsp
+					ON cls.relnamespace = nsp.oid
+				INNER JOIN pg_catalog.pg_attribute att
+					ON att.attrelid = cls.oid
+					AND att.attnum = con.conkey[con.i]
+			WHERE
+				con.conrelid <> 0
+				AND cls.relkind = 'r'
+				AND con.contype = 'c'
+				AND NOT pg_is_other_temp_schema(nsp.oid)
+		""")
+		for row in self.fetch_some(cursor):
+			yield CheckCol(*row)
 
 	def get_functions(self):
 		"""Retrieves the details of functions stored in the database.
@@ -1069,58 +1065,50 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(ROUTINESCHEMA)         AS FUNCSCHEMA,
-				RTRIM(SPECIFICNAME)          AS FUNCSPECNAME,
-				RTRIM(ROUTINENAME)           AS FUNCNAME,
-				RTRIM(%(owner)s)             AS OWNER,
+				nsp.nspname                         AS funcschema,
+				pro.proname || pro.oid              AS funcspecname,
+				pro.proname                         AS funcname,
+				own.rolname                         AS owner,
 				CASE
-					WHEN ORIGIN IN ('B', 'S', 'T') THEN 'Y'
-					ELSE 'N'
-				END                          AS SYSTEM,
-				CHAR(CREATE_TIME)            AS CREATED,
-				REMARKS                      AS DESCRIPTION,
-				DETERMINISTIC                AS DETERMINISTIC,
-				EXTERNAL_ACTION              AS EXTACTION,
-				NULLCALL                     AS NULLCALL,
-				NULLIF(SQL_DATA_ACCESS, ' ') AS ACCESS,
-				TEXT                         AS SQL,
-				FUNCTIONTYPE                 AS FUNCTYPE
+					WHEN nsp.nspname LIKE 'pg_%' THEN true
+					WHEN nsp.nspname = 'information_schema' THEN true
+					ELSE false
+				END                                 AS system,
+				CAST(NULL AS TIMESTAMP)             AS created,
+				obj_description(pro.oid, 'pg_proc') AS description,
+				CASE pro.provolatile
+					WHEN 'v' THEN false
+					ELSE true
+				END                                 AS deterministic,
+				CASE pro.provolatile
+					WHEN 'v' then true
+					ELSE false
+				END                                 AS extaction,
+				pro.proisstrict                     AS nullcall,
+				'M'                                 AS access,
+				CASE pro.proisagg
+					WHEN true THEN NULL
+					ELSE pg_get_functiondef(pro.oid)
+				END                                 AS sql,
+				CASE pro.proretset
+					WHEN true THEN 'T'
+					ELSE
+						CASE pro.proisagg
+							WHEN true THEN 'C'
+							ELSE 'S'
+						END
+				END                                 AS functype
 			FROM
-				%(schema)s.ROUTINES
+				pg_catalog.pg_proc pro
+				INNER JOIN pg_catalog.pg_namespace nsp
+					ON pro.pronamespace = nsp.oid
+				INNER JOIN pg_catalog.pg_authid own
+					ON pro.proowner = own.oid
 			WHERE
-				ROUTINETYPE = 'F'
-				AND VALID <> 'X'
-			WITH UR""" % self.query_subst)
-		for (
-				schema,
-				specname,
-				name,
-				owner,
-				system,
-				created,
-				desc,
-				deterministic,
-				extaction,
-				nullcall,
-				access,
-				sql,
-				functype,
-			) in self.fetch_some(cursor):
-			yield Function(
-				make_str(schema),
-				make_str(specname),
-				make_str(name),
-				make_str(owner),
-				make_bool(system),
-				make_datetime(created),
-				make_str(desc),
-				make_bool(deterministic),
-				make_bool(extaction, true_value='E'),
-				make_bool(nullcall),
-				make_str(access),
-				make_str(sql),
-				make_str(functype),
-			)
+				NOT pg_is_other_temp_schema(nsp.oid)
+		""")
+		for row in self.fetch_some(cursor):
+			yield Function(*row)
 
 	def get_procedures(self):
 		"""Retrieves the details of stored procedures in the database.
@@ -1150,58 +1138,8 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		"""
 		for row in super(InputPlugin, self).get_procedures():
 			yield row
-		cursor = self.connection.cursor()
-		cursor.execute("""
-			SELECT
-				RTRIM(ROUTINESCHEMA)         AS PROCSCHEMA,
-				RTRIM(SPECIFICNAME)          AS PROCSPECNAME,
-				RTRIM(ROUTINENAME)           AS PROCNAME,
-				RTRIM(%(owner)s)             AS OWNER,
-				CASE
-					WHEN ORIGIN IN ('B', 'S', 'T') THEN 'Y'
-					ELSE 'N'
-				END                          AS SYSTEM,
-				CHAR(CREATE_TIME)            AS CREATED,
-				REMARKS                      AS DESCRIPTION,
-				DETERMINISTIC                AS DETERMINISTIC,
-				EXTERNAL_ACTION              AS EXTACTION,
-				NULLCALL                     AS NULLCALL,
-				NULLIF(SQL_DATA_ACCESS, ' ') AS ACCESS,
-				TEXT                         AS SQL
-			FROM
-				%(schema)s.ROUTINES
-			WHERE
-				ROUTINETYPE = 'P'
-				AND VALID <> 'X'
-			WITH UR""" % self.query_subst)
-		for (
-				schema,
-				specname,
-				name,
-				owner,
-				system,
-				created,
-				desc,
-				deterministic,
-				extaction,
-				nullcall,
-				access,
-				sql
-			) in self.fetch_some(cursor):
-			yield Procedure(
-				make_str(schema),
-				make_str(specname),
-				make_str(name),
-				make_str(owner),
-				make_bool(system),
-				make_datetime(created),
-				make_str(desc),
-				make_bool(deterministic),
-				make_bool(extaction, true_value='E'),
-				make_bool(nullcall),
-				make_str(access),
-				make_str(sql),
-			)
+		# PostgreSQL doesn't distinguish between functions and procedures.
+		# Easier to treat all routines as functions for our purposes
 
 	def get_routine_params(self):
 		"""Retrieves the list of parameters belonging to routines.
@@ -1225,6 +1163,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		direction        -- 'I' = Input parameter
 		                    'O' = Output parameter
 		                    'B' = Input & output parameter
+							'V' = Variadic parameter
 		                    'R' = Return value/column
 		description*     -- Descriptive text
 
@@ -1245,59 +1184,69 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(P.ROUTINESCHEMA)          AS ROUTINESCHEMA,
-				RTRIM(P.SPECIFICNAME)           AS ROUTINESPECNAME,
-				RTRIM(COALESCE(P.PARMNAME, '')) AS PARMNAME,
-				RTRIM(P.TYPESCHEMA)             AS TYPESCHEMA,
-				RTRIM(P.TYPENAME)               AS TYPENAME,
-				NULLIF(P.LENGTH, 0)             AS SIZE,
-				P.SCALE                         AS SCALE,
-				-- XXX 0 is a legitimate codepage (e.g. FOR BIT DATA types)
-				NULLIF(P.CODEPAGE, 0)           AS CODEPAGE,
-				CASE P.ROWTYPE
-					WHEN ' ' THEN 'I'
-					WHEN 'P' THEN 'I'
-					WHEN 'C' THEN 'R'
-					ELSE P.ROWTYPE
-				END                             AS DIRECTION,
-				P.REMARKS                       AS DESCRIPTION
+				nsp.nspname                     AS routineschema,
+				pro.proname || pro.oid          AS routinespecname,
+				COALESCE(NULLIF(pro.proargnames[pro.i], ''), 'p' || pro.i) AS parmname,
+				tns.nspname                     AS typeschema,
+				typ.typname                     AS typename,
+				CAST(NULL AS INTEGER)           AS size,
+				CAST(NULL AS INTEGER)           AS scale,
+				CASE pro.proallargtypes[pro.i]
+					WHEN 1042 THEN pg_encoding_to_char(db.encoding)
+					WHEN 1043 THEN pg_encoding_to_char(db.encoding)
+				END                             AS codepage,
+				UPPER(
+					CASE pro.proargmodes[pro.i]
+						WHEN 't' THEN 'o'
+						ELSE pro.proargmodes[pro.i]
+					END
+				)                               AS direction,
+				CAST(NULL AS TEXT)              AS description
 			FROM
-				%(schema)s.ROUTINEPARMS P
-				INNER JOIN %(schema)s.ROUTINES R
-					ON P.ROUTINESCHEMA = R.ROUTINESCHEMA
-					AND P.SPECIFICNAME = R.SPECIFICNAME
+				(
+					SELECT
+						generate_subscripts(p.proallargtypes, 1) AS i, p.*
+					FROM
+						(
+							SELECT
+								oid,
+								proname,
+								pronamespace,
+								COALESCE(
+									proallargtypes,
+									('{0}'::oid[] || proargtypes::oid[])[2:array_length(proargtypes, 1) + 1]
+								) AS proallargtypes,
+								COALESCE(
+									proargnames,
+									array_fill(''::text, array[array_length(COALESCE(proallargtypes, proargtypes), 1)])
+								) AS proargnames,
+								COALESCE(
+									proargmodes::char[],
+									array_fill('i'::char, array[array_length(proargtypes, 1)])
+								) AS proargmodes
+							FROM
+								pg_catalog.pg_proc
+						) AS p
+				) AS pro
+				INNER JOIN pg_catalog.pg_namespace nsp
+					ON pro.pronamespace = nsp.oid
+				INNER JOIN pg_catalog.pg_type typ
+					ON pro.proallargtypes[pro.i] = typ.oid
+				INNER JOIN pg_catalog.pg_namespace tns
+					ON typ.typnamespace = tns.oid
+				INNER JOIN pg_catalog.pg_database db
+					ON db.datname = current_database()
 			WHERE
-				R.ROUTINETYPE IN ('F', 'P')
-				AND R.VALID <> 'X'
+				NOT pg_is_other_temp_schema(nsp.oid)
 			ORDER BY
-				P.ROUTINESCHEMA,
-				P.SPECIFICNAME,
-				P.ORDINAL
-			WITH UR""" % self.query_subst)
-		for (
-				schema,
-				specname,
-				parmname,
-				typeschema,
-				typename,
-				size,
-				scale,
-				codepage,
-				parmtype,
-				desc
-			) in self.fetch_some(cursor):
-			yield RoutineParam(
-				make_str(schema),
-				make_str(specname),
-				make_str(parmname),
-				make_str(typeschema),
-				make_str(typename),
-				make_int(size),
-				make_int(scale),
-				make_int(codepage),
-				make_str(parmtype),
-				make_str(desc),
-			)
+				nsp.nspname,
+				pro.proname || pro.oid,
+				pro.i
+		""")
+		for row in self.fetch_some(cursor):
+			yield RoutineParam(*row)
+		# XXX Need to deal with "return" parameters, in particular how a
+		# set-function (aka a table function) deals with its return columns
 
 	def get_triggers(self):
 		"""Retrieves the details of table triggers in the database.
