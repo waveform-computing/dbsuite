@@ -453,6 +453,28 @@ class InputPlugin(Plugin):
 		"""
 		pass
 
+	def get_tokenizer(self):
+		"""Returns a new instance of an SQL tokenizer class.
+
+		This method is called by the main application when it needs a tokenizer
+		for the dialect of SQL specific to the database targetted by the
+		plugin. The method should construct and return an object which is a
+		derivative of the BaseTokenizer class (or an object which implements an
+		equivalent parse() method).
+		"""
+		pass
+
+	def get_formatter(self):
+		"""Returns a new instance of an SQL formatter class.
+
+		This method is called by the main application when it needs a formatter
+		for the dialect of SQL specific to the database targetted by the
+		plugin. The method should construct and return an object which is a
+		derivative of the BaseFormatter class (or an object which implements an
+		equivalent parse() method).
+		"""
+		pass
+
 	def get_schemas(self):
 		"""Retrieves the details of schemas stored in the database.
 

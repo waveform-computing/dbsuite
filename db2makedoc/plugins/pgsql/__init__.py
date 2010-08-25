@@ -1,6 +1,6 @@
 # vim: set noet sw=4 ts=4:
 
-"""Input plugin for IBM DB2 for Linux/UNIX/Windows."""
+"""Input plugin for PostgreSQL."""
 
 import logging
 import re

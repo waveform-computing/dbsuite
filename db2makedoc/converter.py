@@ -13,8 +13,8 @@ import locale
 import logging
 from urllib2 import urlopen
 from urlparse import urljoin
-from sql.formatter import quote_str, format_ident
-from etree import fromstring, tostring, iselement, Element, SubElement, indent
+from db2makedoc.plugins.formatter import quote_str, format_ident
+from db2makedoc.etree import fromstring, tostring, iselement, Element, SubElement, indent
 
 
 __all__ = [

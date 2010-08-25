@@ -19,7 +19,7 @@ from db2makedoc.astex import tex, xml, TeXFactory
 from db2makedoc.highlighters import CommentHighlighter, SQLHighlighter
 from db2makedoc.hyphenator import hyphenate_word
 from db2makedoc.graph import Graph, Node, Edge, Cluster
-from db2makedoc.sql.tokenizer import TokenTypes as TT
+from db2makedoc.plugins.tokenizer import TokenTypes as TT
 from db2makedoc.db import (
 	DatabaseObject, Relation, Routine, Constraint, Database, Tablespace,
 	Schema, Table, View, Alias, Index, Trigger, Function, Procedure, Datatype,

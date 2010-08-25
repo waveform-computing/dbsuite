@@ -10,8 +10,8 @@ descendent classes to implement a specific markup language (e.g. HTML).
 
 import re
 import logging
-from db2makedoc.sql.tokenizer import DB2LUWTokenizer, Token, TokenTypes as TT
-from db2makedoc.sql.formatter import DB2LUWFormatter, ParseTokenError
+from db2makedoc.plugins.tokenizer import DB2LUWTokenizer, Token, TokenTypes as TT
+from db2makedoc.plugins.formatter import DB2LUWFormatter, ParseTokenError
 
 class CommentHighlighter(object):
 	"""Implements a generic class for parsing simple prefix-based markup.

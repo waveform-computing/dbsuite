@@ -16,8 +16,8 @@ import pdb
 import re
 import sys
 import math
-import db2makedoc.sql.dialects as dialects
-from db2makedoc.sql.tokenizer import TokenTypes as TT, Token, Error, TokenError
+import db2makedoc.plugins.dialects as dialects
+from db2makedoc.plugins.tokenizer import TokenTypes as TT, Token, Error, TokenError
 from decimal import Decimal
 from itertools import tee, izip
 
@@ -111,10 +111,11 @@ def format_ident(name, namechars=set(dialects.db2luw_namechars), qchar='"'):
 	qchar parameter to quote the name.
 
 	Note that the default for namechars is one of the namechars strings from
-	the sql.dialects module, NOT one of the identchars strings. While lowercase
-	characters are usually permitted in identifiers, they are folded to
-	uppercase by the database, and the tokenizer emulates this. This routine is
-	for output and therefore lowercase characters in name will trigger quoting.
+	the plugins.dialects module, NOT one of the identchars strings. While
+	lowercase characters are usually permitted in identifiers, they are folded
+	to uppercase by the database, and the tokenizer emulates this. This routine
+	is for output and therefore lowercase characters in name will trigger
+	quoting.
 	"""
 	firstchars = namechars - set('0123456789')
 	if len(name) == 0:

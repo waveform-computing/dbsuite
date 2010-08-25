@@ -16,7 +16,7 @@ import re
 import logging
 from itertools import chain, groupby
 from UserDict import DictMixin
-from db2makedoc.sql.formatter import format_size, format_ident
+from db2makedoc.plugins.formatter import format_size, format_ident
 from db2makedoc.util import *
 
 

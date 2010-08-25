@@ -9,7 +9,7 @@ from db2makedoc.db import (
 	Schema, Datatype, Table, View, Alias, Constraint, Index, Trigger, Function,
 	Procedure, Tablespace
 )
-from db2makedoc.sql.formatter import quote_str, format_ident
+from db2makedoc.plugins.formatter import quote_str, format_ident
 from string import Template
 
 

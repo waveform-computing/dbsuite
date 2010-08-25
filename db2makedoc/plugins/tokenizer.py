@@ -2,14 +2,14 @@
 
 """Implements a highly configurable SQL tokenizer.
 
-This unit implements a configurable SQL tokenizer base class (SQLTokenizerBase)
+This unit implements a configurable SQL tokenizer base class (BaseTokenizer)
 and several classes descended from this which implement parsing specific
 dialects of SQL, and their particular oddities.
 
 A number of classes which tokenize specific SQL dialects are derived from the
 base SQLTokenizer class. Currently the following classes are defined:
 
-SQLTokenizerBase -- Base tokenizer class
+BaseTokenizer -- Base tokenizer class
 SQL92Tokenizer   -- ANSI SQL-92
 SQL99Tokenizer   -- ANSI SQL-99
 SQL2003Tokenizer -- ANSI SQL-2003
@@ -19,7 +19,7 @@ DB2ZOSTokenizer  -- IBM DB2 for z/OS
 
 import re
 import sys
-import db2makedoc.sql.dialects as dialects
+import db2makedoc.plugins.dialects as dialects
 from decimal import Decimal
 from db2makedoc.util import *
 
@@ -28,7 +28,7 @@ __all__ = [
 	'TokenError',
 	'Token',
 	'TokenTypes',
-	'SQLTokenizerBase',
+	'BaseTokenizer',
 	'SQL92Tokenizer',
 	'SQL99Tokenizer',
 	'SQL2003Tokenizer',
@@ -131,7 +131,7 @@ Token = namedtuple('Token', (
 ))
 
 
-class SQLTokenizerBase(object):
+class BaseTokenizer(object):
 	"""Base SQL tokenizer class.
 
 	This base tokenizer class is used to convert a string containing SQL source
@@ -741,12 +741,12 @@ class SQLTokenizerBase(object):
 		self._add_token(TT.WHITESPACE, None)
 
 
-class SQL92Tokenizer(SQLTokenizerBase):
+class SQL92Tokenizer(BaseTokenizer):
 	"""ANSI SQL-92 tokenizer class."""
 	pass
 
 
-class SQL99Tokenizer(SQLTokenizerBase):
+class SQL99Tokenizer(BaseTokenizer):
 	"""ANSI SQL-99 tokenizer class."""
 
 	def __init__(self):
@@ -755,7 +755,7 @@ class SQL99Tokenizer(SQLTokenizerBase):
 		self.ident_chars = set(dialects.sql99_identchars)
 
 
-class SQL2003Tokenizer(SQLTokenizerBase):
+class SQL2003Tokenizer(BaseTokenizer):
 	"""ANSI SQL-2003 tokenizer class."""
 
 	def __init__(self):
@@ -764,7 +764,7 @@ class SQL2003Tokenizer(SQLTokenizerBase):
 		self.ident_chars = set(dialects.sql2003_identchars)
 
 
-class DB2ZOSTokenizer(SQLTokenizerBase):
+class DB2ZOSTokenizer(BaseTokenizer):
 	"""IBM DB2 UDB for z/OS tokenizer class."""
 
 	def __init__(self):
