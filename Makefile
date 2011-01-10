@@ -86,8 +86,8 @@ README.txt: FORCE
 	for page in Requirements Install Tutorial; do \
 		$(LYNX) $(LYNXFLAGS) -dump $(WIKI)/$$page | awk '\
 			BEGIN {printing=0;} \
-			/^ *\*.*Last Change *$$/ {printing=1; next;} \
-			/^ *Terms of use *$$/ {printing=0;} \
+			/^ *Last modified / {printing=1; next;} \
+			/^ *Copyright / {printing=0;} \
 			{if (printing) print;}' >> README.txt; \
 	done
 
@@ -97,8 +97,8 @@ TODO.txt: FORCE
 	for page in KnownIssues; do \
 		$(LYNX) $(LYNXFLAGS) -dump $(WIKI)/$$page | awk '\
 			BEGIN {printing=0;} \
-			/^ *\*.*Last Change *$$/ {printing=1; next;} \
-			/^ *Terms of use *$$/ {printing=0;} \
+			/^ *Last modified / {printing=1; next;} \
+			/^ *Copyright / {printing=0;} \
 			{if (printing) print;}' >> TODO.txt; \
 	done
 
