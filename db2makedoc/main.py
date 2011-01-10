@@ -13,7 +13,7 @@ import db2makedoc.highlighters
 import db2makedoc.converter
 from db2makedoc.util import *
 
-__version__ = "1.1.0"
+__version__ = "1.1.1"
 
 # Use the user's default locale instead of C
 locale.setlocale(locale.LC_ALL, '')
@@ -232,11 +232,11 @@ class MakeDocUtility(Utility):
 			if not parser.has_option(section, 'plugin'):
 				raise db2makedoc.plugins.PluginConfigurationError('No "plugin" value found')
 			plugin_name = parser.get(section, 'plugin')
-			plugin = db2makedoc.plugins.load_plugin(plugin_name)
-			if issubclass(plugin, db2makedoc.plugins.InputPlugin):
-				inputs.append((section, plugin()))
-			elif issubclass(plugin, db2makedoc.plugins.OutputPlugin):
-				outputs.append((section, plugin()))
+			plugin = db2makedoc.plugins.load_plugin(plugin_name)()
+			if isinstance(plugin, db2makedoc.plugins.InputPlugin):
+				inputs.append((section, plugin))
+			elif isinstance(plugin, db2makedoc.plugins.OutputPlugin):
+				outputs.append((section, plugin))
 			else:
 				raise db2makedoc.plugins.PluginConfigurationError('Plugin "%s" is not a valid input or output plugin' % plugin_name)
 			logging.info('Configuring plugin "%s"' % plugin_name)
