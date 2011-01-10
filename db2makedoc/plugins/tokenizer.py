@@ -75,7 +75,7 @@ class TokenError(Error):
 		context = '\n'.join(source_lines[i:self.line + self.context_lines])
 		# Format the message with the context
 		return '\n'.join([
-			self.message + ':',
+			self.args[0] + ':',
 			'line   : %d' % self.line,
 			'column : %d' % self.column,
 			'context:',
