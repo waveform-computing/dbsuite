@@ -1,5 +1,6 @@
 # vim: set noet sw=4 ts=4:
 
+import logging
 import datetime
 
 try:
@@ -107,7 +108,7 @@ def flatten(elem, include_tail=False):
 	Which is probably not what is wanted. See the flatten_html function below
 	for dealing with this.
 	"""
-	text = elem.text or ''
+	text = elem.text or u''
 	for e in elem:
 		text += flatten(e, True)
 	if include_tail and elem.tail:
@@ -152,15 +153,15 @@ html4_display = dict(
 # for particular display types. Any display type not mentioned in the
 # dictionaries default to ''.
 flatten_prefixes = {
-	'list-item': ' * ',
+	'list-item': u' * ',
 }
 flatten_suffixes = {
-	'block': '\n',
-	'table': '\n',
-	'table-caption': '\n',
-	'table-row': '\n',
-	'table-cell': ' ',
-	'list-item': '\n',
+	'block':         u'\n',
+	'table':         u'\n',
+	'table-caption': u'\n',
+	'table-row':     u'\n',
+	'table-cell':    u' ',
+	'list-item':     u'\n',
 }
 
 def flatten_html(elem, elem_display=html4_display, xmlns='', include_tail=False):
@@ -187,17 +188,17 @@ def flatten_html(elem, elem_display=html4_display, xmlns='', include_tail=False)
 	display = elem_display.get(tag, 'inline')
 	# Don't render elements with certain display types (or their children)
 	if display in ['none', 'table-column-group', 'table-column']:
-		return ''
+		return u''
 	else:
-		text = ''
+		text = u''
 		# Make a vague effort to avoid too many extraneous newlines
 		if elem.text:
-			text += flatten_prefixes.get(display, '')
+			text += flatten_prefixes.get(display, u'')
 			text += elem.text
 		for e in elem:
 			text += flatten_html(e, elem_display, xmlns, True)
 		if include_tail:
-			text += flatten_suffixes.get(display, '')
+			text += flatten_suffixes.get(display, u'')
 			if elem.tail:
 				text += elem.tail
 		return text
