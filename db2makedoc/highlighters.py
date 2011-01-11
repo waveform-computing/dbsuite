@@ -214,7 +214,7 @@ class SQLHighlighter(object):
 				tokens = self.formatter.parse(tokens)
 			except ParseTokenError, e:
 				logging.warning('While formatting %s' % excerpt(tokens))
-				logging.warning('error %s found at line %d, column %d' % (e.message, e.line, e.column))
+				logging.warning('error %s found at line %d, column %d' % (str(e), e.line, e.column))
 		if tokens:
 			if line_split:
 				return (
