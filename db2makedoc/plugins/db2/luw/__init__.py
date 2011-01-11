@@ -73,6 +73,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		# SYSCAT.ROUTINES introduced in v8 (80)
 		# SYSCAT.TABLES.OWNER introduced in v9 (90)
 		# SYSCAT.VARIABLES introduced in v9.5 (95)
+		# SYSCAT.INDEXES.COMPRESSION introduced in v9.7 (97)
 		cursor = self.connection.cursor()
 		schemaver = 70
 		cursor.execute("""
@@ -100,11 +101,20 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 					WITH UR""")
 				if bool(cursor.fetchall()[0][0]):
 					schemaver = 95
+					cursor.execute("""
+						SELECT COUNT(*)
+						FROM SYSCAT.TABLES
+						WHERE TABSCHEMA = 'SYSCAT'
+						AND TABNAME = 'MODULES'
+						WITH UR""")
+					if bool(cursor.fetchall()[0][0]):
+						schemaver = 97
 		logging.info({
 			70: 'Detected v7 (or below) catalog layout',
 			80: 'Detected v8.2 catalog layout',
 			90: 'Detected v9.1 catalog layout',
-			95: 'Detected v9.5 (or above) catalog layout',
+			95: 'Detected v9.5 catalog layout',
+			97: 'Detected v9.7 (or above) catalog layout',
 		}[schemaver])
 		if schemaver < 80:
 			raise db2makedoc.plugins.PluginError('DB2 server must be v8.2 or above')
