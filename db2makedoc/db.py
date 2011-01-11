@@ -1447,7 +1447,8 @@ class Function(Routine):
 		def format_returns():
 			if len(self.return_list) == 0:
 				return ''
-			elif self.type == 'R':
+			# XXX Dirty hack to deal with weirdness in declared ROW types
+			elif (self.type == 'R') or (self.type == 'S' and self.return_list[0].datatype_str == 'ROW'):
 				return ' RETURNS ROW(%s)' % format_params(self.return_list)
 			elif self.type == 'T':
 				return ' RETURNS TABLE(%s)' % format_params(self.return_list)
