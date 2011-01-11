@@ -102,7 +102,7 @@ def flatten(elem, include_tail=False):
 	This will flatten to:
 
 		"Item 1Item 2Item 3"
-	
+
 	Which is probably not what is wanted. See the flatten_html function below
 	for dealing with this.
 	"""
@@ -169,7 +169,7 @@ def flatten_html(elem, elem_display=html4_display, xmlns='', include_tail=False)
 	with the problems of flattening mixed-type XML like HTML documents, in
 	which whitespace must be introduced in order for the flattened text to make
 	sense.
-	
+
 	The elem_display property specifies a mapping of tags to CSS display types
 	which determines how whitespace is added to the result. By default this is
 	the html4_display dictionary defined above. Override this if you want to

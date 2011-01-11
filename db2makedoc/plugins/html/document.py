@@ -442,7 +442,7 @@ class WebSite(object):
 		This method is called when the WebSite class is instantiated. It sets
 		the classes that the site (and associated document classes) use to
 		generate content, and the document classes map itself.
-		
+
 		Specifically, it sets the attributes tag_class (must be a descendent of
 		or compatible with HTMLElementFactory), popup_class (must be like
 		HTMLPopupDocument), graph_class (must be like ObjectGraph). It also
@@ -1368,7 +1368,7 @@ class HTMLPopupDocument(HTMLDocument):
 		self.body = body
 		self.width = int(width)
 		self.height = int(height)
-	
+
 	def generate_body(self):
 		tag = self.tag
 		return tag.body(

@@ -92,7 +92,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		super(InputPlugin, self).__init__()
 		self.add_option('filename', default=None, convert=self.convert_path,
 			doc="""The filename for the XML output file (mandatory)""")
-	
+
 	def configure(self, config):
 		"""Loads the plugin configuration."""
 		super(InputPlugin, self).configure(config)
@@ -129,14 +129,14 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			for elem in self.doc.getiterator()
 			if 'id' in elem.attrib
 		)
-	
+
 	def close(self):
 		"""Closes the source file and cleans up any resources."""
 		super(InputPlugin, self).close()
 		del self.ids
 		del self.parents
 		del self.doc
-	
+
 	def get_schemas(self):
 		"""Retrieves the details of schemas stored in the database.
 
@@ -781,7 +781,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 					lookup_access.get(procedure.attrib['access']),
 					text(procedure.find('sql')),
 				)
-	
+
 	def get_routine_params(self):
 		"""Retrieves the list of parameters belonging to routines.
 
@@ -838,7 +838,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 						lookup[param.attrib['type']],
 						text(param.find('description')),
 					)
-	
+
 	def get_triggers(self):
 		"""Retrieves the details of table triggers in the database.
 

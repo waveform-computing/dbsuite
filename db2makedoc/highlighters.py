@@ -77,7 +77,7 @@ class CommentHighlighter(object):
 	def end_parse(self, summary):
 		"""Stub handler for parsing end."""
 		return '\n\n'.join(self._content)
-	
+
 	find_ref = re.compile(r'@([A-Za-z_$#@][\w$#@]*(\.[A-Za-z_$#@][\w$#@]*){0,2})\b')
 	find_fmt = re.compile(r'(?:^|[\s\W])([/_*])(\w+)\1($|[\s\W])')
 	find_quote = re.compile(r'"(([^".]|\.(?! ))*)"')
@@ -165,7 +165,7 @@ class SQLHighlighter(object):
 		self.tokenizer = DB2LUWTokenizer()
 		self.formatter = DB2LUWFormatter()
 		self.tokenizer.raise_errors = False
-	
+
 	def format_line(self, index, line):
 		"""Stub handler for a line of tokens"""
 		return ''.join(self.format_token(token) for token in line)
@@ -173,14 +173,14 @@ class SQLHighlighter(object):
 	def format_token(self, token):
 		"""Stub handler for a token"""
 		return token.source
-	
+
 	def parse(self, sql, terminator=';', line_split=False):
 		"""Converts the provided SQL into another markup language.
 
 		The sql parameter contains the SQL to be converted into markup. The
 		optional terminator parameter specifies the intial statement terminator
 		assumed to be used in the SQL code (defaults to semi-colon).
-		
+
 		Finally, if the optional line_split parameter is False (which it is by
 		default), the SQL will be returned as a list of marked up strings where
 		each string is a single token in the input. If line_split is True, the
@@ -225,18 +225,18 @@ class SQLHighlighter(object):
 				return (self.format_token(token) for token in tokens)
 		else:
 			return ()
-	
+
 	def parse_prototype(self, sql):
 		"""Utility routine for marking up a routine prototype (as opposed to a complete SQL script)"""
 		self.tokenizer.line_split = False
 		self.formatter.line_split = False
 		tokens = self.formatter.parse_routine_prototype(self.tokenizer.parse(sql))
 		return [self.format_token(token) for token in tokens]
-	
+
 	def parse_to_string(self, sql, terminator=';', line_split=False):
 		"""Utility routine which returns the result of parse() as a single string"""
 		return ''.join(self.parse(sql, terminator, line_split))
-	
+
 	def parse_prototype_to_string(self, sql):
 		"""Utility routine which returns the result of parse_prototype() as a single string"""
 		return ''.join(self.parse_prototype(sql))

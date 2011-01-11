@@ -251,7 +251,7 @@ if sys.platform.startswith('win'):
 						return (right - left + 1, bottom - top + 1)
 				return None
 	else:
-		# PyWin32 query_console_size() adapted from 
+		# PyWin32 query_console_size() adapted from
 		# http://groups.google.com/group/comp.lang.python/msg/f0febe6a8de9666b
 		def query_console_size(handle):
 			try:

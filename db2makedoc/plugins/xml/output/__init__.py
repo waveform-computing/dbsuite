@@ -50,7 +50,7 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 		# Ensure the filename was specified
 		if not self.options['filename']:
 			raise db2makedoc.plugins.PluginConfigurationError('The filename option must be specified')
-	
+
 	def execute(self, database):
 		super(OutputPlugin, self).execute(database)
 		# Translate any templates in the filename option now that we've got the
@@ -94,7 +94,7 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 			f.write(s)
 		finally:
 			f.close()
-	
+
 	def make_element(self, db_object):
 		logging.debug('Constructing element for %s' % db_object.identifier)
 		self.elements[db_object] = {
@@ -116,7 +116,7 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 			Param:      self.make_param,
 			Tablespace: self.make_tablespace,
 		}[type(db_object)](db_object)
-	
+
 	def make_database(self, database):
 		result = Element('database')
 		result.attrib['id'] = database.identifier

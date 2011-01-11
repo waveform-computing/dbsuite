@@ -60,7 +60,7 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 			"600x800".""")
 		# Tweak the default icon_url
 		self.options['icon_url'] = ('http://w3.ibm.com/favicon.ico',) + self.options['icon_url'][1:]
-	
+
 	def configure(self, config):
 		super(OutputPlugin, self).configure(config)
 		# If diagrams are requested, check we can import PIL

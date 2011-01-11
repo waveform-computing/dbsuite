@@ -45,13 +45,13 @@ def convert_name(elem):
 
 def convert_desc(elem):
 	"""Given an HTML element, converts its content to text.
-	
+
 	This routine recursively extracts the text and tail attributes of the
 	specified element. Special handling is provided for <ul> and <ol> lists
 	which are commonly used in the InfoCenter's descriptions of columns. <ul>
 	lists are simply converted to comma separated lists; <ol> lists are
 	converted to numbered comma separated lists.
-	
+
 	All consecutive whitespace found within the HTML (newlines etc.) is
 	converted and compressed to a single space character, and the final result
 	is stripped of leading and trailing whitespace.
@@ -273,7 +273,7 @@ class XMLSource(object):
 
 class CommentConverter(object):
 	"""Generates COMMENT statements for applying descriptions to objects.
-	
+
 	This converter is used when you wish to store object descriptions in the
 	standard system catalog. Note that this has an extremely limited length
 	(254 characters on DB2 for LUW), and lacks facilities for storing certain
@@ -325,7 +325,7 @@ class CommentConverter(object):
 
 class InsertConverter(object):
 	"""Generates INSERT statements for applying descriptions to objects.
-	
+
 	This converter is used when you wish to store object descriptions in the
 	DOCCAT extension schema (see doccat_create.sql). DOCCAT descriptions can be
 	considerably longer than SYSCAT descriptions (up to 32k characters long),
@@ -378,7 +378,7 @@ class InsertConverter(object):
 
 class UpdateConverter(object):
 	"""Generates UPDATE statements for applying descriptions to objects.
-	
+
 	This converter is used when you wish to store object descriptions in the
 	DOCCAT extension schema (see doccat_create.sql). DOCCAT descriptions can be
 	considerably longer than SYSCAT descriptions (up to 32k characters long),
@@ -431,7 +431,7 @@ class UpdateConverter(object):
 
 class MergeConverter(object):
 	"""Generates MERGE statements for applying descriptions to objects.
-	
+
 	This converter is used when you wish to store object descriptions in the
 	DOCCAT extension schema (see doccat_create.sql). DOCCAT descriptions can be
 	considerably longer than SYSCAT descriptions (up to 32k characters long),
@@ -497,7 +497,7 @@ class MergeConverter(object):
 
 class XMLConverter(object):
 	"""Generates an XML tree associating objects with their descriptions.
-	
+
 	This converter is mostly for debugging purposes. Instead of outputting SQL,
 	it returns an XML document containing the object names and their
 	descriptions.

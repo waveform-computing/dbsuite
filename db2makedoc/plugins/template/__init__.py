@@ -154,7 +154,7 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 			):
 			if self.options[template] is not None:
 				self.options[template] = os.path.join(self.options[TEMPLATE_PATH_OPTION], self.options[template])
-	
+
 	def execute(self, database):
 		"""Invokes the plugin to produce documentation."""
 		super(OutputPlugin, self).execute(database)

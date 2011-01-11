@@ -3,7 +3,7 @@
 """HTML character entities from the HTML4.01 spec [1] (see HTMLDocument.serialize()
 for usage).
 
-[1] http://www.w3.org/TR/REC-html40/sgml/entities.html 
+[1] http://www.w3.org/TR/REC-html40/sgml/entities.html
 """
 
 HTML_ENTITIES = {

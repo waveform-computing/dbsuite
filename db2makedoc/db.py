@@ -63,7 +63,7 @@ class DictProxy(object, DictMixin):
 
 	def __init__(self, items, key=None):
 		"""Initializes the dict from a list of tuples.
-		
+
 		If key is not specified, items must be a list of tuples which uniquely
 		identify an object in the database hierarchy (e.g. if the dictionary
 		represents relations then the tuples must be of the form (schema,
@@ -74,7 +74,7 @@ class DictProxy(object, DictMixin):
 		if key is None:
 			key = lambda x: x
 		self._keys = set((key(i) for i in items))
-		
+
 	def _convert(self, item):
 		"""Converts the tuple into a "real" database object.
 
@@ -83,25 +83,25 @@ class DictProxy(object, DictMixin):
 		hierarchy. The default implementation raises an exception.
 		"""
 		raise NotImplementedError
-		
+
 	def keys(self):
 		return self._keys
-	
+
 	def has_key(self, key):
 		return key in self._keys
-	
+
 	def __len__(self):
 		return len(self._keys)
-	
+
 	def __getitem__(self, key):
 		if not key in self._keys:
 			raise KeyError(key)
 		return self._convert(key)
-	
+
 	def __iter__(self):
 		for k in self._keys:
 			yield k
-			
+
 	def __contains__(self, key):
 		return key in self._keys
 
@@ -113,10 +113,10 @@ class ListProxy(object):
 	hierarchy. It is initialized from a list of identifiers which are used to
 	lookup the actual objects from the hierarchy. This class is overridden
 	below to implement lists of relations, indexes, etc.  """
-	
+
 	def __init__(self, items, key=None):
 		"""Initializes the list from a list of tuples.
-		
+
 		If key is not specified, items must be a list of tuples which uniquely
 		identify an object in the database hierarchy (e.g. if the list proxy
 		represents relations then the tuples must be of the form (schema,
@@ -136,13 +136,13 @@ class ListProxy(object):
 		hierarchy. The default implementation raises an exception.
 		"""
 		raise NotImplementedError
-		
+
 	def __len__(self):
 		return len(self._items)
-	
+
 	def __getitem__(self, key):
 		return self._convert(self._items[key])
-	
+
 	def __iter__(self):
 		for i in self._items:
 			yield self._convert(i)
@@ -338,7 +338,7 @@ class DatabaseObject(object):
 		(the default implemented raises an exception).
 		"""
 		raise NotImplementedError
-	
+
 	def _get_parent_list(self):
 		"""Returns the list to which this object belongs in its parent.
 
@@ -365,7 +365,7 @@ class DatabaseObject(object):
 			# parent_list is not permitted to change after construction
 			self._parent_index = self.parent_list.index(self)
 		return self._parent_index
-	
+
 	def _get_identifier(self):
 		"""Returns a unique identifier for the object.
 
@@ -444,7 +444,7 @@ class DatabaseObject(object):
 		if self.parent_list is None:
 			return None
 		return self.parent_list[0]
-	
+
 	def _get_last(self):
 		"""Returns the last sibling of this object.
 
@@ -480,7 +480,7 @@ class DatabaseObject(object):
 	def __str__(self):
 		"""Return a string representation of the object"""
 		return self.qualified_name
-	
+
 	database = property(lambda self: self._get_database(), doc=_get_database.__doc__)
 	parent_list = property(lambda self: self._get_parent_list(), doc=_get_parent_list.__doc__)
 	parent_index = property(lambda self: self._get_parent_index(), doc=_get_parent_index.__doc__)
@@ -505,7 +505,7 @@ class SchemaObject(DatabaseObject):
 		assert isinstance(parent, Schema)
 		super(SchemaObject, self).__init__(parent, name, system, description)
 		self.schema = parent
-	
+
 	def _get_database(self):
 		return self.parent.parent
 
@@ -521,7 +521,7 @@ class RelationObject(DatabaseObject):
 		super(RelationObject, self).__init__(parent, name, system, description)
 		self.relation = self.parent
 		self.schema = self.parent.parent
-	
+
 	def _get_database(self):
 		return self.parent.parent.parent
 
@@ -537,7 +537,7 @@ class RoutineObject(DatabaseObject):
 		super(RoutineObject, self).__init__(parent, name, system, description)
 		self.routine = self.parent
 		self.schema = self.parent.parent
-	
+
 	def _get_database(self):
 		return self.parent.parent.parent
 
@@ -599,7 +599,7 @@ class Routine(SchemaObject):
 
 	def __init__(self, parent, name, specific_name, system=False, description=None):
 		"""Initializes an instance of the class.
-		
+
 		The extra specific_name parameter in this constructor refers to the
 		unique name that identifies the routine. In this context, multiple
 		overloaded routines may have the same name, but each must have a unique
@@ -608,7 +608,7 @@ class Routine(SchemaObject):
 		"""
 		super(Routine, self).__init__(parent, name, system, description)
 		self.specific_name = specific_name
-		
+
 	def _get_identifier(self):
 		return "routine_%s_%s" % (self.schema.name, self.specific_name)
 
@@ -669,7 +669,7 @@ class Routine(SchemaObject):
 		might appear in a manual, e.g. FUNC(PARAM1 TYPE, PARAM2 TYPE, ...)
 		"""
 		raise NotImplementedError
-	
+
 	qualified_specific_name = property(lambda self: self._get_qualified_specific_name(), doc=_get_qualified_specific_name.__doc__)
 	params = property(lambda self: self._get_params(), doc=_get_params.__doc__)
 	param_list = property(lambda self: self._get_param_list(), doc=_get_param_list.__doc__)
@@ -687,7 +687,7 @@ class Constraint(RelationObject):
 		"""Initializes an instance of the class"""
 		super(Constraint, self).__init__(parent, name, system, description)
 		self.table = self.parent
-	
+
 	def _get_identifier(self):
 		return "constraint_%s_%s_%s" % (self.schema.name, self.relation.name, self.name)
 
@@ -698,10 +698,10 @@ class Constraint(RelationObject):
 	def _get_system(self):
 		# Don't inherit system attribute from the parent
 		return self._system
-	
+
 	def _get_prototype(self):
 		"""Returns the prototype SQL of the constraint.
-		
+
 		Returns the attributes of the constraint formatted for use in an ALTER
 		TABLE or CREATE TABLE statement.
 		"""
@@ -720,7 +720,7 @@ class Constraint(RelationObject):
 			format_ident(self.table.name),
 			format_ident(self.name)
 		)
-	
+
 	def _get_parent_list(self):
 		return self.table.constraint_list
 
@@ -735,7 +735,7 @@ class Database(DatabaseObject):
 	"""Class representing a DB2 database"""
 
 	config_names = ['database', 'databases', 'db', 'dbs']
-	
+
 	def __init__(self, input):
 		"""Initializes an instance of the class"""
 		super(Database, self).__init__(None, input.name)
@@ -766,12 +766,12 @@ class Database(DatabaseObject):
 
 	def find(self, qualified_name):
 		"""Find an object in the hierarchy by its qualified name.
-		
+
 		Because there are several namespaces in DB2, the results of such a
 		search can only be unambiguous if an order of precedence for object
 		types is established. The order of precedence used by this method is
 		as follows:
-		
+
 		Schemas
 		Tablespaces
 			Tables, Views, Aliases (one namespace)
@@ -779,7 +779,7 @@ class Database(DatabaseObject):
 				Constraints
 			Indexes
 			Functions, Methods, Procedures (one namespace)
-		
+
 		Hence, if a schema shares a name with a tablespace, the schema will
 		be returned in preference to the tablespace. Likewise, if an index
 		shares a name with a table, the table will be returned in preference
@@ -862,7 +862,7 @@ class Database(DatabaseObject):
 
 	def _get_identifier(self):
 		return "db"
-	
+
 	def _get_database(self):
 		return self
 
@@ -989,11 +989,11 @@ class Schema(DatabaseObject):
 
 	def _get_identifier(self):
 		return "schema_%s" % (self.name)
-	
+
 	def _get_qualified_name(self):
 		# Schemas form the top of the naming hierarchy
 		return self.name
-	
+
 	def _get_database(self):
 		return self.parent
 
@@ -1091,7 +1091,7 @@ class Table(Relation):
 			key=attrgetter('name')
 		)
 		self.constraints = dict((i.name, i) for i in self.constraint_list)
-	
+
 	def _get_size_str(self):
 		"""Returns the size of the table in a human-readable form"""
 		return format_size(self.size, for_sql=False)
@@ -1111,20 +1111,20 @@ class Table(Relation):
 	def _get_create_sql(self):
 		return 'CREATE TABLE %s.%s (%s) IN %s' % (
 			format_ident(self.schema.name),
-			format_ident(self.name),	
+			format_ident(self.name),
 			',\n'.join(chain(
 				(field.prototype for field in self.field_list if not field.system),
 				(const.prototype for const in self.constraint_list if not const.system)
 			)),
 			format_ident(self.tablespace.name),
 		)
-	
+
 	def _get_drop_sql(self):
 		return 'DROP TABLE %s.%s' % (
 			format_ident(self.schema.name),
 			format_ident(self.name)
 		)
-	
+
 	def _get_tablespace(self):
 		"""Returns the tablespace in which the table's data is stored"""
 		return self.database.tablespaces[self._tablespace]
@@ -1137,7 +1137,7 @@ class View(Relation):
 	"""Class representing a view"""
 
 	config_names = ['view', 'views']
-	
+
 	def __init__(self, schema, input, row):
 		"""Initializes an instance of the class from a input row"""
 		super(View, self).__init__(schema, row.name, row.system, row.description)
@@ -1179,19 +1179,19 @@ class View(Relation):
 
 	def _get_dependents(self):
 		return self._dependents
-	
+
 	def _get_dependent_list(self):
 		return self._dependent_list
-	
+
 	def _get_fields(self):
 		return self._fields
-	
+
 	def _get_field_list(self):
 		return self._field_list
 
 	def _get_create_sql(self):
 		return self.sql
-	
+
 	def _get_drop_sql(self):
 		return 'DROP VIEW %s.%s' % (
 			format_ident(self.schema.name),
@@ -1203,7 +1203,7 @@ class Alias(Relation):
 	"""Class representing a alias"""
 
 	config_names = ['alias', 'aliases']
-	
+
 	def __init__(self, schema, input, row):
 		"""Initializes an instance of the class from a input row"""
 		super(Alias, self).__init__(schema, row.name, row.system, row.description)
@@ -1226,7 +1226,7 @@ class Alias(Relation):
 
 	def _get_field_list(self):
 		return self.relation.field_list
-	
+
 	def _get_dependents(self):
 		return self._dependents
 
@@ -1240,13 +1240,13 @@ class Alias(Relation):
 			format_ident(self.relation.schema.name),
 			format_ident(self.relation.name)
 		)
-	
+
 	def _get_drop_sql(self):
 		return 'DROP ALIAS %s.%s' % (
 			format_ident(self.schema.name),
 			format_ident(self.name)
 		)
-	
+
 	def _get_relation(self):
 		"""Returns the relation the alias is for.
 
@@ -1265,7 +1265,7 @@ class Alias(Relation):
 		while isinstance(result, Alias):
 			result = result.relation
 		return result
-	
+
 	relation = property(_get_relation)
 	final_relation = property(_get_final_relation)
 
@@ -1399,7 +1399,7 @@ class Function(Routine):
 	"""Class representing a function"""
 
 	config_names = ['function', 'functions', 'func', 'funcs']
-	
+
 	def __init__(self, schema, input, row):
 		"""Initializes an instance of the class from a input row"""
 		super(Function, self).__init__(schema, row.name, row.specific, row.system, row.description)
@@ -1429,7 +1429,7 @@ class Function(Routine):
 
 	def _get_params(self):
 		return self._params
-	
+
 	def _get_param_list(self):
 		return self._param_list
 
@@ -1438,9 +1438,9 @@ class Function(Routine):
 
 	def _get_return_list(self):
 		return self._return_list
-	
+
 	def _get_prototype(self):
-		
+
 		def format_params(params):
 			return ', '.join(('%s %s' % (format_ident(param.name), param.datatype_str) for param in params))
 
@@ -1461,11 +1461,11 @@ class Function(Routine):
 			format_params(self.param_list),
 			format_returns()
 		)
-	
+
 	def _get_create_sql(self):
 		# XXX Something more sophisticated here?
 		return self.sql or ''
-	
+
 	def _get_drop_sql(self):
 		return 'DROP SPECIFIC FUNCTION %s.%s' % (
 			format_ident(self.schema.name),
@@ -1477,7 +1477,7 @@ class Procedure(Routine):
 	"""Class representing a procedure"""
 
 	config_names = ['procedure', 'procedures', 'proc', 'procs']
-	
+
 	def __init__(self, schema, input, row):
 		"""Initializes an instance of the class from a input row"""
 		super(Procedure, self).__init__(schema, row.name, row.specific, row.system, row.description)
@@ -1505,7 +1505,7 @@ class Procedure(Routine):
 		return self._param_list
 
 	def _get_prototype(self):
-		
+
 		def format_params(params):
 			parmtype = {
 				'I': 'IN',
@@ -1522,11 +1522,11 @@ class Procedure(Routine):
 			format_ident(self.name),
 			format_params(self.param_list)
 		)
-	
+
 	def _get_create_sql(self):
 		# XXX Something more sophisticated here?
 		return self.sql or ''
-	
+
 	def _get_drop_sql(self):
 		return 'DROP SPECIFIC PROCEDURE %s.%s' % (
 			format_ident(self.schema.name),
@@ -1538,7 +1538,7 @@ class Datatype(SchemaObject):
 	"""Class representing a datatype"""
 
 	config_names = ['datatype', 'datatypes', 'type', 'types']
-	
+
 	def __init__(self, schema, input, row):
 		"""Initializes an instance of the class from a input row"""
 		super(Datatype, self).__init__(schema, row.name, row.system, row.description)
@@ -1553,7 +1553,7 @@ class Datatype(SchemaObject):
 
 	def _get_identifier(self):
 		return "datatype_%s_%s" % (self.schema.name, self.name)
-	
+
 	def _get_source(self):
 		"""Returns the datatype on which this type is based.
 
@@ -1564,7 +1564,7 @@ class Datatype(SchemaObject):
 			return self.database.schemas[self._source_schema].datatypes[self._source_name]
 		else:
 			return None
-	
+
 	source = property(_get_source)
 
 
@@ -1609,7 +1609,7 @@ class Field(RelationObject):
 			)
 		else:
 			return ''
-	
+
 	def _get_drop_sql(self):
 		if isinstance(self.relation, Table):
 			return 'ALTER TABLE %s.%s DROP COLUMN %s' % (
@@ -1619,7 +1619,7 @@ class Field(RelationObject):
 			)
 		else:
 			return ''
-	
+
 	def _get_prototype(self):
 		"""Returns the SQL prototype of the field.
 
@@ -1640,7 +1640,7 @@ class Field(RelationObject):
 					self.default
 				))
 		return ' '.join(items)
-		
+
 	def _get_datatype(self):
 		"""Returns the object representing the field's datatype"""
 		return self.database.schemas[self._datatype_schema].datatypes[self._datatype_name]

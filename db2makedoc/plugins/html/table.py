@@ -84,7 +84,7 @@ class TableDocument(HTMLObjectDocument):
 						tag.tr(
 							tag.td(self.site.url_document('dependentrel.html').link()),
 							tag.td(
-								len(self.dbobject.dependents) + 
+								len(self.dbobject.dependents) +
 								sum(len(k.dependent_list) for k in self.dbobject.unique_key_list)
 							),
 							tag.td(self.site.url_document('size.html').link()),

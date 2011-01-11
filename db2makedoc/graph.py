@@ -83,14 +83,14 @@ class GraphObject(object):
 			s = s.replace('\r', '\\r')
 			s = s.replace('\t', '\\t')
 			return '"%s"' % s
-	
+
 	def _attr_values_str(self):
 		"""Internal utility method that returns _attr_values as a formatted string"""
 		return ', '.join(
 			'%s=%s' % (self._quote(n), self._quote(str(v)))
 			for (n, v) in self._attr_values.iteritems()
 		)
-	
+
 	def _get_graph(self):
 		"""Returns the top-level graph that owns the object"""
 		o = self
@@ -115,7 +115,7 @@ class GraphBase(GraphObject):
 
 	def __init__(self, id):
 		"""Initializes an instance of the class.
-		
+
 		The id parameter specifies the id of the graph. Each object in a
 		graphviz graph must have a unique identifier.
 		"""
@@ -223,14 +223,14 @@ class Graph(GraphBase):
 		Parameters are identical to the to_svg() method.
 		"""
 		self._call_graphviz(output, converter, PNG_FORMAT, graph_attr, node_attr, edge_attr)
-	
+
 	def to_gif(self, output, converter=DEFAULT_CONVERTER, graph_attr=None, node_attr=None, edge_attr=None):
 		"""Converts the Graph into a GIF image (and optionally a client-side image-map).
 
 		Parameters are identical to the to_svg() method.
 		"""
 		self._call_graphviz(output, converter, GIF_FORMAT, graph_attr, node_attr, edge_attr)
-	
+
 	def to_map(self, output, converter=DEFAULT_CONVERTER, graph_attr=None, node_attr=None, edge_attr=None):
 		"""Converts the Graph into a client-side image map.
 
@@ -250,7 +250,7 @@ class Graph(GraphBase):
 				else:
 					yield item
 		return iter_sub(self)
-	
+
 	def touch(self, method, *args, **kwargs):
 		"""Calls the specified method for each object within the graph.
 
@@ -281,7 +281,7 @@ class Subgraph(GraphBase):
 
 	def __init__(self, graph, id):
 		"""Initializes an instance of the class.
-		
+
 		The id parameter specifies the id of the graph. Each object in a
 		graphviz graph must have a unique identifier.
 		"""
@@ -313,14 +313,14 @@ class Cluster(Subgraph):
 
 	def __init__(self, graph, id):
 		"""Initializes an instance of the class.
-		
+
 		The id parameter specifies the id of the graph. Each object in a
 		graphviz graph must have a unique identifier.
 		"""
 		assert isinstance(graph, Graph)
 		super(Cluster, self).__init__(graph, id)
 		# XXX Hmm ... need to ensure id is provided and is unique with cluster_ prefix
-	
+
 	def _get_dot(self):
 		# A cluster is just a specially named subgraph, so we just rewrite the
 		# id temporarily and call the inherited method
@@ -343,7 +343,7 @@ class Node(GraphObject):
 
 	def __init__(self, graph, id):
 		"""Initializes an instance of the class.
-		
+
 		The id parameter specifies the id of the node. Each object in a
 		graphviz graph must have a unique identifier.
 		"""
@@ -352,7 +352,7 @@ class Node(GraphObject):
 		self.parent = graph
 		self.id = id
 		graph.children.append(self)
-	
+
 	def _get_dot(self):
 		return '%s [%s]' % (
 			self._quote(str(self.id)),
@@ -408,7 +408,7 @@ class Node(GraphObject):
 		objects connecting the from the node on which the method is called to
 		the node specified in the parameter. If such an Edge is found it is
 		returned. If no such Edge is found, None is returned.
-		
+
 		If the graph is undirected, the method also searches for reverse
 		connections (from the specified node to this node).
 		"""

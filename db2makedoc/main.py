@@ -165,7 +165,7 @@ class Utility(object):
 
 class MakeDocUtility(Utility):
 	"""%prog [options] configs...
-	
+
 	This utility generates documentation (in a variety of formats) from the
 	system catalog in IBM DB2 databases. At least one configuration file (an
 	INI-style file) must be specified. See the documentation for more

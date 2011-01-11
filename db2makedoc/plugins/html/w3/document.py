@@ -711,7 +711,7 @@ class W3Search(W3Article):
 		self.title = 'Search results'
 		self.description = self.title
 		self.search = False
-	
+
 	def _get_parent(self):
 		result = super(W3Search, self)._get_parent()
 		if not result:
@@ -752,7 +752,7 @@ class W3GraphDocument(GraphObjectDocument):
 		graph = super(W3GraphDocument, self).generate()
 		graph.ratio = str(float(maxh) / float(maxw))
 		return graph
-	
+
 	def write(self):
 		# Overridden to set the introduced "written" flag (to ensure we don't
 		# attempt to write the graph more than once due to the induced write()

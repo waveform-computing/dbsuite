@@ -389,7 +389,7 @@ class PlainSearch(PlainDocument):
 		self.title = '%s - Search Results' % site.title
 		self.description = 'Search Results'
 		self.search = False
-	
+
 	def generate_body(self):
 		body = super(PlainSearch, self).generate_body()
 		# XXX Dirty hack to work around a bug in ElementTree: if we use an ET
@@ -401,7 +401,7 @@ class PlainSearch(PlainDocument):
 		# encoding is not ASCII-based (e.g. EBCDIC).
 		body.append(ProcessingInstruction('php', '__PHP__'))
 		return body
-	
+
 	def serialize(self, content):
 		# XXX See generate()
 		php = self.search_php
