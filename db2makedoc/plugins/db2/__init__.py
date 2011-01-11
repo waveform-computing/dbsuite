@@ -26,6 +26,18 @@ def connect(dsn, username=None, password=None):
 	TIMESTAMP fields are CAST to CHAR in the queries below).
 	"""
 	logging.info('Connecting to database "%s"' % dsn)
+	# Try the "official" IBM DB2 Python driver
+	try:
+		import ibm_db
+		import ibm_db_dbi
+	except ImportError:
+		pass
+	else:
+		logging.info('Using IBM DB2 Python driver')
+		if username is not None:
+			return ibm_db_dbi.connect(dsn, username, password)
+		else:
+			return ibm_db_dbi.connect(dsn)
 	# Try the PyDB2 driver
 	try:
 		import DB2
@@ -53,39 +65,6 @@ def connect(dsn, username=None, password=None):
 			return pyodbc.connect('driver=IBM DB2 ODBC DRIVER;dsn=%s;uid=%s;pwd=%s' % (dsn, username, password))
 		else:
 			return pyodbc.connect('driver=IBM DB2 ODBC DRIVER;dsn=%s' % dsn)
-	# Try the "official" IBM DB2 Python driver (but avoid it if possible)
-	try:
-		import ibm_db
-		import ibm_db_dbi
-		# XXX Shut the "official" driver up (stupid warnings)
-		ibm_db_dbi.logger.setLevel(logging.ERROR)
-	except ImportError:
-		pass
-	else:
-		logging.info('Using IBM DB2 Python driver')
-		if username is not None:
-			return ibm_db_dbi.connect(dsn, username, password)
-		else:
-			return ibm_db_dbi.connect(dsn)
-	# Try the mxODBC driver
-	try:
-		import mx.ODBC
-	except ImportError:
-		pass
-	else:
-		logging.info('Using mxODBC driver')
-		# XXX Check whether escaping/quoting is required
-		# XXX See discussion about driver names above
-		if username is not None:
-			connectstr = 'driver=IBM DB2 ODBC DRIVER;dsn=%s;uid=%s;pwd=%s' % (dsn, username, password)
-		else:
-			connectstr = 'driver=IBM DB2 ODBC DRIVER;dsn=%s' % dsn
-		if mswindows:
-			import mx.ODBC.Windows
-			return mx.ODBC.Windows.DriverConnect(connectstr)
-		else:
-			import mx.ODBC.iODBC
-			return mx.ODBC.iODBC.DriverConnect(connectstr)
 	# Try the PythonWin ODBC driver
 	try:
 		import dbi
