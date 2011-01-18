@@ -18,6 +18,7 @@ import sys
 import math
 import db2makedoc.plugins.dialects as dialects
 from db2makedoc.plugins.tokenizer import TokenTypes as TT, Token, Error, TokenError
+from db2makedoc.util import *
 from decimal import Decimal
 from itertools import tee, izip
 
@@ -34,6 +35,7 @@ __all__ = [
 	'merge_whitespace',
 	'strip_whitespace',
 	'split_lines',
+	'Connection',
 	'Error',
 	'ParseError',
 	'ParseBacktrack',
@@ -42,12 +44,16 @@ __all__ = [
 	'ParseExpectedSequenceError',
 	'BaseFormatter',
 	'DB2LUWFormatter',
+	'DB2CLPFormatter',
 ]
 
 # Add some custom token types used by the formatter
 for (type, name) in (
 	('EOF',       '<end-of-file>'),    # Symbolically represents the end of file (e.g. for errors)
 	('DATATYPE',  '<datatype>'),       # Datatypes (e.g. VARCHAR) converted from KEYWORD or IDENTIFIER
+	('SCHEMA',    '<schema>'),         # Schema identifier converted from IDENTIFIER
+	('RELATION',  '<relation>'),       # Relation identifier converted from IDENTIFIER
+	('ROUTINE',   '<routine>'),        # Routine identifier converted from IDENTIFIER
 	('REGISTER',  '<register>'),       # Special registers (e.g. CURRENT DATE) converted from KEYWORD or IDENTIFIER
 	('STATEMENT', '<statement-end>'),  # Statement terminator
 	('INDENT',    None),               # Whitespace indentation at the start of a line
@@ -211,7 +217,7 @@ def format_tokens(tokens, reformat=[], terminator=';', statement=';'):
 		if token.type in reformat:
 			if token.type in (TT.KEYWORD, TT.REGISTER):
 				yield Token(token.type, token.value, token.value, 0, 0)
-			elif token.type in (TT.IDENTIFIER, TT.DATATYPE):
+			elif token.type in (TT.IDENTIFIER, TT.DATATYPE, TT.SCHEMA, TT.RELATION, TT.ROUTINE):
 				yield Token(token.type, token.value, format_ident(token.value), 0, 0)
 			elif token.type == TT.NUMBER:
 				# Ensure decimal values with no decimal portion keep the
@@ -285,15 +291,16 @@ def convert_valign(tokens):
 					alignline = line
 			elif token.type == TT.VAPPLY:
 				# Convert all the remembered VALIGN tokens into WHITESPACE
-				# tokens with appropriate lengths for vertical alignment,
-				# and change the VAPPLY token into a blank WHITESPACE token
-				# (necessary to ensure consistency of remembered indexes)
+				# tokens with appropriate lengths for vertical alignment
 				for j in indexes:
 					line, col = result[j].line, result[j].column
 					result[j] = Token(TT.WHITESPACE, None, ' ' * (aligncol - col), 0, 0)
-				# Remove the VAPPLY token
+				# Convert the VAPPLY token into a zero-length WHITESPACE token.
+				# We cannot simply remove it as that would invalidate the
+				# indexes being generated for the input sequence by the
+				# enumerate() call in the loop
 				if indexes:
-					del result[-1]
+					result[-1] = Token(TT.WHITESPACE, None, '', 0, 0)
 					indexes = []
 					aligncol = alignline = 0
 		# If indexes isn't blank, then we encountered VALIGNs without a
@@ -306,9 +313,9 @@ def merge_whitespace(tokens):
 	"""Merges consecutive WHITESPACE tokens.
 
 	This generator function merges consecutive WHITESPACE tokens which can
-	result from various mechanisms (especially the VALIGN conversion).  Note it
-	also ditches WHITESPACE tokens with no source. Note: this function relies
-	on positional elements being present in the tokens.
+	result from various mechanisms (especially the VALIGN conversion). It also
+	ditches WHITESPACE tokens with no source. Note: this function relies on
+	positional elements being present in the tokens.
 	"""
 	empty = True
 	a, b = tee(tokens)
@@ -523,6 +530,9 @@ class BaseFormatter(object):
 	            containing lowercase characters, symbols, etc.) will be
 	            unquoted (if originally quoted), and folded to uppercase.
 	DATATYPE    Same as IDENTIFIER.
+	SCHEMA      Same as IDENTIFIER.
+	RELATION    Same as IDENTIFIER.
+	ROUTINE     Same as IDENTIFIER.
 	LABEL       Same as IDENTIFIER, with a colon suffix.
 	PARAMETER   Same as IDENTIFIER, with a colon prefix for named parameters.
 	NUMBER      All numbers will be formatted without extraneous leading or
@@ -553,6 +563,9 @@ class BaseFormatter(object):
 		self.reformat = set([
 			TT.DATATYPE,
 			TT.IDENTIFIER,
+			TT.SCHEMA,
+			TT.RELATION,
+			TT.ROUTINE,
 			TT.KEYWORD,
 			TT.LABEL,
 			TT.NUMBER,
@@ -708,6 +721,32 @@ class BaseFormatter(object):
 		else:
 			self._output.insert(i, token)
 
+	def _update_output(self, token, index):
+		"""Changes the specified token in the output.
+
+		This utility routine is used to rewrite tokens in the output sometime
+		prior to the current end of the output.  The index parameter (which is
+		always negative) specifies how many non-junk tokens are to be skipped
+		over before changing the specified token.
+
+		Note that the method takes care to preserve the invariants that the
+		state save/restore methods rely upon.
+		"""
+		if index == 0:
+			i = len(self._output)
+		elif index < 0:
+			i = len(self._output) - 1
+			while index < 0:
+				while self._output[i].type in (TT.COMMENT, TT.WHITESPACE):
+					i -= 1
+				index += 1
+		else:
+			assert False
+		# Check that the statestack invariant (see _save_state()) is preserved
+		assert (len(self._states) == 0) or (i >= self._states[-1][2])
+		# Check for duplicates - replace if we're about to duplicate the token
+		self._output[i - 1] = token
+
 	def _save_state(self):
 		"""Saves the current state of the parser on a stack for later retrieval."""
 		# An invariant observed throughout this class (and its descendents) is
@@ -786,7 +825,7 @@ class BaseFormatter(object):
 		# successful match)
 		transforms = {
 			TT.KEYWORD:     (TT.IDENTIFIER, TT.DATATYPE, TT.REGISTER),
-			TT.IDENTIFIER:  (TT.DATATYPE, TT.REGISTER),
+			TT.IDENTIFIER:  (TT.DATATYPE, TT.REGISTER, TT.SCHEMA, TT.RELATION, TT.ROUTINE),
 			TT.TERMINATOR:  (TT.STATEMENT,),
 			TT.EOF:         (TT.STATEMENT,),
 		}
@@ -1051,6 +1090,33 @@ class DB2LUWFormatter(BaseFormatter):
 	CREATE TABLESPACE, CREATE FUNCTION, and dynamic compound statements).
 	"""
 
+	def __init__(self):
+		super(DB2LUWFormatter, self).__init__()
+		self.current_schema = None
+
+	def _parse_init(self, tokens):
+		super(DB2LUWFormatter, self)._parse_init(tokens)
+		self.current_schema = None
+
+	def _save_state(self):
+		# Override _save_state to save the current schema
+		self._states.append((
+			self._index,
+			self._level,
+			len(self._output),
+			self.current_schema
+		))
+
+	def _restore_state(self):
+		# Override _restore_state to restore the current schema
+		(
+			self._index,
+			self._level,
+			output_len,
+			self.current_schema
+		) = self._states.pop()
+		del self._output[output_len:]
+
 	def _parse_top(self):
 		# Override _parse_top to make a 'statement' the top of the parse tree
 		self._parse_statement()
@@ -1084,11 +1150,17 @@ class DB2LUWFormatter(BaseFormatter):
 		specify SCHEMA.TABLE.COLUMN). The method returns the parsed name as a
 		tuple with 3 elements (None is used for qualifiers which are missing).
 		"""
-		result = (None, None, self._expect(TT.IDENTIFIER).value)
+		token1 = self._expect(TT.IDENTIFIER)
+		result = (None, None, token1.value)
 		if self._match('.'):
-			result = (None, result[2], self._expect(TT.IDENTIFIER).value)
+			self._update_output(Token(TT.RELATION, token1.value, token1.source, token1.line, token1.column), -2)
+			token2 = self._expect(TT.IDENTIFIER)
+			result = (None, result[2], token2.value)
 			if self._match('.'):
-				result = (result[1], result[2], self._expect(TT.IDENTIFIER).value)
+				self._update_output(Token(TT.SCHEMA, token1.value, token1.source, token1.line, token1.column), -4)
+				self._update_output(Token(TT.RELATION, token2.value, token2.source, token2.line, token2.column), -2)
+				token3 = self._expect(TT.IDENTIFIER)
+				result = (result[1], result[2], token3.value)
 		return result
 
 	_parse_column_name = _parse_subrelation_name
@@ -1114,9 +1186,12 @@ class DB2LUWFormatter(BaseFormatter):
 		name). The method returns the parsed name as a tuple with 2 elements
 		(None is used for the schema qualifier if it is missing).
 		"""
-		result = (None, self._expect(TT.IDENTIFIER).value)
+		token1 = self._expect(TT.RELATION)
+		result = (None, token1.value)
 		if self._match('.'):
-			result = (result[1], self._expect(TT.IDENTIFIER).value)
+			self._update_output(Token(TT.SCHEMA, token1.value, token1.source, token1.line, token1.column), -2)
+			token2 = self._expect(TT.RELATION)
+			result = (result[1], token2.value)
 		return result
 
 	_parse_relation_name = _parse_subschema_name
@@ -3112,114 +3187,101 @@ class DB2LUWFormatter(BaseFormatter):
 	def _parse_grant_revoke(self, grant):
 		"""Parses the body of a GRANT or REVOKE statement"""
 		# [GRANT|REVOKE] already matched
+		# Parse any preamble
 		seclabel = False
-		if self._match_one_of([
-			'BINDADD',
-			'CONNECT',
-			'CREATETAB',
-			'CREATE_EXTERNAL_ROUTINE',
-			'CREATE_NOT_FENCED_ROUTINE',
-			'IMPLICIT_SCHEMA',
-			'DBADM',
-			'LOAD',
-			'QUIESCE_CONNECT',
-			'SECADM',
-		]):
-			self._expect_sequence(['ON', 'DATABASE'])
-		elif self._match('EXEMPTION'):
-			self._expect_sequence(['ON', 'RULE'])
-			if self._match_one_of([
-				'DB2LBACREADARRAY',
-				'DB2LBACREADSET',
-				'DB2LBACREADTREE',
-				'DB2LBACWRITEARRAY',
-				'DB2LBACWRITESET',
-				'DB2LBACWRITETREE',
-				'ALL'
-			]).value == 'DB2LBACWRITEARRAY':
-				self._expect_one_of(['WRITEDOWN', 'WRITEUP'])
-			self._expect_sequence(['FOR', TT.IDENTIFIER])
-		elif self._match_one_of([
-			'ALTERIN',
-			'CREATEIN',
-			'DROPIN',
-		]):
-			self._expect_sequence(['ON', 'SCHEMA', TT.IDENTIFIER])
-		elif self._match('CONTROL'):
-			self._expect('ON')
-			if self._match('INDEX'):
-				self._parse_index_name()
-			else:
-				self._match('TABLE')
-				self._parse_table_name()
-		elif self._match('USAGE'):
-			self._expect('ON')
-			if self._match('SEQUENCE'):
-				self._parse_sequence_name()
-			elif self._match('WORKLOAD'):
-				self._expect(TT.IDENTIFIER)
-			else:
-				self._expected_one_of(['SEQUENCE', 'WORKLOAD'])
-		elif self._match('ALTER'):
-			self._expect('ON')
-			if self._match('SEQUENCE'):
-				self._parse_sequence_name()
-			else:
-				self._match('TABLE')
-				self._parse_table_name()
-		elif self._match('ALL'):
-			self._match('PRIVILEGES')
-			self._expect('ON')
-			if self._match('VARIABLE'):
-				self._parse_variable_name()
-			else:
-				self._match('TABLE')
-				self._parse_table_name()
-		elif self._match('USE'):
-			self._expect_sequence(['OF', 'TABLESPACE', TT.IDENTIFIER])
-		elif self._match_sequence(['EXECUTE', 'ON']):
-			if self._match_one_of(['FUNCTION', 'PROCEDURE']):
-				# Ambiguity: Can use schema.* or schema.name(prototype) here
-				if not self._match('*') and not self._match_sequence([TT.IDENTIFIER, '.', '*']):
-					self._parse_routine_name()
-					if self._match('(', prespace=False):
-						self._parse_datatype_list()
-						self._expect(')')
-			elif self._match('SPECIFIC'):
-				self._expect_one_of(['FUNCTION', 'PROCEDURE'])
-				self._parse_routine_name()
-			else:
-				self._expected_one_of(['FUNCTION', 'PROCEDURE', 'SPECIFIC'])
-		elif self._match('PASSTHRU'):
-			self._expect_sequence(['ON', 'SERVER', TT.IDENTIFIER])
+		if self._match('ROLE'):
+			pass
 		elif self._match_sequence(['SECURITY', 'LABEL']):
-			self._expect(TT.IDENTIFIER)
 			seclabel = grant
-		elif self._match('ROLE'):
-			self._parse_ident_list()
-		elif self._match('SETSESSIONUSER'):
-			self._expect('ON')
-			if not self._match('PUBLIC'):
-				self._expect_sequence(['USER', TT.IDENTIFIER])
-		else:
-			# Ambiguity: Here we could be matching table privs (SELECT, INSERT,
-			# et al.) or variable privs (READ, WRITE), or arbitrary IDENTIFIERs
-			# for GRANT ROLE where ROLE has been ommitted. Hence we just loop
-			# round grabbing IDENTs (taking care of the special syntax for
-			# REFERENCES and UPDATE which can include a column list)
+		# Parse the privilege list
+		while True:
+			priv = self._expect(TT.IDENTIFIER)
+			if priv.value in ('REFERENCES', 'UPDATE'):
+				if self._match('('):
+					self._parse_ident_list()
+					self._expect(')')
+			elif priv.value == 'DBADM':
+				while self._match_one_of(['WITH', 'WITHOUT']):
+					self._expect_one_of(['DATAACCESS', 'ACCESSCTRL'])
+			elif priv.value == 'DB2LBACWRITEARRAY':
+				self._expect_one_of(['WRITEDOWN', 'WRITEUP'])
+			elif priv.value == 'ALL':
+				self._match('PRIVILEGES')
+				break
+			if not self._match(','):
+				break
+		# Parse the target list
+		if self._match('OF'):
+			self._expect_sequence(['TABLESPACE', TT.IDENTIFIER])
+		elif self._match('ON'):
 			while True:
-				if self._expect(TT.IDENTIFIER).value in ('REFERENCES', 'UPDATE'):
-					if self._match('('):
-						self._parse_ident_list()
-						self._expect(')')
+				if self._match('DATABASE'):
+					break
+				elif self._match('RULE'):
+					if self._expect_one_of([
+						'DB2LBACREADARRAY',
+						'DB2LBACREADSET',
+						'DB2LBACREADTREE',
+						'DB2LBACWRITEARRAY',
+						'DB2LBACWRITESET',
+						'DB2LBACWRITETREE',
+						'ALL'
+					]).value == 'DB2LBACWRITEARRAY':
+						self._expect_one_of(['WRITEDOWN', 'WRITEUP'])
+					self._expect_sequence(['FOR', TT.IDENTIFIER])
+					break
+				elif self._match('VARIABLE'):
+					self._parse_variable_name()
+					break
+				elif self._match('INDEX'):
+					self._parse_index_name()
+					break
+				elif self._match('MODULE'):
+					self._parse_module_name()
+					break
+				elif self._match_one_of(['PROGRAM', 'PACKAGE']):
+					self._parse_subschema_name()
+					break
+				elif self._match_one_of(['FUNCTION', 'PROCEDURE']):
+					# Ambiguity: Can use schema.* or schema.name(prototype) here
+					if not self._match('*') and not self._match_sequence([TT.IDENTIFIER, '.', '*']):
+						self._parse_routine_name()
+						if self._match('(', prespace=False):
+							self._parse_datatype_list()
+							self._expect(')')
+					break
+				elif self._match('SPECIFIC'):
+					self._expect_one_of(['FUNCTION', 'PROCEDURE'])
+					self._parse_routine_name()
+					break
+				elif self._match('SCHEMA'):
+					self._expect(TT.IDENTIFIER)
+					break
+				elif self._match('SEQUENCE'):
+					self._parse_sequence_name()
+					break
+				elif self._match('SERVER'):
+					self._expect(TT.IDENTIFIER)
+					break
+				elif self._match('USER'):
+					self._expect(TT.IDENTIFIER)
+				elif self._match('PUBLIC'):
+					pass
+				elif self._match('TABLE'):
+					self._parse_table_name()
+					break
+				elif self._match('WORKLOAD'):
+					self._expect(TT.IDENTIFIER)
+					break
+				elif self._match('XSROBJECT'):
+					self._parse_subschema_name()
+					break
+				else:
+					self._parse_table_name()
+					break
 				if not self._match(','):
 					break
-			self._expect('ON')
-			if self._match('VARIABLE'):
-				self._parse_variable_name()
-			else:
-				self._match('TABLE')
-				self._parse_table_name()
+		# Parse the grantee(s)
 		# XXX The following is a bit lax, but again, adhering strictly to the
 		# syntax results in a ridiculously complex syntax
 		self._expect(['FROM', 'TO'][grant])
@@ -3271,8 +3333,15 @@ class DB2LUWFormatter(BaseFormatter):
 				break
 		self._expect(')')
 
-	def _parse_db_partitions_clause(self, size=False):
-		"""Parses an DBPARTITIONNUM clause in a CREATE/ALTER TABLESPACE statement"""
+	def _parse_db_partition_clause(self):
+		"""Parses a DBPARTITIONNUM clause in various statements"""
+		if not self._match('GLOBAL'):
+			if self._match('AT'):
+				self._expect_one_of(['DBPARTITIONNUM', 'NODE'])
+				self._expect(TT.NUMBER)
+
+	def _parse_db_partition_list_clause(self, size=False):
+		"""Parses an DBPARTITIONNUM clause in various statements"""
 		self._expect_one_of([
 			'DBPARTITIONNUM',
 			'DBPARTITIONNUMS',
@@ -3288,6 +3357,16 @@ class DB2LUWFormatter(BaseFormatter):
 			if not self._match(','):
 				break
 		self._expect(')')
+
+	def _parse_db_partitions_clause(self):
+		"""Parses a DBPARTITIONNUM list clause in various statements"""
+		if self._match('ON'):
+			if self._match('ALL'):
+				self._expect_one_of(['DBPARTITIONNUMS', 'NODES'])
+				if self._match('EXCEPT'):
+					self._parse_db_partition_list_clause(size=False)
+			else:
+				self._parse_db_partition_list_clause(size=False)
 
 	def _parse_function_predicates_clause(self):
 		"""Parses the PREDICATES clause in a CREATE FUNCTION statement"""
@@ -3889,14 +3968,14 @@ class DB2LUWFormatter(BaseFormatter):
 		self._expect(TT.IDENTIFIER)
 		while True:
 			if self._match('ADD'):
-				self._parse_db_partitions_clause(size=False)
+				self._parse_db_partition_list_clause(size=False)
 				if self._match('LIKE'):
 					self._expect_one_of(['DBPARTITIONNUM', 'NODE'])
 					self._expect(TT.NUMBER)
 				elif self._match('WITHOUT'):
 					self._expect('TABLESPACES')
 			elif self._match('DROP'):
-				self._parse_db_partitions_clause(size=False)
+				self._parse_db_partition_list_clause(size=False)
 			else:
 				self._expected_one_of(['ADD', 'DROP'])
 			if not self._match(','):
@@ -4315,7 +4394,7 @@ class DB2LUWFormatter(BaseFormatter):
 					self._expect_sequence(['STRIPE', 'SET', TT.IDENTIFIER])
 					self._parse_database_container_clause()
 					if self._match('ON'):
-						self._parse_db_partitions_clause(size=False)
+						self._parse_db_partition_list_clause(size=False)
 				else:
 					# Ambiguity: could be a Database or a System container
 					# clause here
@@ -4326,25 +4405,25 @@ class DB2LUWFormatter(BaseFormatter):
 						self._parse_database_container_clause()
 						reraise = True
 						if self._match('ON'):
-							self._parse_db_partitions_clause(size=False)
+							self._parse_db_partition_list_clause(size=False)
 					except ParseError:
 						# If that fails, rewind and try a system container
 						# clause
 						self._restore_state()
 						if reraise: raise
 						self._parse_system_container_clause()
-						self._parse_db_partitions_clause(size=False)
+						self._parse_db_partition_list_clause(size=False)
 					else:
 						self._forget_state()
 			elif self._match('BEGIN'):
 				self._expect_sequence(['NEW', 'STRIPE', 'SET'])
 				self._parse_database_container_clause()
 				if self._match('ON'):
-					self._parse_db_partitions_clause(size=False)
+					self._parse_db_partition_list_clause(size=False)
 			elif self._match('DROP'):
 				self._parse_database_container_clause(size=False)
 				if self._match('ON'):
-					self._parse_db_partitions_clause(size=False)
+					self._parse_db_partition_list_clause(size=False)
 			elif self._match_one_of(['EXTEND', 'REDUCE']):
 				# Ambiguity: could be a Database or ALL containers clause
 				reraise = False
@@ -4365,7 +4444,7 @@ class DB2LUWFormatter(BaseFormatter):
 				else:
 					self._forget_state()
 				if self._match('ON'):
-					self._parse_db_partitions_clause(size=False)
+					self._parse_db_partition_list_clause(size=False)
 			elif self._match('PREFETCHSIZE'):
 				if not self._match('AUTOMATIC'):
 					self._expect(TT.NUMBER)
@@ -4938,7 +5017,7 @@ class DB2LUWFormatter(BaseFormatter):
 				break
 			if self._match('EXCEPT'):
 				self._expect('ON')
-				self._parse_db_partitions_clause(size=True)
+				self._parse_db_partition_list_clause(size=True)
 			elif t == 'NUMBLOCKPAGES':
 				self._expect(TT.NUMBER)
 				if self._match('BLOCKSIZE'):
@@ -4961,7 +5040,7 @@ class DB2LUWFormatter(BaseFormatter):
 			if self._match('ALL'):
 				self._expect_one_of(['DBPARTITIONNUMS', 'NODES'])
 			else:
-				self._parse_db_partitions_clause(size=False)
+				self._parse_db_partition_list_clause(size=False)
 
 	def _parse_create_event_monitor_statement(self):
 		"""Parses a CREATE EVENT MONITOR statement"""
@@ -5713,7 +5792,7 @@ class DB2LUWFormatter(BaseFormatter):
 				while True:
 					self._parse_database_container_clause()
 					if self._match('ON'):
-						self._parse_db_partitions_clause(size=False)
+						self._parse_db_partition_list_clause(size=False)
 					if not self._match('USING'):
 						break
 				self._parse_tablespace_size_attributes()
@@ -5722,7 +5801,7 @@ class DB2LUWFormatter(BaseFormatter):
 				while True:
 					self._parse_system_container_clause()
 					if self._match('ON'):
-						self._parse_db_partitions_clause(size=False)
+						self._parse_db_partition_list_clause(size=False)
 					if not self._match('USING'):
 						break
 			else:
@@ -6911,7 +6990,7 @@ class DB2LUWFormatter(BaseFormatter):
 		"""Parses a SET SCHEMA statement"""
 		# SET [CURRENT] SCHEMA already matched
 		self._match('=')
-		self._expect_one_of([
+		t = self._expect_one_of([
 			(TT.REGISTER, 'USER'),
 			(TT.REGISTER, 'SESSION_USER'),
 			(TT.REGISTER, 'SYSTEM_USER'),
@@ -6919,6 +6998,8 @@ class DB2LUWFormatter(BaseFormatter):
 			TT.IDENTIFIER,
 			TT.STRING,
 		])
+		if t.type in (TT.IDENTIFIER, TT.STRING):
+			self.current_schema = t.value
 
 	def _parse_set_session_auth_statement(self):
 		"""Parses a SET SESSION AUTHORIZATION statement"""
@@ -7795,3 +7876,3239 @@ class DB2LUWFormatter(BaseFormatter):
 				self._parse_datatype()
 		self._parse_finish()
 		return self._output
+
+Connection = namedtuple('Connection', ('database', 'username', 'password'))
+
+class DB2CLPFormatter(DB2LUWFormatter):
+	"""Parser which handles the DB2 UDB CLP dialect.
+
+	This class inherits from the DB2 SQL language parser and as such is capable
+	of parsing all the statements that the parent class is capable of. In
+	addition, it adds the ability to parse the non-SQL CLP commands (like
+	IMPORT, EXPORT, LOAD, CREATE DATABASE, etc).
+	"""
+
+	def __init__(self):
+		super(DB2CLPFormatter, self).__init__()
+		self.connections = []
+		self.produces = []
+		self.consumes = []
+		self.current_user = None
+		self.current_connection = None
+
+	def _match_clp_string(self):
+		"""Attempts to match the current tokens as a CLP-style string.
+
+		The _match_clp_string() method is used to match a CLP-style string.
+		The "real" CLP has a fundamentally different style of parser to the
+		DB2 SQL parser, and includes several behaviours that are difficult
+		to replicate in this parser (which was primarily targetted at the
+		DB2 SQL dialect). One of these is the CLP's habit of treating an
+		unquoted run of non-whitespace tokens as a string, or allowing a
+		quoted identifier to be treated as a string.
+
+		When this method is called it will return a STRING token consisting
+		of the content of the aforementioned tokens (or None if a CLP-style
+		string is not found in the source at the current position).
+		"""
+		t = self._token()
+		if t.type == TT.STRING:
+			# STRINGs are treated verbatim
+			self._output.append(t)
+			self._index += 1
+		elif t.type == TT.IDENTIFIER and t.source[0] == '"':
+			# Double quoted identifier are converted to STRING tokens
+			t = Token(TT.STRING, t.value, quote_str(t.value, "'"), t.line, t.column)
+			self._output.append(t)
+			self._index += 1
+		elif not t.type in (TT.TERMINATOR, TT.EOF):
+			# Otherwise, any run of non-whitepace tokens is converted to a
+			# single STRING token
+			start = self._index
+			self._index += 1
+			while True:
+				t = self._token()
+				if t.type == TT.STRING:
+					raise ParseError(self._tokens, t, "Quotes (') not permitted in identifier")
+				if t.type == TT.IDENTIFIER and t.source[0] == '"':
+					raise ParseError(self._tokens, t, 'Quotes (") not permitted in identifier')
+				if t.type in (TT.WHITESPACE, TT.COMMENT, TT.TERMINATOR, TT.EOF):
+					break
+				self._index += 1
+			content = ''.join([token.source for token in self._tokens[start:self._index]])
+			t = Token(TT.STRING, content, quote_str(content, "'"), self._tokens[start].line, self._tokens[start].column)
+			self._output.append(t)
+		# Skip WHITESPACE and COMMENTS
+		while self._token().type in (TT.COMMENT, TT.WHITESPACE):
+			self._output.append(self._token())
+			self._index += 1
+		return t
+
+	def _expect_clp_string(self):
+		"""Matches the current tokens as a CLP-style string, or raises an error.
+
+		See _match_clp_string() above for details of the algorithm.
+		"""
+		result = self._match_clp_string()
+		if not result:
+			raise ParseExpectedOneOfError(self._tokens, self._token(), [TT.STRING])
+		return result
+
+	# PATTERNS ###############################################################
+
+	def _parse_clp_string_list(self):
+		"""Parses a comma separated list of strings.
+
+		This is a common pattern in CLP, for example within the LOBS TO clause of
+		the EXPORT command. The method returns the list of strings found.
+		"""
+		result = []
+		while True:
+			result.append(self._expect_clp_string().value)
+			if not self._match(','):
+				break
+		return result
+
+	def _parse_number_list(self):
+		"""Parses a comma separated list of number.
+
+		This is a common pattern in CLP, for example within the METHOD clause of
+		the IMPORT or LOAD commands. The method returns the list of numbers
+		found.
+		"""
+		result = []
+		while True:
+			result.append(self._expect(TT.NUMBER).value)
+			if not self._match(','):
+				break
+		return result
+
+	def _parse_login(self, optional=True, allowchange=False):
+		"""Parses a set of login credentials"""
+		username = None
+		password = None
+		if self._match('USER'):
+			username = self._expect_clp_string().value
+			if self._match('USING'):
+				password = self._expect_clp_string().value
+				if changeallowed:
+					if self._match('NEW'):
+						password = self._expect_clp_string().value
+						self._expect('CONFIRM')
+						self._expect_clp_string()
+					else:
+						self._match_sequence(['CHANGE', 'PASSWORD'])
+		elif not optional:
+			self._expected('USER')
+		return (username, password)
+
+	# COMMANDS ###############################################################
+
+	def _parse_activate_database_command(self):
+		"""Parses an ACTIVATE DATABASE command"""
+		# ACTIVATE [DATABASE|DB] already matched
+		self._expect_clp_string()
+		self._parse_login(optional=True, allowchange=False)
+
+	def _parse_add_contact_command(self):
+		"""Parses an ADD CONTACT command"""
+		# ADD CONTACT already matched
+		self._expect_clp_string()
+		self._expect('TYPE')
+		if self._expect_one_of(['EMAIL', 'PAGE']).value == 'PAGE':
+			if self._match_sequence(['MAXIMUM', 'PAGE', 'LENGTH']) or self._match_sequence(['MAX', 'LEN']):
+				self._expect(TT.NUMBER)
+		self._expect('ADDRESS')
+		self._expect_clp_string()
+		if self._match('DESCRIPTION'):
+			self._expect_clp_string()
+
+	def _parse_add_contactgroup_command(self):
+		"""Parses an ADD CONTACTGROUP command"""
+		# ADD CONTACTGROUP already matched
+		self._expect_clp_string()
+		while True:
+			self._expect_one_of(['CONTACT', 'GROUP'])
+			self._expect_clp_string()
+			if not self_match(','):
+				break
+		if self._match('DESCRIPTION'):
+			self._expect_clp_string()
+
+	def _parse_add_dbpartitionnum_command(self):
+		"""Parses an ADD DBPARTITIONNUM command"""
+		# ADD DBPARTITIONNUM already matched
+		if self._match('LIKE'):
+			self._expect_one_of(['DBPARTITIONNUM', 'NODE'])
+			self._expect(TT.NUMBER)
+		elif self._match('WITHOUT'):
+			self._expect('TABLESPACES')
+
+	def _parse_add_xmlschema_document_command(self):
+		"""Parses an ADD XMLSCHEMA DOCUMENT command"""
+		# ADD XMLSCHEMA DOCUMENT already matched
+		self._expect('TO')
+		self._parse_subschema_name()
+		self._expect('ADD')
+		self._expect_clp_string()
+		self._expect('FROM')
+		self._expect_clp_string()
+		if self._match('WITH'):
+			self._expect_clp_string()
+		if self._match('COMPLETE'):
+			if self._match('WITH'):
+				self._expect_clp_string()
+			self._match_sequence(['ENABLE', 'DECOMPOSITION'])
+
+	def _parse_archive_log_command(self):
+		"""Parses an ARCHIVE LOG command"""
+		# ARCHIVE LOG already matched
+		self._expect('FOR')
+		self._expect_one_of(['DATABASE', 'DB'])
+		self._expect_clp_string()
+		if self._match('USER'):
+			self._expect_clp_string()
+			if self._match('USING'):
+				self._expect_clp_string()
+		self._parse_db_partitions_clause()
+
+	def _parse_attach_command(self):
+		"""Parses an ATTACH command"""
+		# ATTACH already matched
+		if self._match('TO'):
+			self._expect_clp_string()
+		self._parse_login(optional=True, allowchange=True)
+
+	def _parse_autoconfigure_command(self):
+		"""Parses an AUTOCONFIGURE command"""
+		# AUTOCONFIGURE already matched
+		if self._match('USING'):
+			while True:
+				self._expect(TT.IDENTIFIER)
+				self._expect_one_of([TT.NUMBER, TT.STRING, TT.IDENTIFIER])
+				if self._match('APPLY'):
+					break
+		else:
+			self._expect('APPLY')
+		if self._match('DB'):
+			if self._match('AND'):
+				self._expect('DBM')
+			else:
+				self._expect('ONLY')
+		elif self._match('NONE'):
+			pass
+		else:
+			self._expected_one_of(['DB', 'NONE'])
+		self._match_sequence(['ON', 'CURRENT', 'NODE'])
+
+	def _parse_backup_command(self):
+		"""Parses a BACKUP DB command"""
+		# BACKUP [DATABASE|DB] already matched
+		self._expect_clp_string()
+		self._parse_login(optional=True, allowchange=False)
+		self._parse_db_partitions_clause()
+		if self._match('TABLESPACE'):
+			self._expect('(')
+			self._parse_ident_list()
+			self._expect(')')
+		self._match('ONLINE')
+		if self._match('INCREMENTAL'):
+			self._match('DELTA')
+		if self._match('USE'):
+			if self._match('SNAPSHOT'):
+				if self._match('LIBRARY'):
+					self._expect_clp_string()
+			elif self._match_one_of(['TSM', 'XBSA']):
+				if self._match('OPEN'):
+					self._expect(TT.NUMBER)
+					self._expect('SESSIONS')
+			if self._match('OPTIONS'):
+				self._expect_clp_string()
+				# XXX Add support for @filename response file
+		elif self._match('TO'):
+			self._parse_clp_string_list()
+		elif self._match('LOAD'):
+			self._expect_clp_string()
+			if self._match('OPEN'):
+				self._expect(TT.NUMBER)
+				self._expect('SESSIONS')
+			if self._match('OPTIONS'):
+				self._expect_clp_string()
+				# XXX Add support for @filename response file
+		self._match('DEDUP_DEVICE')
+		if self._match('WITH'):
+			self._expect(TT.NUMBER)
+			self._expect('BUFFERS')
+		if self._match('BUFFER'):
+			self._expect(TT.NUMBER)
+		if self._match('PARALLELISM'):
+			self._expect(TT.NUMBER)
+		if self._match('COMPRESS'):
+			if self._match('COMPRLIB'):
+				self._expect_clp_string()
+				self._match('EXCLUDE')
+			if self._match('COMPROPTS'):
+				self._expect_clp_string()
+		if self._match('UTIL_IMPACT_PRIORITY'):
+			self._match(TT.NUMBER)
+		if self._match_one_of(['EXCLUDE', 'INCLUDE']):
+			self._expect('LOGS')
+		if self._match('WITHOUT'):
+			self._expect('PROMPTING')
+
+	# XXX Add support for BIND command
+
+	def _parse_catalog_command(self):
+		"""Parses a CATALOG command"""
+		# CATALOG already matched
+		if self._match_one_of(['USER', 'SYSTEM']):
+			self._expect('ODBC')
+			if self._match_sequence(['DATA', 'SOURCE']):
+				self._expect_clp_string()
+			else:
+				self._expect_sequence(['ALL', 'DATA', 'SOURCES'])
+		elif self._match('ODBC'):
+			if self._match_sequence(['DATA', 'SOURCE']):
+				self._expect_clp_string()
+			else:
+				self._expect_sequence(['ALL', 'DATA', 'SOURCES'])
+		elif self._match_one_of(['DATABASE', 'DB']):
+			self._expect_clp_string()
+			if self._match('AS'):
+				self._expect_clp_string()
+			if self._match('ON'):
+				self._expect_clp_string()
+			elif self._match_sequence(['AT', 'NODE']):
+				self._expect_clp_string()
+			if self._match('AUTHENTICATION'):
+				if self._match_sequence(['KERBEROS', 'TARGET', 'PRINCIPAL']):
+					self._expect_clp_string()
+				else:
+					self._expect_one_of([
+						'SERVER',
+						'CLIENT',
+						'SERVER_ENCRYPT',
+						'SERVER_ENCRYPT_AES',
+						'KERBEROS',
+						'DATA_ENCRYPT',
+						'DATA_ENCRYPT_CMP',
+						'GSSPLUGIN',
+						'DCS',
+						'DCS_ENCRYPT',
+					])
+			if self._match('WITH'):
+				self._expect_clp_string()
+		elif self._match('DCS'):
+			self._expect_one_of(['DATABASE', 'DB'])
+			self._expect_clp_string()
+			if self._match('AS'):
+				self._expect_clp_string()
+			if self._match('AR'):
+				self._expect_clp_string()
+			if self._match('PARMS'):
+				self._expect_clp_string()
+			if self._match('WITH'):
+				self._expect_clp_string()
+		elif self._match('LDAP'):
+			if self._match_one_of(['DATABASE', 'DB']):
+				self._expect_clp_string()
+				if self._match('AS'):
+					self._expect_clp_string()
+				if self._match_sequence(['AT', 'NODE']):
+					self._expect_clp_string()
+				if self._match('GWNODE'):
+					self._expect_clp_string()
+				if self._match('PARMS'):
+					self._expect_clp_string()
+				if self._match('AR'):
+					self._expect_clp_string()
+				if self._match_sequence(['KERBEROS', 'TARGET', 'PRINCIPAL']):
+					self._expect_clp_string()
+				else:
+					self._expect_one_of([
+						'SERVER',
+						'CLIENT',
+						'SERVER_ENCRYPT',
+						'SERVER_ENCRYPT_AES',
+						'KERBEROS',
+						'DCS',
+						'DCS_ENCRYPT',
+						'DATA_ENCRYPT',
+						'GSSPLUGIN',
+					])
+				if self._match('WITH'):
+					self._expect_clp_string()
+			elif self._match('NODE'):
+				self._expect_clp_string()
+				self._expect('AS')
+				self._expect_clp_string()
+			else:
+				self._expected_one_of(['DATABASE', 'DB', 'NODE'])
+			self._parse_login(optional=True, allowchange=False)
+		else:
+			self._match('ADMIN')
+			if self._match_sequence(['LOCAL', 'NODE']):
+				self._expect_clp_string()
+				if self._match('INSTANCE'):
+					self._expect_clp_string()
+				if self._match('SYSTEM'):
+					self._expect_clp_string()
+				if self._match('OSTYPE'):
+					self._expect(IDENTIFIER)
+				if self._match('WITH'):
+					self._expect_clp_string()
+			elif self._match_sequence(['NPIPE', 'NODE']):
+				self._expect_clp_string()
+				self._expect('REMOTE')
+				self._expect_clp_string()
+				self._expect('INSTANCE')
+				self._expect_clp_string()
+				if self._match('SYSTEM'):
+					self._expect_clp_string()
+				if self._match('OSTYPE'):
+					self._expect(IDENTIFIER)
+				if self._match('WITH'):
+					self._expect_clp_string()
+			elif self._match_sequence(['NETBIOS', 'NODE']):
+				self._expect_clp_string()
+				self._expect('REMOTE')
+				self._expect_clp_string()
+				self._expect('ADAPTER')
+				self._expect(NUMBER)
+				if self._match('REMOTE_INSTANCE'):
+					self._expect_clp_string()
+				if self._match('SYSTEM'):
+					self._expect_clp_string()
+				if self._match('OSTYPE'):
+					self._expect(IDENTIFIER)
+				if self._match('WITH'):
+					self._expect_clp_string()
+			elif self._match_one_of(['TCPIP', 'TCPIP4', 'TCPIP6']):
+				self._expect('NODE')
+				self._expect_clp_string()
+				self._expect('REMOTE')
+				self._expect_clp_string()
+				self._expect('SERVER')
+				self._expect_clp_string()
+				if self._match('SECURITY'):
+					self._match_one_of(['SOCKS', 'SSL'])
+				if self._match('REMOTE_INSTANCE'):
+					self._expect_clp_string()
+				if self._match('SYSTEM'):
+					self._expect_clp_string()
+				if self._match('OSTYPE'):
+					self._expect(IDENTIFIER)
+				if self._match('WITH'):
+					self._expect_clp_string()
+			else:
+				self._expected_one_of([
+					'LOCAL',
+					'NPIPE',
+					'NETBIOS',
+					'TCPIP',
+					'TCPIP4',
+					'TCPIP6',
+				])
+
+	def _parse_connect_command(self):
+		"""Parses a CONNECT command"""
+		# CONNECT already matched
+		if self._expect_one_of(['TO', 'RESET']).value == 'RESET':
+			self.current_connection = None
+		else:
+			database = self._expect_clp_string().value
+			if self._match('IN'):
+				if self._expect_one_of(['SHARE', 'EXCLUSIVE']).value == 'EXCLUSIVE':
+					self._expect('MODE')
+					if self._match('ON'):
+						self._expect('SINGLE')
+						self._expect_one_of(['DBPARTITIONNUM', 'NODE'])
+				else:
+					self._expect('MODE')
+			(username, password) = self._parse_login(optional=True, allowchange=True)
+			self.current_connection = Connection(database, username, password)
+			self.connections.append(self.current_connection)
+
+	def _parse_create_database_command(self):
+		"""Parses a CREATE DATABASE command"""
+
+		def parse_tablespace_definition():
+			self._expect('MANAGED')
+			self._expect('BY')
+			if self._match('SYSTEM'):
+				self._expect('USING')
+				self._parse_system_container_clause()
+			elif self._match('DATABASE'):
+				self._expect('USING')
+				self._parse_database_container_clause()
+			elif self._match('AUTOMATIC'):
+				self._expect('STORAGE')
+			if self._match('EXTENTSIZE'):
+				self._expect(TT.NUMBER)
+				self._match_one_of(['K', 'M'])
+			if self._match('PREFETCHSIZE'):
+				self._expect(TT.NUMBER)
+				self._match_one_of(['K', 'M', 'G'])
+			if self._match('OVERHEAD'):
+				self._expect(TT.NUMBER)
+			if self._match('TRANSFERRATE'):
+				self._expect(TT.NUMBER)
+			if self._match('NO'):
+				self._expect_sequence(['FILE', 'SYSTEM', 'CACHING'])
+			elif self._match('FILE'):
+				self._expect_sequence(['SYSTEM', 'CACHING'])
+			self._parse_tablespace_size_attributes()
+
+		# CREATE [DATABASE|DB] already matched
+		self._expect_clp_string()
+		# XXX Implement AT DBPARTITIONNUM? (not for general use, etc.)
+		if self._match('AUTOMATIC'):
+			self._expect('STORAGE')
+			self._expect_one_of(['NO', 'YES'])
+		if self._match('ON'):
+			self._parse_clp_string_list()
+			if self._match('DBPATH'):
+				self._expect('ON')
+				self._expect_clp_string()
+		if self._match('ALIAS'):
+			self._expect_clp_string()
+		if self._match('USING'):
+			self._expect('CODESET')
+			self._expect_clp_string()
+			if self._match('TERRITORY'):
+				self._expect_clp_string()
+		if self._match('COLLATE'):
+			self._expect('USING')
+			self._expect(TT.IDENTIFIER)
+		if self._match('PAGESIZE'):
+			self._expect(TT.NUMBER)
+			self._match('K')
+		if self._match('NUMSEGS'):
+			self._expect(TT.NUMBER)
+		if self._match('DFT_EXTENT_SZ'):
+			self._expect(TT.NUMBER)
+		self._match('RESTRICTIVE')
+		if self._match('CATALOG'):
+			self._expect('TABLESPACE')
+			parse_tablespace_definition()
+		if self._match('USER'):
+			self._expect('TABLESPACE')
+			parse_tablespace_definition()
+		if self._match('TEMPORARY'):
+			self._expect('TABLESPACE')
+			parse_tablespace_definition()
+		if self._match('WITH'):
+			self._expect_clp_string()
+		if self._match('AUTOCONFIGURE'):
+			self._parse_autoconfigure_command()
+
+	def _parse_create_tools_catalog_command(self):
+		"""Parses a CREATE TOOLS CATALOG command"""
+		# CREATE TOOLS CATALOG already matched
+		self._expect_clp_string()
+		if self._match('CREATE'):
+			self._expect('NEW')
+			self._expect('DATABASE')
+			self._expect_clp_string()
+		elif self._match('USE'):
+			self._expect('EXISTING')
+			if self._match('TABLESPACE'):
+				self._expect(IDENTIFIER)
+			self._expect('DATABASE')
+			self._expect_clp_string()
+		self._match('FORCE')
+		if self._match('KEEP'):
+			self._expect('INACTIVE')
+
+	def _parse_deactivate_database_command(self):
+		"""Parses a DEACTIVATE DATABASE command"""
+		# DEACTIVATE [DATABASE|DB] already matched
+		self._expect_clp_string()
+		self._parse_login(optional=True, allowchange=False)
+
+	def _parse_decompose_xml_document(self):
+		"""Parses a DECOMPOSE XML DOCUMENT command"""
+		# DECOMPOSE XML DOCUMENT already matched
+		self._expect_clp_string()
+		self._expect('XMLSCHEMA')
+		self._parse_subschema_name()
+		self._match('VALIDATE')
+
+	def _parse_decompose_xml_documents(self):
+		"""Parses a DECOMPOSE XML DOCUMENTS command"""
+		# DECOMPOSE XML DOCUMENTS already matched
+		self._expect('IN')
+		self._parse_select_statement()
+		self._expect('XMLSCHEMA')
+		self._parse_subschema_name()
+		self._match('VALIDATE')
+		if self._match('ALLOW'):
+			self._match('NO')
+			self._expect('ACCESS')
+		if self._match('COMMITCOUNT'):
+			self._expect(TT.NUMBER)
+		self._match_sequence(['CONTINUE', 'ON', 'ERROR'])
+		if self._match('MESSAGES'):
+			self._expect_clp_string()
+
+	def _parse_deregister_command(self):
+		"""Parses a DEREGISTER command"""
+		# DEREGISTER already matched
+		self._match_sequence(['DB2', 'SERVER'])
+		self._match('IN')
+		self._expect_sequence(['LDAP', 'NODE', TT.IDENTIFIER])
+		self._parse_login(optional=True, allowchange=False)
+
+	def _parse_describe_command(self):
+		"""Parses a DESCRIBE command"""
+		# DESCRIBE already matched
+		table = True
+		if self._match('TABLE'):
+			pass
+		elif self._match_sequence(['INDEXES', 'FOR', 'TABLE']):
+			pass
+		elif self._match_sequence(['RELATIONAL', 'DATA']) or self._match_sequence(['XML', 'DATA']) or self._match_sequence(['TEXT', 'SEARCH']):
+			self._expect_sequence(['INDEXES', 'FOR', 'TABLE'])
+		elif self._match_sequence(['DATA', 'PARTITIONS', 'FOR', 'TABLE']):
+			pass
+		else:
+			table = False
+		if table:
+			self._parse_table_name()
+			self._match_sequence(['SHOW', 'DETAIL'])
+		else:
+			self._match('OUTPUT')
+			self._save_state()
+			try:
+				self._parse_select_statement()
+			except ParseError:
+				self._restore_state()
+				self._parse_call_statement()
+			else:
+				self._forget_state()
+		# XXX Add support for XQUERY?
+
+	def _parse_detach_command(self):
+		"""Parses a DETACH command"""
+		# DETACH already matched
+		pass
+
+	def _parse_disconnect_command(self):
+		"""Parses a DISCONNECT command"""
+		# DISCONNECT already matched
+		if self._match('ALL'):
+			self._match('SQL')
+			self.current_connection = None
+		elif self._match('CURRENT'):
+			self.current_connection = None
+		else:
+			t = self._expect_clp_string()
+			if isinstance(self.current_connection.database, basestring) and s.lower() == t.value.lower():
+				self.current_connection = None
+
+	def _parse_drop_contact_command(self):
+		"""Parses a DROP CONTACT command"""
+		# DROP CONTACT already matched
+		self._expect_clp_string()
+
+	def _parse_drop_contactgroup_command(self):
+		"""Parses a DROP CONTACTGROUP command"""
+		# DROP CONTACTGROUP already matched
+		self._expect_clp_string()
+
+	def _parse_drop_database_command(self):
+		"""Parses a DROP DATABASE command"""
+		# DROP [DATABASE|DB] already matched
+		self._expect_clp_string()
+		if self._match('AT'):
+			self._expect_one_of(['DBPARTITIONNUM', 'NODE'])
+
+	def _parse_drop_dbpartitionnum_verify_command(self):
+		"""Parses a DROP DBPARTITIONNUM VERIFY command"""
+		# DROP DBPARTITIONNUM VERIFY already matched
+		pass
+
+	def _parse_drop_tools_catalog_command(self):
+		"""Parses a DROP TOOLS CATALOG command"""
+		# DROP TOOLS CATALOG already matched
+		self._expect_clp_string()
+		self._expect('IN')
+		self._expect('DATABASE')
+		self._expect_clp_string()
+		self._match('FORCE')
+
+	def _parse_echo_command(self):
+		"""Parses an ECHO command"""
+		# ECHO already matched
+		self._match_clp_string()
+
+	def _parse_export_command(self):
+		"""Parses a EXPORT command"""
+		# EXPORT already matched
+		self._expect('TO')
+		self.produces.append((self._expect_clp_string().value, self.current_connection.database))
+		self._expect('OF')
+		self._expect_one_of(['DEL', 'IXF', 'WSF'])
+		if self._match('LOBS'):
+			self._expect('TO')
+			self._parse_clp_string_list()
+		if self._match('LOBFILE'):
+			self._parse_clp_string_list()
+		if self._match_sequence(['XML', 'TO']):
+			self._parse_clp_string_list()
+		if self._match('XMLFILE'):
+			self._parse_clp_string_list()
+		if self._match('MODIFIED'):
+			self._expect('BY')
+			# The syntax of MODIFIED BY is so incongruous with the parser that
+			# we don't even try and parse it, just skip tokens until we find
+			# some "normal" syntax again. Unfortunately, this means the error
+			# handling becomes rather dumb
+			i = self._index
+			while True:
+				if self._token(i).value in [
+					'XMLSAVESCHEMA',
+					'METHOD',
+					'MESSAGES',
+					'HIERARCHY',
+					'WITH',
+					'SELECT',
+					'VALUES',
+				]:
+					while self._index < i:
+						self._output.append(self._token())
+						self._index += 1
+					break
+				if self._token(i).type == TT.EOF:
+					raise ParseError("Unable to find end of file-modifiers in EXPORT statement")
+				i += 1
+		self._match('XMLSAVESCHEMA')
+		if self._match('METHOD'):
+			self._expect('N')
+			self._expect('(')
+			self._parse_ident_list()
+			self._expect(')')
+		if self._match('MESSAGES'):
+			self._expect_clp_string()
+		if self._match('HIERARCHY'):
+			if self._match('STARTING'):
+				self._expect(TT.IDENTIFIER)
+			else:
+				self._expect('(')
+				self._parse_ident_list()
+				self._expect(')')
+			if self._match('WHERE'):
+				self._parse_search_condition()
+		else:
+			self._parse_select_statement()
+		# XXX Add support for XQUERY?
+
+	def _parse_force_application_command(self):
+		"""Parses a FORCE APPLICATION command"""
+		# FORCE APPLICATION already matched
+		if self._match('('):
+			self._parse_number_list()
+			self._expect(')')
+		else:
+			self._expect('ALL')
+		if self._match('MODE'):
+			self._expect('ASYNC')
+
+	def _parse_get_admin_cfg_command(self):
+		"""Parses a GET ADMIN CFG command"""
+		# GET ADMIN [CONFIGURATION|CONFIG|CFG] already matched
+		if self._match('FOR'):
+			self._expect_sequence(['NODE', TT.IDENTIFIER])
+			self._parse_login(optional=True, allowchange=False)
+
+	def _parse_get_alert_cfg_command(self):
+		"""Parses a GET ALERT CFG command"""
+		# GET ALERT [CONFIGURATION|CONFIG|CFG] already matched
+		self._expect('FOR')
+		if (
+				self._match_sequence(['DATABASE', 'MANAGER'])
+				or self._match_sequence(['DB', 'MANAGER'])
+				or self._match_one_of(['DBM', 'DATABASES', 'CONTAINERS', 'TABLESPACES'])
+			):
+			self._match('DEFAULT')
+		elif (
+				self._match('DATABASE')
+				or self._match_sequence(['TABLESPACE', TT.IDENTIFIER])
+				or self._match_sequence(['CONTAINER', TT.IDENTIFIER, 'FOR', TT.IDENTIFIER])
+			):
+			self._expect('ON')
+			self._expect_clp_string()
+		else:
+			self._expected_one_of([
+				'DB',
+				'DBM',
+				'DATABASE',
+				'DATABASES',
+				'TABLESPACE',
+				'TABLESPACES',
+				'CONTAINER',
+				'CONTAINERS',
+			])
+		if self._match('USING'):
+			self._parse_clp_string_list()
+
+	def _parse_get_cli_cfg_command(self):
+		"""Parses a GET CLI CFG command"""
+		# GET CLI [CONFIGURATION|CONFIG|CFG] already matched
+		self._match_sequence(['AT', 'GLOBAL', 'LEVEL'])
+		if self._match_sequence(['FOR', 'SECTION']):
+			self._expect_clp_string()
+
+	def _parse_get_connection_state_command(self):
+		"""Parses a GET CONNECTION STATE command"""
+		# GET CONNECTION STATE already matched
+		pass
+
+	def _parse_get_contactgroup_command(self):
+		"""Parses a GET CONTACTGROUP command"""
+		# GET CONTACTGROUP already matched
+		self._expect_clp_string()
+
+	def _parse_get_contactgroups_command(self):
+		"""Parses a GET CONTACTGROUPS command"""
+		# GET CONTACTGROUPS already matched
+		pass
+
+	def _parse_get_contacts_command(self):
+		"""Parses a GET CONTACTS command"""
+		# GET CONTACTS already matched
+		pass
+
+	def _parse_get_db_cfg_command(self):
+		"""Parses a GET DB CFG command"""
+		# GET [DATABASE|DB] [CONFIGURATION|CONFIG|CFG] already matched
+		if self._match('FOR'):
+			self._expect_clp_string()
+		self._match_sequence(['SHOW', 'DETAIL'])
+
+	def _parse_get_dbm_cfg_command(self):
+		"""Parses a GET DBM CFG command"""
+		# GET [DATABASE MANAGER|DB MANAGER|DBM] [CONFIGURATION|CONFIG|CFG] already matched
+		self._match_sequence(['SHOW', 'DETAIL'])
+
+	def _parse_get_dbm_monitor_switches_command(self):
+		"""Parses a GET DBM MONITOR SWITCHES command"""
+		# GET [DATABASE MANAGER|DB MANAGER|DBM] MONITOR SWITCHES already matched
+		self._parse_db_partition_clause()
+
+	def _parse_get_description_for_health_indicator_command(self):
+		"""Parses a GET DESCRIPTION FOR HEALTH INDICATOR command"""
+		# GET DESCRIPTION FOR HEALTH INDICATOR already matched
+		self._expect_clp_string()
+
+	def _parse_get_notification_list_command(self):
+		"""Parses a GET NOTIFICATION LIST command"""
+		# GET [HEALTH] NOTIFICATION [CONTACT] LIST already matched
+		pass
+
+	def _parse_get_health_snapshot_command(self):
+		"""Parses a GET HEALTH SNAPSHOT command"""
+		# GET HEALTH SNAPSHOT already matched
+		self._expect('FOR')
+		if (
+				self._match_sequence(['DATABASE', 'MANAGER'])
+				or self._match_sequence(['DB', 'MANAGER'])
+				or self._match('DBM')
+				or self._match_sequence(['ALL', 'DATABASES'])
+			):
+			pass
+		elif self._match_one_of(['ALL', 'DATABASE', 'DB', 'TABLESPACES']):
+			self._expect('ON')
+			self._expect_clp_string()
+		else:
+			self._expected_one_of([
+				'DB',
+				'DATABASE',
+				'DBM',
+				'ALL',
+				'TABLESPACES',
+			])
+		self._parse_db_partition_clause()
+		self._match_sequence(['SHOW', 'DETAIL'])
+		self._match_sequence(['WITH', 'FULL', 'COLLECTION'])
+
+	def _parse_get_instance_command(self):
+		"""Parses a GET INSTANCE command"""
+		# GET INSTANCE already matched
+		pass
+
+	def _parse_get_monitor_switches_command(self):
+		"""Parses a GET MONITOR SWITCHES command"""
+		# GET MONITOR SWITCHES already matched
+		self._parse_db_partition_clause()
+
+	def _parse_get_recommendations_for_health_indicator_command(self):
+		"""Parses a GET RECOMMENDATIONS FOR HEALTH INDICATOR command"""
+		# GET RECOMMENDATIONS FOR HEALTH INDICATOR already matched
+		self._expect_clp_string()
+		if self._match('FOR'):
+			if not self._match('DBM'):
+				if self._match('TABLESPACE'):
+					self._expect(TT.IDENTIFIER)
+				elif self._match('CONTAINER'):
+					self._expect_clp_string()
+					self._expect_sequence(['FOR', 'TABLESPACE', TT.IDENTIFIER])
+				elif self._match('DATABASE'):
+					pass
+				else:
+					self._expected_one_of(['TABLESPACE', 'CONTAINER', 'DATABASE', 'DBM'])
+				self._expect('ON')
+				self._expect_clp_string()
+		self._parse_db_partition_clause()
+
+	def _parse_get_routine_command(self):
+		"""Parses a GET ROUTINE command"""
+		# GET ROUTINE already matched
+		self._expect('INTO')
+		self._expect_clp_string()
+		self._expect('FROM')
+		self._match('SPECIFIC')
+		self._expect('PROCEDURE')
+		self._parse_routine_name()
+		self._match_sequence(['HIDE', 'BODY'])
+
+	def _parse_get_snapshot_command(self):
+		"""Parses a GET SNAPSHOT command"""
+		# GET SNAPSHOT already matched
+		self._expect('FOR')
+		if (
+				self._match_sequence(['DATABASE', 'MANAGER'])
+				or self._match_sequence(['DB', 'MANAGER'])
+				or self._match('DBM')
+				or self._match_sequence(['ALL', 'DCS', 'DATABASES'])
+				or self._match_sequence(['ALL', 'DATABASES'])
+				or self._match_sequence(['ALL', 'DCS', 'APPLICATIONS'])
+				or self._match_sequence(['ALL', 'APPLICATIONS'])
+				or self._match_sequence(['ALL', 'BUFFERPOOLS'])
+				or self._match_sequence(['FCM', 'FOR', 'ALL', 'DBPARTITIONNUMS'])
+				or self._match_sequence(['FCM', 'FOR', 'ALL', 'NODES'])
+				or (self._match_sequence(['DCS', 'APPLICATION', 'APPLID']) and self._match_clp_string())
+				or self._match_sequence(['DCS', 'APPLICATION', 'AGENTID', TT.NUMBER])
+				or (self._match_sequence(['APPLICATION', 'APPLID']) and self._match_clp_string())
+				or self._match_sequence(['APPLICATION', 'AGENTID', TT.NUMBER])
+				or (self._match_sequence(['LOCKS', 'FOR', 'APPLICATION', 'APPLID']) and self._match_clp_string())
+				or self._match_sequence(['LOCKS', 'FOR', 'APPLICATION', 'AGENTID', TT.NUMBER])
+				or self._match_sequence(['ALL', 'REMOTE_DATABASES'])
+				or self._match_sequence(['ALL', 'REMOTE_APPLICATIONS'])
+			):
+			pass
+		elif self._match_sequence(['DYNAMIC', 'SQL', 'ON']):
+			self._expect_clp_string()
+			self._match_sequence(['WRITE', 'TO', 'FILE'])
+		elif (
+				self._match('ALL')
+				or self._match_sequence(['DCS', 'DATABASE'])
+				or self._match_sequence(['DCS', 'DB'])
+				or self._match_sequence(['DCS', 'APPLICATIONS'])
+				or self._match_one_of([
+					'DATABASE',
+					'APPLICATIONS',
+					'TABLES',
+					'TABLESPACES',
+					'LOCKS',
+					'BUFFERPOOLS',
+					'REMOTE_DATABASES',
+					'REMOTE_APPLICATIONS'
+				])
+			):
+			self._expect('ON')
+			self._expect_clp_string()
+		else:
+			self._expected_one_of([
+				'ALL',
+				'DCS',
+				'DB',
+				'DBM',
+				'DATABASE',
+				'FCM',
+				'DYNAMIC',
+				'APPLICATION',
+				'APPLICATIONS',
+				'TABLES',
+				'TABLESPACES',
+				'LOCKS',
+				'BUFFERPOOLS',
+				'REMOTE_DATABASES',
+				'REMOTE_APPLICATIONS',
+			])
+		self._parse_db_partition_clause()
+
+	def _parse_import_method(self):
+		"""Parses the METHOD clause of an IMPORT/LOAD command"""
+		# METHOD already matched
+		if self._match('L'):
+			self._expect('(')
+			while True:
+				self._expect(NUMBER) # col start
+				self._expect(NUMBER) # col end
+				if not self._match(','):
+					break
+			self._expect(')')
+			if self._match('NULL'):
+				self._expect('INDICATORS')
+				self._expect('(')
+				self._parse_number_list()
+				self._expect(')')
+		elif self._match('N'):
+			self._expect('(')
+			self._parse_ident_list()
+			self._expect(')')
+		elif self._match('P'):
+			self._expect('(')
+			self._parse_number_list()
+			self._expect(')')
+		else:
+			self._expected_one_of(['L', 'N', 'P'])
+
+	def _parse_import_command(self):
+		"""Parses a IMPORT command"""
+		# IMPORT already matched
+		self._expect('FROM')
+		self.consumes.append((self._expect_clp_string().value, self.current_connection.database))
+		self._expect('OF')
+		self._expect_one_of(['ASC', 'DEL', 'IXF', 'WSF'])
+		if self._match('LOBS'):
+			self._expect('FROM')
+			self._parse_clp_string_list()
+		if self._match('XML'):
+			self._expect('FROM')
+			self._parse_clp_string_list()
+		if self._match('MODIFIED'):
+			self._expect('BY')
+			# See _parse_export_command() above for an explanation...
+			i = self._index
+			while True:
+				if self._token(i).value in [
+					'METHOD',
+					'COMMITCOUNT',
+					'RESTARTCOUNT',
+					'SKIPCOUNT',
+					'ROWCOUNT',
+					'WARNINGCOUNT',
+					'NOTIMEOUT',
+					'INSERT_UPDATE',
+					'REPLACE',
+					'REPLACE_CREATE',
+					'MESSAGES',
+					'INSERT',
+					'CREATE',
+					'ALLOW',
+					'XMLPARSE',
+					'XMLVALIDATE',
+				]:
+					while self._index < i:
+						self._output.append(self._token())
+						self._index += 1
+					break
+				if self._token(i).type == TT.EOF:
+					raise ParseError("Unable to find end of file-modifiers in IMPORT statement")
+				i += 1
+		if self._match('METHOD'):
+			self._parse_import_method()
+		if self._match('XMLPARSE'):
+			self._expect_one_of(['STRIP', 'PRESERVE'])
+			self._expect('WHITESPACE')
+		if self._match('XMLVALIDATE'):
+			self._expect('USING')
+			if self._match('XDS'):
+				if self._match('DEFAULT'):
+					self._parse_subschema_name()
+				if self._match('IGNORE'):
+					self._expect('(')
+					while True:
+						self._parse_subschema_name()
+						if not self._match(','):
+							break
+					self._expect(')')
+				if self._match('MAP'):
+					self._expect('(')
+					while True:
+						self._expect('(')
+						self._parse_subschema_name()
+						self._expect(',')
+						self._parse_subschema_name()
+						self._expect(')')
+						if not self._match(','):
+							break
+					self._expect(')')
+			elif self._match('SCHEMA'):
+				self._parse_subschema_name()
+			elif self._match('SCHEMALOCATION'):
+				self._expect('HINTS')
+		if self._match('ALLOW'):
+			self._expect_one_of(['NO', 'WRITE'])
+			self._expect('ACCESS')
+		if self._match('COMMITCOUNT'):
+			self._expect_one_of([TT.NUMBER, 'AUTOMATIC'])
+		if self._match_one_of(['RESTARTCOUNT', 'SKIPCOUNT']):
+			self._expect(TT.NUMBER)
+		if self._match('ROWCOUNT'):
+			self._expect(TT.NUMBER)
+		if self._match('WARNINGCOUNT'):
+			self._expect(TT.NUMBER)
+		if self._match('NOTIMEOUT'):
+			pass
+		if self._match('MESSAGES'):
+			self._expect_clp_string()
+		# Parse the action (CREATE/INSERT/etc.)
+		t = self._expect_one_of([
+			'CREATE',
+			'INSERT',
+			'INSERT_UPDATE',
+			'REPLACE',
+			'REPLACE_CREATE',
+		])
+		self._expect('INTO')
+		self._parse_table_name()
+		if self._match('('):
+			self._parse_ident_list()
+			self._expect(')')
+		if (t.value == 'CREATE') and self._match('IN'):
+			self._expect(TT.IDENTIFIER)
+			if self._match('INDEX'):
+				self._expect('IN')
+				self._expect(TT.IDENTIFIER)
+			if self._match('LONG'):
+				self._expect('IN')
+				self._expect(TT.IDENTIFIER)
+
+	def _parse_initialize_tape_command(self):
+		"""Parses an INTIALIZE TAPE command"""
+		# INITIALIZE TAPE already matched
+		if self._match('ON'):
+			self._expect_clp_string()
+		if self._match('USING'):
+			self._expect(TT.NUMBER)
+
+	def _parse_inspect_command(self):
+		"""Parses an INSPECT command"""
+		# INSPECT already matched
+		if self._match('ROWCOMPESTIMATE'):
+			self._expect('TABLE')
+			if self._match('NAME'):
+				self._expect(TT.IDENTIFIER)
+				if self._match('SCHEMA'):
+					self._expect(TT.IDENTIFIER)
+			elif self._match('TBSPACEID'):
+				self._expect_sequence([TT.NUMBER, 'OBJECTID', TT.NUMBER])
+		elif self._match('CHECK'):
+			if self._match('DATABASE'):
+				if self._match('BEGIN'):
+					self._expect_sequence(['TBSPACEID', TT.NUMBER])
+					self._match_sequence(['OBJECTID', TT.NUMBER])
+			elif self._match('TABLESPACE'):
+				if self._match('NAME'):
+					self._expect(TT.IDENTIFIER)
+				elif self._match('TBSPACEID'):
+					self._expect(TT.NUMBER)
+				if self._match('BEGIN'):
+					self._expect_sequence(['OBJECTID', TT.NUMBER])
+			if self._match('TABLE'):
+				if self._match('NAME'):
+					self._expect(TT.IDENTIFIER)
+					if self._match('SCHEMA'):
+						self._expect(TT.IDENTIFIER)
+				elif self._match('TBSPACEID'):
+					self._expect_sequence([TT.NUMBER, 'OBJECTID', TT.NUMBER])
+		else:
+			self._expected_one_of(['ROWCOMPESTIMATE', 'CHECK'])
+		self._match_sequence(['FOR', 'ERROR', 'STATE', 'ALL'])
+		if self._match_sequence(['LIMIT', 'ERROR', 'TO']):
+			self._expect_one_of(['DEFAULT', 'ALL', TT.NUMBER])
+		if self._match('EXTENTMAP'):
+			self._expect_one_of(['NORMAL', 'NONE', 'LOW'])
+		if self._match('DATA'):
+			self._expect_one_of(['NORMAL', 'NONE', 'LOW'])
+		if self._match('BLOCKMAP'):
+			self._expect_one_of(['NORMAL', 'NONE', 'LOW'])
+		if self._match('INDEX'):
+			self._expect_one_of(['NORMAL', 'NONE', 'LOW'])
+		if self._match('LONG'):
+			self._expect_one_of(['NORMAL', 'NONE', 'LOW'])
+		if self._match('LOB'):
+			self._expect_one_of(['NORMAL', 'NONE', 'LOW'])
+		if self._match('XML'):
+			self._expect_one_of(['NORMAL', 'NONE', 'LOW'])
+		self._match('INDEXDATA')
+		self._expect('RESULTS')
+		self._match('KEEP')
+		self._expect_clp_string()
+		self._parse_db_partitions_clause()
+
+	def _parse_list_active_databases_command(self):
+		"""Parses a LIST ACTIVE DATABASES command"""
+		# LIST ACTIVE DATABASES already matched
+		self._parse_db_partition_clause()
+
+	def _parse_list_applications_command(self):
+		"""Parses a LIST APPLICATIONS command"""
+		# LIST APPLICATIONS already matched
+		if self._match('FOR'):
+			self._expect_one_of(['DATABASE', 'DB'])
+			self._expect_clp_string()
+		self._parse_db_partition_clause()
+		self._match_sequence(['SHOW', 'DETAIL'])
+
+	def _parse_list_command_options_command(self):
+		"""Parses a LIST COMMAND OPTIONS command"""
+		# LIST COMMAND OPTIONS already matched
+		pass
+
+	def _parse_list_db_directory_command(self):
+		"""Parses a LIST DB DIRECTORY command"""
+		# LIST [DATABASE|DB] DIRECTORY already matched
+		if self._match('ON'):
+			self._expect_clp_string()
+
+	def _parse_list_database_partition_groups_command(self):
+		"""Parses a LIST DATABASE PARTITION GROUPS command"""
+		# LIST DATABASE PARTITION GROUPS already matched
+		self._match_sequence(['SHOW', 'DETAIL'])
+
+	def _parse_list_nodes_command(self):
+		"""Parses a LIST NODES command"""
+		# LIST DBPARTITIONNUMS|NODES already matched
+		pass
+
+	def _parse_list_dcs_applications_command(self):
+		"""Parses a LIST DCS APPLICATIONS command"""
+		# LIST DCS APPLICATIONS already matched
+		if not self._match('EXTENDED'):
+			self._match_sequence(['SHOW', 'DETAIL'])
+
+	def _parse_list_dcs_directory_command(self):
+		"""Parses a LIST DCS DIRECTORY command"""
+		# LIST DCS DIRECTORY already matched
+		pass
+
+	def _parse_list_drda_indoubt_transactions_command(self):
+		"""Parses a LIST DRDA INDOUBT TRANSACTIONS command"""
+		# LIST DRDA INDOUBT TRANSACTIONS already matched
+		self._match_sequence(['WITH', 'PROMPTING'])
+
+	def _parse_list_history_command(self):
+		"""Parses a LIST HISTORY command"""
+		# LIST HISTORY already matched
+		if self._match_one_of(['CREATE', 'ALTER', 'RENAME']):
+			self._expect('TABLESPACE')
+		elif self._match('ARCHIVE'):
+			self._expect('LOG')
+		elif self._match('DROPPED'):
+			self._expect('TABLE')
+		else:
+			self._match_one_of(['BACKUP', 'ROLLFORWARD', 'LOAD', 'REORG'])
+		if self._match('SINCE'):
+			self._expect(TT.NUMBER)
+		elif self._match('CONTAINING'):
+			self._parse_subschema_name()
+		elif not self._match('ALL'):
+			self._expected_one_of(['ALL', 'SINCE', 'CONTAINING'])
+		self._expect('FOR')
+		self._match_one_of(['DATABASE', 'DB'])
+		self._expect_clp_string()
+
+	def _parse_list_indoubt_transactions_command(self):
+		"""Parses a LIST INDOUBT TRANSACTIONS command"""
+		# LIST INDOUBT TRANSACTIONS already matched
+		self._match_sequence(['WITH', 'PROMPTING'])
+
+	def _parse_list_node_directory_command(self):
+		"""Parses a LIST NODE DIRECTORY command"""
+		# LIST [ADMIN] NODE DIRECTORY already matched
+		self._match_sequence(['SHOW', 'DETAIL'])
+
+	def _parse_list_odbc_data_sources_command(self):
+		"""Parses a LIST ODBC DATA SOURCES command"""
+		# LIST [USER|SYSTEM] ODBC DATA SOURCES already matched
+		pass
+
+	def _parse_list_tables_command(self):
+		"""Parses a LIST TABLES command"""
+		# LIST PACKAGES|TABLES already matched
+		if self._match('FOR'):
+			if self._match('SCHEMA'):
+				self._expect(TT.IDENTIFIER)
+			elif not self._match_one_of(['USER', 'SYSTEM', 'ALL']):
+				self._expected_one_of(['USER', 'SYSTEM', 'ALL', 'SCHEMA'])
+		self._match_sequence(['SHOW', 'DETAIL'])
+
+	def _parse_list_tablespace_containers_command(self):
+		"""Parses a LIST TABLESPACE CONTAINERS command"""
+		# LIST TABLESPACE CONTAINERS already matched
+		self._expect_sequence(['FOR', TT.NUMBER])
+		self._match_sequence(['SHOW', 'DETAIL'])
+
+	def _parse_list_tablespaces_command(self):
+		"""Parses a LIST TABLESPACES command"""
+		# LIST TABLESPACES already matched
+		self._match_sequence(['SHOW', 'DETAIL'])
+
+	def _parse_list_utilities_command(self):
+		"""Parses a LIST UTILITIES command"""
+		# LIST UTILITIES already matched
+		self._match_sequence(['SHOW', 'DETAIL'])
+
+	def _parse_load_command(self):
+		"""Parses a LOAD command"""
+		# LOAD already matched
+		self._match('CLIENT')
+		self._expect('FROM')
+		filename = self._expect_clp_string().value
+		self._expect('OF')
+		if self._expect_one_of(['ASC', 'DEL', 'IXF', 'CURSOR']).value != 'CURSOR':
+			self.consumes.append((filename, self.current_connection.database))
+		if self._match('LOBS'):
+			self._expect('FROM')
+			self._parse_clp_string_list()
+		if self._match('XML'):
+			self._expect('FROM')
+			self._parse_clp_string_list()
+		if self._match('MODIFIED'):
+			self._expect('BY')
+			# See _parse_export_command() above for an explanation...
+			i = self._index
+			while True:
+				if self._token(i)[1] in [
+					'INSERT',
+					'MESSAGES',
+					'METHOD',
+					'REPLACE',
+					'RESTART',
+					'ROWCOUNT',
+					'SAVECOUNT',
+					'TEMPFILES',
+					'TERMINATE',
+					'WARNINGCOUNT',
+					'XMLPARSE',
+					'XMLVALIDATE',
+				]:
+					while self._index < i:
+						self._output.append(self._token())
+						self._index += 1
+					break
+				if self._token(i).type == TT.EOF:
+					raise ParseError("Unable to find end of file-modifiers in LOAD statement")
+				i += 1
+		if self._match('METHOD'):
+			self._parse_import_method()
+		if self._match('XMLPARSE'):
+			self._expect_one_of(['STRIP', 'PRESERVE'])
+			self._expect('WHITESPACE')
+		if self._match('XMLVALIDATE'):
+			self._expect('USING')
+			if self._match('XDS'):
+				if self._match('DEFAULT'):
+					self._parse_subschema_name()
+				if self._match('IGNORE'):
+					self._expect('(')
+					while True:
+						self._parse_subschema_name()
+						if not self._match(','):
+							break
+					self._expect(')')
+				if self._match('MAP'):
+					self._expect('(')
+					while True:
+						self._expect('(')
+						self._parse_subschema_name()
+						self._expect(',')
+						self._parse_subschema_name()
+						self._expect(')')
+						if not self._match(','):
+							break
+					self._expect(')')
+			elif self._match('SCHEMA'):
+				self._parse_subschema_name()
+			elif self._match('SCHEMALOCATION'):
+				self._expect('HINTS')
+		if self._match('SAVECOUNT'):
+			self._expect(TT.NUMBER)
+		if self._match('ROWCOUNT'):
+			self._expect(TT.NUMBER)
+		if self._match('WARNINGCOUNT'):
+			self._expect(TT.NUMBER)
+		if self._match('MESSAGES'):
+			self._expect_clp_string()
+		if self._match('TEMPFILES'):
+			self._expect('PATH')
+			self._expect_clp_string()
+		if self._expect_one_of(['INSERT', 'RESTART', 'REPLACE', 'TERMINATE']).value == 'REPLACE':
+			self._match_one_of(['KEEPDICTIONARY', 'RESETDICTIONARY'])
+		self._expect('INTO')
+		self._parse_table_name()
+		if self._match('('):
+			self._parse_ident_list()
+			self._expect(')')
+		if self._match('FOR'):
+			self._expect('EXCEPTION')
+			self._parse_table_name()
+			if self._match_one_of(['NORANGEEXC', 'NOUNIQUEEXC']):
+				if self._match(','):
+					self._expect_one_of(['NORANGEEXC', 'NOUNIQUEEXC'])
+		if self._match('STATISTICS'):
+			if self._expect_one_of(['NO', 'USE']).value == 'USE':
+				self._expect('PROFILE')
+		if self._match('COPY'):
+			if self._expect_one_of(['NO', 'YES']).value == 'YES':
+				if self._match('USE'):
+					self._expect('TSM')
+					if self._match('OPEN'):
+						self._expect_sequence([TT.NUMBER, 'SESSIONS'])
+				elif self._match('TO'):
+					self._parse_clp_string_list()
+				elif self._match('LOAD'):
+					self._expect_clp_string()
+					if self._match('OPEN'):
+						self._expect_sequence([TT.NUMBER, 'SESSIONS'])
+				else:
+					self._expected_one_of(['USE', 'TO', 'LOAD'])
+		elif self._match('NONRECOVERABLE'):
+			pass
+		if self._match('WITHOUT'):
+			self._expect('PROMPTING')
+		if self._match('DATA'):
+			self._expect('BUFFER')
+			self._expect(TT.NUMBER)
+		if self._match('SORT'):
+			self._expect('BUFFER')
+			self._expect(TT.NUMBER)
+		if self._match('CPU_PARALLELISM'):
+			self._expect(TT.NUMBER)
+		if self._match('DISK_PARALLELISM'):
+			self._expect(TT.NUMBER)
+		if self._match('FETCH_PARALLELISM'):
+			self._expect_one_of(['YES', 'NO'])
+		if self._match('INDEXING'):
+			self._expect('MODE')
+			self._expect_one_of(['AUTOSELECT', 'REBUILD', 'INCREMENTAL', 'DEFERRED'])
+		if self._match('ALLOW'):
+			if self._match_sequence(['READ', 'ACCESS']):
+				self._match_sequence(['USE', TT.IDENTIFIER])
+			elif self._match_sequence(['NO', 'ACCESS']):
+				pass
+			else:
+				self._expected_one_of(['READ', 'NO'])
+		if self._match_sequence(['SET', 'INTEGRITY']):
+			self._expect_sequence(['PENDING', 'CASCADE'])
+			self._expect_one_of(['DEFERRED', 'IMMEDIATE'])
+		if self._match('LOCK'):
+			self._expect_sequence(['WITH', 'FORCE'])
+		if self._match('SOURCEUSEREXIT'):
+			self._expect_clp_string()
+			if self._match('REDIRECT'):
+				if self._match('INPUT'):
+					self._expect('FROM')
+					self._expect_one_of(['BUFFER', 'FILE'])
+					self._expect_clp_string()
+				if self._match('OUTPUT'):
+					self._expect_sequence(['TO', 'FILE'])
+					self._expect_clp_string()
+		self._match_sequence(['PARTITIONED', 'DB', 'CONFIG'])
+		while True:
+			if self._match('MODE'):
+				self._expect_one_of([
+					'PARTITION_AND_LOAD',
+					'PARTITION_ONLY',
+					'LOAD_ONLY',
+					'LOAD_ONLY_VERIFY_PART',
+					'ANALYZE',
+				])
+			elif self._match('ISOLATE_PART_ERRS'):
+				self._expect_one_of([
+					'SETUP_ERRS_ONLY',
+					'LOAD_ERRS_ONLY',
+					'SETUP_AND_LOAD_ERRS',
+					'NO_ISOLATION',
+				])
+			elif self._match_one_of(['PART_FILE_LOCATION', 'MAP_FILE_INPUT', 'MAP_FILE_OUTPUT', 'DISTFILE']):
+				self._expect_clp_string()
+			elif self._match_one_of(['OUTPUT_DBPARTNUMS', 'PARTITIONING_DBPARTNUMS']):
+				self._expect('(')
+				while True:
+					self._expect(TT.NUMBER)
+					if self._match('TO'):
+						self._expect(TT.NUMBER)
+					if not self._match(','):
+						break
+				self._expect(')')
+			elif self._match_one_of(['MAXIMUM_PART_AGENTS', 'STATUS_INTERVAL', 'TRACE', 'RUN_STAT_DBPARTNUM']):
+				self._expect(TT.NUMBER)
+			elif self._match('PORT_RANGE'):
+				self._expect_sequence(['(', TT.NUMBER, ',', TT.NUMBER, ')'])
+			elif self._match_one_of(['CHECK_TRUNCATION', 'NEWLINE', 'OMIT_HEADER']):
+				pass
+			else:
+				break
+
+	def _parse_load_query_command(self):
+		"""Parses a LOAD QUERY command"""
+		# LOAD QUERY already matched
+		self._expect('TABLE')
+		self._parse_table_name()
+		if self._match('TO'):
+			self._expect_clp_string()
+		self._match_one_of(['NOSUMMARY', 'SUMMARYONLY'])
+		self._match('SHOWDELTA')
+
+	def _parse_migrate_db_command(self):
+		"""Parses a MIGRATE DB command"""
+		# MIGRATE [DATABASE|DB] already matched
+		self._expect_clp_string()
+		self._parse_login(optional=True, allowchange=False)
+
+	def _parse_ping_command(self):
+		"""Parses a PING command"""
+		# PING already matched
+		self._expect_clp_string()
+		if self._match('REQUEST'):
+			self._expect(TT.NUMBER)
+		if self._match('RESPONSE'):
+			self._expect(TT.NUMBER)
+		if self._match(TT.NUMBER):
+			self._match_one_of(['TIME', 'TIMES'])
+
+	def _parse_precompile_command(self):
+		"""Parses a PRECOMPILE command"""
+		# [PREP|PRECOMPILE] already matched
+		# XXX Can these parameters be specified in any order?
+		self._expect_clp_string()
+		if self._match('ACTION'):
+			if self._match_one_of(['ADD', 'REPLACE']).value == 'ADD':
+				pass
+			else:
+				if self._match('RETAIN'):
+					self._expect_one_of(['YES', 'NO'])
+				if self_match('REPLVER'):
+					self._expect_clp_string()
+		if self._match('APREUSE'):
+			self._expect_one_of(['YES', 'NO'])
+		if self._match('BINDFILE'):
+			if self._match('USING'):
+				self._expect_clp_string()
+		if self._match('BLOCKING'):
+			self._expect_one_of(['UNAMBIG', 'ALL', 'NO'])
+		if self._match('COLLECTION'):
+			self._expect(TT.IDENTIFIER)
+		if self._match('CALL_RESOLUTION'):
+			self._expect_one_of(['IMMEDIATE', 'DEFERRED'])
+		if self._match('CCSIDG'):
+			self._expect(TT.NUMBER)
+		if self._match('CCSIDM'):
+			self._expect(TT.NUMBER)
+		if self._match('CCSIDS'):
+			self._expect(TT.NUMBER)
+		if self._match('CHARSUB'):
+			self._expect_one_of(['DEFAULT', 'BIT', 'MIXED', 'SBCS'])
+		if self._match('CNULREQD'):
+			self._expect_one_of(['YES', 'NO'])
+		if self._match('COLLECTION'):
+			self._expect(TT.IDENTIFIER)
+		self._match_one_of(['COMPILE', 'PRECOMPILE'])
+		if self._match('CONCURRENTACCESSRESOLUTION'):
+			if self._expect_one_of(['USE', 'WAIT']).value == 'USE':
+				self._expect_sequence(['CURRENTLY', 'COMMITTED'])
+			else:
+				self._expect_sequence(['FOR', 'OUTCOME'])
+		if self._match('CONNECT'):
+			self._expect(TT.NUMBER)
+		if self._match('DATETIME'):
+			self._expect_one_of(['DEF', 'EUR', 'ISO', 'JIS', 'LOC', 'USA'])
+		if self._match('DBPROTOCOL'):
+			self._expect_one_of(['DRDA', 'PRIVATE'])
+		if self._match('DEC'):
+			self._expect(TT.NUMBER)
+		if self._match('DECDEL'):
+			self._expect_one_of(['PERIOD', 'COMMA'])
+		if self._match('DEFERRED_PREPARE'):
+			self._expect_one_of(['NO', 'ALL', 'YES'])
+		if self._match('DEGREE'):
+			self._expect_one_of([TT.NUMBER, 'ANY'])
+		if self._match('DISCONNECT'):
+			self._expect_one_of(['EXPLICIT', 'AUTOMATIC', 'CONDITIONAL'])
+		if self._match('DYNAMICRULES'):
+			self._expect_one_of(['RUN', 'BIND', 'INVOKERUN', 'INVOKEBIND', 'DEFINERUN', 'DEFINEBIND'])
+		if self._match('ENCODING'):
+			self._expect_one_of(['ASCII', 'EBCDIC', 'UNICODE', 'CCSID'])
+		if self._match('EXPLAIN'):
+			self._expect_one_of(['NO', 'ALL', 'ONLY', 'REOPT', 'YES'])
+		if self._match('EXPLSNAP'):
+			self._expect_one_of(['NO', 'ALL', 'REOPT', 'YES'])
+		if self._match('EXTENDEDINDICATOR'):
+			self._expect_one_of(['YES', 'NO'])
+		if self._match('FEDERATED'):
+			self._expect_one_of(['YES', 'NO'])
+		if self._match('FEDERATED_ASYNCHRONY'):
+			self._expect_one_of([TT.NUMBER, 'ANY'])
+		if self._match('FUNCPATH'):
+			self._parse_ident_list()
+		if self._match('GENERIC'):
+			self._expect_clp_string()
+		if self._amtch('IMMEDWRITE'):
+			self._expect_one_of(['NO', 'YES', 'PH1'])
+		if self._match('INSERT'):
+			self._expect_one_of(['DEF', 'BUF'])
+		if self._match('ISOLATION'):
+			self._expect_one_of(['CS', 'NC', 'RR', 'RS', 'UR'])
+		if self._match('KEEPDYNAMIC'):
+			self._expect_one_of(['YES', 'NO'])
+		if self._match('LANGLEVEL'):
+			self._expect_one_of(['SAA1', 'MIA', 'SQL92E'])
+		if self._match('LEVEL'):
+			self._expect(TT.IDENTIFIER)
+		if self._match('LONGERROR'):
+			self._expect_one_of(['YES', 'NO'])
+		if self._match('MESSAGES'):
+			self._expect_clp_string()
+		if self._match('NOLINEMACRO'):
+			pass
+		if self._match('OPTHINT'):
+			self._expect_clp_string()
+		if self._match('OPTLEVEL'):
+			self._expect(TT.NUMBER)
+		if self._match('OPTPROFILE'):
+			self._expect_clp_string()
+		if self._match('OS400NAMING'):
+			self._expect_one_of(['SYSTEM', 'SQL'])
+		if self._match('OUTPUT'):
+			self._expect_clp_string()
+		if self._match('OWNER'):
+			self._expect(TT.IDENTIFIER)
+		if self._match('PACKAGE'):
+			if self._match('USING'):
+				self._expect(TT.IDENTIFIER)
+		if self._match('PREPROCESSOR'):
+			self._expect_clp_string()
+		if self._match('QUALIFIER'):
+			self._expect(TT.IDENTIFIER)
+		if self._match('QUERYOPT'):
+			self._expect(TT.NUMBER)
+		if self._match('RELEASE'):
+			self._expect_one_of(['COMMIT', 'DEALLOCATE'])
+		if self._match('REOPT'):
+			self._expect_one_of(['NONE', 'ONCE', 'ALWAYS', 'VARS'])
+		if self._match_one_of(['REOPT', 'NOREOPT']):
+			self._expect('VARS')
+		if self._match('SQLCA'):
+			self._expect_one_of(['NONE', 'SAA'])
+		if self._match('SQLERROR'):
+			self._expect_one_of(['NOPACKAGE', 'CHECK', 'CONTINUE'])
+		if self._match('SQLFLAG'):
+			self._expect_one_of(['SQL92E', 'MVSDB2V23', 'MVSDB2V31', 'MVSDB2V41'])
+			self._expect('SYNTAX')
+		if self._match('SORTSEQ'):
+			self._expect_one_of(['JOBRUN', 'HEX'])
+		if self._match('SQLRULES'):
+			self._expect_one_of(['DB2', 'STD'])
+		if self._match('SQLWARN'):
+			self._expect_one_of(['YES', 'NO'])
+		if self._match('STATICREADONLY'):
+			self._expect_one_of(['YES', 'NO', 'INSENSITIVE'])
+		if self._match('STRDEL'):
+			self._expect_one_of(['APOSTROPHE', 'QUOTE'])
+		if self._match('SYNCPOINT'):
+			self._expect_one_of(['ONEPHASE', 'NONE', 'TWOPHASE'])
+		if self._match('SYNTAX'):
+			pass
+		if self._match('TARGET'):
+			self._expect_one_of(['IBMCOB', 'MFCOB', 'ANSI_COBOL', 'C', 'CPLUSPLUS', 'FORTRAN', 'BORLAND_C', 'BORLAND_CPLUSPLUS'])
+		if self._match('TEXT'):
+			self._expect_clp_string()
+		if self._match('TRANSFORM'):
+			self._expect('GROUP')
+			self._expect(TT.IDENTIFIER)
+		if self._match('VALIDATE'):
+			self._expect_one_of(['BIND', 'RUN'])
+		if self._match('WCHARTYPE'):
+			self._expect_one_of(['NOCONVERT', 'CONVERT'])
+		if self._match('VERSION'):
+			self._expect_clp_string()
+
+	def _parse_prune_history_command(self):
+		"""Parses a PRUNE HISTORY command"""
+		# PRUNE HISTORY already matched
+		self._expect(TT.NUMBER)
+		self._match_sequence(['WITH', 'FORCE', 'OPTION'])
+		self._match_sequence(['AND', 'DELETE'])
+
+	def _parse_prune_logfile_command(self):
+		"""Parses a PRUNE LOGFILE command"""
+		# PRUNT LOGFILE already matched
+		self._expect_sequence(['PRIOR', 'TO'])
+		self._expect_clp_string()
+
+	def _parse_put_routine_command(self):
+		"""Parses a PUT ROUTINE command"""
+		# PUT ROUTINE already matched
+		self._expect('FROM')
+		self._expect_clp_string()
+		if self._match('OWNER'):
+			self._expect(TT.IDENTIFIER)
+			self._match_sequence(['USE', 'REGISTERS'])
+
+	def _parse_query_client_command(self):
+		"""Parses a QUERY CLIENT command"""
+		# QUERY CLIENT already matched
+		pass
+
+	def _parse_quiesce_command(self):
+		"""Parses a QUIESCE DB / INSTANCE command"""
+		# QUIESCE already matched
+		if self._match('INSTANCE'):
+			self._expect_clp_string()
+			if self._match_one_of(['USER', 'GROUP']):
+				self._expect(TT.IDENTIFIER)
+			self._match_sequence(['RESTRICTED', 'ACCESS'])
+		elif self._match_one_of(['DATABASE', 'DB']):
+			pass
+		else:
+			self._expected_one_of(['DATABASE', 'DB', 'INSTANCE'])
+		if self._expect_one_of(['IMMEDIATE', 'DEFER'])[1] == 'DEFER':
+			if self._match('WITH'):
+				self._expect_sequence(['TIMEOUT', TT.NUMBER])
+		self._match_sequence(['FORCE', 'CONNECTIONS'])
+
+	def _parse_quiesce_tablespaces_command(self):
+		"""Parses a QUIESCE TABLESPACES command"""
+		# QUIESCE TABLESPACES already matched
+		self._expect_sequence(['FOR', 'TABLE'])
+		self._parse_table_name()
+		if self._expect_one_of(['SHARE', 'INTENT', 'EXCLUSIVE', 'RESET']).value == 'INTENT':
+			self._expect_sequence(['TO', 'UPDATE'])
+
+	def _parse_quit_command(self):
+		"""Parses a QUIT command"""
+		# QUIT already matched
+		pass
+
+	def _parse_rebind_command(self):
+		"""Parses a REBIND command"""
+		# REBIND already matched
+		self._match('PACKAGE')
+		self._parse_subschema_name()
+		if self._match('VERSION'):
+			self._expect_clp_string()
+		if self._match('APREUSE'):
+			self._expect_one_of(['YES', 'NO'])
+		if self._match('RESOLVE'):
+			self._expect_one_of(['ANY', 'CONSERVATIVE'])
+		if self._match('REOPT'):
+			self._expect_one_of(['NONE', 'ONCE', 'ALWAYS'])
+
+	def _parse_recover_db_command(self):
+		"""Parses a RECOVER DB command"""
+		# RECOVER [DATABASE|DB] already matched
+		self._expect_clp_string()
+		if self._match('TO'):
+			if self._match('END'):
+				self._expect_sequence(['OF', 'LOGS'])
+				self._parse_db_partitions_clause()
+			else:
+				self._expect_clp_string()
+				if self._match('USING'):
+					self._expect_one_of(['LOCAL', 'UTC'])
+					self._expect('TIME')
+				if self._match('ON'):
+					self._expect('ALL')
+					self._expect_one_of(['DBPARTITIONNUMS', 'NODES'])
+		self._parse_login(optional=True, allowchange=False)
+		if self._match('USING'):
+			self._expect_sequence(['HISTORY', 'FILE'])
+			self._expect('(')
+			self._expect_clp_string()
+			if self._match(','):
+				while True:
+					self._expect_clp_string()
+					self._expect('ON')
+					self._expect_one_of(['DBPARTITIONNUM', 'NODE'])
+					self._expect(TT.NUMBER)
+					if not self._match(','):
+						break
+			self._expect(')')
+		if self._match('OVERFLOW'):
+			self._expect_sequence(['LOG', 'PATH'])
+			self._expect('(')
+			self._expect_clp_string()
+			if self._match(','):
+				while True:
+					self._expect_clp_string()
+					self._expect('ON')
+					self._expect_one_of(['DBPARTITIONNUM', 'NODE'])
+					self._expect(TT.NUMBER)
+					if not self._match(','):
+						break
+			self._expect(')')
+		if self._match('COMPRLIB'):
+			self._expect_clp_string()
+		if self._match('COMPROPTS'):
+			self._expect_clp_string()
+		self._match('RESTART')
+
+	def _parse_redistribute_database_partition_group_command(self):
+		"""Parses a REDISTRIBUTE DATABASE PARTITION GROUP command"""
+		# REDISTRIBUTE DATABASE PARTITION GROUP already matched
+		self._expect_clp_string()
+		self._match_sequence(['NOT', 'ROLLFORWARD', 'RECOVERABLE'])
+		t = self._expect_one_of(['UNIFORM',' USING', 'COTNINUE', 'ABORT']).value
+		partitions = False
+		if t == 'USING':
+			if self._expect_one_of(['DISTFILE', 'TARGETMAP']).value == 'DISTFILE':
+				partitions = True
+			self._expect_clp_string()
+		elif t == 'UNIFORM':
+			partitions = True
+		if partitions:
+			if self._match('ADD'):
+				self._parse_db_partition_list_clause(size=False)
+			if self._match('DROP'):
+				self._parse_db_partition_list_clause(size=False)
+		if self._match('TABLE'):
+			self._expect('(')
+			while True:
+				self._parse_table_name()
+				if not self._match(','):
+					break
+			self._expect(')')
+			self._match_one_of(['ONCE', 'FIRST'])
+		if self._match('INDEXING'):
+			self._expect('MODE')
+			self._expect_one_of(['REBUILD', 'DEFERRED'])
+		elif self._match('DATA'):
+			self._expect('BUFFER')
+			self._expect(TT.NUMBER)
+		elif self._match('STATISTICS'):
+			if self._expect_one_of(['USE', 'NONE']).value == 'USE':
+				self._expect('PROFILE')
+		elif self._match('STOP'):
+			self._expect('AT')
+			self._expect_clp_string()
+
+	def _parse_refresh_ldap_command(self):
+		"""Parses a REFRESH LDAP command"""
+		# REFRESH LDAP already matched
+		if self._match('CLI'):
+			self._expect('CFG')
+		elif self._match_one_of(['DB', 'NODE']):
+			self._expect('DIR')
+		elif self._match('IMMEDIATE'):
+			self._match('ALL')
+		else:
+			self._expected_one_of(['CLI', 'DB', 'NODE', 'IMMEDIATE'])
+
+	def _parse_register_command(self):
+		"""Parses a REGISTER command"""
+		# REGISTER already matched
+		self._match_sequence(['DB2', 'SERVER'])
+		self._match('IN')
+		self._match('ADMIN')
+		self._expect('LDAP')
+		self._expect_one_of(['NODE', 'AS'])
+		self._expect_clp_string()
+		self._expect('PROTOCOL')
+		if self._expect_one_of(['TCPIP', 'TCPIP4', 'TCPIP6', 'NPIPE']).value != 'NPIPE':
+			if self._match('HOSTNAME'):
+				self._expect_clp_string()
+			if self._match('SVCENAME'):
+				self._expect_clp_string()
+			self._match_sequence(['SECURITY', 'SOCKS'])
+		if self._match('REMOTE'):
+			self._expect_clp_string()
+		if self._match('INSTANCE'):
+			self._expect_clp_string()
+		if self._match('NODETYPE'):
+			self._expect_one_of(['SERVER', 'MPP', 'DCS'])
+		if self._match('OSTYPE'):
+			self._expect_clp_string()
+		if self._match('WITH'):
+			self._expect_clp_string()
+		self._parse_login(optional=True, allowchange=False)
+
+	def _parse_register_xmlschema_command(self):
+		"""Parses a REGISTER XMLSCHEMA command"""
+		# REGISTER XMLSCHEMA already matched
+		self._expect_clp_string()
+		self._expect('FROM')
+		self._expect_clp_string()
+		if self._match('WITH'):
+			self._expect_clp_string()
+		if self._match('AS'):
+			self._parse_subschema_name()
+		if self._match('('):
+			while True:
+				self._expect('ADD')
+				self._expect_clp_string()
+				self._expect('FROM')
+				self._expect_clp_string()
+				if self._match('WITH'):
+					self._expect_clp_string()
+				if self._match(')'):
+					break
+		if self._match('COMPLETE'):
+			if self._match('WITH'):
+				self._expect_clp_string()
+			if self._match('ENABLE'):
+				self._expect('DECOMPOSITION')
+
+	def _parse_register_xsrobject_command(self):
+		"""Parses a REGISTER XSROBJECT command"""
+		# REGISTER XSROBJECT already matched
+		self._expect_clp_string()
+		if self._match('PUBLIC'):
+			self._expect_clp_string()
+		self._expect('FROM')
+		self._expect_clp_string()
+		if self._match('AS'):
+			self._parse_subschema_name()
+		if self._match('EXTERNAL'):
+			self._expect('ENTITY')
+		else:
+			self._expect_one_of(['DTD', 'EXTERNAL'])
+
+	def _parse_reorg_command(self):
+		"""Parses a REORG command"""
+
+		def parse_table_clause():
+			if self._match('INDEX'):
+				self._parse_index_name()
+			if self._match('INPLACE'):
+				if not self._match_one_of(['STOP', 'PAUSE']):
+					if self._match('ALLOW'):
+						self._expect_one_of(['READ', 'WRITE'])
+						self._expect('ACCESS')
+					if self._match('NOTRUNCATE'):
+						self._expect('TABLE')
+					self._match_one_of(['START', 'RESUME'])
+			else:
+				if self._match('ALLOW'):
+					self._expect_one_of(['READ', 'NO'])
+					self._expect('ACCESS')
+				if self._match('USE'):
+					self._expect(TT.IDENTIFIER)
+				self._match('INDEXSCAN')
+				if self._match('LONGLOBDATA'):
+					if self._match('USE'):
+						self._expect(TT.IDENTIFIER)
+				self._match_one_of(['KEEPDICTIONARY', 'RESETDICTIONARY'])
+
+		def parse_index_clause():
+			if self._match('ALLOW'):
+				self._expect_one_of(['NO', 'WRITE', 'READ'])
+				self._expect('ACCESS')
+			if self._match_one_of(['CONVERT', 'CLEANUP']).value == 'CLEANUP':
+				self._expect('ONLY')
+				self._match_one_of(['ALL', 'PAGES'])
+
+		# REORG already matched
+		if self._match('TABLE'):
+			self._parse_table_name()
+			if self._match('RECLAIM'):
+				self._expect_sequence(['EXTENTS', 'ONLY'])
+				if self._match('ALLOW'):
+					self._expect_one_of(['READ', 'WRITE', 'NO'])
+					self._expect('ACCESS')
+			else:
+				parse_table_clause()
+		elif self._match('INDEX'):
+			self._parse_index_name()
+			if self._match('FOR'):
+				self._expect('TABLE')
+				self._parse_table_name()
+				parse_index_clause()
+		elif self._match('INDEXES'):
+			self._expect_sequence(['ALL', 'FOR', 'TABLE'])
+			self._parse_table_name()
+			parse_index_clause()
+		else:
+			self._expected_one_of(['TABLE', 'INDEX', 'INDEXES'])
+		if self._match_sequence(['ON', 'DATA', 'PARTITION']):
+			self._expect(TT.IDENTIFIER)
+		self._parse_db_partitions_clause()
+
+	def _parse_reorgchk_command(self):
+		"""Parses a REORGCHK command"""
+		# REORGCHK already matched
+		if self._match_one_of(['UPDATE', 'CURRENT']):
+			self._expect('STATISTICS')
+		if self._match('ON'):
+			if self._match('SCHEMA'):
+				self._expect(TT.IDENTIFIER)
+			elif self._match('TABLE'):
+				if not self._match_one_of(['SYSTEM', 'USER', 'ALL']):
+					self._parse_table_name()
+			else:
+				self._expected_one_of(['SCHEMA', 'TABLE'])
+
+	def _parse_reset_admin_cfg_command(self):
+		"""Parses a RESET ADMIN CFG command"""
+		# RESET ADMIN [CONFIGURATION|CONFIG|CFG] already matched
+		if self._match('FOR'):
+			self._expect('NODE')
+			self._expect_clp_string()
+			self._parse_login(optional=True, allowchange=False)
+
+	def _parse_reset_alert_cfg_command(self):
+		"""Parses a RESET ALERT CFG command"""
+		# RESET ALERT [CONFIGURATION|CONFIG|CFG] already matched
+		self._expect('FOR')
+		if (
+				self._match_sequence(['DATABASE', 'MANAGER'])
+				or self._match_sequence(['DB', 'MANAGER'])
+				or self._match_one_of(['DBM', 'CONTAINERS', 'DATABASES', 'TABLESPACES'])
+			):
+			pass
+		elif (
+				self._match_sequence(['CONTAINER', TT.IDENTIFIER, 'FOR', TT.IDENTIFIER])
+				or self._match_sequence('TABLESPACE', TT.IDENTIFIER)
+				or self._match('DATABASE')
+			):
+			self._expect('ON')
+			self._expect_clp_string()
+			if self._match('USING'):
+				self._expect_clp_string()
+
+	def _parse_reset_db_cfg_command(self):
+		"""Parses a RESET DB CFG command"""
+		# RESET [DATABASE|DB] [CONFIGURATION|CONFIG|CFG] already matched
+		self._expect('FOR')
+		self._expect_clp_string()
+		if self._match_one_of(['DBPARTITIONNUM', 'NODE']):
+			self._expect(TT.NUMBER)
+
+	def _parse_reset_dbm_cfg_command(self):
+		"""Parses a RESET DBM CFG command"""
+		# RESET [DATABASE MANAGER|DB MANAGER|DBM] [CONFIGURATION|CONFIG|CFG] already matched
+		pass
+
+	def _parse_reset_monitor_command(self):
+		"""Parses a RESET MONITOR command"""
+		# RESET MONITOR already matched
+		if self._match('ALL'):
+			self._match('DCS')
+		elif self._match('FOR'):
+			self._match('DCS')
+			self._expect_one_of(['DATABASE', 'DB'])
+			self._expect_clp_string()
+		else:
+			self._expected_one_of(['ALL', 'FOR'])
+		self._parse_db_partition_clause()
+
+	def _parse_restart_db_command(self):
+		"""Parses a RESTART DB command"""
+		# RESTART [DATABASE|DB] already matched
+		self._expect_clp_string()
+		self._parse_login(optional=True, allowchange=False)
+		if self._match('DROP'):
+			self._expect_sequence(['PENDING', 'TABLESPACES'])
+			self._expect('(')
+			while True:
+				self._expect(TT.IDENTIFIER)
+				if not self._match(','):
+					break
+			self._expect(')')
+		self._match_sequence(['WRITE', 'RESUME'])
+
+	def _parse_restore_db_command(self):
+		"""Parses a RESTORE DB command"""
+		# RESTORE [DATABASE|DB] already matched
+		self._expect_clp_string()
+		if self._match_one_of(['CONTINUE', 'ABORT']):
+			pass
+		else:
+			self._parse_login(optional=True, allowchange=False)
+			if self._match('TABLESPACE'):
+				self._expect('(')
+				self._parse_ident_list()
+				self._expect(')')
+				if self._match('SCHEMA'):
+					if self._match('('):
+						self._parse_ident_list()
+						self._expect(')')
+				self._match('ONLINE')
+			elif (
+					self._match_sequence(['HISTORY', 'FILE'])
+					or self._match_sequence(['COMPRESSION', 'LIBRARY'])
+					or self._match('LOGS')
+				):
+				self._match('ONLINE')
+			elif self._match('REBUILD'):
+				self._expect('WITH')
+				if self._match('ALL'):
+					self._expect_sequence(['TABLESPACES', 'IN'])
+					self._expect_one_of(['DATABASE', 'IMAGE'])
+					if self._match('EXCEPT'):
+						self._expect('TABLESPACE')
+						self._expect('(')
+						self._parse_ident_list()
+						self._expect(')')
+				else:
+					self._expect('TABLESPACE')
+					self._expect('(')
+					self._parse_ident_list()
+					self._expect(')')
+			if self._match('INCREMENTAL'):
+				self._match_one_of(['AUTO', 'AUTOMATIC', 'ABORT'])
+			if self._match('USE'):
+				self._match_one_of(['TSM', 'XBSA'])
+				if self._match('OPEN'):
+					self._expect(TT.NUMBER)
+					self._expect('SESSIONS')
+				if self._match('OPTIONS'):
+					self._expect_clp_string()
+					# XXX Add support for @filename response file
+			elif self._match('FROM'):
+				self._parse_clp_string_list()
+			elif self._match('LOAD'):
+				self._expect_clp_string()
+				if self._match('OPEN'):
+					self._expect(TT.NUMBER)
+					self._expect('SESSIONS')
+				if self._match('OPTIONS'):
+					self._expect_clp_string()
+					# XXX Add support for @filename response file
+			if self._match('TAKEN'):
+				self._expect('AT')
+				self._expect(TT.NUMBER)
+			if self._match('TO'):
+				self._expect_clp_string()
+			elif self._match('DBPATH'):
+				self._expect('ON')
+				self._expect_clp_string()
+			elif self._match('ON'):
+				self._parse_clp_string_list()
+				if self._match('DBPATH'):
+					self._expect('ON')
+					self._expect_clp_string()
+			if self._match('INTO'):
+				self._expect_clp_string()
+			if self._match('LOGTARGET'):
+				if self._match_one_of(['INCLUDE', 'EXCLUDE']):
+					self._match('FORCE')
+				else:
+					self._expect_clp_string()
+			if self._match('NEWLOGPATH'):
+				self._expect_clp_string()
+			if self._match('WITH'):
+				self._expect(TT.NUMBER)
+				self._expect('BUFFERS')
+			if self._match('BUFFER'):
+				self._expect(TT.NUMBER)
+			self._match_sequence(['REPLACE', 'HISTORY', 'FILE'])
+			self._match_sequence(['REPLACE', 'EXISTING'])
+			if self._match('REDIRECT'):
+				if self._match('GENERATE'):
+					self._expect('SCRIPT')
+					self._expect_clp_string()
+			if self._match('PARALLELISM'):
+				self._expect(TT.NUMBER)
+			if self._match('COMPRLIB'):
+				self._expect_clp_string()
+			if self._match('COMPROPTS'):
+				self._expect_clp_string()
+			self._match_sequence(['WITHOUT', 'ROLLING', 'FORWARD'])
+			self._match_sequence(['WITHOUT', 'PROMPTING'])
+
+	def _parse_rewind_tape_command(self):
+		"""Parses a REWIND TAPE command"""
+		# REWIND TAPE already matched
+		if self._match('ON'):
+			self._expect_clp_string()
+
+	def _parse_rollforward_db_command(self):
+		"""Parses a ROLLFORWARD DB command"""
+		# ROLLFORWARD [DATABASE|DB] already matched
+		self._expect_clp_string()
+		self._parse_login(optional=True, allowchange=False)
+		if self._match('TO'):
+			if self._match('END'):
+				self._expect('OF')
+				if self._expect_one_of(['LOGS', 'BACKUP']).value == 'BACKUP':
+					if self._match('ON'):
+						self._expect('ALL')
+						self._expect_one_of(['DBPARTITIONNUMS', 'NODES'])
+				else:
+					self._parse_db_partitions_clause()
+			else:
+				self._expect(TT.NUMBER)
+				if self._match('ON'):
+					self._expect('ALL')
+					self._expect_one_of(['DBPARTITIONNUMS', 'NODES'])
+				if self._match('USING'):
+					self._expect_one_of(['UTC', 'LOCAL'])
+					self._expect('TIME')
+			if self._match('AND'):
+				self._expect_one_of(['COMPLETE', 'STOP'])
+		elif self._match_one_of(['COMPLETE', 'STOP', 'CANCEL']):
+			self._parse_db_partitions_clause()
+		elif self._match('QUERY'):
+			self._expect('STATUS')
+			if self._match('USING'):
+				self._expect_one_of(['UTC', 'LOCAL'])
+				self._expect('TIME')
+			self._parse_db_partitions_clause()
+		if self._match('TABLESPACE'):
+			if not self._match('ONLINE'):
+				self._expect('(')
+				self._parse_ident_list()
+				self._expect(')')
+				self._match('ONLINE')
+		if self._match('OVERFLOW'):
+			self._expect_sequence(['LOG', 'PATH'])
+			self._expect('(')
+			self._expect_clp_string()
+			if self._match(','):
+				while True:
+					self._expect_clp_string()
+					self._expect('ON')
+					self._expect_one_of(['DBPARTITIONNUM', 'NODE'])
+					self._expect(TT.NUMBER)
+					if not self._match(','):
+						break
+			self._expect(')')
+		self._match('NORETRIEVE')
+		if self._match('RECOVER'):
+			self._expect_sequence(['DROPPED', 'TABLE'])
+			self._expect_clp_string()
+			self._expect('TO')
+			self._expect_clp_string()
+
+	def _parse_runstats_command(self):
+		"""Parses a RUNSTATS command"""
+
+		def parse_index_options():
+			"""Parses the indexing clauses of a RUNSTATS command"""
+			# FOR/AND already matched
+			if self._match('SAMPLED'):
+				self._expect('DETAILED')
+			else:
+				self._match('DETAILED')
+			self._expect_one_of(['INDEX', 'INDEXES'])
+			if not self._match('ALL'):
+				while True:
+					self._parse_index_name()
+					if not self._match(','):
+						break
+
+		def parse_column_options(dist):
+			"""Parses column options clauses of a RUNSTATS command"""
+			# ON already matched
+			if (
+					self._match_sequence(['ALL', 'COLUMNS', 'AND', 'COLUMNS'])
+					or self._match_sequence(['KEY', 'COLUMNS', 'AND', 'COLUMNS'])
+					or self._match('COLUMNS')
+				):
+				self._expect('(')
+				while True:
+					if self._match('('):
+						self._parse_ident_list()
+						self._expect(')')
+					else:
+						self._expect(TT.IDENTIFIER)
+						if self._match('LIKE'):
+							self._expect('STATISTICS')
+					if dist:
+						while self._match_one_of(['NUM_FREQVALUES', 'NUM_QUANTILES']):
+							self._expect(TT.NUMBER)
+					if not self._match(','):
+						break
+				self._expect(')')
+			else:
+				self._expect_one_of(['ALL', 'KEY', 'COLUMNS'])
+				self._expect('COLUMNS')
+
+		# RUNSTATS already matched
+		self._expect_sequence(['ON', 'TABLE'])
+		self._parse_table_name()
+		if self._match_one_of(['USE', 'UNSET']):
+			self._expect('PROFILE')
+		else:
+			if self._match('FOR'):
+				parse_index_options()
+				self._match_sequence(['EXCLUDING', 'XML', 'COLUMNS'])
+			else:
+				if self._match('ON'):
+					parse_column_options(dist=False)
+				if self._match('WITH'):
+					self._expect('DISTRIBUTION')
+					if self._match('ON'):
+						parse_column_options(dist=True)
+					if self._match('DEFAULT'):
+						while self._match_one_of(['NUM_FREQVALUES', 'NUM_QUANTILES']):
+							self._expect(TT.NUMBER)
+				self._match_sequence(['EXCLUDING', 'XML', 'COLUMNS'])
+				if self._match('AND'):
+					parse_index_options()
+			if self._match('ALLOW'):
+				self._expect_one_of(['READ', 'WRITE'])
+				self._expect('ACCESS')
+			if self._match('TABLESAMPLE'):
+				self._expect_one_of(['SYSTEM', 'BERNOULLI'])
+				self._expect('(')
+				self._expect(TT.NUMBER)
+				self._expect(')')
+				if self._match('REPEATABLE'):
+					self._expect('(')
+					self._expect(TT.NUMBER)
+					self._expect(')')
+			if self._match('SET'):
+				self._expect('PROFILE')
+				self._match_one_of(['NONE', 'ONLY'])
+			elif self._match('UPDATE'):
+				self._expect('PROFILE')
+				self._match('ONLY')
+		if self._match('UTIL_IMPACT_PRIORITY'):
+			self._match(TT.NUMBER)
+
+	def _parse_set_client_command(self):
+		"""Parses a SET CLIENT command"""
+		# SET CLIENT already matched
+		if self._match('CONNECT'):
+			self._expect(TT.NUMBER)
+		if self._match('DISCONNECT'):
+			self._expect_one_of(['EXPLICIT', 'CONDITIONAL', 'AUTOMATIC'])
+		if self._match('SQLRULES'):
+			self._expect_one_of(['DB2', 'STD'])
+		if self._match('SYNCPOINT'):
+			self._expect_one_of(['ONEPHASE', 'TWOPHASE', 'NONE'])
+		if self._match('CONNECT_DBPARTITIONNUM'):
+			self._expect_one_of(['CATALOG_DBPARTITIONNUM', TT.NUMBER])
+		if self._match('ATTACH_DBPARTITIONNUM'):
+			self._expect(TT.NUMBER)
+
+	def _parse_set_runtime_degree_command(self):
+		"""Parses a SET RUNTIME DEGREE command"""
+		# SET RUNTIME DEGREE already matched
+		self._expect('FOR')
+		if not self._match('ALL'):
+			self._expect('(')
+			while True:
+				self._expect(TT.NUMBER)
+				if not self._match(','):
+					break
+			self._expect(')')
+		self._expect('TO')
+		self._expect(TT.NUMBER)
+
+	def _parse_set_serveroutput_command(self):
+		"""Parses a SET SERVEROUTPUT command"""
+		# SET SERVEROUTPUT already matched
+		self._expect_one_of(['OFF', 'ON'])
+
+	def _parse_set_tablespace_containers_command(self):
+		"""Parses a SET TABLESPACE CONTAINERS command"""
+		# SET TABLESPACE CONTAINERS already matched
+		self._expect('FOR')
+		self._expect(TT.NUMBER)
+		if self._match_one_of(['REPLAY', 'IGNORE']):
+			self._expect_sequence(['ROLLFORWARD', 'CONTAINER', 'OPERATIONS'])
+		self._expect('USING')
+		if not self._match_sequence(['AUTOMATIC', 'STORAGE']):
+			self._expect('(')
+			while True:
+				if self._expect_one_of(['FILE', 'DEVICE', 'PATH']).value == 'PATH':
+					self._expect_clp_string()
+				else:
+					self._expect_clp_string()
+					self._expect(TT.NUMBER)
+				if not self._match(','):
+					break
+			self._expect(')')
+
+	def _parse_set_tape_position_command(self):
+		"""Parses a SET TAPE POSITION command"""
+		# SET TAPE POSITION already matched
+		if self._match('ON'):
+			self._expect_clp_string()
+		self._expect('TO')
+		self._expect(TT.NUMBER)
+
+	def _parse_set_util_impact_priority_command(self):
+		"""Parses a SET UTIL_IMPACT_PRIORITY command"""
+		# SET UTIL_IMPACT_PRIORITY already matched
+		self._expect('FOR')
+		self._expect(TT.NUMBER)
+		self._expect('TO')
+		self._expect(TT.NUMBER)
+
+	def _parse_set_workload_command(self):
+		"""Parses a SET WORKLOAD command"""
+		# SET WORKLOAD already matched
+		self._expect('TO')
+		self._expect_one_of(['AUTOMATIC', 'SYSDEFAULTADMWORKLOAD'])
+
+	def _parse_set_write_command(self):
+		"""Parses a SET WRITE command"""
+		# SET WRITE already matched
+		self._expect_one_of(['SUSPEND', 'RESUME'])
+		self._expect('FOR')
+		self._expect_one_of(['DATABASE', 'DB'])
+
+	def _parse_start_dbm_command(self):
+		"""Parses a START DBM command"""
+		# START [DATABASE MANAGER|DB MANAGER|DBM] already matched
+		if self._match('REMOTE'):
+			self._match('INSTANCE')
+			self._expect_clp_string()
+			self._expect_one_of(['ADMINNODE', 'HOSTNAME'])
+			self._expect_clp_string()
+			self._parse_login(optional=False, allowchange=False)
+		if self._match('ADMIN'):
+			self._expect('MODE')
+			if self._match_one_of(['USER', 'GROUP']):
+				self._expect(TT.IDENTIFIER)
+			self._match_sequence(['RESTRICTED', 'ACCESS'])
+		if self._match('PROFILE'):
+			self._expect_clp_string()
+		if self._match_one_of(['DBPARTITIONNUM', 'NODE']):
+			self._expect(TT.NUMBER)
+			if self._match('ADD'):
+				self._expect_one_of(['DBPARTITIONNUM', 'NODE'])
+				self._expect('HOSTNAME')
+				self._expect_clp_string()
+				self._expect('PORT')
+				self._expect(TT.NUMBER)
+				if self._match('COMPUTER'):
+					self._expect_clp_string()
+				self._parse_login(optional=True, allowchange=False)
+				if self._match('NETNAME'):
+					self._expect_clp_string()
+				if self._match('LIKE'):
+					self._expect_one_of(['DBPARTITIONNUM', 'NODE'])
+					self._expect(TT.NUMBER)
+				elif self._match('WITHOUT'):
+					self._expect('TABLESPACES')
+			elif self._match('RESTART'):
+				if self._match('HOSTNAME'):
+					self._expect_clp_string()
+				if self._match('PORT'):
+					self._expect(TT.NUMBER)
+				if self._match('COMPUTER'):
+					self._expect_clp_string()
+				self._parse_login(optional=True, allowchange=False)
+				if self._match('NETNAME'):
+					self._expect_clp_string()
+			elif self._match('STANDALONE'):
+				pass
+
+	def _parse_start_hadr_command(self):
+		"""Parses a START HADR command"""
+		# START HADR already matched
+		self._expect('ON')
+		self._expect_one_of(['DATABASE', 'DB'])
+		self._expect_clp_string()
+		self._parse_login(optional=True, allowchange=False)
+		self._expect('AS')
+		if self._expect_one_of(['PRIMARY', 'STANDBY']).value == 'PRIMARY':
+			self._match_sequence(['BY', 'FORCE'])
+
+	def _parse_stop_dbm_command(self):
+		"""Parses a STOP DBM command"""
+		# STOP [DATABASE MANAGER|DB MANAGER|DBM] already matched
+		if self._match('PROFILE'):
+			self._expect_clp_string()
+		if self._match('DROP'):
+			self._expect_one_of(['DBPARTITIONNUM', 'NODE'])
+			self._expect(TT.NUMBER)
+		else:
+			self._match('FORCE')
+			if self._match_one_of(['DBPARTITIONNUM', 'NODE']):
+				self._expect(TT.NUMBER)
+
+	def _parse_stop_hadr_command(self):
+		"""Parses a STOP HADR command"""
+		# STOP HADR already matched
+		self._expect('ON')
+		self._expect_one_of(['DATABASE', 'DB'])
+		self._expect_clp_string()
+		self._parse_login(optional=True, allowchange=False)
+
+	def _parse_takeover_hadr_command(self):
+		"""Parses a TAKEOVER HADR command"""
+		# TAKEOVER HADR already matched
+		self._expect('ON')
+		self._expect_one_of(['DATABASE', 'DB'])
+		self._expect_clp_string()
+		self._parse_login(optional=True, allowchange=False)
+		if self._match_sequence(['BY', 'FORCE']):
+			self._match_sequence(['PEER', 'WINDOW', 'ONLY'])
+
+	def _parse_terminate_command(self):
+		"""Parses a TERMINATE command"""
+		# TERMINATE already matched
+		pass
+
+	def _parse_uncatalog_command(self):
+		"""Parses an UNCATALOG command"""
+		if self._match_one_of(['DATABASE', 'DB', 'NODE']):
+			self._expect_clp_string()
+		elif self._match('DCS'):
+			self._expect_one_of(['DATABASE', 'DB'])
+			self._expect_clp_string()
+		elif self._match('LDAP'):
+			self._expect_one_of(['DATABASE', 'DB', 'NODE'])
+			self._expect_clp_string()
+			self._parse_login(optional=True, allowchange=False)
+		elif self._match_one_of(['USER', 'SYSTEM']):
+			self._expect_sequence(['ODBC', 'DATA', 'SOURCE'])
+			self._expect_clp_string()
+		elif self._match('ODBC'):
+			self._expect_sequence(['DATA', 'SOURCE'])
+			self._expect_clp_string()
+		else:
+			self._expected_one_of([
+				'DATABASE',
+				'DB',
+				'NODE',
+				'DCS',
+				'LDAP',
+				'USER',
+				'SYSTEM',
+				'ODBC',
+			])
+
+	def _parse_unquiesce_command(self):
+		"""Parses an UNQUIESCE command"""
+		# UNQUIESCE already matched
+		if self._match('INSTANCE'):
+			self._expect_clp_string()
+		elif self._match_one_of(['DATABASE', 'DB']):
+			pass
+		else:
+			self._expected_one_of(['DATABASE', 'DB', 'INSTANCE'])
+
+	def _parse_update_admin_cfg_command(self):
+		"""Parses an UPDATE ADMIN CFG command"""
+		# UPDATE ADMIN CONFIGURATION|CONFIG|CFG already matched
+		self._expect('USING')
+		while True:
+			self._expect(TT.IDENTIFIER)
+			self._expect_one_of([TT.NUMBER, TT.STRING, TT.IDENTIFIER])
+			if self._peek_one_of(['FOR', TT.TERMINATOR, TT.EOF]):
+				break
+		if self._match_sequence(['FOR', 'NODE']):
+			self._expect_clp_string()
+			self._parse_login(optional=True, allowchange=False)
+
+	def _parse_update_alert_cfg_command(self):
+		"""Parses an UPDATE ALERT CFG command"""
+		# UPDATE ALERT CONFIGURATION|CONFIG|CFG already matched
+		self._expect('FOR')
+		if (
+				self._match_sequence(['DATABASE', 'MANAGER'])
+				or self._match_sequence(['DB', 'MANAGER'])
+				or self._match_one_of(['DBM', 'CONTAINERS', 'DATABASES', 'TABLESPACES'])
+			):
+			pass
+		elif (
+				self._match_sequence(['CONTAINER', TT.IDENTIFIER, 'FOR', TT.IDENTIFIER])
+				or self._match_sequence('TABLESPACE', TT.IDENTIFIER)
+				or self._match('DATABASE')
+			):
+			self._expect('ON')
+			self._expect_clp_string()
+		if self._match('USING'):
+			self._expect_clp_string()
+		if self._match('SET'):
+			while True:
+				self._expect_one_of(['ALARM', 'WARNING', 'SENSITIVITY', 'ACTIONSENABLED', 'THRESHOLDSCHECKED'])
+				self._expect_one_of([TT.NUMBER, 'YES', 'NO'])
+				if not self._match(','):
+					break
+		elif self._match('ADD'):
+			while True:
+				self._expect_one_of(['SCRIPT', 'TASK'])
+				self._expect_clp_string()
+				self._expect('TYPE')
+				if self._match('DB2'):
+					if (
+							self._match_sequence(['STATEMENT', 'TERMINATION', 'CHARACTER'])
+							or self._match_sequence(['STMT', 'TERM', 'CHAR'])
+							or self._match_sequence(['TERM', 'CHAR'])
+						):
+						self._expect_clp_string()
+				elif self._match_sequence(['OPERATING', 'SYSTEM']) or self._match('OS'):
+					if (
+							self._match_sequence(['COMMAND', 'LINE', 'PARAMETERS'])
+							or self._match('PARMS')
+						):
+						self._expect_clp_string()
+				else:
+					self._expected_one_of(['DB2', 'OS', 'OPERATING'])
+				self._expect_sequence(['WORKING', 'DIRECTORY'])
+				self._expect_clp_string()
+				self._expect('ON')
+				if self._expect_one_of(['WARNING', 'ALARM', 'ALLALERT', 'ATTENTION']).value == 'ATTENTION':
+					self._expect(TT.NUMBER)
+				if self._match('ON'):
+					self._expect_clp_string()
+				self._parse_login(optional=False, allowchange=False)
+				if not self._match(','):
+					break
+		else:
+			if self._expect_one_of(['SET', 'ADD', 'UPDATE', 'DELETE']).value == 'UPDATE':
+				update = True
+			self._expect('ACTION')
+			while True:
+				self._expect_one_of(['SCRIPT', 'TASK'])
+				self._expect_clp_string()
+				self._expect('ON')
+				if self._expect_one_of(['WARNING', 'ALARM', 'ALLALERT', 'ATTENTION']).value == 'ATTENTION':
+					self._expect(TT.NUMBER)
+				if update:
+					while True:
+						self._expect('SET')
+						self._expect_one_of(['ALARM', 'WARNING', 'SENSITIVITY', 'ACTIONSENABLED', 'THRESHOLDSCHECKED'])
+						self._expect_one_of([TT.NUMBER, 'YES', 'NO'])
+						if not self._match(','):
+							break
+				if not self._match(','):
+					break
+
+	def _parse_update_alternate_server_command(self):
+		"""Parses an UPDATE ALTERNATE SERVER command"""
+		# UPDATE ALTERNATE SERVER already matched
+		self._expect('FOR')
+		if self._expect_one_of(['LDAP', 'DATABASE', 'DB']).value == 'LDAP':
+			self._expect_one_of(['DATABASE', 'DB'])
+			self._expect_clp_string()
+			self._expect('USING')
+			self._expect_one_of(['NODE', 'GWNODE'])
+			self._expect_clp_string()
+			self._parse_login(optional=True, allowchange=False)
+		else:
+			self._expect_clp_string()
+			self._expect_sequence(['USING', 'HOSTNAME'])
+			self._expect_clp_string()
+			self._expect('PORT')
+			self._expect_clp_string()
+
+	def _parse_update_cli_cfg_command(self):
+		"""Parses an UPDATE CLI CFG command"""
+		# UPDATE CLI CONFIGURATION|CONFIG|CFG already matched
+		if self._match('AT'):
+			self._expect_one_of(['GLOBAL', 'USER'])
+			self._expect('LEVEL')
+		self._expect_sequence(['FOR', 'SECTION'])
+		self._expect_clp_string()
+		self._expect('USING')
+		while True:
+			self._expect(TT.IDENTIFIER)
+			self._expect_one_of([TT.NUMBER, TT.STRING, TT.IDENTIFIER])
+			if self._peek_one_of([TT.TERMINATOR, TT.EOF]):
+				break
+
+	def _parse_update_command_options_command(self):
+		"""Parses an UPDATE COMMAND OPTIONS command"""
+		# UPDATE COMMAND OPTIONS already matched
+		self._expect('USING')
+		while True:
+			option = self._expect_one_of([
+				'A', 'C', 'D', 'E', 'I', 'L', 'M', 'N',
+				'O', 'P', 'Q', 'R', 'S', 'V', 'W', 'Z',
+			]).value
+			value = self._expect_one_of(['ON', 'OFF']).value
+			if option in ('E', 'L', 'R', 'Z') and value == 'ON':
+				self._expect_clp_string()
+			if self._peek_one_of([TT.TERMINATOR, TT.EOF]):
+				break
+
+	def _parse_update_contact_command(self):
+		"""Parses an UPDATE CONTACT command"""
+		# UPDATE CONTACT already matched
+		self._expect_clp_string()
+		self._expect('USING')
+		while True:
+			if self._match('ADDRESS'):
+				self._expect_clp_string()
+			elif self._match('TYPE'):
+				self._expect_one_of(['EMAIL', 'PAGE'])
+			elif self._match('MAXPAGELEN'):
+				self._expect(TT.NUMBER)
+			elif self._match('DESCRIPTION'):
+				self._expect_clp_string()
+			else:
+				self._expected_one_of(['ADDRESS', 'TYPE', 'MAXPAGELEN', 'DESCRIPTION'])
+			if not self._match(','):
+				break
+
+	def _parse_update_contactgroup_command(self):
+		"""Parses an UPDATE CONTACTGROUP command"""
+		# UPDATE CONTACTGROUP already matched
+		self._expect_clp_string()
+		self._expect('(')
+		while True:
+			self._expect_one_of(['ADD', 'DROP'])
+			self._expect_one_of(['CONTACT', 'GROUP'])
+			self._expect_clp_string()
+			if not self._match(','):
+				break
+		self._expect(')')
+		if self._match('DESCRIPTION'):
+			self._expect_clp_string()
+
+	def _parse_update_db_cfg_command(self):
+		"""Parses an UPDATE DB CFG command"""
+		# UPDATE DATABASE|DB CONFIGURATION|CONFIG|CFG already matched
+		if self._match('FOR'):
+			self._expect_clp_string()
+		if self._match_one_of(['DBPARTITIONNUM', 'NODE']):
+			self._expect(TT.NUMBER)
+		self._expect('USING')
+		while True:
+			self._expect(TT.IDENTIFIER)
+			if self._match_one_of(['AUTOMATIC', 'MANUAL']):
+				pass
+			else:
+				self._expect_one_of([TT.NUMBER, TT.STRING, TT.IDENTIFIER])
+				self._match('AUTOMATIC')
+			if self._peek_one_of(['IMMEDIATE', 'DEFERRED', TT.TERMINATOR, TT.EOF]):
+				break
+		self._match_one_of(['IMMEDIATE', 'DEFERRED'])
+
+	def _parse_update_dbm_cfg_command(self):
+		"""Parses an UPDATE DBM CFG command"""
+		# UPDATE DATABASE MANAGER|DB MANAGER|DBM CONFIGURATION|CONFIG|CFG already matched
+		self._expect('USING')
+		while True:
+			self._expect(TT.IDENTIFIER)
+			if self._match_one_of(['AUTOMATIC', 'MANUAL']):
+				pass
+			else:
+				self._expect_one_of([TT.NUMBER, TT.STRING, TT.IDENTIFIER])
+				self._match('AUTOMATIC')
+			if self._peek_one_of(['IMMEDIATE', 'DEFERRED', TT.TERMINATOR, TT.EOF]):
+				break
+		self._match_one_of(['IMMEDIATE', 'DEFERRED'])
+
+	def _parse_update_notification_list_command(self):
+		"""Parses an UPDATE NOTIFICATION LIST command"""
+		# UPDATE [HEALTH] NOTIFICATION [CONTACT] LIST already matched
+		first = True
+		while True:
+			if not self._match_one_of(['ADD', 'DROP']):
+				if not first:
+					break
+				else:
+					self._expected_one_of(['ADD', 'DROP'])
+			first = False
+			self._expect_one_of(['CONTACT', 'GROUP'])
+			self._expect_clp_string()
+
+	def _parse_update_history_command(self):
+		"""Parses an UPDATE HISTORY command"""
+		# UPDATE HISTORY already matched
+		self._expect_one_of(['FOR', 'EID'])
+		self._expect(TT.NUMBER)
+		self._expect('WITH')
+		if self._match('LOCATION'):
+			self._expect_clp_string()
+			self._expect_sequence(['DEVICE', 'TYPE'])
+			self._expect_one_of(['D', 'K', 'T', 'A', 'F', 'U', 'P', 'N', 'X', 'Q', 'O'])
+		elif self._match('COMMENT'):
+			self._expect_clp_string()
+		elif self._match('STATUS'):
+			self._expect_one_of(['A', 'I', 'E', 'D', 'X'])
+		else:
+			self._expected_one_of(['LOCATION', 'COMMENT', 'STATUS'])
+
+	def _parse_update_ldap_node_command(self):
+		"""Parses an UPDATE LDAP NODE command"""
+		# UPDATE LDAP NODE already matched
+		self._expect_clp_string()
+		if self._match('HOSTNAME'):
+			self._expect_clp_string()
+		if self._match('SVCENAME'):
+			self._expect_clp_string()
+		if self._match('WITH'):
+			self._expect_clp_string()
+		self._parse_login(optional=True, allowchange=False)
+
+	def _parse_update_monitor_switches_command(self):
+		"""Parses an UPDATE MONITOR SWITCHES command"""
+		# UPDATE MONITOR SWITCHES already matched
+		self._expect('USING')
+		first = True
+		while True:
+			if not self._match_one_of(['BUFFERPOOL', 'LOCK', 'SORT', 'STATEMENT', 'TABLE', 'TIMESTAMP', 'UOW']):
+				if not first:
+					break
+				else:
+					self._expected_one_of(['BUFFERPOOL', 'LOCK', 'SORT', 'STATEMENT', 'TABLE', 'TIMESTAMP', 'UOW'])
+			first = False
+			self._expect_one_of(['OFF', 'ON'])
+		self._parse_db_partition_clause()
+
+	def _parse_update_xmlschema_command(self):
+		"""Parses an UPDATE XMLSCHEMA command"""
+		# UPDATE XMLSCHEMA already matched
+		self._parse_subschema_name()
+		self._expect('WITH')
+		self._parse_subschema_name()
+		self._match_sequence(['DROP', 'NEW', 'SCHEMA'])
+
+	def _parse_upgrade_db_command(self):
+		"""Parses an UPGRADE DB command"""
+		# UPGRADE DATABASE|DB already matched
+		self._expect_clp_string()
+		self._parse_login(optional=True, allowchange=False)
+
+	# COMPOUND COMMANDS ######################################################
+
+	def _parse_command(self):
+		"""Parses a top-level CLP command in a DB2 script"""
+		# Ambiguity: Some CLP commands start with the same keywords as SQL
+		# statements (e.g. CREATE DATABASE and CREATE DATABASE PARTITION
+		# GROUP).  Attempt to parse the statement as a CLP statement, rewind
+		# and try to parse as an SQL command if that fails. This is one reason
+		# for the message "The command was processed as an SQL statement
+		# because it was not a valid Command Line Processor command" in DB2;
+		# there are two very different and separate parsers, one for CLP which
+		# tries to parse a command first, which defers to the secondary SQL
+		# parser if it fails.
+		self._save_state()
+		try:
+			if self._match('ACTIVATE'):
+				self._expect_one_of(['DATABASE', 'DB'])
+				self._parse_activate_database_command()
+			elif self._match('ATTACH'):
+				self._parse_attach_command()
+			elif self._match('AUTOCONFIGURE'):
+				self._parse_autoconfigure_command()
+			elif self._match('BACKUP'):
+				self._expect_one_of(['DATABASE', 'DB'])
+				self._parse_backup_command()
+			elif self._match('CATALOG'):
+				self._parse_catalog_command()
+			elif self._match('CONNECT'):
+				self._parse_connect_command()
+			elif self._match('CREATE'):
+				if self._match_one_of(['DATABASE', 'DB']):
+					if self._match('PARTITION'):
+						raise ParseBacktrack()
+					self._parse_create_database_command()
+				elif self._match('TOOLS'):
+					self._expect('CATALOG')
+					self._parse_create_tools_catalog_command()
+				else:
+					raise ParseBacktrack()
+			elif self._match('DEACTIVATE'):
+				self._expect_one_of(['DATABASE', 'DB'])
+				self._parse_deactivate_database_command()
+			elif self._match('DETACH'):
+				self._parse_detach_command()
+			elif self._match('DISCONNECT'):
+				self._parse_disconnect_command()
+			elif self._match('DROP'):
+				if self._match_one_of(['DATABASE', 'DB']):
+					self._parse_drop_database_command()
+				elif self._match('TOOLS'):
+					self._expect('CATALOG')
+					self._parse_drop_tools_catalog_command()
+				else:
+					raise ParseBacktrack()
+			elif self._match('ECHO'):
+				self._parse_echo_command()
+			elif self._match('EXPORT'):
+				self._parse_export_command()
+			elif self._match('FORCE'):
+				self._expect('APPLICATION')
+				self._parse_force_application_command()
+			elif self._match('GET'):
+				if self._match('ADMIN'):
+					self._expect_one_of(['CONFIGURATION', 'CONFIG', 'CFG'])
+					self._parse_get_admin_cfg_command()
+				elif self._match('ALERT'):
+					self._expect_one_of(['CONFIGURATION', 'CONFIG', 'CFG'])
+					self._parse_get_alert_cfg_command()
+				elif self._match('CLI'):
+					self._expect_one_of(['CONFIGURATION', 'CONFIG', 'CFG'])
+					self._parse_get_cli_cfg_command()
+				elif self._match('CONNECTION'):
+					self._expect('STATE')
+					self._parse_get_connection_state_command()
+				elif self._match('CONTACTGROUP'):
+					self._parse_get_contactgroup_command()
+				elif self._match('CONTACTGROUPS'):
+					self._parse_get_contactgroups_command()
+				elif self._match('CONTACTS'):
+					self._parse_get_contacts_command()
+				elif self._match_one_of(['DATABASE', 'DB']):
+					if self._match_one_of(['CONFIGURATION', 'CONFIG', 'CFG']):
+						self._parse_get_db_cfg_command()
+					elif self._match('MANAGER'):
+						if self._match_one_of(['CONFIGURATION', 'CONFIG', 'CFG']):
+							self._parse_get_dbm_cfg_command()
+						elif self._match_sequence(['MONITOR', 'SWITCHES']):
+							self._parse_get_dbm_monitor_switches_command()
+						else:
+							self._expected_one_of(['CONFIGURATION', 'CONFIG', 'CFG', 'MONITOR'])
+				elif self._match('DBM'):
+					if self._match_one_of(['CONFIGURATION', 'CONFIG', 'CFG']):
+						self._parse_get_dbm_cfg_command()
+					elif self._match_sequence(['MONITOR', 'SWITCHES']):
+						self._parse_get_dbm_monitor_switches_command()
+					else:
+						self._expected_one_of(['CONFIGURATION', 'CONFIG', 'CFG', 'MONITOR'])
+				elif self._match('DESCRIPTION'):
+					self._expect_sequence(['FOR', 'HEALTH', 'INDICATOR'])
+					self._parse_get_description_for_health_indicator_command()
+				elif self._match('HEALTH'):
+					if self._match('NOTIFICATION'):
+						self._expect_sequence(['CONTACT', 'LIST'])
+						self._parse_get_notification_list_command()
+					elif self._match('SNAPSHOT'):
+						self._parse_get_health_snapshot_command()
+					else:
+						self._expected_one_of(['NOTIFICATION', 'SNAPSHOT'])
+				elif self._match('INSTANCE'):
+					self._parse_get_instance_command()
+				elif self._match('MONITOR'):
+					self._expect('SWITCHES')
+					self._parse_get_monitor_switches_command()
+				elif self._match('NOTIFICATION'):
+					self._expect('LIST')
+					self._parse_get_notification_list_command()
+				elif self._match('RECOMMENDATIONS'):
+					self._expect_sequence(['FOR', 'HEALTH', 'INDICATOR'])
+					self._parse_get_recommendations_for_health_indicator_command()
+				elif self._match('ROUTINE'):
+					self._parse_get_routine_command()
+				elif self._match('SNAPSHOT'):
+					self._parse_get_snapshot_command()
+				else:
+					raise ParseBacktrack()
+			elif self._match('IMPORT'):
+				self._parse_import_command()
+			elif self._match('INITIALIZE'):
+				self._expect('TAPE')
+				self._parse_initialize_tape_command()
+			elif self._match('INSPECT'):
+				self._parse_inspect_command()
+			elif self._match('LIST'):
+				if self._match('ACTIVE'):
+					self._expect('DATABASES')
+					self._parse_list_active_databases_command()
+				elif self._match('ADMIN'):
+					self._expect_sequence(['NODE', 'DIRECTORY'])
+					self._parse_list_node_directory_command()
+				elif self._match('APPLICATIONS'):
+					self._parse_list_applications_command()
+				elif self._match('COMMAND'):
+					self._expect('OPTIONS')
+					self._parse_list_command_options_command()
+				elif self._match('DATABASE'):
+					if self._match('DIRECTORY'):
+						self._parse_list_db_directory_command()
+					elif self._match('PARTITION'):
+						self._expect('GROUPS')
+						self._parse_list_database_partition_groups_command()
+					else:
+						self._expected_one_of(['DIRECTORY', 'PARTITION'])
+				elif self._match_one_of(['DBPARTITIONNUMS', 'NODES']):
+					self._parse_list_nodes_command()
+				elif self._match('DCS'):
+					if self._match('APPLICATIONS'):
+						self._parse_list_dcs_applications_command()
+					elif self._match('DIRECTORY'):
+						self._parse_list_dcs_directory_command()
+					else:
+						self._expected_one_of(['APPLICATIONS', 'DIRECTORY'])
+				elif self._match('DRDA'):
+					self._expect_sequence(['INDOUBT', 'TRANSACTIONS'])
+					self._parse_list_drda_indoubt_transactions_command()
+				elif self._match('HISTORY'):
+					self._parse_list_history_command()
+				elif self._match('INDOUBT'):
+					self._expect('TRANSACTIONS')
+					self._parse_list_indoubt_transactions_command()
+				elif self._match('NODE'):
+					self._expect('DIRECTORY')
+					self._parse_list_node_directory_command()
+				elif self._match_one_of(['USER', 'SYSTEM']):
+					self._expect_sequence(['ODBC', 'DATA', 'SOURCES'])
+					self._parse_list_odbc_data_sources_command()
+				elif self._match('ODBC'):
+					self._expect_sequence(['DATA', 'SOURCES'])
+					self._parse_list_odbc_data_sources_command()
+				elif self._match_one_of(['PACKAGES', 'TABLES']):
+					self._parse_list_tables_command(self)
+				elif self._match('TABLESPACES'):
+					if self._match('CONTAINERS'):
+						self._parse_list_tablespace_containers_command()
+					else:
+						self._parse_list_tablespaces_command()
+				elif self._match('UTILITIES'):
+					self._parse_list_utilities_command()
+				else:
+					self._expected_one_of([
+						'ACTIVE',
+						'ADMIN',
+						'APPLICATIONS',
+						'COMMAND',
+						'DATABASE',
+						'DB',
+						'DBPARTITIONNUMS',
+						'DCS',
+						'DRDA',
+						'HISTORY',
+						'INDOUBT',
+						'NODE',
+						'NODES',
+						'ODBC',
+						'PACKAGES',
+						'SYSTEM',
+						'TABLES',
+						'TABLESPACES',
+						'USER',
+						'UTILITIES',
+					])
+			elif self._match('LOAD'):
+				if self._match('QUERY'):
+					self._parse_load_query_command()
+				else:
+					self._parse_load_command()
+			elif self._match('MIGRATE'):
+				self._expect_one_of(['DATABASE', 'DB'])
+				self._parse_migrate_db_command()
+			elif self._match('PING'):
+				self._parse_ping_command()
+			elif self._match_one_of(['PRECOMPILE', 'PREP']):
+				self._parse_precompile_command()
+			elif self._match('PRUNE'):
+				if self._match('HISTORY'):
+					self._parse_prune_history_command()
+				elif self._match('LOGFILE'):
+					self._parse_prune_logfile_command()
+				else:
+					self._expected_one_of(['HISTORY', 'LOGFILE'])
+			elif self._match('PUT'):
+				self._expect('ROUTINE')
+				self._parse_put_routine_command()
+			elif self._match('QUERY'):
+				self._expect('CLIENT')
+				self._parse_query_client_command()
+			elif self._match('QUIESCE'):
+				if self._match('TABLESPACES'):
+					self._parse_quiesce_tablespaces_command()
+				else:
+					self._parse_quiesce_command()
+			elif self._match('QUIT'):
+				self._parse_quit_command()
+			elif self._match('REBIND'):
+				self._parse_rebind_command()
+			elif self._match('RECOVER'):
+				self._expect_one_of(['DATABASE', 'DB'])
+				self._parse_recover_db_command()
+			elif self._match('REDISTRIBUTE'):
+				self._expect_sequence(['DATABASE', 'PARTITION', 'GROUP'])
+				self._parse_redistribute_database_partition_group_command()
+			elif self._match('REFRESH'):
+				if self._match('LDAP'):
+					self._parse_refresh_ldap_command()
+				else:
+					raise ParseBacktrack()
+			elif self._match('REGISTER'):
+				if self._match('XMLSCHEMA'):
+					self._parse_register_xmlschema_command()
+				elif self._match('XSROBJECT'):
+					self._parse_register_xsrobject_command()
+				else:
+					self._parse_register_command()
+			elif self._match('REORG'):
+				self._parse_reorg_command()
+			elif self._match('REORGCHK'):
+				self._parse_reorgchk_command()
+			elif self._match('RESET'):
+				if self._match('ADMIN'):
+					self._expect_one_of(['CONFIGURATION', 'CONFIG', 'CFG'])
+					self._parse_reset_admin_cfg_command()
+				elif self._match('ALERT'):
+					self._expect_one_of(['CONFIGURATION', 'CONFIG', 'CFG'])
+					self._parse_reset_alert_cfg_command()
+				elif self._match_one_of(['DATABASE', 'DB']):
+					if self._match('MANAGER'):
+						self._expect_one_of(['CONFIGURATION', 'CONFIG', 'CFG'])
+						self._parse_reset_dbm_cfg_command()
+					else:
+						self._expect_one_of(['CONFIGURATION', 'CONFIG', 'CFG'])
+						self._parse_reset_db_cfg_command()
+				elif self._match('DBM'):
+					self._expect_one_of(['CONFIGURATION', 'CONFIG', 'CFG'])
+					self._parse_reset_dbm_cfg_command()
+				elif self._match('MONITOR'):
+					self._parse_reset_monitor_command()
+				else:
+					self._expected_one_of([
+						'ADMIN',
+						'ALERT',
+						'DATABASE',
+						'DB',
+						'DBM',
+						'MONITOR',
+					])
+			elif self._match('RESTART'):
+				self._expect_one_of(['DATABASE', 'DB'])
+				self._parse_restart_db_command()
+			elif self._match('RESTORE'):
+				self._expect_one_of(['DATABASE', 'DB'])
+				self._parse_restore_db_command()
+			elif self._match('REWIND'):
+				self._expect('TAPE')
+				self._parse_rewind_tape_command()
+			elif self._match('ROLLFORWARD'):
+				self._expect_one_of(['DATABASE', 'DB'])
+				self._parse_rollforward_db_command()
+			elif self._match('RUNSTATS'):
+				self._parse_runstats_command()
+			elif self._match('SET'):
+				if self._match('CLIENT'):
+					self._parse_set_client_command()
+				elif self._match('RUNTIME'):
+					self._expect('DEGREE')
+					self._parse_set_runtime_degree_command()
+				elif self._match('SERVEROUTPUT'):
+					self._parse_set_serveroutput_command()
+				elif self._match('TABLESPACE'):
+					self._expect('CONTAINERS')
+					self._parse_set_tablespace_containers_command()
+				elif self._match('TAPE'):
+					self._expect('POSITION')
+					self._parse_set_tape_position_command()
+				elif self._match('UTIL_IMPACT_PRIORITY'):
+					self._parse_set_util_impact_priority_command()
+				elif self._match('WORKLOAD'):
+					self._parse_set_workload_command()
+				else:
+					raise ParseBacktrack()
+			elif self._match('START'):
+				if self._match('HADR'):
+					self._parse_start_hadr_command()
+				elif self._match_one_of(['DATABASE', 'DB']):
+					self._expect('MANAGER')
+					self._parse_start_dbm_command()
+				elif self._match('DBM'):
+					self._parse_start_dbm_command()
+				else:
+					self._expected_one_of(['HADR', 'DATABASE', 'DB', 'DBM'])
+			elif self._match('STOP'):
+				if self._match('HADR'):
+					self._parse_stop_hadr_command()
+				elif self._match_one_of(['DATABASE', 'DB']):
+					self._expect('MANAGER')
+					self._parse_stop_dbm_command()
+				elif self._match('DBM'):
+					self._parse_stop_dbm_command()
+				else:
+					self._expected_one_of(['HADR', 'DATABASE', 'DB', 'DBM'])
+			elif self._match('TAKEOVER'):
+				self._parse_takeover_hadr_command()
+			elif self._match('TERMINATE'):
+				self._parse_terminate_command()
+			elif self._match('UNCATALOG'):
+				self._parse_uncatalog_command()
+			elif self._match('UNQUIESCE'):
+				self._parse_unquiesce_command()
+			elif self._match('UPDATE'):
+				if self._match('ADMIN'):
+					self._expect_one_of(['CONFIGURATION', 'CONFIG', 'CFG'])
+					self._parse_update_admin_cfg_command()
+				elif self._match('ALERT'):
+					self._expect_one_of(['CONFIGURATION', 'CONFIG', 'CFG'])
+					self._parse_update_alert_cfg_command()
+				elif self._match_sequence(['ALTERNATE', 'SERVER']):
+					self._parse_update_alternate_server_command()
+				elif self._match('CLI'):
+					self._expect_one_of(['CONFIGURATION', 'CONFIG', 'CFG'])
+					self._parse_update_cli_cfg_command()
+				elif self._match_sequence(['COMMAND', 'OPTIONS']):
+					self._parse_update_command_options_command()
+				elif self._match('CONTACT'):
+					self._parse_update_contact_command()
+				elif self._match('CONTACTGROUP'):
+					self._parse_update_contactgroup_command()
+				elif self._match_one_of(['DATABASE', 'DB']):
+					if self._match('MANAGER'):
+						self._parse_update_dbm_cfg_command()
+					else:
+						self._parse_update_db_cfg_command()
+				elif self._match('DBM'):
+					self._parse_update_dbm_cfg_command()
+				elif (
+						self._match_sequence(['HEALTH', 'NOTIFICATION', 'CONTACT', 'LIST'])
+						or self._match_sequence(['NOTIFICATION', 'LIST'])
+					):
+					self._parse_update_notification_list_command()
+				elif self._match('HISTORY'):
+					self._parse_update_history_command()
+				elif self._match_sequence(['LDAP', 'NODE']):
+					self._parse_update_ldap_node_command()
+				elif self._match_sequence(['MONITOR', 'SWITCHES']):
+					self._parse_update_monitor_switches_command()
+				elif self._match('XMLSCHEMA'):
+					self._parse_update_xmlschema_command()
+				else:
+					raise ParseBacktrack()
+			elif self._match('UPGRADE'):
+				self._expect_one_of(['DATABASE', 'DB'])
+				self._parse_upgrade_db_command()
+			else:
+				raise ParseBacktrack()
+		except ParseBacktrack:
+			self._restore_state()
+			self._parse_statement()
+		else:
+			self._forget_state()
+
+	def _parse_top(self):
+		# Override _parse_top to make a CLP command the top of the parse tree
+		self._parse_command()
+
+	def _parse_init(self, tokens):
+		# Override _parse_init to set up the output lists (produces, consumes,
+		# etc.)
+		super(DB2CLPFormatter, self)._parse_init(tokens)
+		self.produces = []
+		self.consumes = []
+		self.connections = []
+		self.current_connection = None
+		self.current_user = None
+
+	def _save_state(self):
+		# Override _save_state to save the state of the output lists (produces,
+		# consumes, etc.)
+		self._states.append((
+			self._index,
+			self._level,
+			len(self._output),
+			self.current_schema,
+			self.current_user,
+			self.current_connection,
+			len(self.produces),
+			len(self.consumes),
+			len(self.connections),
+		))
+
+	def _restore_state(self):
+		# Override _restore_state to restore the state of the output lists
+		# (produces, consumes, etc.)
+		(
+			self._index,
+			self._level,
+			output_len,
+			self.current_schema,
+			self.current_user,
+			self.current_connection,
+			produces_len,
+			consumes_len,
+			logins_len,
+		) = self._states.pop()
+		del self.produces[produces_len:]
+		del self.consumes[consumes_len:]
+		del self.connections[logins_len:]
+		del self._output[output_len:]
+
+if __name__ == '__main__':
+	pass
