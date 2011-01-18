@@ -15,7 +15,7 @@ plugins (along with the configuration information for the plugin).
 import re
 import logging
 from itertools import chain, groupby
-from UserDict import DictMixin
+from collections import Mapping, Sequence
 from db2makedoc.plugins.formatter import format_size, format_ident
 from db2makedoc.util import *
 
@@ -39,6 +39,7 @@ __all__ = [
 	'Routine',
 	'Schema',
 	'SchemaObject',
+	'Script',
 	'Table',
 	'Tablespace',
 	'Trigger',
@@ -49,10 +50,7 @@ __all__ = [
 
 # PRIVATE PROXY CLASSES #######################################################
 
-# XXX Many of these could be made direct subclasses of list, tuple, etc.
-# XXX These should be replaced with the new ABCs in Python 2.6's collections package
-
-class DictProxy(object, DictMixin):
+class DictProxy(Mapping):
 	"""Presents a dictionary of objects from a list of identifiers.
 
 	This abstract class acts like a read-only dictionary of objects from the
@@ -84,12 +82,6 @@ class DictProxy(object, DictMixin):
 		"""
 		raise NotImplementedError
 
-	def keys(self):
-		return self._keys
-
-	def has_key(self, key):
-		return key in self._keys
-
 	def __len__(self):
 		return len(self._keys)
 
@@ -102,11 +94,8 @@ class DictProxy(object, DictMixin):
 		for k in self._keys:
 			yield k
 
-	def __contains__(self, key):
-		return key in self._keys
 
-
-class ListProxy(object):
+class ListProxy(Sequence):
 	"""Presents a list of objects from a list of identifiers.
 
 	This abstract class acts like a read-only list of objects from the database
@@ -146,17 +135,6 @@ class ListProxy(object):
 	def __iter__(self):
 		for i in self._items:
 			yield self._convert(i)
-
-	def __contains__(self, key):
-		return any(i == key for i in self)
-
-	def index(self, x, i=0, j=None):
-		if j is None:
-			j = len(self)
-		for result in xrange(i, j):
-			if self[result] is x:
-				return result
-		raise ValueError("%s not found in list" % repr(x))
 
 
 class RelationsDict(DictProxy):
