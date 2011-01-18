@@ -824,7 +824,7 @@ class BaseFormatter(object):
 		# IDENTIFIER token into a DATATYPE token and return it, indicating a
 		# successful match)
 		transforms = {
-			TT.KEYWORD:     (TT.IDENTIFIER, TT.DATATYPE, TT.REGISTER),
+			TT.KEYWORD:     (TT.IDENTIFIER, TT.DATATYPE, TT.REGISTER, TT.SCHEMA, TT.RELATION, TT.ROUTINE),
 			TT.IDENTIFIER:  (TT.DATATYPE, TT.REGISTER, TT.SCHEMA, TT.RELATION, TT.ROUTINE),
 			TT.TERMINATOR:  (TT.STATEMENT,),
 			TT.EOF:         (TT.STATEMENT,),
