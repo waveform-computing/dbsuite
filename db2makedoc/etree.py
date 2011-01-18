@@ -1,5 +1,6 @@
 # vim: set noet sw=4 ts=4:
 
+import datetime
 
 try:
 	import xml.etree.ElementTree as etree
