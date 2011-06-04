@@ -33,10 +33,10 @@ classifiers = [
 
 entry_points = {
 	'console_scripts': [
-		'db2makedoc = db2makedoc.main:db2makedoc_main',
-		'db2convdoc = db2makedoc.main:db2convdoc_main',
-		'db2grepdoc = db2makedoc.main:db2grepdoc_main',
-		'db2tidysql = db2makedoc.main:db2tidysql_main',
+		'db2makedoc = db2makedoc.main.db2makedoc:main',
+		'db2convdoc = db2makedoc.main.db2convdoc:main',
+		'db2grepdoc = db2makedoc.main.db2grepdoc:main',
+		'db2tidysql = db2makedoc.main.db2tidysql:main',
 	]
 }
 
