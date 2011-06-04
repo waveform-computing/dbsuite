@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 # vim: set noet sw=4 ts=4:
 
-"""Flexible documentation generator for IBM DB2.
+"""Flexible documentation tools for relational databases.
 
-db2makedoc is a command line application for generating documentation
-from IBM DB2 databases (although theoretically it could be extended to
-support other databases) in a variety of formats. The application is
-modular including a plugin framework for input and output."""
+dbsuite is a set of command line applications for documentation related
+functions for relational databases (primarily DB2, but in the process of being
+expanded to other databases). The applications are modular including an
+extensible plugin framework for supporting new sources and output formats."""
 
 import ez_setup
 ez_setup.use_setuptools() # install setuptools if it isn't already installed
@@ -33,10 +33,10 @@ classifiers = [
 
 entry_points = {
 	'console_scripts': [
-		'db2makedoc = db2makedoc.main.db2makedoc:main',
-		'db2convdoc = db2makedoc.main.db2convdoc:main',
-		'db2grepdoc = db2makedoc.main.db2grepdoc:main',
-		'db2tidysql = db2makedoc.main.db2tidysql:main',
+		'dbmakedoc = db2makedoc.main.dbmakedoc:main',
+		'dbconvdoc = db2makedoc.main.dbconvdoc:main',
+		'dbgrepdoc = db2makedoc.main.dbgrepdoc:main',
+		'dbtidysql = db2makedoc.main.dbtidysql:main',
 	]
 }
 
@@ -49,9 +49,9 @@ def main():
 	from setuptools import setup, find_packages
 	from db2makedoc.main import __version__
 	setup(
-		name                 = 'db2makedoc',
+		name                 = 'dbsuite',
 		version              = __version__,
-		description          = 'Flexible documentation generator for IBM DB2',
+		description          = 'Flexible documentation tools for relational databases',
 		long_description     = __doc__,
 		author               = 'Dave Hughes',
 		author_email         = 'dave@waveform.org.uk',
