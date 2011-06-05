@@ -16,7 +16,7 @@ import pdb
 import re
 import sys
 import math
-import dbsuite.plugins.dialects as dialects
+from dbsuite.plugins.dialects import db2luw_namechars
 from dbsuite.plugins.tokenizer import TokenTypes as TT, Token, Error, TokenError
 from dbsuite.util import *
 from decimal import Decimal
@@ -114,7 +114,7 @@ def dump_token(token):
 	else:
 		return '%-16s %-20s %-20s (%d:%d)' % (TT.names[token.type], repr(token.value), repr(token.source), token.line, token.column)
 
-def format_ident(name, namechars=set(dialects.db2luw_namechars), qchar='"'):
+def format_ident(name, namechars=set(db2luw_namechars), qchar='"'):
 	"""Format an SQL identifier with quotes if required.
 
 	The name parameter provides the object name to format. The optional
