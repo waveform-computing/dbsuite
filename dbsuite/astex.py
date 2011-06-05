@@ -3,7 +3,7 @@
 import re
 import os
 import datetime
-from dbsuite.util import *
+from dbsuite.compat import *
 
 tex_special = re.compile(ur'([#$%^&_{}~/\\\u00A0]|\.\.\.)')
 def escape_tex(s):

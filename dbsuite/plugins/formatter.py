@@ -18,7 +18,7 @@ import sys
 import math
 from dbsuite.plugins.dialects import db2luw_namechars
 from dbsuite.plugins.tokenizer import TokenTypes as TT, Token, Error, TokenError
-from dbsuite.util import *
+from dbsuite.compat import *
 from decimal import Decimal
 from itertools import tee, izip
 

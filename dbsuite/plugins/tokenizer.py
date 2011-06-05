@@ -21,7 +21,7 @@ import re
 import sys
 import dbsuite.plugins.dialects as dialects
 from decimal import Decimal
-from dbsuite.util import *
+from dbsuite.compat import *
 
 __all__ = [
 	'Error',

@@ -4,7 +4,7 @@ import sys
 import logging
 import dbsuite.highlighters
 import dbsuite.main
-from dbsuite.util import *
+from dbsuite.compat import *
 
 class TidySqlUtility(dbsuite.main.Utility):
 	"""%prog [options] files...

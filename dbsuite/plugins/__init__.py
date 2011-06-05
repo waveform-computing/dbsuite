@@ -19,7 +19,7 @@ import re
 import fnmatch
 import dbsuite.db
 from itertools import chain, groupby, ifilter
-from dbsuite.util import *
+from dbsuite.compat import *
 from dbsuite.tuples import (
 	ConstraintRef, IndexRef, RelationDep, RelationRef, RoutineRef, TableRef,
 	TablespaceRef, TriggerDep, TriggerRef

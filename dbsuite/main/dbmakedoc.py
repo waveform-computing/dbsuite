@@ -4,7 +4,7 @@ import logging
 import dbsuite.db
 import dbsuite.plugins
 import dbsuite.main
-from dbsuite.util import *
+from dbsuite.compat import *
 
 class MakeDocUtility(dbsuite.main.Utility):
 	"""%prog [options] configs...

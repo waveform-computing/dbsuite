@@ -17,7 +17,7 @@ import logging
 from itertools import chain, groupby
 from collections import Mapping, Sequence
 from dbsuite.plugins.formatter import format_size, format_ident
-from dbsuite.util import *
+from dbsuite.compat import *
 
 
 __all__ = [

@@ -8,7 +8,7 @@ object hierarchy constructed by the application to represent the database
 structure.
 """
 
-from dbsuite.util import *
+from dbsuite.compat import *
 
 
 __all__ = [

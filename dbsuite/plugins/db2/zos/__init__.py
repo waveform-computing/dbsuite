@@ -6,7 +6,7 @@ import logging
 import re
 import dbsuite.plugins
 from itertools import groupby
-from dbsuite.util import *
+from dbsuite.compat import *
 from dbsuite.plugins.db2 import (
 	connect, make_datetime, make_bool, make_int, make_str
 )

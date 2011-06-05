@@ -2,7 +2,7 @@ import sys
 import logging
 import dbsuite.commentor
 import dbsuite.main
-from dbsuite.util import *
+from dbsuite.compat import *
 
 class GrepDocUtility(dbsuite.main.Utility):
 	"""%prog [options] source...
