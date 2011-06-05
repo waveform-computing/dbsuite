@@ -17,10 +17,10 @@ import datetime
 import imp
 import re
 import fnmatch
-import db2makedoc.db
+import dbsuite.db
 from itertools import chain, groupby, ifilter
-from db2makedoc.util import *
-from db2makedoc.tuples import (
+from dbsuite.util import *
+from dbsuite.tuples import (
 	ConstraintRef, IndexRef, RelationDep, RelationRef, RoutineRef, TableRef,
 	TablespaceRef, TriggerDep, TriggerRef
 )
@@ -87,9 +87,9 @@ class Plugin(object):
 		self.options = {}
 		# Construct some utility mappings for the database class conversions
 		classes = [
-			cls for cls in db2makedoc.db.__dict__.itervalues()
+			cls for cls in dbsuite.db.__dict__.itervalues()
 			if type(cls) == type(object)
-			and issubclass(cls, db2makedoc.db.DatabaseObject)
+			and issubclass(cls, dbsuite.db.DatabaseObject)
 			and hasattr(cls, 'config_names')
 		]
 		# Generate a mapping of configuration names to classes
@@ -110,7 +110,7 @@ class Plugin(object):
 			])
 			for parent in classes
 		)
-		self.__abstracts[db2makedoc.db.UniqueKey] = []
+		self.__abstracts[dbsuite.db.UniqueKey] = []
 		# Remove concrete classes (those with no children)
 		self.__abstracts = dict(
 			(base, classes)
@@ -301,7 +301,7 @@ class Plugin(object):
 		This conversion method handles a value which refers to a database
 		class. For example, "type=table". Alternate versions (e.g. plurals) of
 		the class names are accepted (see the "config_names" attribute of the
-		classes in the db2makedoc.db module), and values are case insensitive.
+		classes in the dbsuite.db module), and values are case insensitive.
 
 		If the optional abstract parameter is True, abstract base classes like
 		Relation, Constraint, and Routine will be permitted as the result.  If
@@ -322,7 +322,7 @@ class Plugin(object):
 		This conversion method handles lists of database classes, for example
 		"diagrams=alias,table,view". Alternate versions (e.g. plurals) of the
 		class names are accepted (see the "config_names" attribute of the
-		classes in the db2makedoc.db module), and values are case insensitive.
+		classes in the dbsuite.db module), and values are case insensitive.
 
 		If the optional abstract parameter is True, abstract base classes like
 		Relation, Constraint, and Routine will be permitted in the result. If
@@ -1247,7 +1247,7 @@ class InputPlugin(Plugin):
 		return dict((TablespaceRef(tbspace), list(indexes)) for (tbspace, indexes) in result)
 
 
-_plugin_root = 'db2makedoc.plugins'
+_plugin_root = 'dbsuite.plugins'
 def get_plugins(root=None, name=None):
 	"""Generator returning all input and output plugins in a package.
 

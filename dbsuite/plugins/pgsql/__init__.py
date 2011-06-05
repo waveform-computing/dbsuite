@@ -4,11 +4,11 @@
 
 import logging
 import re
-import db2makedoc.plugins
-from db2makedoc.plugins.db2 import (
+import dbsuite.plugins
+from dbsuite.plugins.db2 import (
 	connect, make_datetime, make_bool, make_int, make_str
 )
-from db2makedoc.tuples import (
+from dbsuite.tuples import (
 	Schema, Datatype, Table, View, Alias, RelationDep, Index, IndexCol,
 	RelationCol, UniqueKey, UniqueKeyCol, ForeignKey, ForeignKeyCol, Check,
 	CheckCol, Function, Procedure, RoutineParam, Trigger, TriggerDep,
@@ -81,7 +81,7 @@ def connect(database=None, username=None, password=None, host=None, port=None, u
 	raise ImportError('Unable to find a suitable connection framework; please install pg8000, Psycopg2, or pyodbc')
 
 
-class InputPlugin(db2makedoc.plugins.InputPlugin):
+class InputPlugin(dbsuite.plugins.InputPlugin):
 	"""Input plugin for PostgreSQL.
 
 	This input plugin supports extracting documentation information from
@@ -114,9 +114,9 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		super(InputPlugin, self).configure(config)
 		# Check for missing stuff
 		if not self.options['username']:
-			raise db2makedoc.plugins.PluginConfigurationError('The username option must be specified')
+			raise dbsuite.plugins.PluginConfigurationError('The username option must be specified')
 		if not self.options['host'] and not self.options['unix_socket']:
-			raise db2makedoc.plugins.PluginConfigurationError('Either "host" or "unix_socket" must be specified')
+			raise dbsuite.plugins.PluginConfigurationError('Either "host" or "unix_socket" must be specified')
 		# If database is not specified it's equal to username
 		if not self.options['database']:
 			self.options['database'] = self.options['username']

@@ -16,8 +16,8 @@ import re
 import logging
 from itertools import chain, groupby
 from collections import Mapping, Sequence
-from db2makedoc.plugins.formatter import format_size, format_ident
-from db2makedoc.util import *
+from dbsuite.plugins.formatter import format_size, format_ident
+from dbsuite.util import *
 
 
 __all__ = [

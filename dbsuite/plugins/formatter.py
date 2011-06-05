@@ -16,9 +16,9 @@ import pdb
 import re
 import sys
 import math
-import db2makedoc.plugins.dialects as dialects
-from db2makedoc.plugins.tokenizer import TokenTypes as TT, Token, Error, TokenError
-from db2makedoc.util import *
+import dbsuite.plugins.dialects as dialects
+from dbsuite.plugins.tokenizer import TokenTypes as TT, Token, Error, TokenError
+from dbsuite.util import *
 from decimal import Decimal
 from itertools import tee, izip
 

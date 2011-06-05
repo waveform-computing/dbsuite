@@ -5,14 +5,14 @@
 import logging
 import zipfile
 import datetime
-import db2makedoc.plugins
-from db2makedoc.highlighters import CommentHighlighter, SQLHighlighter
-from db2makedoc.db import (
+import dbsuite.plugins
+from dbsuite.highlighters import CommentHighlighter, SQLHighlighter
+from dbsuite.db import (
 	Schema, Datatype, Table, View, Alias, Constraint, Index, Trigger, Function,
 	Procedure, Tablespace
 )
-from db2makedoc.plugins.formatter import quote_str, format_ident
-from db2makedoc.etree import Element, ElementFactory, indent, tostring, _namespace_map
+from dbsuite.plugins.formatter import quote_str, format_ident
+from dbsuite.etree import Element, ElementFactory, indent, tostring, _namespace_map
 from pkg_resources import resource_string, resource_stream
 from string import Template
 
@@ -113,7 +113,7 @@ class ODFCommentHighlighter(CommentHighlighter):
 		return self._content
 
 
-class OutputPlugin(db2makedoc.plugins.OutputPlugin):
+class OutputPlugin(dbsuite.plugins.OutputPlugin):
 	"""Output plugin for OpenDocument text.
 
 	This output plugin generates documentation in the OpenDocument text
@@ -153,7 +153,7 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 		super(OutputPlugin, self).configure(config)
 		# Ensure the filename was specified
 		if not self.options['filename']:
-			raise db2makedoc.plugins.PluginConfigurationError('The filename option must be specified')
+			raise dbsuite.plugins.PluginConfigurationError('The filename option must be specified')
 
 	def execute(self, database):
 		super(OutputPlugin, self).execute(database)

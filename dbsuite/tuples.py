@@ -8,7 +8,7 @@ object hierarchy constructed by the application to represent the database
 structure.
 """
 
-from db2makedoc.util import *
+from dbsuite.util import *
 
 
 __all__ = [

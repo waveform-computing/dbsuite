@@ -9,31 +9,31 @@ certain methods to provide formatting specific to the plain style.
 import os
 import logging
 from pkg_resources import resource_string, resource_stream
-from db2makedoc.graph import Graph, Node, Edge, Cluster
-from db2makedoc.etree import ProcessingInstruction, iselement
-from db2makedoc.db import (
+from dbsuite.graph import Graph, Node, Edge, Cluster
+from dbsuite.etree import ProcessingInstruction, iselement
+from dbsuite.db import (
 	Database, Schema, Relation, Table, View, Alias, UniqueKey,
 	ForeignKey, Check, Index, Trigger, Function, Procedure, Tablespace
 )
-from db2makedoc.plugins.html.document import (
+from dbsuite.plugins.html.document import (
 	HTMLElementFactory, ObjectGraph, WebSite, HTMLDocument, HTMLPopupDocument,
 	HTMLObjectDocument, HTMLSiteIndexDocument, HTMLExternalDocument,
 	StyleDocument, ScriptDocument, ImageDocument, GraphDocument,
 	GraphObjectDocument
 )
-from db2makedoc.plugins.html.database import DatabaseDocument
-from db2makedoc.plugins.html.schema import SchemaDocument, SchemaGraph
-from db2makedoc.plugins.html.table import TableDocument, TableGraph
-from db2makedoc.plugins.html.view import ViewDocument, ViewGraph
-from db2makedoc.plugins.html.alias import AliasDocument, AliasGraph
-from db2makedoc.plugins.html.uniquekey import UniqueKeyDocument
-from db2makedoc.plugins.html.foreignkey import ForeignKeyDocument
-from db2makedoc.plugins.html.check import CheckDocument
-from db2makedoc.plugins.html.index import IndexDocument
-from db2makedoc.plugins.html.trigger import TriggerDocument
-from db2makedoc.plugins.html.function import FunctionDocument
-from db2makedoc.plugins.html.procedure import ProcedureDocument
-from db2makedoc.plugins.html.tablespace import TablespaceDocument
+from dbsuite.plugins.html.database import DatabaseDocument
+from dbsuite.plugins.html.schema import SchemaDocument, SchemaGraph
+from dbsuite.plugins.html.table import TableDocument, TableGraph
+from dbsuite.plugins.html.view import ViewDocument, ViewGraph
+from dbsuite.plugins.html.alias import AliasDocument, AliasGraph
+from dbsuite.plugins.html.uniquekey import UniqueKeyDocument
+from dbsuite.plugins.html.foreignkey import ForeignKeyDocument
+from dbsuite.plugins.html.check import CheckDocument
+from dbsuite.plugins.html.index import IndexDocument
+from dbsuite.plugins.html.trigger import TriggerDocument
+from dbsuite.plugins.html.function import FunctionDocument
+from dbsuite.plugins.html.procedure import ProcedureDocument
+from dbsuite.plugins.html.tablespace import TablespaceDocument
 
 # Import the imaging library
 try:

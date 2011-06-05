@@ -1,10 +1,10 @@
 import sys
 import logging
-import db2makedoc.commentor
-import db2makedoc.main
-from db2makedoc.util import *
+import dbsuite.commentor
+import dbsuite.main
+from dbsuite.util import *
 
-class GrepDocUtility(db2makedoc.main.Utility):
+class GrepDocUtility(dbsuite.main.Utility):
 	"""%prog [options] source...
 
 	This utility filters source SQL files for only those lines related to
@@ -27,7 +27,7 @@ class GrepDocUtility(db2makedoc.main.Utility):
 	def main(self, options, args):
 		super(GrepDocUtility, self).main(options, args)
 		done_stdin = False
-		extractor = db2makedoc.commentor.SQLCommentExtractor()
+		extractor = dbsuite.commentor.SQLCommentExtractor()
 		for sql_file in args:
 			if sql_file == '-':
 				if not done_stdin:

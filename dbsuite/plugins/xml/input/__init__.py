@@ -5,10 +5,10 @@
 import logging
 import re
 import datetime
-import db2makedoc.plugins
+import dbsuite.plugins
 from itertools import chain
-from db2makedoc.etree import parse, iselement
-from db2makedoc.tuples import (
+from dbsuite.etree import parse, iselement
+from dbsuite.tuples import (
 	Schema, Datatype, Table, View, Alias, RelationDep, Index, IndexCol,
 	RelationCol, UniqueKey, UniqueKeyCol, ForeignKey, ForeignKeyCol, Check,
 	CheckCol, Function, Procedure, RoutineParam, Trigger, TriggerDep,
@@ -75,7 +75,7 @@ def text(value):
 	else:
 		return None
 
-class InputPlugin(db2makedoc.plugins.InputPlugin):
+class InputPlugin(dbsuite.plugins.InputPlugin):
 	"""Input plugin for metadata storage (in XML format).
 
 	This input plugin extracts database metadata from an XML file. This is
@@ -98,11 +98,11 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		super(InputPlugin, self).configure(config)
 		# Ensure the filename was specified and that we can open it
 		if not self.options['filename']:
-			raise db2makedoc.plugins.PluginConfigurationError('The filename option must be specified')
+			raise dbsuite.plugins.PluginConfigurationError('The filename option must be specified')
 		try:
 			open(self.options['filename'], 'rb')
 		except Exception, e:
-			raise db2makedoc.plugins.PluginConfigurationError('Unable to open the specified file: %s' % str(e))
+			raise dbsuite.plugins.PluginConfigurationError('Unable to open the specified file: %s' % str(e))
 
 	def open(self):
 		"""Opens and parses the source file."""
@@ -111,7 +111,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		# Open and parse the document, and check its got the right root
 		self.doc = parse(self.options['filename']).getroot()
 		if self.doc.tag != 'database':
-			raise db2makedoc.plugins.PluginError('Document root element must be "database"')
+			raise dbsuite.plugins.PluginError('Document root element must be "database"')
 		self.name = self.doc.attrib['name']
 		# Generate a parent map for the document (we'll need this later to
 		# lookup the parents of nodes addressed by ID)

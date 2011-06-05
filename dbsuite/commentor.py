@@ -10,8 +10,8 @@ distributed with this utility.
 """
 
 import logging
-from db2makedoc.plugins.tokenizer import DB2LUWTokenizer, Token, TokenTypes as TT
-from db2makedoc.plugins.formatter import DB2CLPFormatter, dump
+from dbsuite.plugins.tokenizer import DB2LUWTokenizer, Token, TokenTypes as TT
+from dbsuite.plugins.formatter import DB2CLPFormatter, dump
 
 
 class Error(Exception):

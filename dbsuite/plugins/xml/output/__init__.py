@@ -4,11 +4,11 @@
 
 import re
 import logging
-import db2makedoc.plugins
-from db2makedoc.etree import (
+import dbsuite.plugins
+from dbsuite.etree import (
 	fromstring, tostring, indent, Element, SubElement, CDATA
 )
-from db2makedoc.db import (
+from dbsuite.db import (
 	Database, Schema, Datatype, Table, View, Alias, Field, UniqueKey,
 	PrimaryKey, ForeignKey, Check, Index, Trigger, Function, Procedure,
 	Param, Tablespace
@@ -16,7 +16,7 @@ from db2makedoc.db import (
 from string import Template
 
 
-class OutputPlugin(db2makedoc.plugins.OutputPlugin):
+class OutputPlugin(dbsuite.plugins.OutputPlugin):
 	"""Output plugin for metadata storage (in XML format).
 
 	This output plugin writes all database metadata into an XML file. This is
@@ -49,7 +49,7 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 		u''.encode(self.options['encoding'])
 		# Ensure the filename was specified
 		if not self.options['filename']:
-			raise db2makedoc.plugins.PluginConfigurationError('The filename option must be specified')
+			raise dbsuite.plugins.PluginConfigurationError('The filename option must be specified')
 
 	def execute(self, database):
 		super(OutputPlugin, self).execute(database)

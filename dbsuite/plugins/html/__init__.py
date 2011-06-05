@@ -12,13 +12,13 @@ import sys
 mswindows = sys.platform.startswith('win')
 import codecs
 import logging
-import db2makedoc.db
-import db2makedoc.plugins
-from db2makedoc.plugins.html.document import WebSite
-from db2makedoc.graph import DEFAULT_CONVERTER
+import dbsuite.db
+import dbsuite.plugins
+from dbsuite.plugins.html.document import WebSite
+from dbsuite.graph import DEFAULT_CONVERTER
 from string import Template
 
-class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
+class HTMLOutputPlugin(dbsuite.plugins.OutputPlugin):
 	"""Abstract base class for HTML output plugins.
 
 	Note: This class is deliberately not called "OutputPlugin" as it cannot be
@@ -46,7 +46,7 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 			file in the output (i.e. the file documenting the database itself).
 			The default "index" results in the top-level file being named
 			"index.html". Change this if you wish to have a separate index.html
-			file which is not touched by db2makedoc. Accepts $-prefixed
+			file which is not touched by dbsuite. Accepts $-prefixed
 			substitutions (see path)""")
 		self.add_option('encoding', default='UTF-8',
 			doc="""The character encoding to use for all text-based files
@@ -117,14 +117,14 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 		try:
 			codecs.lookup(self.options['encoding'])
 		except:
-			raise db2makedoc.plugins.PluginConfigurationError('Unknown character encoding "%s"' % self.options['encoding'])
+			raise dbsuite.plugins.PluginConfigurationError('Unknown character encoding "%s"' % self.options['encoding'])
 		# If search is True, check that the Xapian bindings are
 		# available
 		if self.options['search']:
 			try:
 				import xapian
 			except ImportError:
-				raise db2makedoc.plugins.PluginConfigurationError('Search is enabled, but the Python Xapian bindings were not found')
+				raise dbsuite.plugins.PluginConfigurationError('Search is enabled, but the Python Xapian bindings were not found')
 		# If diagrams are requested, check we can find GraphViz in the PATH
 		if self.options['diagrams']:
 			gvexe = DEFAULT_CONVERTER
@@ -135,7 +135,7 @@ class HTMLOutputPlugin(db2makedoc.plugins.OutputPlugin):
 				for path in os.environ.get('PATH', os.defpath).split(os.pathsep)
 			], False)
 			if not found:
-				raise db2makedoc.plugins.PluginConfigurationError('Diagrams requested, but the GraphViz utility (%s) was not found in the PATH' % gvexe)
+				raise dbsuite.plugins.PluginConfigurationError('Diagrams requested, but the GraphViz utility (%s) was not found in the PATH' % gvexe)
 
 	def substitute(self):
 		"""Returns the list of options which can accept $-prefixed substitutions."""

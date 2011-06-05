@@ -1,8 +1,8 @@
 # vim: set noet sw=4 ts=4:
 
 from itertools import chain
-from db2makedoc.db import Alias, View, ForeignKey, PrimaryKey, UniqueKey, Check
-from db2makedoc.plugins.html.document import HTMLObjectDocument, GraphObjectDocument
+from dbsuite.db import Alias, View, ForeignKey, PrimaryKey, UniqueKey, Check
+from dbsuite.plugins.html.document import HTMLObjectDocument, GraphObjectDocument
 
 orders = {
 	'A': 'Ascending',

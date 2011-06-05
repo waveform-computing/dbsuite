@@ -2,13 +2,13 @@
 
 """Output plugin for IBM Intranet w3v8 style web pages."""
 
-import db2makedoc.plugins
-import db2makedoc.plugins.html
-from db2makedoc.db import Schema, Table, View, Alias
-from db2makedoc.plugins.html.w3.document import W3Site
+import dbsuite.plugins
+import dbsuite.plugins.html
+from dbsuite.db import Schema, Table, View, Alias
+from dbsuite.plugins.html.w3.document import W3Site
 
 
-class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
+class OutputPlugin(dbsuite.plugins.html.HTMLOutputPlugin):
 	"""Output plugin for IBM Intranet w3v8 style web pages.
 
 	This output plugin supports generating XHTML documentation conforming to
@@ -68,10 +68,10 @@ class OutputPlugin(db2makedoc.plugins.html.HTMLOutputPlugin):
 			try:
 				import PIL
 			except ImportError:
-				raise db2makedoc.plugins.PluginConfigurationError('Diagrams requested, but the Python Imaging Library (PIL) was not found')
+				raise dbsuite.plugins.PluginConfigurationError('Diagrams requested, but the Python Imaging Library (PIL) was not found')
 		supported_diagrams = set([Schema, Table, View, Alias])
 		if self.options['diagrams'] - supported_diagrams:
-			raise db2makedoc.plugins.PluginConfigurationError('No diagram support for %s objects (supported objects are %s)' % (
+			raise dbsuite.plugins.PluginConfigurationError('No diagram support for %s objects (supported objects are %s)' % (
 				', '.join(c.config_names[0] for c in self.options['diagrams'] - supported_diagrams),
 				', '.join(c.config_names[0] for c in supported_diagrams)
 			))

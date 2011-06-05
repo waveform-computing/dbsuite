@@ -4,11 +4,11 @@
 
 import logging
 import re
-import db2makedoc.plugins
-from db2makedoc.plugins.db2 import (
+import dbsuite.plugins
+from dbsuite.plugins.db2 import (
 	connect, make_datetime, make_bool, make_int, make_str
 )
-from db2makedoc.tuples import (
+from dbsuite.tuples import (
 	Schema, Datatype, Table, View, Alias, RelationDep, Index, IndexCol,
 	RelationCol, UniqueKey, UniqueKeyCol, ForeignKey, ForeignKeyCol, Check,
 	CheckCol, Function, Procedure, RoutineParam, Trigger, TriggerDep,
@@ -16,7 +16,7 @@ from db2makedoc.tuples import (
 )
 
 
-class InputPlugin(db2makedoc.plugins.InputPlugin):
+class InputPlugin(dbsuite.plugins.InputPlugin):
 	"""Input plugin for IBM DB2 for Linux/UNIX/Windows.
 
 	This input plugin supports extracting documentation information from IBM
@@ -41,9 +41,9 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 		super(InputPlugin, self).configure(config)
 		# Check for missing stuff
 		if not self.options['database']:
-			raise db2makedoc.plugins.PluginConfigurationError('The database option must be specified')
+			raise dbsuite.plugins.PluginConfigurationError('The database option must be specified')
 		if self.options['username'] is not None and self.options['password'] is None:
-			raise db2makedoc.plugins.PluginConfigurationError('If the username option is specified, the password option must also be specified')
+			raise dbsuite.plugins.PluginConfigurationError('If the username option is specified, the password option must also be specified')
 
 	def open(self):
 		"""Opens the database connection for data retrieval."""
@@ -117,7 +117,7 @@ class InputPlugin(db2makedoc.plugins.InputPlugin):
 			97: 'Detected v9.7 (or above) catalog layout',
 		}[schemaver])
 		if schemaver < 80:
-			raise db2makedoc.plugins.PluginError('DB2 server must be v8.2 or above')
+			raise dbsuite.plugins.PluginError('DB2 server must be v8.2 or above')
 		# Set up a generic query substitution dictionary
 		self.query_subst = {
 			'schema': ['SYSCAT', 'DOCCAT'][doccat],

@@ -1,6 +1,6 @@
 # vim: set noet sw=4 ts=4:
 
-from db2makedoc.plugins.html.document import HTMLObjectDocument
+from dbsuite.plugins.html.document import HTMLObjectDocument
 
 trigtime = {
 	'A': 'After',

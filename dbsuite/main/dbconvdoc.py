@@ -2,11 +2,11 @@
 
 import sys
 import logging
-import db2makedoc.converter
-import db2makedoc.main
-from db2makedoc.util import *
+import dbsuite.converter
+import dbsuite.main
+from dbsuite.util import *
 
-class ConvDocUtility(db2makedoc.main.Utility):
+class ConvDocUtility(dbsuite.main.Utility):
 	"""%prog [options] source converter
 
 	This utility generates SYSCAT (or DOCCAT) compatible comments from a
@@ -30,19 +30,19 @@ class ConvDocUtility(db2makedoc.main.Utility):
 		self.parser.add_option('--help-converter', dest=u'conv',
 			help=u"""display help about the named converter""")
 		self.sources = {
-			'luw81': db2makedoc.converter.InfoCenterSource81,
-			'luw82': db2makedoc.converter.InfoCenterSource82,
-			'luw91': db2makedoc.converter.InfoCenterSource91,
-			'luw95': db2makedoc.converter.InfoCenterSource95,
-			'luw97': db2makedoc.converter.InfoCenterSource97,
-			'xml':   db2makedoc.converter.XMLSource,
+			'luw81': dbsuite.converter.InfoCenterSource81,
+			'luw82': dbsuite.converter.InfoCenterSource82,
+			'luw91': dbsuite.converter.InfoCenterSource91,
+			'luw95': dbsuite.converter.InfoCenterSource95,
+			'luw97': dbsuite.converter.InfoCenterSource97,
+			'xml':   dbsuite.converter.XMLSource,
 		}
 		self.converters = {
-			'comment': db2makedoc.converter.CommentConverter,
-			'insert':  db2makedoc.converter.InsertConverter,
-			'update':  db2makedoc.converter.UpdateConverter,
-			'merge':   db2makedoc.converter.MergeConverter,
-			'xml':     db2makedoc.converter.XMLConverter,
+			'comment': dbsuite.converter.CommentConverter,
+			'insert':  dbsuite.converter.InsertConverter,
+			'update':  dbsuite.converter.UpdateConverter,
+			'merge':   dbsuite.converter.MergeConverter,
+			'xml':     dbsuite.converter.XMLConverter,
 		}
 
 	def main(self, options, args):

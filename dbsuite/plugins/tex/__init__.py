@@ -6,13 +6,13 @@ import os
 import sys
 mswindows = sys.platform.startswith('win')
 import logging
-import db2makedoc.db
-import db2makedoc.plugins
-from db2makedoc.plugins.tex.document import TeXDocumentation
-from db2makedoc.graph import DEFAULT_CONVERTER
+import dbsuite.db
+import dbsuite.plugins
+from dbsuite.plugins.tex.document import TeXDocumentation
+from dbsuite.graph import DEFAULT_CONVERTER
 from string import Template
 
-class OutputPlugin(db2makedoc.plugins.OutputPlugin):
+class OutputPlugin(dbsuite.plugins.OutputPlugin):
 	"""Output plugin for LaTeX documentation.
 
 	This output plugin supports generating PDF documentation via the TeX
@@ -112,7 +112,7 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 		super(OutputPlugin, self).configure(config)
 		# Ensure the filename was specified
 		if not self.options['filename']:
-			raise db2makedoc.plugins.PluginConfigurationError('The filename option must be specified')
+			raise dbsuite.plugins.PluginConfigurationError('The filename option must be specified')
 		self.options['path'] = os.path.dirname(self.options['filename'])
 		# If diagrams are requested, check we can find GraphViz in the PATH
 		if self.options['diagrams']:
@@ -124,7 +124,7 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 				for path in os.environ.get('PATH', os.defpath).split(os.pathsep)
 			], False)
 			if not found:
-				raise db2makedoc.plugins.PluginConfigurationError('Diagrams requested, but the GraphViz utility (%s) was not found in the PATH' % gvexe)
+				raise dbsuite.plugins.PluginConfigurationError('Diagrams requested, but the GraphViz utility (%s) was not found in the PATH' % gvexe)
 
 	def substitute(self):
 		"""Returns the list of options which can accept $-prefixed substitutions."""

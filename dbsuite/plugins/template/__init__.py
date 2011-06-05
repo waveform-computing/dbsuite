@@ -4,7 +4,7 @@
 
 import os
 import kid
-import db2makedoc.plugins
+import dbsuite.plugins
 
 # Constants
 TEMPLATE_PATH_OPTION = 'template_path'
@@ -75,7 +75,7 @@ class OutputOptions(object):
 		self.encoding = DEFAULT_ENCODING
 
 
-class OutputPlugin(db2makedoc.plugins.OutputPlugin):
+class OutputPlugin(dbsuite.plugins.OutputPlugin):
 	"""Output plugin for kid XML templates.
 
 	This output plugin supports generating XML, HTML or plain text output by

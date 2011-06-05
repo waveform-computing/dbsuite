@@ -7,7 +7,7 @@ import logging
 import locale
 import textwrap
 import traceback
-from db2makedoc.util import *
+from dbsuite.util import *
 
 __version__ = "1.2.0"
 
@@ -101,7 +101,7 @@ class Utility(object):
 			# Just ignore system exit and keyboard interrupt errors (after all,
 			# they're user generated)
 			return 130
-		elif issubclass(type, (IOError, db2makedoc.plugins.PluginError)):
+		elif issubclass(type, (IOError, dbsuite.plugins.PluginError)):
 			# For simple errors like IOError and PluginError just output the
 			# message which should be sufficient for the end user (no need to
 			# confuse them with a full stack trace)

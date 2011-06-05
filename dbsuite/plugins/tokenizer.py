@@ -19,9 +19,9 @@ DB2ZOSTokenizer  -- IBM DB2 for z/OS
 
 import re
 import sys
-import db2makedoc.plugins.dialects as dialects
+import dbsuite.plugins.dialects as dialects
 from decimal import Decimal
-from db2makedoc.util import *
+from dbsuite.util import *
 
 __all__ = [
 	'Error',

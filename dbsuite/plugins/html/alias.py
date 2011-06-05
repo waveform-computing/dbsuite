@@ -1,7 +1,7 @@
 # vim: set noet sw=4 ts=4:
 
-from db2makedoc.db import Table
-from db2makedoc.plugins.html.document import HTMLObjectDocument, GraphObjectDocument
+from dbsuite.db import Table
+from dbsuite.plugins.html.document import HTMLObjectDocument, GraphObjectDocument
 
 class AliasDocument(HTMLObjectDocument):
 	def generate_body(self):

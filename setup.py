@@ -33,10 +33,10 @@ classifiers = [
 
 entry_points = {
 	'console_scripts': [
-		'dbmakedoc = db2makedoc.main.dbmakedoc:main',
-		'dbconvdoc = db2makedoc.main.dbconvdoc:main',
-		'dbgrepdoc = db2makedoc.main.dbgrepdoc:main',
-		'dbtidysql = db2makedoc.main.dbtidysql:main',
+		'dbmakedoc = dbsuite.main.dbmakedoc:main',
+		'dbconvdoc = dbsuite.main.dbconvdoc:main',
+		'dbgrepdoc = dbsuite.main.dbgrepdoc:main',
+		'dbtidysql = dbsuite.main.dbtidysql:main',
 	]
 }
 
@@ -47,7 +47,7 @@ def get_console_scripts():
 
 def main():
 	from setuptools import setup, find_packages
-	from db2makedoc.main import __version__
+	from dbsuite.main import __version__
 	setup(
 		name                 = 'dbsuite',
 		version              = __version__,

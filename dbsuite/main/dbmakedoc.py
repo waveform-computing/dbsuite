@@ -1,12 +1,12 @@
 import optparse
 import ConfigParser
 import logging
-import db2makedoc.db
-import db2makedoc.plugins
-import db2makedoc.main
-from db2makedoc.util import *
+import dbsuite.db
+import dbsuite.plugins
+import dbsuite.main
+from dbsuite.util import *
 
-class MakeDocUtility(db2makedoc.main.Utility):
+class MakeDocUtility(dbsuite.main.Utility):
 	"""%prog [options] configs...
 
 	This utility generates documentation (in a variety of formats) from the
@@ -73,15 +73,15 @@ class MakeDocUtility(db2makedoc.main.Utility):
 		for section in parser.sections():
 			logging.info('Reading section [%s]' % section)
 			if not parser.has_option(section, 'plugin'):
-				raise db2makedoc.plugins.PluginConfigurationError('No "plugin" value found')
+				raise dbsuite.plugins.PluginConfigurationError('No "plugin" value found')
 			plugin_name = parser.get(section, 'plugin')
-			plugin = db2makedoc.plugins.load_plugin(plugin_name)()
-			if isinstance(plugin, db2makedoc.plugins.InputPlugin):
+			plugin = dbsuite.plugins.load_plugin(plugin_name)()
+			if isinstance(plugin, dbsuite.plugins.InputPlugin):
 				inputs.append((section, plugin))
-			elif isinstance(plugin, db2makedoc.plugins.OutputPlugin):
+			elif isinstance(plugin, dbsuite.plugins.OutputPlugin):
 				outputs.append((section, plugin))
 			else:
-				raise db2makedoc.plugins.PluginConfigurationError('Plugin "%s" is not a valid input or output plugin' % plugin_name)
+				raise dbsuite.plugins.PluginConfigurationError('Plugin "%s" is not a valid input or output plugin' % plugin_name)
 			logging.info('Configuring plugin "%s"' % plugin_name)
 			plugin.configure(dict(
 				(name, value.replace('\n', ''))
@@ -123,7 +123,7 @@ class MakeDocUtility(db2makedoc.main.Utility):
 				logging.info('Executing input section [%s]' % section)
 				input.open()
 				try:
-					db = db2makedoc.db.Database(input)
+					db = dbsuite.db.Database(input)
 				finally:
 					input.close()
 				for (section, output) in outputs:
@@ -133,21 +133,21 @@ class MakeDocUtility(db2makedoc.main.Utility):
 	def list_plugins(self):
 		"""Pretty-print a list of the available input and output plugins."""
 		# Get all plugins and separate them into input and output lists, sorted
-		# by name. The prefix of the root plugin package ("db2makedoc.plugins")
+		# by name. The prefix of the root plugin package ("dbsuite.plugins")
 		# is stripped from the qualified name of each plugin module
-		plugins = list(db2makedoc.plugins.get_plugins())
+		plugins = list(dbsuite.plugins.get_plugins())
 		input_plugins = sorted(
 			(
 				(name, cls)
 				for (name, cls) in plugins
-				if issubclass(cls, db2makedoc.plugins.InputPlugin)
+				if issubclass(cls, dbsuite.plugins.InputPlugin)
 			), key=itemgetter(0)
 		)
 		output_plugins = sorted(
 			(
 				(name, cls)
 				for (name, cls) in plugins
-				if issubclass(cls, db2makedoc.plugins.OutputPlugin)
+				if issubclass(cls, dbsuite.plugins.OutputPlugin)
 			), key=itemgetter(0)
 		)
 		# Format and output the lists
@@ -166,7 +166,7 @@ class MakeDocUtility(db2makedoc.main.Utility):
 
 	def help_plugin(self, plugin_name):
 		"""Pretty-print some help text for the specified plugin."""
-		plugin = db2makedoc.plugins.load_plugin(plugin_name)()
+		plugin = dbsuite.plugins.load_plugin(plugin_name)()
 		self.pprint('Name:')
 		self.pprint(plugin_name, indent=' '*4)
 		self.pprint('')

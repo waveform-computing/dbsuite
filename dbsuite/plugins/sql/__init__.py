@@ -4,16 +4,16 @@
 
 import codecs
 import logging
-import db2makedoc.plugins
-from db2makedoc.db import (
+import dbsuite.plugins
+from dbsuite.db import (
 	Schema, Datatype, Table, View, Alias, Constraint, Index, Trigger, Function,
 	Procedure, Tablespace
 )
-from db2makedoc.plugins.formatter import quote_str, format_ident
+from dbsuite.plugins.formatter import quote_str, format_ident
 from string import Template
 
 
-class OutputPlugin(db2makedoc.plugins.OutputPlugin):
+class OutputPlugin(dbsuite.plugins.OutputPlugin):
 	"""Output plugin for comment script generation.
 
 	This output plugin generates an SQL script which can be used to apply
@@ -73,14 +73,14 @@ class OutputPlugin(db2makedoc.plugins.OutputPlugin):
 		codecs.lookup(self.options['encoding'])
 		# Ensure the filename was specified
 		if not self.options['filename']:
-			raise db2makedoc.plugins.PluginConfigurationError('The filename option must be specified')
+			raise dbsuite.plugins.PluginConfigurationError('The filename option must be specified')
 		# Ensure the statement value is valid
 		valid = set(['comment', 'update', 'merge'])
 		if not self.statement in valid:
-			raise db2makedoc.plugins.PluginConfigurationError('The statement option must be one of %s' % ', '.join(valid))
+			raise dbsuite.plugins.PluginConfigurationError('The statement option must be one of %s' % ', '.join(valid))
 		# Ensure the combination of maxlen and ellipsis isn't silly
 		if self.maxlen > 0 and len(self.ellipsis) >= self.maxlen:
-			raise db2makedoc.plugins.PluginConfigurationError('The ellipsis option is as long or longer than maxlen!')
+			raise dbsuite.plugins.PluginConfigurationError('The ellipsis option is as long or longer than maxlen!')
 
 	def execute(self, database):
 		super(OutputPlugin, self).execute(database)

@@ -14,13 +14,13 @@ import logging
 
 from operator import attrgetter
 from itertools import chain
-from db2makedoc.main import __version__
-from db2makedoc.astex import tex, xml, TeXFactory
-from db2makedoc.highlighters import CommentHighlighter, SQLHighlighter
-from db2makedoc.hyphenator import hyphenate_word
-from db2makedoc.graph import Graph, Node, Edge, Cluster
-from db2makedoc.plugins.tokenizer import TokenTypes as TT
-from db2makedoc.db import (
+from dbsuite.main import __version__
+from dbsuite.astex import tex, xml, TeXFactory
+from dbsuite.highlighters import CommentHighlighter, SQLHighlighter
+from dbsuite.hyphenator import hyphenate_word
+from dbsuite.graph import Graph, Node, Edge, Cluster
+from dbsuite.plugins.tokenizer import TokenTypes as TT
+from dbsuite.db import (
 	DatabaseObject, Relation, Routine, Constraint, Database, Tablespace,
 	Schema, Table, View, Alias, Index, Trigger, Function, Procedure, Datatype,
 	Field, UniqueKey, PrimaryKey, ForeignKey, Check, Param

@@ -2,11 +2,11 @@
 
 import sys
 import logging
-import db2makedoc.highlighters
-import db2makedoc.main
-from db2makedoc.util import *
+import dbsuite.highlighters
+import dbsuite.main
+from dbsuite.util import *
 
-class TidySqlUtility(db2makedoc.main.Utility):
+class TidySqlUtility(dbsuite.main.Utility):
 	"""%prog [options] files...
 
 	This utility reformats SQL for human consumption using the same parser that
@@ -25,7 +25,7 @@ class TidySqlUtility(db2makedoc.main.Utility):
 	def main(self, options, args):
 		super(TidySqlUtility, self).main(options, args)
 		done_stdin = False
-		highlighter = db2makedoc.highlighters.SQLHighlighter()
+		highlighter = dbsuite.highlighters.SQLHighlighter()
 		for sql_file in args:
 			if sql_file == '-':
 				if not done_stdin:
