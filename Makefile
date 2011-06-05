@@ -5,7 +5,7 @@ PYTHON=python
 PYFLAGS=
 #LYNX=lynx
 #LYNXFLAGS=-nonumbers -justify
-LYNX=links
+LYNX=elinks
 LYNXFLAGS=
 
 # Calculate the base names of the distribution, the location of all source,
