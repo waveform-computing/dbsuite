@@ -430,7 +430,7 @@ class InputPlugin(Plugin):
 		"""
 		raise NotImplementedError
 
-	def parser(self):
+	def parser(self, for_scripts=False):
 		"""Returns a new instance of an SQL parser class.
 
 		This method is called by the main application when it needs a parser
@@ -438,21 +438,16 @@ class InputPlugin(Plugin):
 		plugin. The method should construct and return an object which is a
 		derivative of the BaseParser class (or an object which implements an
 		equivalent parse() method).
+
+		The for_scripts argument is for those database engines that implement
+		an extended "script-only" dialect which includes additional commands
+		understood by their script interpreter, but not by the engine itself
+		(Oracle's SQLPlus, PostgreSQL's psql, and DB2's CLP are examples of
+		this). If True, plugins dealing with such database engines should
+		return an augmented parser capable of dealing with the additional
+		language.
 		"""
 		raise NotImplementedError
-
-	def script_parser(self):
-		"""Returns a new instance of an augmented SQL parser class.
-
-		This property is for those database engines that implement an extended
-		"script-only" dialect which includes additional commands understood by
-		their script interpreter, but not by the engine itself (Oracle's
-		SQLPlus, PostgreSQL's psql, and DB2's CLP are examples of this). By
-		default this property simply returns the parser property's value, but
-		plugins dealing with such database engines should override this
-		property to return something different.
-		"""
-		return self.parser()
 
 	def configure(self, config):
 		"""Loads the plugin configuration."""

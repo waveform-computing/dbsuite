@@ -139,7 +139,7 @@ class TeXSQLHighlighter(SQLHighlighter):
 	"""
 
 	def __init__(self, doc):
-		super(TeXSQLHighlighter, self).__init__(doc.database.source)
+		super(TeXSQLHighlighter, self).__init__(doc.database.source, for_scripts=False)
 		self.doc = doc
 		tag = self.doc.tag
 		if not hasattr(tag, 'SQLerror'):

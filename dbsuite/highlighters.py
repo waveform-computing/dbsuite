@@ -157,12 +157,11 @@ class SQLHighlighter(object):
 	stubs for converting the result tokens into markup.
 	"""
 
-	def __init__(self, plugin):
+	def __init__(self, plugin, for_scripts=False):
 		"""Initializes an instance of the class"""
 		super(SQLHighlighter, self).__init__()
 		self.tokenizer = plugin.tokenizer()
-		# XXX Should be able to select parser() here too depending on context...
-		self.formatter = plugin.script_parser()
+		self.formatter = plugin.parser(for_scripts=for_scripts)
 		self.tokenizer.raise_errors = False
 
 	def format_line(self, index, line):

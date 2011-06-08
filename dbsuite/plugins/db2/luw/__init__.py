@@ -40,11 +40,11 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 	def tokenizer(self):
 		return DB2LUWTokenizer()
 
-	def parser(self):
-		return DB2LUWParser()
-
-	def script_parser(self):
-		return DB2LUWScriptParser()
+	def parser(self, for_scripts=False):
+		if for_scripts:
+			return DB2LUWScriptParser()
+		else:
+			return DB2LUWParser()
 
 	def configure(self, config):
 		"""Loads the plugin configuration."""

@@ -41,11 +41,11 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 	def tokenizer(self):
 		return DB2ZOSTokenizer()
 
-	def parser(self):
-		return DB2ZOSParser()
-
-	def script_parser(self):
-		return DB2ZOSScriptParser()
+	def parser(self, for_scripts=False):
+		if for_scripts:
+			return DB2ZOSScriptParser()
+		else:
+			return DB2ZOSParser()
 
 	def configure(self, config):
 		"""Loads the plugin configuration."""

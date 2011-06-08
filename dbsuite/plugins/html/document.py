@@ -266,7 +266,7 @@ class HTMLSQLHighlighter(SQLHighlighter):
 	"""
 
 	def __init__(self, site):
-		super(HTMLSQLHighlighter, self).__init__(site.database.source)
+		super(HTMLSQLHighlighter, self).__init__(site.database.source, for_scripts=False)
 		self.site = site
 		self.css_classes = {
 			TT.ERROR:      'sql-error',

@@ -174,7 +174,7 @@ class SQLCommentExtractor(object):
 	def __init__(self, plugin):
 		super(SQLCommentExtractor, self).__init__()
 		self.tokenizer = plugin.tokenizer()
-		self.formatter = plugin.script_parser()
+		self.formatter = plugin.parser(for_scripts=True)
 		self.graph = Graph()
 
 	def parse(self, sql, terminator=';'):

@@ -28,7 +28,7 @@ class TidySqlUtility(dbsuite.main.Utility):
 		done_stdin = False
 		# XXX Add method to select input plugin
 		plugin = dbsuite.plugins.load_plugin('db2.luw')()
-		highlighter = dbsuite.highlighters.SQLHighlighter(plugin)
+		highlighter = dbsuite.highlighters.SQLHighlighter(plugin, for_scripts=True)
 		for sql_file in args:
 			if sql_file == '-':
 				if not done_stdin:
