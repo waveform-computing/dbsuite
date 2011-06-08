@@ -1,7 +1,7 @@
 # vim: set noet sw=4 ts=4:
 
 from dbsuite.plugins.db2.zos.tokenizer import db2zos_namechars, db2zos_identchars
-from dbsuite.parser import BaseParser, ParseBacktrack, quote_str
+from dbsuite.parser import BaseParser, ParseError, ParseBacktrack, quote_str
 from dbsuite.tokenizer import TokenTypes as TT, Token
 from dbsuite.compat import *
 
@@ -6852,38 +6852,42 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 		of the content of the aforementioned tokens (or None if a CLP-style
 		string is not found in the source at the current position).
 		"""
-		t = self._token()
-		if t.type == TT.STRING:
+		token = self._token()
+		if token.type == TT.STRING:
 			# STRINGs are treated verbatim
-			self._output.append(t)
 			self._index += 1
-		elif t.type == TT.IDENTIFIER and t.source[0] == '"':
+		elif token.type == TT.IDENTIFIER and token.source[0] == '"':
 			# Double quoted identifier are converted to STRING tokens
-			t = Token(TT.STRING, t.value, quote_str(t.value, "'"), t.line, t.column)
-			self._output.append(t)
+			token = Token(TT.STRING, token.value, quote_str(token.value, "'"), token.line, token.column)
 			self._index += 1
-		elif not t.type in (TT.TERMINATOR, TT.EOF):
+		elif not token.type in (TT.TERMINATOR, TT.EOF):
 			# Otherwise, any run of non-whitepace tokens is converted to a
 			# single STRING token
 			start = self._index
 			self._index += 1
 			while True:
-				t = self._token()
-				if t.type == TT.STRING:
-					raise ParseError(self._tokens, t, "Quotes (') not permitted in identifier")
-				if t.type == TT.IDENTIFIER and t.source[0] == '"':
-					raise ParseError(self._tokens, t, 'Quotes (") not permitted in identifier')
-				if t.type in (TT.WHITESPACE, TT.COMMENT, TT.TERMINATOR, TT.EOF):
+				token = self._token()
+				if token.type == TT.STRING:
+					raise ParseError(self._tokens, token, "Quotes (') not permitted in identifier")
+				if token.type == TT.IDENTIFIER and token.source[0] == '"':
+					raise ParseError(self._tokens, token, 'Quotes (") not permitted in identifier')
+				if token.type in (TT.WHITESPACE, TT.COMMENT, TT.TERMINATOR, TT.EOF):
 					break
 				self._index += 1
 			content = ''.join([token.source for token in self._tokens[start:self._index]])
-			t = Token(TT.STRING, content, quote_str(content, "'"), self._tokens[start].line, self._tokens[start].column)
-			self._output.append(t)
+			token = Token(TT.STRING, content, quote_str(content, "'"), self._tokens[start].line, self._tokens[start].column)
+		else:
+			token = None
+		if token:
+			if not (self._output and self._output[-1].type in (TT.INDENT, TT.WHITESPACE)):
+				self._output.append(Token(TT.WHITESPACE, None, ' ', 0, 0))
+			self._output.append(token)
 		# Skip WHITESPACE and COMMENTS
 		while self._token().type in (TT.COMMENT, TT.WHITESPACE):
-			self._output.append(self._token())
+			if self._token().type == TT.COMMENT or TT.WHITESPACE not in self.reformat:
+				self._output.append(self._token())
 			self._index += 1
-		return t
+		return token
 
 	def _expect_clp_string(self):
 		"""Matches the current tokens as a CLP-style string, or raises an error.

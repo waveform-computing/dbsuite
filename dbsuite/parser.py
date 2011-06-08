@@ -598,23 +598,17 @@ class BaseParser(object):
 		self._index = 0
 		self._output = []
 		self._level = 0
+		self._tokens = tokens
 		# Reconstruct a copy of the source; this is only used for exceptions
 		# which use the original source string for context reporting
 		self._source = ''.join(token.source for token in tokens)
-		# If we're reformatting spaces, strip all WHITESPACE tokens from the
-		# input (no point parsing them if we're going to rewrite them all
-		# anyway)
-		if TT.WHITESPACE in self.reformat:
-			self._tokens = [token for token in tokens if token.type != TT.WHITESPACE]
-		else:
-			self._tokens = tokens
 
 	def _parse_finish(self):
 		"""Cleans up and finalizes tokens in the output."""
 		output = self._output
 		output = format_tokens(output, reformat=self.reformat,
 			terminator=self.terminator, statement=self.statement,
-			namechars=self.namechars)
+			namechars=set(self.namechars))
 		if TT.WHITESPACE in self.reformat:
 			output = recalc_positions(strip_whitespace(convert_valign(convert_indent(output, indent=self.indent))))
 		else:
@@ -931,7 +925,8 @@ class BaseParser(object):
 		self._output.append(token)
 		self._index += 1
 		while self._token().type in (TT.COMMENT, TT.WHITESPACE):
-			self._output.append(self._token())
+			if self._token().type == TT.COMMENT or TT.WHITESPACE not in self.reformat:
+				self._output.append(self._token())
 			self._index += 1
 		# If postspace is False, prevent the next _match call from adding a
 		# leading space by adding an empty WHITESPACE token. The final phase of
