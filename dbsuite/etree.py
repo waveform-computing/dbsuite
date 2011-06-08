@@ -288,7 +288,7 @@ class ElementFactory(object):
 					else:
 						last.tail += contents
 		elif isinstance(contents, (int, long, bool, datetime.datetime, datetime.date, datetime.time)):
-			# XXX This branch exists for optimization purposes only (the except
+			# This branch exists for optimization purposes only (the except
 			# branch below is moderately expensive)
 			self._append(node, self._format(contents))
 		elif iselement(contents):
