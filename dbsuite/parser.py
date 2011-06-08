@@ -175,7 +175,7 @@ def recalc_positions(tokens):
 	column = 1
 	for token in tokens:
 		yield Token(token.type, token.value, token.source, line, column)
-		for char in token[2]:
+		for char in token.source:
 			if char == '\n':
 				line += 1
 				column = 1
@@ -323,26 +323,25 @@ def merge_whitespace(tokens):
 			yield token
 
 def strip_whitespace(tokens):
-	"""Strips leading and trailing WHITESPACE tokens.
+	"""Strips trailing WHITESPACE tokens from all lines of output.
 
-	This generator function strips leading and trailing WHITESPACE tokens from
-	the provided sequence of tokens. The final result will require
-	recalculation of positions if any tokens have been ommitted from the front
-	of the sequence.
+	This generator function strips trailing WHITESPACE tokens at the end of a
+	line from the provided sequence of tokens. The function assumes that
+	WHITESPACE tokens have been merged (two will not appear consecutively).
+	Positions present in the tokens are preserved.
 	"""
-	leading = True
-	buf = []
-	for t in tokens:
-		if leading:
-			if t.type != TT.WHITESPACE:
-				leading = False
-		if not leading:
-			if t.type != TT.WHITESPACE:
-				while buf:
-					yield buf.pop()
-				yield t
+	last = None
+	for token in tokens:
+		if token.type == TT.WHITESPACE:
+			if '\n' in token.source:
+				last = Token(TT.WHITESPACE, None, '\n' + token.source.split('\n', 1)[1], token.line, token.column)
 			else:
-				buf.append(t)
+				last = token
+		else:
+			if last:
+				yield last
+				last = None
+			yield token
 
 def split_lines(tokens):
 	"""Splits tokens which contain line breaks.
@@ -609,10 +608,12 @@ class BaseParser(object):
 			terminator=self.terminator, statement=self.statement,
 			namechars=set(self.namechars))
 		if TT.WHITESPACE in self.reformat:
-			output = recalc_positions(strip_whitespace(convert_valign(convert_indent(output, indent=self.indent))))
+			output = recalc_positions(convert_valign(convert_indent(output, indent=self.indent)))
 		else:
 			output = (token for token in tokens if token.type not in (TT.INDENT, TT.VALIGN, TT.VAPPLY))
 		output = merge_whitespace(output)
+		if TT.WHITESPACE in self.reformat:
+			output = strip_whitespace(output)
 		if self.line_split:
 			output = split_lines(output)
 		self._output = list(output)
@@ -919,7 +920,7 @@ class BaseParser(object):
 		if TT.WHITESPACE in self.reformat:
 			if prespace is None:
 				prespace = self._prespace_default(template)
-			if prespace and not (self._output and self._output[-1].type in (TT.INDENT, TT.WHITESPACE)):
+			if prespace and self._output and self._output[-1].type not in (TT.INDENT, TT.WHITESPACE):
 				self._output.append(Token(TT.WHITESPACE, None, ' ', 0, 0))
 		self._output.append(token)
 		self._index += 1
