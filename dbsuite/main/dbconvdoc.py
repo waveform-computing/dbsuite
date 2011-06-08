@@ -65,7 +65,7 @@ class ConvDocUtility(dbsuite.main.Utility):
 			except KeyError:
 				self.parser.error('invalid converter: %s' % args[1])
 			for line in converter(source()):
-				sys.stdout.write(line.encode(ENCODING))
+				sys.stdout.write(line.encode(self.encoding))
 		else:
 			self.parser.error('you must specify a source and a converter')
 		return 0

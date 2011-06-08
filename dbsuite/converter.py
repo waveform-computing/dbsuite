@@ -194,9 +194,8 @@ class InfoCenterSource(object):
 
 	def _get_xml(self, url):
 		logging.debug(u'Retrieving URL %s' % url)
-		# XXX Shouldn't assume the character set here (although all the docs
-		# are served as UTF-8 currently)
-		html = urlopen(url).read().decode('UTF-8')
+		f = urlopen(url)
+		html = f.read().decode(f.info().getparam('charset') or 'UTF-8')
 		# Workaround: ElementTree doesn't know about non-XML entities like
 		# &nbsp; which occurs frequently in HTML, so we use a dirty hack here
 		# to change them into numeric entities.
@@ -212,22 +211,27 @@ class InfoCenterSource(object):
 
 
 class InfoCenterSource81(InfoCenterSource):
+	"""Retrieves object descriptions from the DB2 v8.1 for LUW InfoCenter."""
 	def __init__(self):
 		super(InfoCenterSource81, self).__init__(version=u'81')
 
 class InfoCenterSource82(InfoCenterSource):
+	"""Retrieves object descriptions from the DB2 v8.2 for LUW InfoCenter."""
 	def __init__(self):
 		super(InfoCenterSource82, self).__init__(version=u'82')
 
 class InfoCenterSource91(InfoCenterSource):
+	"""Retrieves object descriptions from the DB2 v9.1 for LUW InfoCenter."""
 	def __init__(self):
 		super(InfoCenterSource91, self).__init__(version=u'91')
 
 class InfoCenterSource95(InfoCenterSource):
+	"""Retrieves object descriptions from the DB2 v9.5 for LUW InfoCenter."""
 	def __init__(self):
 		super(InfoCenterSource95, self).__init__(version=u'95')
 
 class InfoCenterSource97(InfoCenterSource):
+	"""Retrieves object descriptions from the DB2 v9.7 for LUW InfoCenter."""
 	def __init__(self):
 		super(InfoCenterSource97, self).__init__(version=u'97')
 

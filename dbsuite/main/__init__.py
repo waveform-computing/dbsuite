@@ -15,9 +15,6 @@ __version__ = "1.2.0"
 # Use the user's default locale instead of C
 locale.setlocale(locale.LC_ALL, '')
 
-# Get the default output encoding from the default locale
-ENCODING = locale.getdefaultlocale()[1]
-
 class HelpFormatter(optparse.IndentedHelpFormatter):
 	# Customize the width of help output
 	def __init__(self):
@@ -31,6 +28,9 @@ class OptionParser(optparse.OptionParser):
 		raise optparse.OptParseError(msg)
 
 class Utility(object):
+	# Get the default output encoding from the default locale
+	encoding = locale.getdefaultlocale()[1]
+
 	# This class is the abstract base class for each of the command line
 	# utility classes defined below. It provides some basic facilities like an
 	# option parser, console pretty-printing, logging and exception handling
@@ -152,7 +152,7 @@ class Utility(object):
 				sys.stdout.write('\n')
 			para = self.wrapper.fill(para)
 			if isinstance(para, unicode):
-				para = para.encode(ENCODING)
+				para = para.encode(self.encoding)
 			sys.stdout.write(para + '\n')
 
 	def main(self, options, args):
