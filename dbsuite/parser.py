@@ -13,8 +13,7 @@ import pdb
 import re
 import sys
 import math
-from dbsuite.dialects import sql92_namechars, sql92_identchars
-from dbsuite.tokenizer import TokenTypes as TT, Token, Error, TokenError
+from dbsuite.tokenizer import TokenTypes as TT, Token, Error, TokenError, sql92_namechars, sql92_identchars
 from dbsuite.compat import *
 from decimal import Decimal
 from itertools import tee, izip
