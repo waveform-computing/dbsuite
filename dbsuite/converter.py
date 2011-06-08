@@ -13,7 +13,7 @@ import locale
 import logging
 from urllib2 import urlopen
 from urlparse import urljoin
-from dbsuite.plugins.formatter import quote_str, format_ident
+from dbsuite.parser import quote_str, format_ident
 from dbsuite.etree import fromstring, tostring, iselement, Element, SubElement, indent
 
 

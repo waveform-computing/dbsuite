@@ -16,7 +16,7 @@ import re
 import logging
 from itertools import chain, groupby
 from collections import Mapping, Sequence
-from dbsuite.plugins.formatter import format_size, format_ident
+from dbsuite.parser import format_size, format_ident
 from dbsuite.compat import *
 
 
@@ -717,6 +717,7 @@ class Database(DatabaseObject):
 	def __init__(self, input):
 		"""Initializes an instance of the class"""
 		super(Database, self).__init__(None, input.name)
+		self.source = input
 		self.tablespace_list = [Tablespace(self, input, t) for t in input.tablespaces]
 		self.tablespaces = dict((t.name, t) for t in self.tablespace_list)
 		self.schema_list = [Schema(self, input, s) for s in input.schemas]

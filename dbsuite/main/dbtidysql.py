@@ -3,6 +3,7 @@
 import sys
 import logging
 import dbsuite.highlighters
+import dbsuite.plugins
 import dbsuite.main
 from dbsuite.compat import *
 
@@ -25,7 +26,9 @@ class TidySqlUtility(dbsuite.main.Utility):
 	def main(self, options, args):
 		super(TidySqlUtility, self).main(options, args)
 		done_stdin = False
-		highlighter = dbsuite.highlighters.SQLHighlighter()
+		# XXX Add method to select input plugin
+		plugin = dbsuite.plugins.load_plugin('db2.luw')()
+		highlighter = dbsuite.highlighters.SQLHighlighter(plugin)
 		for sql_file in args:
 			if sql_file == '-':
 				if not done_stdin:

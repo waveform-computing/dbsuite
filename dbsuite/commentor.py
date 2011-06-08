@@ -10,8 +10,8 @@ distributed with this utility.
 """
 
 import logging
-from dbsuite.plugins.tokenizer import DB2LUWTokenizer, Token, TokenTypes as TT
-from dbsuite.plugins.formatter import DB2CLPFormatter, dump
+from dbsuite.tokenizer import Token, TokenTypes as TT
+from dbsuite.parser import dump
 
 
 class Error(Exception):
@@ -81,7 +81,7 @@ class CheckSchemaState(State):
 		else:
 			return self.graph.skipping
 	def __setitem__(self, template, new_state):
-		raise NotImplementedError()
+		raise NotImplementedError
 
 
 class Graph(object):
@@ -171,10 +171,10 @@ class Graph(object):
 		return result
 
 class SQLCommentExtractor(object):
-	def __init__(self):
+	def __init__(self, plugin):
 		super(SQLCommentExtractor, self).__init__()
-		self.tokenizer = DB2LUWTokenizer()
-		self.formatter = DB2CLPFormatter()
+		self.tokenizer = plugin.tokenizer()
+		self.formatter = plugin.script_parser()
 		self.graph = Graph()
 
 	def parse(self, sql, terminator=';'):

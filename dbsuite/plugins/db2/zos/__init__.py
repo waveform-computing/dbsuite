@@ -10,6 +10,8 @@ from dbsuite.compat import *
 from dbsuite.plugins.db2 import (
 	connect, make_datetime, make_bool, make_int, make_str
 )
+from dbsuite.plugins.db2.zos.tokenizer import DB2ZOSTokenizer
+from dbsuite.plugins.db2.zos.parser import DB2ZOSParser, DB2ZOSScriptParser
 from dbsuite.tuples import (
 	Schema, Datatype, Table, View, Alias, RelationDep, Index, IndexCol,
 	RelationCol, UniqueKey, UniqueKeyCol, ForeignKey, ForeignKeyCol, Check,
@@ -35,6 +37,15 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 		self.add_option('password', default=None,
 			doc="""The password associated with the user given by the username
 			option (mandatory if username is supplied)""")
+
+	def tokenizer(self):
+		return DB2ZOSTokenizer()
+
+	def parser(self):
+		return DB2ZOSParser()
+
+	def script_parser(self):
+		return DB2ZOSScriptParser()
 
 	def configure(self, config):
 		"""Loads the plugin configuration."""

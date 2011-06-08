@@ -11,7 +11,7 @@ from dbsuite.db import (
 	Schema, Datatype, Table, View, Alias, Constraint, Index, Trigger, Function,
 	Procedure, Tablespace
 )
-from dbsuite.plugins.formatter import quote_str, format_ident
+from dbsuite.parser import quote_str, format_ident
 from dbsuite.etree import Element, ElementFactory, indent, tostring, _namespace_map
 from pkg_resources import resource_string, resource_stream
 from string import Template

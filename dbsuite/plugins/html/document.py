@@ -20,7 +20,7 @@ from dbsuite.main import __version__
 from dbsuite.highlighters import CommentHighlighter, SQLHighlighter
 from dbsuite.plugins.html.entities import HTML_ENTITIES
 from dbsuite.graph import Graph, Node, Edge, Cluster
-from dbsuite.plugins.tokenizer import TokenTypes as TT
+from dbsuite.tokenizer import TokenTypes as TT
 from dbsuite.db import (
 	DatabaseObject, Relation, Routine, Constraint, Database, Tablespace,
 	Schema, Table, View, Alias, Index, Trigger, Function, Procedure, Datatype,
@@ -266,7 +266,7 @@ class HTMLSQLHighlighter(SQLHighlighter):
 	"""
 
 	def __init__(self, site):
-		super(HTMLSQLHighlighter, self).__init__()
+		super(HTMLSQLHighlighter, self).__init__(site.database.source)
 		self.site = site
 		self.css_classes = {
 			TT.ERROR:      'sql-error',

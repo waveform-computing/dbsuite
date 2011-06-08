@@ -7,6 +7,7 @@ import logging
 import locale
 import textwrap
 import traceback
+import dbsuite.plugins
 from dbsuite.compat import *
 
 __version__ = "1.2.0"

@@ -8,13 +8,14 @@ import dbsuite.plugins
 from dbsuite.plugins.db2 import (
 	connect, make_datetime, make_bool, make_int, make_str
 )
+from dbsuite.plugins.db2.luw.tokenizer import DB2LUWTokenizer
+from dbsuite.plugins.db2.luw.parser import DB2LUWParser, DB2LUWScriptParser
 from dbsuite.tuples import (
 	Schema, Datatype, Table, View, Alias, RelationDep, Index, IndexCol,
 	RelationCol, UniqueKey, UniqueKeyCol, ForeignKey, ForeignKeyCol, Check,
 	CheckCol, Function, Procedure, RoutineParam, Trigger, TriggerDep,
 	Tablespace
 )
-
 
 class InputPlugin(dbsuite.plugins.InputPlugin):
 	"""Input plugin for IBM DB2 for Linux/UNIX/Windows.
@@ -35,6 +36,15 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 		self.add_option('password', default=None,
 			doc="""The password associated with the user given by the username
 			option (mandatory if username is supplied)""")
+
+	def tokenizer(self):
+		return DB2LUWTokenizer()
+
+	def parser(self):
+		return DB2LUWParser()
+
+	def script_parser(self):
+		return DB2LUWScriptParser()
 
 	def configure(self, config):
 		"""Loads the plugin configuration."""

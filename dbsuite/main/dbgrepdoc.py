@@ -1,6 +1,7 @@
 import sys
 import logging
 import dbsuite.commentor
+import dbsuite.plugins
 import dbsuite.main
 from dbsuite.compat import *
 
@@ -27,7 +28,9 @@ class GrepDocUtility(dbsuite.main.Utility):
 	def main(self, options, args):
 		super(GrepDocUtility, self).main(options, args)
 		done_stdin = False
-		extractor = dbsuite.commentor.SQLCommentExtractor()
+		# XXX Add method to select input plugin
+		plugin = dbsuite.plugins.load_plugin('db2.luw')()
+		extractor = dbsuite.commentor.SQLCommentExtractor(plugin)
 		for sql_file in args:
 			if sql_file == '-':
 				if not done_stdin:

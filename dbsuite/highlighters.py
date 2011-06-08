@@ -10,8 +10,8 @@ descendent classes to implement a specific markup language (e.g. HTML).
 
 import re
 import logging
-from dbsuite.plugins.tokenizer import DB2LUWTokenizer, Token, TokenTypes as TT
-from dbsuite.plugins.formatter import DB2LUWFormatter, ParseTokenError
+from dbsuite.tokenizer import Token, TokenTypes as TT
+from dbsuite.parser import ParseTokenError
 
 class CommentHighlighter(object):
 	"""Implements a generic class for parsing simple prefix-based markup.
@@ -27,7 +27,7 @@ class CommentHighlighter(object):
 	* A word surrounded by _underscores_ is underlined.
 	* An identifier, possibly compound, prefixed by @ is a pointer to a
 	  database object (e.g. @SYSCAT.TABLES).
-	* A line break (\\n) indicates the end of a paragraph.
+* A line break (\\n) indicates the end of a paragraph.
 
 	As the markup is intended for use in the comments attached to meta-data in
 	the database (which has extremely limited field sizes), it is designed to
@@ -151,19 +151,18 @@ class SQLHighlighter(object):
 	a markup language, e.g. HTML. Output plugins can sub-class this to generate
 	their own particular markup.
 
-	The class utilizes the tokenizer and (optionally) formatter classes from
-	the sql module to parse the SQL and defines various handler stubs for
-	converting the result tokens into markup.
+	The plugin parameter provides an InputPlugin descendent from which the
+	highlighter can obtain a tokenizer and parser for the SQL dialect of the
+	plugin's particular database engine.  The class defines various handler
+	stubs for converting the result tokens into markup.
 	"""
 
-	def __init__(self):
+	def __init__(self, plugin):
 		"""Initializes an instance of the class"""
 		super(SQLHighlighter, self).__init__()
-		# XXX At some point we need to implement a mechanism for the input
-		# plugin to inform this what tokenizer and formatter to use (although
-		# there's not much point until other formatters are developed ;-)
-		self.tokenizer = DB2LUWTokenizer()
-		self.formatter = DB2LUWFormatter()
+		self.tokenizer = plugin.tokenizer()
+		# XXX Should be able to select parser() here too depending on context...
+		self.formatter = plugin.script_parser()
 		self.tokenizer.raise_errors = False
 
 	def format_line(self, index, line):

@@ -19,7 +19,7 @@ from dbsuite.astex import tex, xml, TeXFactory
 from dbsuite.highlighters import CommentHighlighter, SQLHighlighter
 from dbsuite.hyphenator import hyphenate_word
 from dbsuite.graph import Graph, Node, Edge, Cluster
-from dbsuite.plugins.tokenizer import TokenTypes as TT
+from dbsuite.tokenizer import TokenTypes as TT
 from dbsuite.db import (
 	DatabaseObject, Relation, Routine, Constraint, Database, Tablespace,
 	Schema, Table, View, Alias, Index, Trigger, Function, Procedure, Datatype,
@@ -139,7 +139,7 @@ class TeXSQLHighlighter(SQLHighlighter):
 	"""
 
 	def __init__(self, doc):
-		super(TeXSQLHighlighter, self).__init__()
+		super(TeXSQLHighlighter, self).__init__(doc.database.source)
 		self.doc = doc
 		tag = self.doc.tag
 		if not hasattr(tag, 'SQLerror'):

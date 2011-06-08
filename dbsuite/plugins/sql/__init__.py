@@ -9,7 +9,7 @@ from dbsuite.db import (
 	Schema, Datatype, Table, View, Alias, Constraint, Index, Trigger, Function,
 	Procedure, Tablespace
 )
-from dbsuite.plugins.formatter import quote_str, format_ident
+from dbsuite.parser import quote_str, format_ident
 from string import Template
 
 

@@ -419,6 +419,41 @@ class InputPlugin(Plugin):
 			This ensures that, if system schemas are excluded, all objects with
 			built-in datatypes do not also disappear""")
 
+	def tokenizer(self):
+		"""Returns a new instance of an SQL tokenizer class.
+
+		This method is called by the main application when it needs a tokenizer
+		for the dialect of SQL specific to the database targetted by the
+		plugin. The method should construct and return an object which is a
+		derivative of the BaseTokenizer class (or an object which implements an
+		equivalent parse() method).
+		"""
+		raise NotImplementedError
+
+	def parser(self):
+		"""Returns a new instance of an SQL parser class.
+
+		This method is called by the main application when it needs a parser
+		for the dialect of SQL specific to the database targetted by the
+		plugin. The method should construct and return an object which is a
+		derivative of the BaseParser class (or an object which implements an
+		equivalent parse() method).
+		"""
+		raise NotImplementedError
+
+	def script_parser(self):
+		"""Returns a new instance of an augmented SQL parser class.
+
+		This property is for those database engines that implement an extended
+		"script-only" dialect which includes additional commands understood by
+		their script interpreter, but not by the engine itself (Oracle's
+		SQLPlus, PostgreSQL's psql, and DB2's CLP are examples of this). By
+		default this property simply returns the parser property's value, but
+		plugins dealing with such database engines should override this
+		property to return something different.
+		"""
+		return self.parser()
+
 	def configure(self, config):
 		"""Loads the plugin configuration."""
 		super(InputPlugin, self).configure(config)
@@ -450,28 +485,6 @@ class InputPlugin(Plugin):
 		if a plugin author has obtained any explicit locks on the source
 		database or wishes to ensure the connection closes as rapidly as
 		possible, this is the place to do it.
-		"""
-		pass
-
-	def get_tokenizer(self):
-		"""Returns a new instance of an SQL tokenizer class.
-
-		This method is called by the main application when it needs a tokenizer
-		for the dialect of SQL specific to the database targetted by the
-		plugin. The method should construct and return an object which is a
-		derivative of the BaseTokenizer class (or an object which implements an
-		equivalent parse() method).
-		"""
-		pass
-
-	def get_formatter(self):
-		"""Returns a new instance of an SQL formatter class.
-
-		This method is called by the main application when it needs a formatter
-		for the dialect of SQL specific to the database targetted by the
-		plugin. The method should construct and return an object which is a
-		derivative of the BaseFormatter class (or an object which implements an
-		equivalent parse() method).
 		"""
 		pass
 
@@ -1305,7 +1318,7 @@ def load_plugin(name, root=None):
 	mod_name = '.'.join((root, name))
 	if not mod_name in sys.modules:
 		try:
-			__import__(mod_name)
+			__import__(mod_name, level=0)
 		except ImportError, e:
 			raise PluginLoadError(e)
 	try:
