@@ -4796,14 +4796,16 @@ class DB2ZOSParser(BaseParser):
 		# CREATE TRIGGER already matched
 		self._parse_trigger_name()
 		self._indent()
-		if self._match_sequence(['NO', 'CASCADE', 'BEFORE']):
+		if self._match_sequence(['NO', 'CASCADE']):
+			self._expect('BEFORE')
+		elif self._match('BEFORE'):
 			pass
 		elif self._match_sequence(['INSTEAD', 'OF']):
 			pass
 		elif self._match('AFTER'):
 			pass
 		else:
-			self._expected_one_of(['AFTER', 'NO', 'INSTEAD'])
+			self._expected_one_of(['AFTER', 'BEFORE', 'NO', 'INSTEAD'])
 		if self._match('UPDATE'):
 			if self._match('OF'):
 				self._indent()
