@@ -91,7 +91,7 @@ class SQLJob(object):
 			retrylimit=3, autocommit=False, stoponerror=False,
 			deletefiles=False):
 		self.scripts = [
-			SQLScript(sql_file, vars, terminator, retrylimit, autocommit, stoponerror, deletefiles)
+			SQLScript(plugin, sql_file, vars, terminator, retrylimit, autocommit, stoponerror, deletefiles)
 			for sql_file in sql_files
 		]
 		for script in self.scripts:
@@ -290,7 +290,6 @@ class SQLScript(object):
 		self.autocommit = autocommit
 		self.stoponerror = stoponerror
 		self.deletefiles = deletefiles
-		logging.info('Parsing script %s' % filename)
 		if isinstance(sql_file, basestring):
 			self.filename = sql_file
 			sql_file = open(sql_file, 'rU')
@@ -303,6 +302,7 @@ class SQLScript(object):
 		self.sql = Template(self.sql).safe_substitute(vars)
 		tokenizer = plugin.tokenizer()
 		parser = plugin.parser(for_scripts=True)
+		logging.info('Parsing script %s' % self.filename)
 		tokens = parser.parse(tokenizer.parse(self.sql, terminator=terminator))
 		self.sql = ''.join([token[2] for token in tokens])
 		# Convert filenames to "canonical" format (resolve all symbolic links,
