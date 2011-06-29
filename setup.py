@@ -37,6 +37,7 @@ entry_points = {
 		'dbconvdoc = dbsuite.main.dbconvdoc:main',
 		'dbgrepdoc = dbsuite.main.dbgrepdoc:main',
 		'dbtidysql = dbsuite.main.dbtidysql:main',
+		'dbexec = dbsuite.main.dbexec:main',
 	]
 }
 
