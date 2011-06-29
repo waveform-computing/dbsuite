@@ -7204,7 +7204,7 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 				if self._match('SYSTEM'):
 					self._expect_clp_string()
 				if self._match('OSTYPE'):
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 				if self._match('WITH'):
 					self._expect_clp_string()
 			elif self._match_sequence(['NPIPE', 'NODE']):
@@ -7216,7 +7216,7 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 				if self._match('SYSTEM'):
 					self._expect_clp_string()
 				if self._match('OSTYPE'):
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 				if self._match('WITH'):
 					self._expect_clp_string()
 			elif self._match_sequence(['NETBIOS', 'NODE']):
@@ -7224,13 +7224,13 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 				self._expect('REMOTE')
 				self._expect_clp_string()
 				self._expect('ADAPTER')
-				self._expect(NUMBER)
+				self._expect(TT.NUMBER)
 				if self._match('REMOTE_INSTANCE'):
 					self._expect_clp_string()
 				if self._match('SYSTEM'):
 					self._expect_clp_string()
 				if self._match('OSTYPE'):
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 				if self._match('WITH'):
 					self._expect_clp_string()
 			elif self._match_one_of(['TCPIP', 'TCPIP4', 'TCPIP6']):
@@ -7247,7 +7247,7 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 				if self._match('SYSTEM'):
 					self._expect_clp_string()
 				if self._match('OSTYPE'):
-					self._expect(IDENTIFIER)
+					self._expect(TT.IDENTIFIER)
 				if self._match('WITH'):
 					self._expect_clp_string()
 			else:
@@ -7363,7 +7363,7 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 		elif self._match('USE'):
 			self._expect('EXISTING')
 			if self._match('TABLESPACE'):
-				self._expect(IDENTIFIER)
+				self._expect(TT.IDENTIFIER)
 			self._expect('DATABASE')
 			self._expect_clp_string()
 		self._match('FORCE')
@@ -7794,8 +7794,8 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 		if self._match('L'):
 			self._expect('(')
 			while True:
-				self._expect(NUMBER) # col start
-				self._expect(NUMBER) # col end
+				self._expect(TT.NUMBER) # col start
+				self._expect(TT.NUMBER) # col end
 				if not self._match(','):
 					break
 			self._expect(')')
