@@ -316,9 +316,9 @@ class SQLScript(object):
 			(os.path.normcase(os.path.realpath(os.path.expanduser(f))), db)
 			for (f, db) in parser.consumes
 		]
-		# Copy the logins list (for use by the main module to test logins prior
-		# to starting all scripts in parallel)
-		self.logins = parser.logins
+		# Copy the logins list (for use by the job to test logins prior to
+		# starting all scripts in parallel)
+		self.logins = parser.connections
 		# The depends list is set up by resolve_dependencies later
 		self.depends = []
 		self.rdepends = []
