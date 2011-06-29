@@ -87,8 +87,9 @@ class SQLJob(object):
 	executing the scripts themselves.
 	"""
 
-	def __init__(self, sql_files, vars={}, terminator=';', retrylimit=3,
-			autocommit=False, stoponerror=False, deletefiles=False):
+	def __init__(self, plugin, sql_files, vars={}, terminator=';',
+			retrylimit=3, autocommit=False, stoponerror=False,
+			deletefiles=False):
 		self.scripts = [
 			SQLScript(sql_file, vars, terminator, retrylimit, autocommit, stoponerror, deletefiles)
 			for sql_file in sql_files
@@ -264,13 +265,14 @@ class SQLScript(object):
 	In addition, the object records all output from stdout/stderr, and the
 	returncode of the DB2 CLP.
 	"""
-	
-	def __init__(self, sql_file, vars={}, terminator=';', retrylimit=3,
+
+	def __init__(self, plugin, sql_file, vars={}, terminator=';', retrylimit=3,
 			autocommit=False, stoponerror=False, deletefiles=False):
 		"""Initializes an instance of the class.
 
 		Parameters:
-		filename -- The name of the file containing the SQL script
+		plugin -- An InputPlugin which the instance can use to obtain an SQL parser
+		sql_file -- The name of the file (or file-like object) containing the SQL script
 		vars -- A dictionary of values to substitute into the script
 		terminator -- The statement terminator string/character
 		retrylimit -- The number of times to retry the script if it fails
@@ -288,12 +290,16 @@ class SQLScript(object):
 		self.autocommit = autocommit
 		self.stoponerror = stoponerror
 		self.deletefiles = deletefiles
-		self.filename = filename
 		logging.info('Parsing script %s' % filename)
-		self.sql = open(filename, 'r').read()
+		if isinstance(sql_file, basestring):
+			self.filename = sql_file
+			sql_file = open(sql_file, 'rU')
+		else:
+			self.filename = filename
+		self.sql = sql_file.read()
 		self.sql = Template(self.sql).safe_substitute(vars)
-		tokenizer = DB2UDBSQLTokenizer()
-		parser = CLPParser()
+		tokenizer = plugin.tokenizer()
+		parser = plugin.parser(for_scripts=True)
 		tokens = parser.parse(tokenizer.parse(self.sql, terminator=terminator))
 		self.sql = ''.join([token[2] for token in tokens])
 		# Convert filenames to "canonical" format (resolve all symbolic links,

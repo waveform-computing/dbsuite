@@ -5,6 +5,7 @@ import logging
 import dbsuite.script
 import dbsuite.plugins
 import dbsuite.main
+import ConfigParser
 from dbsuite.compat import *
 
 class MyConfigParser(ConfigParser.SafeConfigParser):
@@ -64,7 +65,8 @@ class ExecSqlUtility(dbsuite.main.Utility):
 			else:
 				sql_file = open(sql_file, 'rU')
 			sql_files.append(sql_file)
-		job = dbsuite.script.SQLJob(sql_files, vars=config,
+		plugin = dbsuite.plugins.load_plugin('db2.luw')()
+		job = dbsuite.script.SQLJob(plugin, sql_files, vars=config,
 			terminator=options.terminator, retrylimit=options.retry,
 			autocommit=options.autocommit, stoponerror=options.stoponerror,
 			deletefiles=options.deletefiles)
