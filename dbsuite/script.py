@@ -295,7 +295,10 @@ class SQLScript(object):
 			self.filename = sql_file
 			sql_file = open(sql_file, 'rU')
 		else:
-			self.filename = filename
+			if hasattr(sql_file, 'name'):
+				self.filename = sql_file.name
+			else:
+				self.filename = 'stdin'
 		self.sql = sql_file.read()
 		self.sql = Template(self.sql).safe_substitute(vars)
 		tokenizer = plugin.tokenizer()
