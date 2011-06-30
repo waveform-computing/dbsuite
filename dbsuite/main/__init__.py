@@ -1,6 +1,8 @@
 # vim: set noet sw=4 ts=4:
 
 import sys
+mswindows = sys.platform == "win32"
+
 import optparse
 import ConfigParser
 import logging
@@ -8,6 +10,7 @@ import locale
 import textwrap
 import traceback
 import dbsuite.plugins
+import glob
 from dbsuite.compat import *
 
 __version__ = "1.2.0"
@@ -72,7 +75,7 @@ class Utility(object):
 	def __call__(self, args=None):
 		if args is None:
 			args = sys.argv[1:]
-		(options, args) = self.parser.parse_args(args)
+		(options, args) = self.parser.parse_args(self.expand_args(args))
 		console = logging.StreamHandler(sys.stderr)
 		console.setFormatter(logging.Formatter('%(message)s'))
 		console.setLevel(options.loglevel)
@@ -95,6 +98,41 @@ class Utility(object):
 				return self.main(options, args) or 0
 			except:
 				return self.handle(*sys.exc_info())
+
+	def expand_args(self, args):
+		"""Expands @response files and wildcards in the command line"""
+		result = []
+		for arg in args:
+			if arg[0] == '@' and len(arg) > 1:
+				arg = os.path.normcase(os.path.realpath(os.path.abspath(os.path.expanduser(arg[1:]))))
+				try:
+					with open(arg, 'rU') as resp_file:
+						for resp_arg in resp_file:
+							# Only strip the line break (whitespace is significant)
+							resp_arg = resp_arg.rstrip('\n')
+							# Only perform globbing on response file values for UNIX
+							if mswindows:
+								result.append(resp_arg)
+							else:
+								result.extend(self.glob_arg(resp_arg))
+				except IOError, e:
+					raise optparse.OptionValueError(str(e))
+			else:
+				result.append(arg)
+		# Perform globbing on everything for Windows
+		if mswindows:
+			result = reduce(lambda a, b: a + b, [self.glob_arg(f) for f in result], [])
+		return result
+
+	def glob_arg(self, arg):
+		"""Performs shell-style globbing of arguments"""
+		if set('*?[') & set(arg):
+			args = glob.glob(os.path.normcase(os.path.realpath(os.path.abspath(os.path.expanduser(arg)))))
+			if args:
+				return args
+		# Return the original parameter in the case where the parameter
+		# contains no wildcards or globbing returns no results
+		return [arg]
 
 	def handle(self, type, value, tb):
 		"""Exception hook for non-debug mode."""

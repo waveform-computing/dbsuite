@@ -9,6 +9,7 @@ import threading
 import subprocess
 from datetime import datetime
 from string import Template
+from time import sleep
 from db2exec.sql.tokenizer import DB2UDBSQLTokenizer
 from db2exec.sql.parser import CLPParser
 
@@ -76,6 +77,17 @@ def clean_output(s):
 		s = s.replace('\r\n', '\n')
 		s = s.replace('\r', '\n')
 	return s
+
+def format_rc(rc):
+	if rc == 0:
+		return 'OK'
+	else:
+		result = []
+		if rc & 1: result.append('No Recs')
+		if rc & 2: result.append('Warning')
+		if rc & 4: result.append('DB2 Err')
+		if rc & 8: result.append('CLP Err')
+		return ','.join(result)
 
 
 class SQLJob(object):
@@ -163,6 +175,57 @@ class SQLJob(object):
 				logging.info(' '*4 + f)
 		logging.info('')
 
+	def print_status(self, scripts=None):
+		"""Outputs the start time, duration and status of each script."""
+		if scripts is None:
+			scripts = self.scripts
+		# Sort scripts by start time and filename (unstarted scripts are listed
+		# last)
+		scripts = \
+			sorted((script for script in scripts if script.started), key=lambda script: (script.started, script.filename)) + \
+			sorted((script for script in scripts if not script.started), key=lambda script: script.filename)
+		# Make a list of tuples of (filename, starttime, duration, exitcode)
+		data = []
+		for script in scripts:
+			if script.started:
+				duration = (script.finished - script.started).seconds
+				duration = '%.2d:%.2d:%.2d' % (duration / 3600, (duration / 60) % 60, duration % 60)
+				data.append((
+					script.filename,
+					script.started.strftime('%H:%M:%S'),
+					duration,
+					format_rc(script.returncode),
+				))
+			else:
+				data.append((
+					script.filename,
+					'-',
+					'-',
+					'Not Run',
+				))
+		data.insert(0, ('Script', 'Started', 'Duration', 'Status'))
+		started = min(script.started for script in scripts if script.started)
+		finished = max(script.finished for script in scripts if script.finished)
+		data.append((
+			'Total',
+			started.strftime('%H:%M:%S'),
+			'%ds' % (finished - started).seconds,
+			'',
+		))
+		# Calculate the maximum length of each field
+		lengths = (
+			max(len(x) for (x, _, _, _) in data),
+			max(len(x) for (_, x, _, _) in data),
+			max(len(x) for (_, _, x, _) in data),
+			max(len(x) for (_, _, _, x) in data),
+		)
+		# Insert separators
+		data.insert(1, tuple('-' * l for l in lengths))
+		data.insert(-1, tuple('-' * l for l in lengths))
+		# Output the data
+		for row in data:
+			logging.info(' '.join('%-*s' % (l, s) for (l, s) in zip(lengths, row)))
+
 	def test_login(self, database, username, password):
 		"""Utility routine for testing database logins prior to script execution."""
 		args = [
@@ -194,11 +257,13 @@ class SQLJob(object):
 		if p.returncode >= 4:
 			raise Error(clean_output(output))
 
-	def test_logins(self):
+	def test_logins(self, scripts=None):
 		"""Tests the provided login details against all databases accessed by all scripts"""
+		if scripts is None:
+			scripts = self.scripts
 		result = True
 		logins = set()
-		for script in self.scripts:
+		for script in scripts:
 			logins |= set(script.logins)
 		for login in logins:
 			try:
@@ -211,17 +276,19 @@ class SQLJob(object):
 		if not result:
 			raise Exception('One or more test logins failed')
 
-	def test_permissions(self):
+	def test_permissions(self, scripts=None):
 		"""Tests the read and/or write permissions of produced and consumed files"""
+		if scripts is None:
+			scripts = self.scripts
 		filemodesok = True
 		filemodes = {}
-		for script in self.scripts:
-			for (f, db) in self.produces:
+		for script in scripts:
+			for (f, db) in script.produces:
 				if os.path.exists(f):
 					filemodes[f] = 'a'
 				else:
 					filemodes[f] = 'w'
-			for (f, db) in s.consumes:
+			for (f, db) in script.consumes:
 				if f in filemodes:
 					filemodes[f] = filemodes[f][0] + '+'
 				else:
@@ -249,8 +316,40 @@ class SQLJob(object):
 		if not filemodesok:
 			raise Exception('One or more file permission tests failed, aborting execution')
 
-	def execute(self):
-		pass
+	def execute(self, scripts=None):
+		if scripts is None:
+			scripts = self.scripts
+		# Execute the scripts. Break out of the loop if any scripts fail, or once
+		# there are no scripts which have not succeeded
+		while True:
+			for script in [s for s in scripts if s.state == EXECUTABLE]:
+				script.execute()
+			if [s for s in scripts if s.state == FAILED]:
+				break
+			if not [s for s in scripts if s.state != SUCCEEDED]:
+				break
+			sleep(1)
+		# Wait for scripts to finish executing
+		while [s for s in scripts if s.state == EXECUTING]:
+			sleep(1)
+		# Provide a summary of script execution times and results
+		self.print_status()
+		# If one or more scripts failed, raise an exception (i.e. exit now)
+		if len([s for s in scripts if s.state == FAILED]) > 0:
+			raise Exception("One or more scripts failed")
+		# If requested, delete produced files (note this only happens if all
+		# scripts have completed successfully)
+		for script in scripts:
+			if script.deletefiles:
+				for (filename, db) in script.produces:
+					if os.path.exists(filename):
+						try:
+							os.unlink(filename)
+						except Exception, e:
+							# If we can't delete a file, log the error but
+							# don't abort (and don't report an error via the
+							# exit code)
+							logging.error(str(e))
 
 
 class SQLScript(object):
