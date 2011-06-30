@@ -6941,7 +6941,7 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 			username = self._expect_clp_string().value
 			if self._match('USING'):
 				password = self._expect_clp_string().value
-				if changeallowed:
+				if allowchange:
 					if self._match('NEW'):
 						password = self._expect_clp_string().value
 						self._expect('CONFIRM')

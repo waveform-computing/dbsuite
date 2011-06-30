@@ -147,30 +147,33 @@ class SQLJob(object):
 			elif i == len(scripts):
 				logging.info(prefix.rstrip())
 
-	def print_transfers(scripts=None):
+	def print_transfers(self, scripts=None):
 		"""Output nodes in a definition list of database transfers performed"""
 		if scripts is None:
 			scripts = self.scripts
 		files = {}
 		for script in scripts:
-			for (f, source_db) in script.produces:
-				files[f] = (source_db, [])
+			for (f, source) in script.produces:
+				files[f] = (source, [])
 		for script in scripts:
-			for (f, target_db) in script.consumes:
+			for (f, target) in script.consumes:
 				if not f in files:
-					files[f] = (None, [target_db])
+					files[f] = (None, [target])
 				else:
-					files[f][1].append(target_db)
+					files[f][1].append(target)
 		dbs = {}
 		for f in files:
-			source_db = files[f][0]
-			for target_db in files[f][1]:
-				if not (source_db, target_db) in dbs:
-					dbs[(source_db, target_db)] = [f]
+			source = files[f][0]
+			for target in files[f][1]:
+				if not (source, target) in dbs:
+					dbs[(source, target)] = [f]
 				else:
-					dbs[(source_db, target_db)].append(f)
-		for ((source_db, target_db), files) in dbs.iteritems():
-			logging.info('%s -> %s:' % (str(source_db), str(target_db)))
+					dbs[(source, target)].append(f)
+		for ((source, target), files) in dbs.iteritems():
+			logging.info('%s -> %s:' % (
+				'(missing source)' if source is None else source.database,
+				'(missing consumer)' if target is None else target.database,
+			))
 			for f in sorted(files):
 				logging.info(' '*4 + f)
 		logging.info('')

@@ -78,7 +78,7 @@ class ExecSqlUtility(dbsuite.main.Utility):
 			if options.test > 2:
 				job.test_logins()
 			if options.test > 1:
-				job.test_permission()
+				job.test_permissions()
 			logging.info('')
 			logging.info('Dependency tree:')
 			job.print_dependencies()
@@ -90,6 +90,17 @@ class ExecSqlUtility(dbsuite.main.Utility):
 				# Write SQL to stdout so it can be redirected if necessary
 				sys.stdout.write(script.sql)
 		return 0
+
+	def handle(self, type, value, tb):
+		"""Exception hook for non-debug mode."""
+		if issubclass(type, (dbsuite.script.Error,)):
+			# For script errors, just output the message which should be
+			# sufficient for the end user (no need to confuse them with a full
+			# stack trace)
+			logging.critical(str(value))
+			return 3
+		else:
+			super(ExecSqlUtility, self).handle(type, value, tb)
 
 	def process_config(self, config_file):
 		"""Reads and parses an Ini-style configuration file.

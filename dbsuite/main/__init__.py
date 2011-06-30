@@ -3,6 +3,7 @@
 import sys
 mswindows = sys.platform == "win32"
 
+import os
 import optparse
 import ConfigParser
 import logging
