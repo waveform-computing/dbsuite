@@ -31,7 +31,7 @@ class Error(Exception):
 	def __init__(self, msg=''):
 		Exception.__init__(self, msg)
 		self.message = msg
-	
+
 	def __repr__(self):
 		return self.message
 
@@ -44,7 +44,7 @@ class DependencyError(Error):
 		Error.__init__(self, msg)
 		self.filename = script.filename
 		self.errors = []
-	
+
 	def append(self, depfile, msg):
 		self.errors.append((depfile, msg))
 		self.message += '\n%s' % (msg)
@@ -424,7 +424,7 @@ class SQLScript(object):
 		# The depends list is set up by resolve_dependencies later
 		self.depends = []
 		self.rdepends = []
-	
+
 	def resolve_dependencies(self, scripts):
 		"""Resolves script dependencies by examining produced and consumed files.
 
@@ -505,7 +505,7 @@ class SQLScript(object):
 				if s == self:
 					break
 			raise e
-	
+
 	def depends_on(self, script):
 		"""Returns True if script is a dependency.
 
@@ -517,7 +517,7 @@ class SQLScript(object):
 			if (script == producer) or producer.depends_on(script):
 				return True
 		return False
-	
+
 	def execute(self):
 		"""Executes the script in a subprocess tracked by a background thread.
 
@@ -543,7 +543,7 @@ class SQLScript(object):
 		self.output = ''
 		self.__thread = threading.Thread(target=self.__exec_thread, args=())
 		self.__thread.start()
-	
+
 	def __exec_thread(self):
 		"""Target method for the background thread tracking the subprocess.
 
