@@ -6842,7 +6842,7 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 		self.current_user = None
 		self.current_connection = None
 
-	def _match_clp_string(self):
+	def _match_clp_string(self, password=False):
 		"""Attempts to match the current tokens as a CLP-style string.
 
 		The _match_clp_string() method is used to match a CLP-style string.
@@ -6886,6 +6886,8 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 		if token:
 			if not (self._output and self._output[-1].type in (TT.INDENT, TT.WHITESPACE)):
 				self._output.append(Token(TT.WHITESPACE, None, ' ', 0, 0))
+			if password:
+				token = Token(TT.PASSWORD, token.value, token.source, token.line, token.column)
 			self._output.append(token)
 		# Skip WHITESPACE and COMMENTS
 		while self._token().type in (TT.COMMENT, TT.WHITESPACE):
@@ -6894,14 +6896,14 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 			self._index += 1
 		return token
 
-	def _expect_clp_string(self):
+	def _expect_clp_string(self, password=False):
 		"""Matches the current tokens as a CLP-style string, or raises an error.
 
 		See _match_clp_string() above for details of the algorithm.
 		"""
-		result = self._match_clp_string()
+		result = self._match_clp_string(password)
 		if not result:
-			raise ParseExpectedOneOfError(self._tokens, self._token(), [TT.STRING])
+			raise ParseExpectedOneOfError(self._tokens, self._token(), [TT.PASSWORD if password else TT.STRING])
 		return result
 
 	# PATTERNS ###############################################################
@@ -6940,12 +6942,12 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 		if self._match('USER'):
 			username = self._expect_clp_string().value
 			if self._match('USING'):
-				password = self._expect_clp_string().value
+				password = self._expect_clp_string(password=True).value
 				if allowchange:
 					if self._match('NEW'):
-						password = self._expect_clp_string().value
+						password = self._expect_clp_string(password=True).value
 						self._expect('CONFIRM')
-						self._expect_clp_string()
+						self._expect_clp_string(password=True)
 					else:
 						self._match_sequence(['CHANGE', 'PASSWORD'])
 		elif not optional:

@@ -6,12 +6,25 @@ import dbsuite.script
 import dbsuite.plugins
 import dbsuite.main
 import ConfigParser
+import optparse
+try:
+	import cPickle as pickle
+except ImportError:
+	import pickle
 from dbsuite.compat import *
 
 class MyConfigParser(ConfigParser.SafeConfigParser):
 	"""Tweaked version of SaveConfigParser that uses uppercase for keys"""
 	def optionxform(self, optionstr):
 		return optionstr.upper()
+
+class ListHandler(logging.Handler):
+	"""An extremely basic logging handler which simply remembers all LogRecords"""
+	def __init__(self):
+		logging.Handler.__init__(self)
+		self.records = []
+	def emit(self, record):
+		self.records.append(record)
 
 class ExecSqlUtility(dbsuite.main.Utility):
 	"""%prog [options] files...
@@ -32,7 +45,9 @@ class ExecSqlUtility(dbsuite.main.Utility):
 			test=0,
 			retry=1,
 			stoponerror=False,
-			terminator=';')
+			terminator=';',
+			execinternal=False
+		)
 		self.parser.add_option('-t', '--terminator', dest='terminator',
 			help="""specify the statement terminator (default=';')""")
 		self.parser.add_option("-a", "--auto-commit", dest="autocommit", action="store_true",
@@ -43,53 +58,76 @@ class ExecSqlUtility(dbsuite.main.Utility):
 			help="""delete files produced by the scripts after execution""")
 		self.parser.add_option("-n", "--dry-run", dest="test", action="count",
 			help="""test but don't run the scripts, can be specified multiple times: 1x=parse, 2x=test file perms, 3x=test db logins""")
-		self.parser.add_option("-r", "--retry", dest="retry",
+		self.parser.add_option("-r", "--retry", dest="retry", type="int",
 			help="""specify the maximum number of retries after script failure (default: %default)""")
 		self.parser.add_option("-s", "--stop-on-error", dest="stoponerror", action="store_true",
 			help="""if a script encounters an error stop it immediately""")
+		self.parser.add_option("--exec-internal", dest="execinternal", action="store_true",
+			help=optparse.SUPPRESS_HELP)
 
 	def main(self, options, args):
 		super(ExecSqlUtility, self).main(options, args)
-		config = {}
-		if options.config:
-			config = self.process_config(options.config)
-		done_stdin = False
-		sql_files = []
-		for sql_file in args:
-			if sql_file == '-':
-				if not done_stdin:
-					done_stdin = True
-					sql_file = sys.stdin
-				else:
-					raise IOError('Cannot read input from stdin multiple times')
-			else:
-				sql_file = open(sql_file, 'rU')
-			sql_files.append(sql_file)
-		plugin = dbsuite.plugins.load_plugin('db2.luw')()
-		job = dbsuite.script.SQLJob(plugin, sql_files, vars=config,
-			terminator=options.terminator, retrylimit=options.retry,
-			autocommit=options.autocommit, stoponerror=options.stoponerror,
-			deletefiles=options.deletefiles)
-		if options.test == 0:
-			job.test_logins()
-			job.test_permissions()
-			job.execute()
+		if options.execinternal:
+			# We've been called by a parent dbexec instance to execute an SQL
+			# script. Firstly, set up logging to just capture LogRecord objects
+			log = logging.getLogger()
+			while log.handlers:
+				log.removeHandler(log.handlers[-1])
+			log.addHandler(ListHandler())
+			try:
+				# Then reconstruct the pickled SQLScript that's been passed on stdin
+				# and run its exec_internal method
+				script = pickle.load(sys.stdin)
+				returncode = script._exec_internal()
+			finally:
+				# Finally, pickle the LogRecord objects and dump them to stdout
+				# before exiting with the appropriate returncode
+				pickle.dump(log.handlers[0].records, sys.stdout)
+				return returncode
 		else:
-			if options.test > 2:
-				job.test_logins()
-			if options.test > 1:
+			# This is a normal dbexec run
+			config = {}
+			if options.config:
+				config = self.process_config(options.config)
+			done_stdin = False
+			sql_files = []
+			for sql_file in args:
+				if sql_file == '-':
+					if not done_stdin:
+						done_stdin = True
+						sql_file = sys.stdin
+					else:
+						raise IOError('Cannot read input from stdin multiple times')
+				else:
+					sql_file = open(sql_file, 'rU')
+				sql_files.append(sql_file)
+			plugin = dbsuite.plugins.load_plugin('db2.luw')()
+			job = dbsuite.script.SQLJob(plugin, sql_files, vars=config,
+				terminator=options.terminator, retrylimit=options.retry,
+				autocommit=options.autocommit, stoponerror=options.stoponerror,
+				deletefiles=options.deletefiles)
+			if options.test == 0:
+				job.test_connections()
 				job.test_permissions()
-			logging.info('')
-			logging.info('Dependency tree:')
-			job.print_dependencies()
-			logging.info('Data transfers:')
-			job.print_transfers()
-			for script in job.depth_traversal():
+				job.execute()
+			else:
+				if options.test > 2:
+					job.test_connections()
+				if options.test > 1:
+					job.test_permissions()
 				logging.info('')
-				logging.info(script.filename)
-				# Write SQL to stdout so it can be redirected if necessary
-				sys.stdout.write(script.sql)
-		return 0
+				logging.info('Dependency tree:')
+				job.print_dependencies()
+				logging.info('Data transfers:')
+				job.print_transfers()
+				for script in job.depth_traversal():
+					logging.info('')
+					logging.info(script.filename)
+					# Write SQL to stdout so it can be redirected if necessary
+					sys.stdout.write(script.sql)
+					sys.stdout.write('\n')
+					sys.stdout.flush()
+			return 0
 
 	def handle(self, type, value, tb):
 		"""Exception hook for non-debug mode."""

@@ -7,11 +7,15 @@ import os.path
 import logging
 import threading
 import subprocess
+try:
+	import cPickle as pickle
+except ImportError:
+	import pickle
 from datetime import datetime
 from string import Template
 from time import sleep
-from db2exec.sql.tokenizer import DB2UDBSQLTokenizer
-from db2exec.sql.parser import CLPParser
+from dbsuite.tokenizer import Token
+from dbsuite.parser import TokenTypes as TT
 
 # Constants for the SQLScript.state property
 (
@@ -100,7 +104,7 @@ class SQLJob(object):
 	"""
 
 	def __init__(self, plugin, sql_files, vars={}, terminator=';',
-			retrylimit=3, autocommit=False, stoponerror=False,
+			retrylimit=1, autocommit=False, stoponerror=False,
 			deletefiles=False):
 		self.scripts = [
 			SQLScript(plugin, sql_file, vars, terminator, retrylimit, autocommit, stoponerror, deletefiles)
@@ -229,7 +233,7 @@ class SQLJob(object):
 		for row in data:
 			logging.info(' '.join('%-*s' % (l, s) for (l, s) in zip(lengths, row)))
 
-	def test_login(self, database, username, password):
+	def test_connection(self, connection):
 		"""Utility routine for testing database logins prior to script execution."""
 		args = [
 			'-o', # enable output
@@ -248,10 +252,10 @@ class SQLJob(object):
 			stderr=subprocess.STDOUT,
 			close_fds=not mswindows
 		)
-		if username is not None:
-			sql = "CONNECT TO '%s' USER '%s' USING '%s';\n" % (database, username, password)
+		if connection.username is not None:
+			sql = "CONNECT TO '%s' USER '%s' USING '%s';\n" % (connection.database, connection.username, connection.password)
 		else:
-			sql = "CONNECT TO '%s';\n" % database
+			sql = "CONNECT TO '%s';\n" % connection.database
 		sql += 'CONNECT RESET;\n'
 		try:
 			output = p.communicate(sql)[0]
@@ -260,24 +264,24 @@ class SQLJob(object):
 		if p.returncode >= 4:
 			raise Error(clean_output(output))
 
-	def test_logins(self, scripts=None):
-		"""Tests the provided login details against all databases accessed by all scripts"""
+	def test_connections(self, scripts=None):
+		"""Tests the provided connection details against all databases accessed by all scripts"""
 		if scripts is None:
 			scripts = self.scripts
 		result = True
-		logins = set()
+		connections = set()
 		for script in scripts:
-			logins |= set(script.logins)
-		for login in logins:
+			connections |= set(script.connections)
+		for connection in connections:
 			try:
-				self.test_login(login.database, login.username, login.password)
-				logging.info('Test login to database %s succeeded with username: %s' % (login.database, login.username))
+				self.test_connection(connection)
+				logging.info('Test connection to database %s succeeded with username: %s' % (connection.database, connection.username))
 			except Exception, e:
-				logging.error('Test login to database %s failed with username: %s. Error:' % (login.database, login.username))
+				logging.error('Test connection to database %s failed with username: %s. Error:' % (connection.database, connection.username))
 				logging.error(str(e))
 				result = False
 		if not result:
-			raise Exception('One or more test logins failed')
+			raise Exception('One or more test connections failed')
 
 	def test_permissions(self, scripts=None):
 		"""Tests the read and/or write permissions of produced and consumed files"""
@@ -368,7 +372,7 @@ class SQLScript(object):
 	returncode of the DB2 CLP.
 	"""
 
-	def __init__(self, plugin, sql_file, vars={}, terminator=';', retrylimit=3,
+	def __init__(self, plugin, sql_file, vars={}, terminator=';', retrylimit=1,
 			autocommit=False, stoponerror=False, deletefiles=False):
 		"""Initializes an instance of the class.
 
@@ -380,15 +384,15 @@ class SQLScript(object):
 		retrylimit -- The number of times to retry the script if it fails
 		autocommit -- Whether to activate CLP's auto-COMMIT behaviour
 		stoponerror -- Whether to terminate script immediately upon error
+		deletefiles -- Whether or not to delete all files produced by the script upon successful completion
 		"""
 		super(SQLScript, self).__init__()
-		self.__retrylimit = retrylimit
-		self.__process = None
-		self.__thread = None
-		self.output = ''
+		self.output = []
 		self.started = None
 		self.finished = None
 		self.returncode = None
+		self.terminator = terminator
+		self.retrylimit = retrylimit
 		self.autocommit = autocommit
 		self.stoponerror = stoponerror
 		self.deletefiles = deletefiles
@@ -405,8 +409,8 @@ class SQLScript(object):
 		tokenizer = plugin.tokenizer()
 		parser = plugin.parser(for_scripts=True)
 		logging.info('Parsing script %s' % self.filename)
-		tokens = parser.parse(tokenizer.parse(self.sql, terminator=terminator))
-		self.sql = ''.join([token[2] for token in tokens])
+		self.tokens = parser.parse(tokenizer.parse(self.sql, terminator=self.terminator))
+		self.sql = ''.join(token.source for token in self.tokens)
 		# Convert filenames to "canonical" format (resolve all symbolic links,
 		# transform to lowercase on Windows, etc.) to allow comparison of
 		# filenames which may not actually exist as files yet
@@ -418,9 +422,9 @@ class SQLScript(object):
 			(os.path.normcase(os.path.realpath(os.path.expanduser(f))), db)
 			for (f, db) in parser.consumes
 		]
-		# Copy the logins list (for use by the job to test logins prior to
+		# Copy the connections list (for use by the job to test connections prior to
 		# starting all scripts in parallel)
-		self.logins = parser.connections
+		self.connections = parser.connections
 		# The depends list is set up by resolve_dependencies later
 		self.depends = []
 		self.rdepends = []
@@ -527,9 +531,9 @@ class SQLScript(object):
 		substituted variables in the original and the parser may have removed
 		incompatible comments, etc).
 
-		A background thread is also created (running the __exec_thread method
-		below) to send the script to the subprocess, and retrieve any/all
-		output produced.
+		A background thread is created (running the _exec_thread method below)
+		to send the script to the subprocess, and retrieve any/all output
+		produced.
 		"""
 		assert self.state != EXECUTING
 		logging.info("Starting script %s" % (self.filename,))
@@ -540,79 +544,146 @@ class SQLScript(object):
 		self.started = datetime.now()
 		self.finished = None
 		self.returncode = None
-		self.output = ''
-		self.__thread = threading.Thread(target=self.__exec_thread, args=())
-		self.__thread.start()
+		self.output = []
+		t = threading.Thread(target=self._exec_thread, args=())
+		t.start()
 
-	def __exec_thread(self):
+	def _exec_thread(self):
 		"""Target method for the background thread tracking the subprocess.
 
 		This method is used by the execute method as the body of the thread
 		that starts, communicates and tracks the subprocess executing the
 		script. See the execute method for more details.
 		"""
-		args = [
-			'-o',                           # enable output
-			'-v',                           # verbose output
-			'-p-',                          # disable input prompt
-			['+s', '-s'][self.stoponerror], # terminate immediately on error
-			['+c', '-c'][self.autocommit],  # enable auto-COMMIT
-			'-td@'                          # use @ as statement terminator
-		]
-		cmdline = 'db2 %s' % ' '.join(args)
-		if mswindows:
-			cmdline = 'db2cmd -i -w -c %s' % cmdline
-		self.__process = subprocess.Popen(
-			[cmdline],
-			shell=True,
+		p = subprocess.Popen(
+			[sys.argv[0], '--exec-internal'], # execute ourselves in script mode
+			shell=False,
 			stdin=subprocess.PIPE,
 			stdout=subprocess.PIPE,
-			stderr=subprocess.STDOUT,
+			stderr=sys.stderr,
 			close_fds=not mswindows
 		)
 		try:
+			# Pickle ourselves and send the result to the subprocess
+			s = pickle.dumps(self)
 			try:
-				self.output = self.__process.communicate(self.sql)[0]
+				output = p.communicate(s)[0]
 			except Exception, e:
-				self.output = str(e)
-				logging.error("Script %s failed: %s" % (self.filename, self.output))
+				logging.error('Script %s failed: %s' % (self.filename, str(e)))
 				# An exception is fatal, no retries allowed
-				self.__retrylimit = 0
+				self.retrylimit = 0
 			else:
-				self.output = clean_output(self.output)
+				# The subprocess will send back a pickled array of LogRecord
+				# objects on its stdout which we now unpickle
+				self.output = pickle.loads(output)
 				# Use the global output lock to prevent overlapping output in
 				# case of simultaneous script completions
 				output_lock.acquire()
 				try:
 					# Check the return code
-					self.returncode = self.__process.returncode
+					self.returncode = p.returncode
 					if self.returncode >= 4:
-						self.__retrylimit -= 1
-						if self.__retrylimit > 0:
-							logging.warning("Script %s failed with return code %d (retries left: %d)" % (self.filename, self.returncode, self.__retrylimit))
+						self.retrylimit -= 1
+						if self.retrylimit > 0:
+							logging.warning('Script %s failed with return code %d (retries left: %d)' % (self.filename, self.returncode, self.retrylimit))
 						else:
-							logging.error("Script %s failed with return code %d (no retries remaining)" % (self.filename, self.returncode))
+							logging.error('Script %s failed with return code %d (no retries remaining)' % (self.filename, self.returncode))
 					else:
-						logging.info("Script %s completed successfully with return code %d" % (self.filename, self.returncode))
-					logging.info("Script %s output" % self.filename)
-					for line in self.output.splitlines():
-						logging.info(line.rstrip())
+						logging.info('Script %s completed successfully with return code %d' % (self.filename, self.returncode))
+					logging.info('Script %s output' % self.filename)
+					# Pass the LogRecords sent by the subprocess thru to the
+					# root logger
+					for rec in self.output:
+						logging.getLogger().handle(rec)
 				finally:
 					output_lock.release()
 		finally:
-			self.__thread = None
-			self.__process = None
 			# finished is set last to avoid a race condition. Furthermore, it
 			# MUST be set or we will wind up with a process in "limbo" (hence
 			# the try..finally section).
 			self.finished = datetime.now()
 
-	def __get_state(self):
+	def _exec_internal(self):
+		# Split the tokens into statements, stripping leading whitespace and
+		# removing all comments
+		statement = []
+		statements = []
+		for token in self.tokens:
+			if token.type != TT.COMMENT:
+				if statement or token.type != TT.WHITESPACE:
+					statement.append(token)
+			if token.type == TT.STATEMENT:
+				statements.append(statement)
+				statement = []
+		if statement:
+			statement.append(Token(TT.STATEMENT, ';', self.terminator, statement[-1].line, statement[-1].column + 1))
+			statements.append(statement)
+		# Execute each statement in turn. The returncode of each execution is
+		# combined (by bitwise-or) into our final returncode
+		returncode = 0
+		for statement in statements:
+			args = [
+				'-o',                           # enable output
+				'+p',                           # disable input prompt
+				['+c', '-c'][self.autocommit],  # enable auto-COMMIT
+				'-td@'                          # use @ as statement terminator
+			]
+			cmdline = ['db2'] + args
+			if mswindows:
+				cmdline = ['db2cmd', '-i', '-w', '-c'] + cmdline
+			p = subprocess.Popen(
+				cmdline,
+				shell=False,
+				stdin=subprocess.PIPE,
+				stdout=subprocess.PIPE,
+				stderr=subprocess.STDOUT,
+				close_fds=not mswindows
+			)
+			# Log the statement that will run. Hide any passwords or statement
+			# terminators, and compress all whitespace, just as the DB2 CLP
+			# usually does
+			logging.info(''.join(
+				"'***'" if token.type == TT.PASSWORD else
+				' '     if token.type == TT.WHITESPACE else
+				''      if token.type == TT.STATEMENT else
+				token.source for token in statement
+			))
+			# Construct the SQL to execute with @ as statement terminator
+			sql = ''.join(
+				'@' if token.type == TT.STATEMENT else token.source
+				for token in statement
+			)
+			try:
+				output = p.communicate(sql)[0]
+			except Exception, e:
+				logging.error('Failed to execute at line %d of script %s: %s' % (statement[0].line, self.filename, str(e)))
+				returncode |= 8
+			else:
+				# Log the output of the statement with a level appropriate to
+				# the CLP's return code
+				if p.returncode == 0:
+					log = logging.info
+				elif p.returncode < 4:
+					log = logging.warn
+				else:
+					log = logging.error
+					log('Statement at line %d of script %s produced the following error:' % (statement[0].line, self.filename))
+				output = clean_output(output).splitlines()
+				for line in output:
+					log(line)
+				# Combine the returncode into our eventual returncode
+				returncode |= p.returncode
+			if self.stoponerror and returncode >= 4:
+				break
+		return returncode
+
+	@property
+	def state(self):
 		if self.started and not self.finished:
 			return EXECUTING
 		elif self.returncode is not None and self.returncode < 4:
 			return SUCCEEDED
-		elif self.__retrylimit > 0:
+		elif self.retrylimit > 0:
 			if len([d for (f, d) in self.depends if d.state != SUCCEEDED]) == 0:
 				return EXECUTABLE
 			elif len([d for (f, d) in self.depends if d.state == FAILED]) == 0:
@@ -621,6 +692,4 @@ class SQLScript(object):
 				return FAILED
 		else:
 			return FAILED
-
-	state = property(__get_state, doc="""The current state of the script""")
 

@@ -13,7 +13,7 @@ import pdb
 import re
 import sys
 import math
-from dbsuite.tokenizer import TokenTypes as TT, Token, Error, TokenError, sql92_namechars, sql92_identchars
+from dbsuite.tokenizer import TokenTypes, Token, Error, TokenError, sql92_namechars, sql92_identchars
 from dbsuite.compat import *
 from decimal import Decimal
 from itertools import tee, izip
@@ -43,6 +43,7 @@ __all__ = [
 ]
 
 # Add some custom token types used by the formatter
+TT = TokenTypes
 for (type, name) in (
 	('EOF',       '<end-of-file>'),    # Symbolically represents the end of file (e.g. for errors)
 	('DATATYPE',  '<datatype>'),       # Datatypes (e.g. VARCHAR) converted from KEYWORD or IDENTIFIER
@@ -50,6 +51,7 @@ for (type, name) in (
 	('RELATION',  '<relation>'),       # Relation identifier converted from IDENTIFIER
 	('ROUTINE',   '<routine>'),        # Routine identifier converted from IDENTIFIER
 	('REGISTER',  '<register>'),       # Special registers (e.g. CURRENT DATE) converted from KEYWORD or IDENTIFIER
+	('PASSWORD',  '<password>'),       # Password converted from STRING
 	('STATEMENT', '<statement-end>'),  # Statement terminator
 	('INDENT',    None),               # Whitespace indentation at the start of a line
 	('VALIGN',    None),               # Whitespace indentation within a line to vertically align blocks of text
@@ -206,8 +208,8 @@ def format_tokens(tokens, reformat=[], terminator=';', statement=';', namechars=
 					yield Token(TT.NUMBER, token.value, str(token.value) + '.', 0, 0)
 				else:
 					yield Token(TT.NUMBER, token.value, str(token.value), 0, 0)
-			elif token.type == TT.STRING:
-				yield Token(TT.STRING, token.value, quote_str(token.value), 0, 0)
+			elif token.type in (TT.STRING, TT.PASSWORD):
+				yield Token(token.type, token.value, quote_str(token.value), 0, 0)
 			elif token.type == TT.LABEL:
 				yield Token(TT.LABEL, token.value, format_ident(token.value, namechars=namechars) + ':', 0, 0)
 			elif token.type == TT.PARAMETER:
@@ -551,6 +553,7 @@ class BaseParser(object):
 			TT.REGISTER,
 			TT.STATEMENT,
 			TT.STRING,
+			TT.PASSWORD,
 			TT.TERMINATOR,
 			TT.WHITESPACE,
 		])
@@ -803,6 +806,7 @@ class BaseParser(object):
 		transforms = {
 			TT.KEYWORD:     (TT.IDENTIFIER, TT.DATATYPE, TT.REGISTER, TT.SCHEMA, TT.RELATION, TT.ROUTINE),
 			TT.IDENTIFIER:  (TT.DATATYPE, TT.REGISTER, TT.SCHEMA, TT.RELATION, TT.ROUTINE),
+			TT.STRING:      (TT.PASSWORD,),
 			TT.TERMINATOR:  (TT.STATEMENT,),
 			TT.EOF:         (TT.STATEMENT,),
 		}
