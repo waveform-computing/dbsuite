@@ -7992,6 +7992,11 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 		self._expect_clp_string()
 		self._parse_db_partitions_clause()
 
+	def _parse_instance_command(self):
+		"""Parses the custom (non-CLP) INSTANCE command"""
+		# INSTANCE already matched
+		self._expect_clp_string()
+
 	def _parse_list_active_databases_command(self):
 		"""Parses a LIST ACTIVE DATABASES command"""
 		# LIST ACTIVE DATABASES already matched
@@ -8312,6 +8317,32 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 		# MIGRATE [DATABASE|DB] already matched
 		self._expect_clp_string()
 		self._parse_login(optional=True, allowchange=False)
+
+	def _parse_on_command(self):
+		"""Parses the custom (non-CLP) ON SQLCODE|SQLSTATE command"""
+		# ON already matched
+		if self._match('SQLCODE'):
+			self._expect(TT.IDENTIFIER)
+		elif self._match('SQLSTATE'):
+			self._expect_one_of([TT.STRING, TT.IDENTIFIER])
+		elif self._match('EXITCODE'):
+			self._expect(TT.NUMBER)
+		else:
+			self._expected_one_of(['SQLCODE', 'SQLSTATE', 'EXITCODE'])
+		wait = False
+		if self._match('WAIT'):
+			wait = True
+			self._expect(TT.NUMBER)
+			self._expect_one_of(['SECOND', 'SECONDS', 'MINUTE', 'MINUTES', 'HOUR', 'HOURS'])
+			self._match('AND')
+		retry = False
+		if self._match('RETRY'):
+			retry = True
+			self._expect_one_of(['STATEMENT', 'SCRIPT'])
+			if self._match(TT.NUMBER):
+				self._expect_one_of(['TIME', 'TIMES'])
+		self._match('AND')
+		self._expect_one_of(['FAIL', 'SUCCEED', 'CONTINUE', 'IGNORE'])
 
 	def _parse_ping_command(self):
 		"""Parses a PING command"""
@@ -9739,6 +9770,8 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 				self._parse_initialize_tape_command()
 			elif self._match('INSPECT'):
 				self._parse_inspect_command()
+			elif self._match('INSTANCE'):
+				self._parse_instance_command()
 			elif self._match('LIST'):
 				if self._match('ACTIVE'):
 					self._expect('DATABASES')
@@ -9825,6 +9858,8 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 			elif self._match('MIGRATE'):
 				self._expect_one_of(['DATABASE', 'DB'])
 				self._parse_migrate_db_command()
+			elif self._match('ON'):
+				self._parse_on_command()
 			elif self._match('PING'):
 				self._parse_ping_command()
 			elif self._match_one_of(['PRECOMPILE', 'PREP']):

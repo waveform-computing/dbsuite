@@ -613,7 +613,7 @@ class BaseParser(object):
 		if TT.WHITESPACE in self.reformat:
 			output = recalc_positions(convert_valign(convert_indent(output, indent=self.indent)))
 		else:
-			output = (token for token in tokens if token.type not in (TT.INDENT, TT.VALIGN, TT.VAPPLY))
+			output = recalc_positions(token for token in output if token.type not in (TT.INDENT, TT.VALIGN, TT.VAPPLY))
 		output = merge_whitespace(output)
 		if TT.WHITESPACE in self.reformat:
 			output = strip_whitespace(output)

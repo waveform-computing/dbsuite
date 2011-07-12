@@ -16,6 +16,7 @@ from string import Template
 from time import sleep
 from dbsuite.tokenizer import Token
 from dbsuite.parser import TokenTypes as TT
+from dbsuite.compat import *
 
 # Constants for the SQLScript.state property
 (
@@ -25,6 +26,20 @@ from dbsuite.parser import TokenTypes as TT
 	WAITING,    # script is waiting for dependencies to be satisfied
 	FAILED,     # script, or a dependent script has failed and cannot be retried
 ) = range(5)
+
+# Constants for the SQLScript._exec_internal state mode
+(
+	SQLCODE,
+	SQLSTATE,
+) = range(2)
+
+# Constants for the SQLScript._exec_internal action
+(
+	FAIL,
+	SUCCEED,
+	CONTINUE,
+	IGNORE
+) = range(4)
 
 # Global lock used to ensure output doesn't overlap
 output_lock = threading.RLock()
@@ -40,6 +55,12 @@ class Error(Exception):
 		return self.message
 
 	__str__ = __repr__
+
+class ScriptRuntimeError(Error):
+	"""Raised when a script fails at runtime"""
+
+	def __init__(self, msg):
+		Error.__init__(self, msg)
 
 class DependencyError(Error):
 	"""Base class for dependency errors"""
@@ -260,9 +281,9 @@ class SQLJob(object):
 		try:
 			output = p.communicate(sql)[0]
 		except Exception, e:
-			raise Error(str(e))
+			raise ScriptRuntimeError(str(e))
 		if p.returncode >= 4:
-			raise Error(clean_output(output))
+			raise ScriptRuntimeError(clean_output(output))
 
 	def test_connections(self, scripts=None):
 		"""Tests the provided connection details against all databases accessed by all scripts"""
@@ -281,7 +302,7 @@ class SQLJob(object):
 				logging.error(str(e))
 				result = False
 		if not result:
-			raise Exception('One or more test connections failed')
+			raise Error('One or more test connections failed')
 
 	def test_permissions(self, scripts=None):
 		"""Tests the read and/or write permissions of produced and consumed files"""
@@ -321,7 +342,7 @@ class SQLJob(object):
 				logging.error(str(e))
 				filemodesok = False
 		if not filemodesok:
-			raise Exception('One or more file permission tests failed, aborting execution')
+			raise Error('One or more file permission tests failed, aborting execution')
 
 	def execute(self, scripts=None):
 		if scripts is None:
@@ -343,7 +364,7 @@ class SQLJob(object):
 		self.print_status()
 		# If one or more scripts failed, raise an exception (i.e. exit now)
 		if len([s for s in scripts if s.state == FAILED]) > 0:
-			raise Exception("One or more scripts failed")
+			raise ScriptRuntimeError('One or more scripts failed')
 		# If requested, delete produced files (note this only happens if all
 		# scripts have completed successfully)
 		for script in scripts:
@@ -408,6 +429,7 @@ class SQLScript(object):
 		self.sql = Template(self.sql).safe_substitute(vars)
 		tokenizer = plugin.tokenizer()
 		parser = plugin.parser(for_scripts=True)
+		parser.reformat = set()
 		logging.info('Parsing script %s' % self.filename)
 		self.tokens = parser.parse(tokenizer.parse(self.sql, terminator=self.terminator))
 		self.sql = ''.join(token.source for token in self.tokens)
@@ -437,7 +459,7 @@ class SQLScript(object):
 		IXF file produced by one script and consumed by another implies that
 		the latter script relies on the former).
 		"""
-		logging.info("Calculating dependencies for script %s" % self.filename)
+		logging.info('Calculating dependencies for script %s' % self.filename)
 		# Calculate a list of files on which this script depends, and which
 		# scripts in the provided list produce these files
 		self.depends = [
@@ -460,22 +482,22 @@ class SQLScript(object):
 		# date)
 		for (depfile, producers) in self.depends:
 			if len(producers) == 0 and os.path.exists(depfile):
-				logging.warning("Missing dependency: File %s exists, but has no producer" % (depfile,))
+				logging.warning('Missing dependency: File %s exists, but has no producer' % depfile)
 		# Check the reverse dependency list for files which are produced but
 		# never consumed and log a warning
 		for (depfile, consumers) in self.rdepends:
 			if len(consumers) == 0:
-				logging.warning("File %s is produced, but never consumed" % (depfile,))
+				logging.warning('File %s is produced, but never consumed' % depfile)
 		# Check the dependency list for missing dependencies and ambiguous
 		# dependencies (multiple producers of a file)
 		e = None
 		for (depfile, producers) in self.depends:
 			if len(producers) == 0 and not os.path.exists(depfile):
 				if not e: e = UnresolvedDependencyError(self)
-				e.append(depfile, "Missing dependency: File %s does not exist and has no producer" % (depfile,))
+				e.append(depfile, 'Missing dependency: File %s does not exist and has no producer' % depfile)
 			elif len(producers) > 1:
 				if not e: e = UnresolvedDependencyError(self)
-				e.append(depfile, "Ambiguous dependency: %s all produce file %s" % (', '.join([s.filename for s in producers]), depfile))
+				e.append(depfile, 'Ambiguous dependency: %s all produce file %s' % (', '.join([s.filename for s in producers]), depfile))
 		if e:
 			raise e
 		# Change the producers list in each dependency entry into a single
@@ -503,7 +525,7 @@ class SQLScript(object):
 			while True:
 				for (depfile, producer) in s.depends:
 					if producer.depends_on(self):
-						e.append(depfile, "%s depends on %s" % (s.filename, producer.filename))
+						e.append(depfile, '%s depends on %s' % (s.filename, producer.filename))
 						s = producer
 						break
 				if s == self:
@@ -536,7 +558,7 @@ class SQLScript(object):
 		produced.
 		"""
 		assert self.state != EXECUTING
-		logging.info("Starting script %s" % (self.filename,))
+		logging.info('Starting script %s' % self.filename)
 		# These variables MUST be set by execute() to guarantee their state by
 		# the time the method exits (to ensure our state is consistent). Just
 		# because we start the background execution thread, doesn't mean it's
@@ -547,6 +569,22 @@ class SQLScript(object):
 		self.output = []
 		t = threading.Thread(target=self._exec_thread, args=())
 		t.start()
+
+	@property
+	def state(self):
+		if self.started and not self.finished:
+			return EXECUTING
+		elif self.returncode is not None and self.returncode < 4:
+			return SUCCEEDED
+		elif self.retrylimit > 0:
+			if len([d for (f, d) in self.depends if d.state != SUCCEEDED]) == 0:
+				return EXECUTABLE
+			elif len([d for (f, d) in self.depends if d.state == FAILED]) == 0:
+				return WAITING
+			else:
+				return FAILED
+		else:
+			return FAILED
 
 	def _exec_thread(self):
 		"""Target method for the background thread tracking the subprocess.
@@ -606,6 +644,8 @@ class SQLScript(object):
 	def _exec_internal(self):
 		# Split the tokens into statements, stripping leading whitespace and
 		# removing all comments
+		self._on_mode = None
+		self._on_states = {}
 		statement = []
 		statements = []
 		for token in self.tokens:
@@ -621,24 +661,9 @@ class SQLScript(object):
 		# Execute each statement in turn. The returncode of each execution is
 		# combined (by bitwise-or) into our final returncode
 		returncode = 0
-		for statement in statements:
-			args = [
-				'-o',                           # enable output
-				'+p',                           # disable input prompt
-				['+c', '-c'][self.autocommit],  # enable auto-COMMIT
-				'-td@'                          # use @ as statement terminator
-			]
-			cmdline = ['db2'] + args
-			if mswindows:
-				cmdline = ['db2cmd', '-i', '-w', '-c'] + cmdline
-			p = subprocess.Popen(
-				cmdline,
-				shell=False,
-				stdin=subprocess.PIPE,
-				stdout=subprocess.PIPE,
-				stderr=subprocess.STDOUT,
-				close_fds=not mswindows
-			)
+		position = 0
+		while position < len(statements):
+			statement = statements[position]
 			# Log the statement that will run. Hide any passwords or statement
 			# terminators, and compress all whitespace, just as the DB2 CLP
 			# usually does
@@ -648,48 +673,114 @@ class SQLScript(object):
 				''      if token.type == TT.STATEMENT else
 				token.source for token in statement
 			))
-			# Construct the SQL to execute with @ as statement terminator
-			sql = ''.join(
-				'@' if token.type == TT.STATEMENT else token.source
-				for token in statement
+			if statement[0].value == 'ON':
+				rc, state = self._exec_on_statement(statement)
+			elif statement[0].value == 'INSTANCE':
+				rc, state = self._exec_instance_statement(statement)
+			else:
+				rc, state = self._exec_statement(statement)
+			# Combine the returncode into our eventual returncode
+			returncode |= rc
+			if self.stoponerror and returncode >= 4:
+				break
+			position += 1
+		return returncode
+
+	def _exec_statement(self, statement):
+		# Construct the SQL to execute with @ as statement terminator
+		sql = ''.join(
+			'@' if token.type == TT.STATEMENT else token.source
+			for token in statement
+		)
+		cmdline = [
+			'db2',
+			'-o',                          # enable output
+			'+p',                          # disable input prompt
+			['+c', '-c'][self.autocommit], # enable auto-COMMIT if required
+			'-td@'                         # use @ as statement terminator
+		]
+		if mswindows:
+			cmdline = ['db2cmd', '-i', '-w', '-c'] + cmdline
+		p = subprocess.Popen(
+			cmdline,
+			shell=False,
+			stdin=subprocess.PIPE,
+			stdout=subprocess.PIPE,
+			stderr=subprocess.STDOUT,
+			close_fds=not mswindows
+		)
+		try:
+			output = p.communicate(sql)[0]
+		except Exception, e:
+			logging.error('Failed to execute at line %d of script %s: %s' % (statement[0].line, self.filename, str(e)))
+			return (8, None)
+		else:
+			# Log the output of the statement with a level appropriate to
+			# the CLP's return code
+			if p.returncode == 0:
+				log = logging.info
+			elif p.returncode < 4:
+				log = logging.warn
+			else:
+				log = logging.error
+				log('Statement at line %d of script %s produced the following error:' % (statement[0].line, self.filename))
+			output = clean_output(output).splitlines()
+			for line in output:
+				log(line)
+			return (p.returncode, None)
+
+	def _exec_on_statement(self, statement):
+		pass
+
+	def _exec_instance_statement(self, statement):
+		# Construct a TERMINATE statement and run it to kill off any existing
+		# DB2 backend process
+		term = [
+			Token(TT.IDENTIFIER, 'TERMINATE', 'TERMINATE', statement[0].line, statement[0].column),
+			statement[-1],
+		]
+		rc, state = self._exec_statement(term)
+		if rc != 0:
+			return (rc, state)
+		# Strip the statement of all junk tokens. Afterward it should have the
+		# structure ['INSTANCE', instance-name, ';']
+		statement = [t for t in statement if t.type not in (TT.WHITESPACE, TT.COMMENT)]
+		if mswindows:
+			# XXX No idea how to do this on Windows yet
+			raise NotImplementedError
+		else:
+			# Run a shell to source the new instance's DB2 profile
+			cmdline = [
+				'source', '~%s/sqllib/db2profile' % statement[1].value, '&&',
+				'echo', 'DB2INSTANCE=$DB2INSTANCE', '&&',
+				'echo', 'PATH=$PATH', '&&',
+				'echo', 'CLASSPATH=$CLASSPATH', '&&',
+				'echo', 'LIBPATH=$LIBPATH', '&&',
+				'echo', 'SHLIB_PATH=$SHLIB_PATH', '&&',
+				'echo', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH', '&&',
+				'echo', 'LD_LIBRARY_PATH_32=$LD_LIBRARY_PATH_32', '&&',
+				'echo', 'LD_LIBRARY_PATH_64=$LD_LIBRARY_PATH_64'
+			]
+			p = subprocess.Popen(
+				cmdline,
+				shell=True,
+				stdin=subprocess.PIPE,
+				stdout=subprocess.PIPE,
+				stderr=subprocess.STDOUT,
+				close_fds=True
 			)
 			try:
 				output = p.communicate(sql)[0]
 			except Exception, e:
 				logging.error('Failed to execute at line %d of script %s: %s' % (statement[0].line, self.filename, str(e)))
-				returncode |= 8
+				return (8, None)
 			else:
-				# Log the output of the statement with a level appropriate to
-				# the CLP's return code
-				if p.returncode == 0:
-					log = logging.info
-				elif p.returncode < 4:
-					log = logging.warn
-				else:
-					log = logging.error
-					log('Statement at line %d of script %s produced the following error:' % (statement[0].line, self.filename))
-				output = clean_output(output).splitlines()
-				for line in output:
-					log(line)
-				# Combine the returncode into our eventual returncode
-				returncode |= p.returncode
-			if self.stoponerror and returncode >= 4:
-				break
-		return returncode
-
-	@property
-	def state(self):
-		if self.started and not self.finished:
-			return EXECUTING
-		elif self.returncode is not None and self.returncode < 4:
-			return SUCCEEDED
-		elif self.retrylimit > 0:
-			if len([d for (f, d) in self.depends if d.state != SUCCEEDED]) == 0:
-				return EXECUTABLE
-			elif len([d for (f, d) in self.depends if d.state == FAILED]) == 0:
-				return WAITING
-			else:
-				return FAILED
-		else:
-			return FAILED
+				for line in output.splitlines():
+					var, value = line.split('=', 1)
+					if value:
+						os.environ[var] = value
+					else:
+						del os.environ[var]
+				logging.warn('Switched to instance: %s' % statement[1].value)
+				return (0, None)
 
