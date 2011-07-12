@@ -750,27 +750,27 @@ class SQLScript(object):
 			raise NotImplementedError
 		else:
 			# Run a shell to source the new instance's DB2 profile
-			cmdline = [
-				'source', '~%s/sqllib/db2profile' % statement[1].value, '&&',
-				'echo', 'DB2INSTANCE=$DB2INSTANCE', '&&',
-				'echo', 'PATH=$PATH', '&&',
-				'echo', 'CLASSPATH=$CLASSPATH', '&&',
-				'echo', 'LIBPATH=$LIBPATH', '&&',
-				'echo', 'SHLIB_PATH=$SHLIB_PATH', '&&',
-				'echo', 'LD_LIBRARY_PATH=$LD_LIBRARY_PATH', '&&',
-				'echo', 'LD_LIBRARY_PATH_32=$LD_LIBRARY_PATH_32', '&&',
-				'echo', 'LD_LIBRARY_PATH_64=$LD_LIBRARY_PATH_64'
-			]
+			cmdline = ' '.join([
+				'. ~%s/sqllib/db2profile' % statement[1].value,
+				'&& echo DB2INSTANCE=$DB2INSTANCE',
+				'&& echo PATH=$PATH',
+				'&& echo CLASSPATH=$CLASSPATH',
+				'&& echo LIBPATH=$LIBPATH',
+				'&& echo SHLIB_PATH=$SHLIB_PATH',
+				'&& echo LD_LIBRARY_PATH=$LD_LIBRARY_PATH',
+				'&& echo LD_LIBRARY_PATH_32=$LD_LIBRARY_PATH_32',
+				'&& echo LD_LIBRARY_PATH_64=$LD_LIBRARY_PATH_64'
+			])
 			p = subprocess.Popen(
 				cmdline,
 				shell=True,
-				stdin=subprocess.PIPE,
+				stdin=None,
 				stdout=subprocess.PIPE,
 				stderr=subprocess.STDOUT,
 				close_fds=True
 			)
 			try:
-				output = p.communicate(sql)[0]
+				output = p.communicate()[0]
 			except Exception, e:
 				logging.error('Failed to execute at line %d of script %s: %s' % (statement[0].line, self.filename, str(e)))
 				return (8, None)
@@ -779,7 +779,7 @@ class SQLScript(object):
 					var, value = line.split('=', 1)
 					if value:
 						os.environ[var] = value
-					else:
+					elif var in os.environ:
 						del os.environ[var]
 				logging.warn('Switched to instance: %s' % statement[1].value)
 				return (0, None)

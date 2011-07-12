@@ -9784,7 +9784,7 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 				elif self._match('COMMAND'):
 					self._expect('OPTIONS')
 					self._parse_list_command_options_command()
-				elif self._match('DATABASE'):
+				elif self._match_one_of(['DATABASE', 'DB']):
 					if self._match('DIRECTORY'):
 						self._parse_list_db_directory_command()
 					elif self._match('PARTITION'):
