@@ -3,6 +3,7 @@
 import sys
 import logging
 import dbsuite.script
+import dbsuite.tokenizer
 import dbsuite.plugins
 import dbsuite.main
 import ConfigParser
@@ -131,7 +132,7 @@ class ExecSqlUtility(dbsuite.main.Utility):
 
 	def handle(self, type, value, tb):
 		"""Exception hook for non-debug mode."""
-		if issubclass(type, (dbsuite.script.Error,)):
+		if issubclass(type, (dbsuite.script.Error, dbsuite.tokenizer.Error)):
 			# For script errors, just output the message which should be
 			# sufficient for the end user (no need to confuse them with a full
 			# stack trace)

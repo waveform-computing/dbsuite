@@ -30,7 +30,7 @@ from dbsuite.compat import *
 # Declare a simple class to store the attributes associated with an ON statement
 class OnState(object):
 	def __init__(self, line, delay, retry_mode, retry_count, action):
-		Super(OnState, self).__init__()
+		super(OnState, self).__init__()
 		self.line = line
 		self.delay = delay
 		self.retry_mode = retry_mode
@@ -855,8 +855,9 @@ class SQLScript(object):
 				# in an infinite loop
 				pass
 			else:
-				self._on_states[state] = OnState((statement[0].line, delay, retry_mode, retry_count, action))
+				self._on_states[state] = OnState(statement[0].line, delay, retry_mode, retry_count, action)
 			self._on_mode = mode
+			logging.info('ON statement processed successfully')
 		except Exception, e:
 			logging.error('Statement at line %d of script %s produced the following error:' % (statement[0].line, self.filename))
 			logging.error(str(e))
@@ -914,6 +915,6 @@ class SQLScript(object):
 			logging.error(str(e))
 			return (8, None)
 		else:
-			logging.warn('Switched to instance: %s' % statement[1].value)
+			logging.info('Switched to instance: %s' % statement[1].value)
 			return (0, None)
 
