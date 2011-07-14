@@ -27,19 +27,20 @@ from dbsuite.compat import *
 	FAILED,     # script, or a dependent script has failed and cannot be retried
 ) = range(5)
 
-# Constants for the SQLScript._exec_internal state mode
-(
-	SQLCODE,
-	SQLSTATE,
-) = range(2)
+# Declare a simple class to store the attributes associated with an ON statement
+class OnState(object):
+	def __init__(self, line, delay, retry_mode, retry_count, action):
+		Super(OnState, self).__init__()
+		self.line = line
+		self.delay = delay
+		self.retry_mode = retry_mode
+		self.retry_count = retry_count
+		self.action = action
 
-# Constants for the SQLScript._exec_internal action
-(
-	FAIL,
-	SUCCEED,
-	CONTINUE,
-	IGNORE
-) = range(4)
+# Create a singleton class to represent arbitrary error states for the ON statement
+class ErrorState(object):
+	pass
+ErrorState = ErrorState()
 
 # Global lock used to ensure output doesn't overlap
 output_lock = threading.RLock()
@@ -679,11 +680,49 @@ class SQLScript(object):
 				rc, state = self._exec_instance_statement(statement)
 			else:
 				rc, state = self._exec_statement(statement)
-			# Combine the returncode into our eventual returncode
-			returncode |= rc
+			position += 1
+			# Check the dictionary of ON states for a match
+			on_state = None
+			if state and (state in self._on_states):
+				on_state = self._on_states[state]
+			elif rc >= 4 and (ErrorState in self._on_states):
+				on_state = self._on_states[ErrorState]
+			# If we found a match, act on the ON state immediately as it may
+			# alter the rc
+			if on_state:
+				logging.warn('State matches ON statement at line %d' % on_state.line)
+				if on_state.retry_mode:
+					if on_state.retry_count == 0:
+						logging.warn('All retries exhausted')
+					else:
+						if on_state.delay:
+							logging.warn('Pausing for %d seconds' % on_state.delay)
+							sleep(on_state.delay)
+						if on_state.retry_count > 0:
+							suffix = '(%d retries remaining)' % on_state.retry_count
+							on_state.retry_count -= 1
+						else:
+							suffix = ''
+						if on_state.retry_mode == 'SCRIPT':
+							logging.warn('Retrying script %s' % suffix)
+							position = 0
+						else:
+							logging.warn('Retrying statement %s' % suffix)
+							position -= 1
+						# In the case that we're retrying something, restart
+						# the loop here skipping the ON action and the update
+						# of returncode
+						continue
+				# If not retrying or all retries are exhausted, perform the ON
+				# state action
+				if on_state.action in ('CONTINUE', 'FAIL'):
+					returncode |= rc
+				if on_state.action in ('STOP', 'FAIL') and rc >= 4:
+					break
+			else:
+				returncode |= rc
 			if self.stoponerror and returncode >= 4:
 				break
-			position += 1
 		return returncode
 
 	def _exec_statement(self, statement):
@@ -699,6 +738,10 @@ class SQLScript(object):
 			['+c', '-c'][self.autocommit], # enable auto-COMMIT if required
 			'-td@'                         # use @ as statement terminator
 		]
+		if self._on_mode == 'SQLCODE':
+			cmdline.append('-ec')          # output the SQLCODE after execution
+		elif self._on_mode == 'SQLSTATE':
+			cmdline.append('-es')          # output the SQLSTATE after execution
 		if mswindows:
 			cmdline = ['db2cmd', '-i', '-w', '-c'] + cmdline
 		p = subprocess.Popen(
@@ -715,6 +758,16 @@ class SQLScript(object):
 			logging.error('Failed to execute at line %d of script %s: %s' % (statement[0].line, self.filename, str(e)))
 			return (8, None)
 		else:
+			output = clean_output(output).splitlines()
+			# If we're watching for SQLCODEs or SQLSTATEs, strip off the last
+			# line of output as it contains the state
+			if self._on_mode:
+				state = output[-1].strip()
+				output = output[:-1]
+				if self._on_mode == 'SQLCODE':
+					state = int(state)
+			else:
+				state = None
 			# Log the output of the statement with a level appropriate to
 			# the CLP's return code
 			if p.returncode == 0:
@@ -724,63 +777,143 @@ class SQLScript(object):
 			else:
 				log = logging.error
 				log('Statement at line %d of script %s produced the following error:' % (statement[0].line, self.filename))
-			output = clean_output(output).splitlines()
 			for line in output:
 				log(line)
-			return (p.returncode, None)
+			return (p.returncode, state)
 
 	def _exec_on_statement(self, statement):
-		pass
+		# Strip the statement of all junk tokens
+		try:
+			statement = [t for t in statement if t.type not in (TT.WHITESPACE, TT.COMMENT)]
+			i = 1
+			# Parse the error condition clause
+			mode = statement[i].value
+			if mode == 'SQLCODE':
+				if self._on_mode and self._on_mode != mode:
+					raise Exception('Cannot use ON SQLCODE after ON SQLSTATE')
+				i += 1
+				if statement[i].type == TT.OPERATOR:
+					i += 1
+				if statement[i].type == TT.NUMBER:
+					state = statement[i].value
+				else:
+					if not statement[i].value.upper().startswith('SQL'):
+						raise Exception('Invalid SQLCODE "%s"; SQLCODEs must being with "SQL"' % statement[i].value)
+					if not 7 <= len(statement[i].value) <= 8:
+						raise Exception('Invalid SQLCODE "%s"; SQLCODEs must be between 7 and 8 characters long' % statement[i].value)
+					try:
+						state = int(statement[i].value[3:7])
+					except ValueError:
+						raise Exception('Invalid SQLCODE "%s"; SQL must be followed by 4 numerals' % statement[i].value)
+				if state > 0:
+					# Make all SQLCODEs negative
+					state = -state
+				i += 1
+			elif mode == 'SQLSTATE':
+				if self._on_mode and self._on_mode != mode:
+					raise Exception('Cannot use ON SQLSTATE after ON SQLCODE')
+				i += 1
+				state = statement[i].value.upper()
+				i += 1
+			else:
+				i += 1
+				state = ErrorState
+			# Parse the delay clause (if present)
+			if statement[i].value == 'WAIT':
+				i += 1
+				delay = statement[i].value
+				i += 1
+				if statement[i].value in ('HOUR', 'HOURS'):
+					delay *= (60*60)
+				elif statement[i].value in ('MINUTE', 'MINUTES'):
+					delay *= 60
+				i += 1
+				if statement[i].value == 'AND':
+					i += 1
+			else:
+				delay = 0
+			# Parse the retry clause (if present)
+			if statement[i].value == 'RETRY':
+				i += 1
+				retry_mode = statement[i].value
+				i += 1
+				if statement[i].type == TT.NUMBER:
+					retry_count = statement[i].value
+					i += 2
+				else:
+					retry_count = -1
+				if statement[i].value == 'AND':
+					i += 1
+			else:
+				retry_mode = None
+				retry_count = 0
+			action = statement[i].value
+			if (state in self._on_states) and (self._on_states[state].line == statement[0].line):
+				# If there's already an entry for this ON statement in the
+				# states dictionary we're retrying the script so don't re-write
+				# the entry or we'll reset the retry-count and probably wind up
+				# in an infinite loop
+				pass
+			else:
+				self._on_states[state] = OnState((statement[0].line, delay, retry_mode, retry_count, action))
+			self._on_mode = mode
+		except Exception, e:
+			logging.error('Statement at line %d of script %s produced the following error:' % (statement[0].line, self.filename))
+			logging.error(str(e))
+			return (8, None)
+		else:
+			return (0, None)
 
 	def _exec_instance_statement(self, statement):
-		# Construct a TERMINATE statement and run it to kill off any existing
-		# DB2 backend process
-		term = [
-			Token(TT.IDENTIFIER, 'TERMINATE', 'TERMINATE', statement[0].line, statement[0].column),
-			statement[-1],
-		]
-		rc, state = self._exec_statement(term)
-		if rc != 0:
-			return (rc, state)
-		# Strip the statement of all junk tokens. Afterward it should have the
-		# structure ['INSTANCE', instance-name, ';']
-		statement = [t for t in statement if t.type not in (TT.WHITESPACE, TT.COMMENT)]
-		if mswindows:
-			# XXX No idea how to do this on Windows yet
-			raise NotImplementedError
-		else:
-			# Run a shell to source the new instance's DB2 profile
-			cmdline = ' '.join([
-				'. ~%s/sqllib/db2profile' % statement[1].value,
-				'&& echo DB2INSTANCE=$DB2INSTANCE',
-				'&& echo PATH=$PATH',
-				'&& echo CLASSPATH=$CLASSPATH',
-				'&& echo LIBPATH=$LIBPATH',
-				'&& echo SHLIB_PATH=$SHLIB_PATH',
-				'&& echo LD_LIBRARY_PATH=$LD_LIBRARY_PATH',
-				'&& echo LD_LIBRARY_PATH_32=$LD_LIBRARY_PATH_32',
-				'&& echo LD_LIBRARY_PATH_64=$LD_LIBRARY_PATH_64'
-			])
-			p = subprocess.Popen(
-				cmdline,
-				shell=True,
-				stdin=None,
-				stdout=subprocess.PIPE,
-				stderr=subprocess.STDOUT,
-				close_fds=True
-			)
-			try:
-				output = p.communicate()[0]
-			except Exception, e:
-				logging.error('Failed to execute at line %d of script %s: %s' % (statement[0].line, self.filename, str(e)))
-				return (8, None)
+		try:
+			# Construct a TERMINATE statement and run it to kill off any existing
+			# DB2 backend process
+			term = [
+				Token(TT.IDENTIFIER, 'TERMINATE', 'TERMINATE', statement[0].line, statement[0].column),
+				statement[-1],
+			]
+			rc, state = self._exec_statement(term)
+			if rc != 0:
+				return (rc, state)
+			# Strip the statement of all junk tokens. Afterward it should have the
+			# structure ['INSTANCE', instance-name, ';']
+			statement = [t for t in statement if t.type not in (TT.WHITESPACE, TT.COMMENT)]
+			if mswindows:
+				# XXX No idea how to do this on Windows yet
+				raise NotImplementedError
 			else:
+				# Run a shell to source the new instance's DB2 profile
+				cmdline = ' '.join([
+					'. ~%s/sqllib/db2profile' % statement[1].value,
+					'&& echo DB2INSTANCE=$DB2INSTANCE',
+					'&& echo PATH=$PATH',
+					'&& echo CLASSPATH=$CLASSPATH',
+					'&& echo LIBPATH=$LIBPATH',
+					'&& echo SHLIB_PATH=$SHLIB_PATH',
+					'&& echo LD_LIBRARY_PATH=$LD_LIBRARY_PATH',
+					'&& echo LD_LIBRARY_PATH_32=$LD_LIBRARY_PATH_32',
+					'&& echo LD_LIBRARY_PATH_64=$LD_LIBRARY_PATH_64'
+				])
+				p = subprocess.Popen(
+					cmdline,
+					shell=True,
+					stdin=None,
+					stdout=subprocess.PIPE,
+					stderr=subprocess.STDOUT,
+					close_fds=True
+				)
+				output = p.communicate()[0]
 				for line in output.splitlines():
 					var, value = line.split('=', 1)
 					if value:
 						os.environ[var] = value
 					elif var in os.environ:
 						del os.environ[var]
-				logging.warn('Switched to instance: %s' % statement[1].value)
-				return (0, None)
+		except Exception, e:
+			logging.error('Statement at line %d of script %s produced the following error:' % (statement[0].line, self.filename))
+			logging.error(str(e))
+			return (8, None)
+		else:
+			logging.warn('Switched to instance: %s' % statement[1].value)
+			return (0, None)
 

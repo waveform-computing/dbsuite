@@ -8322,13 +8322,16 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 		"""Parses the custom (non-CLP) ON SQLCODE|SQLSTATE command"""
 		# ON already matched
 		if self._match('SQLCODE'):
-			self._expect(TT.IDENTIFIER)
+			if self._match((TT.OPERATOR, '-')):
+				self._expect(TT.NUMBER)
+			else:
+				self._expect_one_of([TT.STRING, TT.NUMBER])
 		elif self._match('SQLSTATE'):
-			self._expect_one_of([TT.STRING, TT.IDENTIFIER])
-		elif self._match('EXITCODE'):
-			self._expect(TT.NUMBER)
+			self._expect(TT.STRING)
+		elif self._match('ERROR'):
+			pass
 		else:
-			self._expected_one_of(['SQLCODE', 'SQLSTATE', 'EXITCODE'])
+			self._expected_one_of(['SQLCODE', 'SQLSTATE', 'ERROR'])
 		wait = False
 		if self._match('WAIT'):
 			wait = True
@@ -8341,7 +8344,9 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 			self._expect_one_of(['STATEMENT', 'SCRIPT'])
 			if self._match(TT.NUMBER):
 				self._expect_one_of(['TIME', 'TIMES'])
-		self._match('AND')
+			self._match('AND')
+		if wait and not retry:
+			self._expected('RETRY')
 		self._expect_one_of(['FAIL', 'SUCCEED', 'CONTINUE', 'IGNORE'])
 
 	def _parse_ping_command(self):

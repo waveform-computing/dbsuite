@@ -15,7 +15,6 @@ SQL99Tokenizer   -- ANSI SQL-99
 SQL2003Tokenizer -- ANSI SQL-2003
 """
 
-import dbsuite.dialects as dialects
 from decimal import Decimal
 from dbsuite.compat import *
 
