@@ -706,6 +706,7 @@ class SQLScript(object):
 						if on_state.retry_mode == 'SCRIPT':
 							logging.warn('Retrying script %s' % suffix)
 							position = 0
+							self._exec_terminate_statement(statement)
 						else:
 							logging.warn('Retrying statement %s' % suffix)
 							position -= 1
@@ -867,15 +868,7 @@ class SQLScript(object):
 
 	def _exec_instance_statement(self, statement):
 		try:
-			# Construct a TERMINATE statement and run it to kill off any existing
-			# DB2 backend process
-			term = [
-				Token(TT.IDENTIFIER, 'TERMINATE', 'TERMINATE', statement[0].line, statement[0].column),
-				statement[-1],
-			]
-			rc, state = self._exec_statement(term)
-			if rc != 0:
-				return (rc, state)
+			self._exec_terminate_statement(statement)
 			# Strip the statement of all junk tokens. Afterward it should have the
 			# structure ['INSTANCE', instance-name, ';']
 			statement = [t for t in statement if t.type not in (TT.WHITESPACE, TT.COMMENT)]
@@ -918,3 +911,13 @@ class SQLScript(object):
 			logging.info('Switched to instance: %s' % statement[1].value)
 			return (0, None)
 
+	def _exec_terminate_statement(self, statement):
+		# Construct a TERMINATE statement and run it to kill off any existing
+		# DB2 backend process
+		term = [
+			Token(TT.IDENTIFIER, 'TERMINATE', 'TERMINATE', statement[0].line, statement[0].column),
+			statement[-1],
+		]
+		rc, state = self._exec_statement(term)
+		if rc >= 4:
+			raise Exception('Implicit TERMINATE statement failed')
