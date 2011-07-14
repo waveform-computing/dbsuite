@@ -324,8 +324,8 @@ class BaseTokenizer(object):
 	"""
 
 	def __init__(self):
-		self.keywords = set(dialects.sql92_keywords)
-		self.ident_chars = set(dialects.sql92_identchars)
+		self.keywords = set(sql92_keywords)
+		self.ident_chars = set(sql92_identchars)
 		self.space_chars = ' \t\r\n'
 		self.sql_comments = True
 		self.c_comments = False
@@ -915,8 +915,8 @@ class SQL99Tokenizer(BaseTokenizer):
 
 	def __init__(self):
 		super(SQL99Tokenizer, self).__init__()
-		self.keywords = set(dialects.sql99_keywords)
-		self.ident_chars = set(dialects.sql99_identchars)
+		self.keywords = set(sql99_keywords)
+		self.ident_chars = set(sql99_identchars)
 
 
 class SQL2003Tokenizer(BaseTokenizer):
@@ -924,6 +924,6 @@ class SQL2003Tokenizer(BaseTokenizer):
 
 	def __init__(self):
 		super(SQL2003Tokenizer, self).__init__()
-		self.keywords = set(dialects.sql2003_keywords)
-		self.ident_chars = set(dialects.sql2003_identchars)
+		self.keywords = set(sql2003_keywords)
+		self.ident_chars = set(sql2003_identchars)
 
