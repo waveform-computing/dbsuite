@@ -690,7 +690,7 @@ class SQLScript(object):
 			# If we found a match, act on the ON state immediately as it may
 			# alter the rc
 			if on_state:
-				logging.warn('State matches ON statement at line %d' % on_state.line)
+				logging.info('ON statement matched at line %d' % on_state.line)
 				if on_state.retry_mode:
 					if on_state.retry_count == 0:
 						logging.warn('All retries exhausted')

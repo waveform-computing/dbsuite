@@ -8347,7 +8347,7 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 			self._match('AND')
 		if wait and not retry:
 			self._expected('RETRY')
-		self._expect_one_of(['FAIL', 'SUCCEED', 'CONTINUE', 'IGNORE'])
+		self._expect_one_of(['FAIL', 'STOP', 'CONTINUE', 'IGNORE'])
 
 	def _parse_ping_command(self):
 		"""Parses a PING command"""
