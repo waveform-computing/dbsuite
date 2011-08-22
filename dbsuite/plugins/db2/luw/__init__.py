@@ -414,18 +414,22 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(TABSCHEMA)      AS ALIASSCHEMA,
-				RTRIM(TABNAME)        AS ALIASNAME,
-				RTRIM(%(owner)s)      AS OWNER,
-				CHAR('N')             AS SYSTEM,
-				CHAR(CREATE_TIME)     AS CREATED,
-				REMARKS               AS DESCRIPTION,
-				RTRIM(BASE_TABSCHEMA) AS BASESCHEMA,
-				RTRIM(BASE_TABNAME)   AS BASETABLE
+				RTRIM(A.TABSCHEMA)      AS ALIASSCHEMA,
+				RTRIM(A.TABNAME)        AS ALIASNAME,
+				RTRIM(A.%(owner)s)      AS OWNER,
+				CHAR('N')               AS SYSTEM,
+				CHAR(A.CREATE_TIME)     AS CREATED,
+				A.REMARKS               AS DESCRIPTION,
+				RTRIM(A.BASE_TABSCHEMA) AS BASESCHEMA,
+				RTRIM(A.BASE_TABNAME)   AS BASETABLE
 			FROM
-				%(schema)s.TABLES
+				%(schema)s.TABLES A
+				INNER JOIN %(schema)s.TABLES T
+					ON T.TABSCHEMA = TABLE_SCHEMA(A.TABSCHEMA)
+					AND T.TABNAME = TABLE_NAME(A.TABNAME)
 			WHERE
-				TYPE = 'A'
+				A.TYPE = 'A'
+				AND T.STATUS <> 'X'
 			WITH UR""" % self.query_subst)
 		for (
 				schema,
