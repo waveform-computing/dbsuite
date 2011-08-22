@@ -142,19 +142,25 @@ class HTMLOutputPlugin(dbsuite.plugins.OutputPlugin):
 		# Override this in descendents if additional string options are introduced
 		return ('path', 'top', 'home_title', 'home_url', 'site_title', 'icon_url')
 
-	def execute(self, database):
+	def build_site(self, database):
 		"""Invokes the plugin to produce documentation.
 
 		Descendent classes should NOT override this method, but instead
-		override the methods of the Website class. To customize the class,
+		override the methods of the WebSite class. To customize the class,
 		set self.site_class to a different class in descendent constructors.
+
+		The process of producing the site and associated document objects
+		was moved into this method which is specific to HTML output plugins
+		for the purpose of making a "live" server of database documentation
+		which didn't require the writing of the documentation to disk.
 		"""
-		super(HTMLOutputPlugin, self).execute(database)
 		# Take a copy of the options if we haven't already
 		if not hasattr(self, 'options_templates'):
 			self.options_templates = dict(self.options)
 		# Build the dictionary of substitutions for $-prefixed variable
 		# references in all substitutable options (path et al.)
+		# XXX What if we're called multiple times? This will screw-up
+		# susbtitutions which include $
 		values = dict(os.environ)
 		values.update({
 			'db': database.name,
@@ -166,6 +172,14 @@ class HTMLOutputPlugin(dbsuite.plugins.OutputPlugin):
 		for option in self.substitute():
 			if isinstance(self.options[option], basestring):
 				self.options[option] = Template(self.options[option]).safe_substitute(values)
-		site = self.site_class(database, self.options)
-		site.write()
+		return self.site_class(database, self.options)
 
+	def execute(self, database):
+		"""Invokes the plugin to write documentation to disk.
+
+		Descendent classes should NOT override this method, but instead
+		override the methods of the Website class. To customize the class,
+		set self.site_class to a different class in descendent constructors.
+		"""
+		super(HTMLOutputPlugin, self).execute(database)
+		self.build_site(database).write()

@@ -214,43 +214,39 @@ class W3Site(WebSite):
 		for item in self.diagrams:
 			self.document_classes[item].add(graph_map[item])
 
-	def create_documents(self, phase=0):
-		result = super(W3Site, self).create_documents(phase)
-		if phase == 0:
-			# Add the style, script and search documents
-			self.w3_style = W3Style(self)
-			self.w3_script = W3Script(self)
-			if self.search:
-				W3Search(self)
-			W3Loader(self)
-			return True
-		elif phase == 3:
-			# Add external documents for all menu_items
-			found_top = False
-			menu_docs = []
-			for (title, url) in [(self.home_title, self.home_url)] + self.menu_items:
-				if url == '#':
-					doc = self.object_document(self.database)
-					doc.title = title
-					found_top = True
-				else:
-					doc = W3External(self, url, title)
-				menu_docs.append(doc)
-			if not found_top:
+	def create_static_documents(self):
+		super(W3Site, self).create_static_documents()
+		# Add the style, script and search documents
+		self.w3_style = W3Style(self)
+		self.w3_script = W3Script(self)
+		if self.search:
+			W3Search(self)
+		W3Loader(self)
+
+	def create_object_documents(self):
+		super(W3Site, self).create_object_documents()
+		found_top = False
+		menu_docs = []
+		for (title, url) in [(self.home_title, self.home_url)] + self.menu_items:
+			if url == '#':
 				doc = self.object_document(self.database)
-				menu_docs.append(doc)
-			# Configure links between external menu_docs
-			prior = None
-			for doc in menu_docs:
-				doc.first = menu_docs[0]
-				doc.last = menu_docs[-1]
-				doc.prior = prior
-				prior = doc
-			# Generate the site navigation map
-			W3SiteNav(self)
-			return True
-		else:
-			return result
+				doc.title = title
+				found_top = True
+			else:
+				doc = W3External(self, url, title)
+			menu_docs.append(doc)
+		if not found_top:
+			doc = self.object_document(self.database)
+			menu_docs.append(doc)
+		# Configure links between external menu_docs
+		prior = None
+		for doc in menu_docs:
+			doc.first = menu_docs[0]
+			doc.last = menu_docs[-1]
+			doc.prior = prior
+			prior = doc
+		# Generate the site navigation map
+		W3SiteNav(self)
 
 
 class W3External(HTMLExternalDocument):

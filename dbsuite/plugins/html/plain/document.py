@@ -184,28 +184,24 @@ class PlainSite(WebSite):
 		for item in self.diagrams:
 			self.document_classes[item].add(graph_map[item])
 
-	def create_documents(self, phase=0):
-		result = super(PlainSite, self).create_documents(phase)
-		if phase == 0:
-			# Create static documents. Note that we don't keep a reference to the
-			# image documents.  Firstly, the objects will be kept alive by virtue
-			# of being added to the urls map in this object (by virtue of the
-			# add_document call in their constructors). Secondly, no document ever
-			# refers directly to these objects - they're referred to solely in in
-			# the plain stylesheet
-			self.plain_style = PlainStyle(self)
-			self.plain_script = PlainScript(self)
-			HeaderImage(self)
-			SortableImage(self)
-			SortAscImage(self)
-			SortDescImage(self)
-			ExpandImage(self)
-			CollapseImage(self)
-			if self.search:
-				PlainSearch(self)
-			return True
-		else:
-			return result
+	def create_static_documents(self):
+		super(PlainSite, self).create_static_documents()
+		# Create static documents. Note that we don't keep a reference to the
+		# image documents.  Firstly, the objects will be kept alive by virtue
+		# of being added to the urls map in this object (by virtue of the
+		# add_document call in their constructors). Secondly, no document ever
+		# refers directly to these objects - they're referred to solely in in
+		# the plain stylesheet
+		self.plain_style = PlainStyle(self)
+		self.plain_script = PlainScript(self)
+		HeaderImage(self)
+		SortableImage(self)
+		SortAscImage(self)
+		SortDescImage(self)
+		ExpandImage(self)
+		CollapseImage(self)
+		if self.search:
+			PlainSearch(self)
 
 
 class PlainExternal(HTMLExternalDocument):

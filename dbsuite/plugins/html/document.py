@@ -381,9 +381,7 @@ class WebSite(object):
 		self.get_options(options)
 		self.get_factories()
 		self.tag = self.tag_class(self)
-		phase = 0
-		while self.create_documents(phase):
-			phase += 1
+		self.create_documents()
 
 	def get_options(self, options):
 		"""Configures the class from the dictionary of options given.
@@ -480,42 +478,123 @@ class WebSite(object):
 		until it returns False. Hence, descendents should ensure they return
 		the result of the superclass' call or'ed with their own result.
 		"""
-		if phase == 0:
-			# Build the static documents (basically just file copies with optional
-			# transcoding to the site's encoding)
-			self.sql_style = SQLStyle(self)
-			self.jquery_script = JQueryScript(self)
-			self.tablesorter_script = TablesorterScript(self)
-			self.thickbox_style = ThickboxStyle(self)
-			self.thickbox_script = ThickboxScript(self)
-			ThickboxImage(self)
-			return True
-		elif phase == 1:
-			# Build the static popup documents
-			popups = fromstring(resource_string(__name__, 'popups.xml'))
-			for popup in popups:
-				self.popup_class(site=self, body=list(popup), **popup.attrib)
-			return True
-		elif phase == 2:
-			# If indexes are requested, build the sorted object lists now (and set
-			# up the first level of the index_docs mapping)
-			if self.indexes:
-				for cls in self.indexes:
-					self.index_maps[cls] = {}
-					self.index_docs[cls] = {}
-				for dbobject in self.database:
-					self.index_object(dbobject, self.indexes)
-			return True
-		elif phase == 3:
-			# Build the object and index documents
+		self.create_static_documents()
+		self.create_popup_documents()
+		self.create_index_levels()
+		self.create_object_documents()
+		if self.index_docs:
+			self.create_index_links()
+
+	def create_static_documents(self):
+		"""Creates the static documents required by the site."""
+		# Build the static documents (basically just file copies with optional
+		# transcoding to the site's encoding)
+		self.sql_style = SQLStyle(self)
+		self.jquery_script = JQueryScript(self)
+		self.tablesorter_script = TablesorterScript(self)
+		self.thickbox_style = ThickboxStyle(self)
+		self.thickbox_script = ThickboxScript(self)
+		ThickboxImage(self)
+
+	def create_popup_documents(self):
+		"""Creates the popup documents required by the site."""
+		# Build the static popup documents
+		popups = fromstring(resource_string(__name__, 'popups.xml'))
+		for popup in popups:
+			self.popup_class(site=self, body=list(popup), **popup.attrib)
+
+	def create_object_documents(self):
+		"""Creates the documents for database objects in the site."""
+		# Build the object and index documents
+		for dbobject in self.database:
+			self.add_object(dbobject)
+		for cls in self.index_maps:
+			for letter in self.index_maps[cls]:
+				self.index_class(self, cls, letter)
+
+	def create_index_levels(self):
+		"""Creates the index documents required by the site."""
+		# If indexes are requested, build the sorted object lists now (and set
+		# up the first level of the index_docs mapping)
+		if self.indexes:
+			for cls in self.indexes:
+				self.index_maps[cls] = {}
+				self.index_docs[cls] = {}
 			for dbobject in self.database:
-				self.add_object(dbobject)
-			for cls in self.index_maps:
-				for letter in self.index_maps[cls]:
-					self.index_class(self, cls, letter)
-			return True
-		else:
-			return False
+				self.index_object(dbobject, self.indexes)
+
+	def create_index_links(self):
+		"""Utility method for linking letters of indexes together.
+
+		This method is called during write() to generate the first, prior,
+		next, last, and parent links of the index documents. Normally, this
+		sort of thing would be done in the generate() method of the document in
+		question. However, it's much more efficient to do this at the site
+		level for the index documents as we can sort the list of documents by
+		letter once, and apply the links from the result.
+
+		In this method, we also generate a bunch of "fake" documents
+		representing each index. The HTMLExternalDocument class is used for
+		this, and each "fake" document actually points to the document for the
+		first letter of the index. These documents are used to provide another
+		level of structure to the document hierarchy, which groups together
+		each index letter document, e.g.:
+
+		Database Document
+		+- Table Index (fake)
+		|  +- A
+		|  +- B
+		|  +- C
+		|  +- D
+		|  +- ...
+		+- View Index (fake)
+		   +- A
+		   +- B
+		   +- ...
+
+		Override this in descendents if the index_docs structure is changed or
+		enhanced.
+		"""
+		# Sort the list of database classes by name and filter out those which
+		# have no index content
+		dbclasses = [
+			dbclass for dbclass in sorted(self.index_docs.iterkeys(),
+				key=lambda dbclass: self.type_name(dbclass))
+			if self.index_docs[dbclass]
+		]
+		# Create "fake" documents to represent each index. Note that the URL
+		# constructed here is ultimately discarded, but must still be unique
+		# (see below)
+		dbclass_docs = [
+			HTMLExternalDocument(self,
+				'indexof_%s.html' % dbclass.config_names[0],
+				'%s Index' % self.type_name(dbclass)
+			)
+			for dbclass in dbclasses
+		]
+		self.first_index = dbclass_docs[0]
+		dbclass_parent = self.object_document(self.database)
+		dbclass_prior = None
+		for (dbclass, dbclass_doc) in zip(dbclasses, dbclass_docs):
+			letter_docs = sorted(self.index_docs[dbclass].itervalues(), key=attrgetter('letter'))
+			if letter_docs:
+				# Replace the URL of the class document with the URL of the
+				# first letter of the index. We can't do this at construction
+				# time or the fake document will supplant the real document
+				# (for the first letter) in the site's structures.
+				dbclass_doc.url = letter_docs[0].url
+				dbclass_doc.first = dbclass_docs[0]
+				dbclass_doc.last = dbclass_docs[-1]
+				dbclass_doc.parent = dbclass_parent
+				dbclass_doc.prior = dbclass_prior
+				dbclass_prior = dbclass_doc
+				letter_prior = None
+				for letter_doc in letter_docs:
+					letter_doc.first = letter_docs[0]
+					letter_doc.last = letter_docs[-1]
+					letter_doc.parent = dbclass_doc
+					letter_doc.prior = letter_prior
+					letter_prior = letter_doc
 
 	def add_object(self, dbobject):
 		"""Adds documents for a specific database object.
@@ -577,6 +656,7 @@ class WebSite(object):
 		object_graph() methods) if more complex associations are desired (e.g.
 		framed and non-framed versions of documents).
 		"""
+		logging.debug('Adding document %s' % document.url)
 		self.urls[document.url] = document
 		self.urls[document.absolute_url] = document
 		if isinstance(document, HTMLObjectDocument):
@@ -762,84 +842,9 @@ class WebSite(object):
 		else:
 			return self.tag.a(letter, href=doc.url, title=doc.title)
 
-	def link_indexes(self):
-		"""Utility method for linking letters of indexes together.
-
-		This method is called during write() to generate the first, prior,
-		next, last, and parent links of the index documents. Normally, this
-		sort of thing would be done in the generate() method of the document in
-		question. However, it's much more efficient to do this at the site
-		level for the index documents as we can sort the list of documents by
-		letter once, and apply the links from the result.
-
-		In this method, we also generate a bunch of "fake" documents
-		representing each index. The HTMLExternalDocument class is used for
-		this, and each "fake" document actually points to the document for the
-		first letter of the index. These documents are used to provide another
-		level of structure to the document hierarchy, which groups together
-		each index letter document, e.g.:
-
-		Database Document
-		+- Table Index (fake)
-		|  +- A
-		|  +- B
-		|  +- C
-		|  +- D
-		|  +- ...
-		+- View Index (fake)
-		   +- A
-		   +- B
-		   +- ...
-
-		Override this in descendents if the index_docs structure is changed or
-		enhanced.
-		"""
-		# Sort the list of database classes by name and filter out those which
-		# have no index content
-		dbclasses = [
-			dbclass for dbclass in sorted(self.index_docs.iterkeys(),
-				key=lambda dbclass: self.type_name(dbclass))
-			if self.index_docs[dbclass]
-		]
-		# Create "fake" documents to represent each index. Note that the URL
-		# constructed here is ultimately discarded, but must still be unique
-		# (see below)
-		dbclass_docs = [
-			HTMLExternalDocument(self,
-				'indexof_%s.html' % dbclass.config_names[0],
-				'%s Index' % self.type_name(dbclass)
-			)
-			for dbclass in dbclasses
-		]
-		self.first_index = dbclass_docs[0]
-		dbclass_parent = self.object_document(self.database)
-		dbclass_prior = None
-		for (dbclass, dbclass_doc) in zip(dbclasses, dbclass_docs):
-			letter_docs = sorted(self.index_docs[dbclass].itervalues(), key=attrgetter('letter'))
-			if letter_docs:
-				# Replace the URL of the class document with the URL of the
-				# first letter of the index. We can't do this at construction
-				# time or the fake document will supplant the real document
-				# (for the first letter) in the site's structures.
-				dbclass_doc.url = letter_docs[0].url
-				dbclass_doc.first = dbclass_docs[0]
-				dbclass_doc.last = dbclass_docs[-1]
-				dbclass_doc.parent = dbclass_parent
-				dbclass_doc.prior = dbclass_prior
-				dbclass_prior = dbclass_doc
-				letter_prior = None
-				for letter_doc in letter_docs:
-					letter_doc.first = letter_docs[0]
-					letter_doc.last = letter_docs[-1]
-					letter_doc.parent = dbclass_doc
-					letter_doc.prior = letter_prior
-					letter_prior = letter_doc
-
 	def write(self):
 		"""Writes all documents in the site to disk."""
 		logging.info('Writing output to "%s"' % self.base_path)
-		if self.index_docs:
-			self.link_indexes()
 		if self.threads == 1:
 			if self.diagrams:
 				logging.info('Writing documents and graphs')
@@ -964,6 +969,7 @@ class WebSiteDocument(object):
 	def __init__(self, site, url):
 		"""Initializes an instance of the class."""
 		super(WebSiteDocument, self).__init__()
+		self.mimetype = 'application/octet-stream'
 		self.site = site
 		self.url = url
 		self.absolute_url = urlparse.urljoin(self.site.base_url, url)
@@ -1067,6 +1073,7 @@ class ImageDocument(StaticDocument):
 
 	def __init__(self, site, url, content, alt=None):
 		super(ImageDocument, self).__init__(site, url, content, encoding=None)
+		self.mimetype = 'image/png'
 		self.alt = alt
 
 	def link(self, *args, **kwargs):
@@ -1085,6 +1092,7 @@ class StyleDocument(StaticDocument):
 
 	def __init__(self, site, url, content, encoding='UTF-8', media='all'):
 		super(StyleDocument, self).__init__(site, url, content, encoding)
+		self.mimetype = 'text/css'
 		self.media = media
 
 	def link(self, *args, **kwargs):
@@ -1105,6 +1113,7 @@ class ScriptDocument(StaticDocument):
 
 	def __init__(self, site, url, content, encoding='UTF-8'):
 		super(ScriptDocument, self).__init__(site, url, content, encoding)
+		self.mimetype = 'text/javascript'
 
 	def link(self, *args, **kwargs):
 		# Overridden to return a <script> element
@@ -1123,6 +1132,7 @@ class XMLDocument(WebSiteDocument):
 
 	def __init__(self, site, url):
 		super(XMLDocument, self).__init__(site, url)
+		self.mimetype = 'text/xml'
 		self.public_id = None
 		self.system_id = None
 		self.entities = None
@@ -1166,6 +1176,7 @@ class HTMLDocument(XMLDocument):
 
 	def __init__(self, site, url):
 		super(HTMLDocument, self).__init__(site, url)
+		self.mimetype = 'text/html'
 		self.ftsdoc = None
 		self.title = ''
 		self.description = ''
@@ -1564,6 +1575,13 @@ class GraphDocument(WebSiteDocument):
 
 	def __init__(self, site, url, alt=''):
 		super(GraphDocument, self).__init__(site, url)
+		self.mimetype = {
+			'.png': 'image/png',
+			'.gif': 'image/gif',
+			'.svg': 'image/svg+xml',
+			'.ps':  'application/postscript',
+			'.eps': 'application/postscript',
+		}[os.path.splitext(self.filename)[1].lower()]
 		self.alt = alt
 		# PNGs and GIFs use a client-side image-map to define link locations
 		# (SVGs just use embedded links)
