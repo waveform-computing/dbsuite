@@ -280,11 +280,14 @@ else:
 		except:
 			return None
 	def default_console_size():
-		fd = os.open(os.ctermid(), os.O_RDONLY)
 		try:
-			result = query_console_size(fd)
-		finally:
-			os.close(fd)
+			fd = os.open(os.ctermid(), os.O_RDONLY)
+			try:
+				result = query_console_size(fd)
+			finally:
+				os.close(fd)
+		except OSError:
+			result = None
 		if result:
 			return result
 		try:
