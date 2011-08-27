@@ -1,3 +1,8 @@
+# vim: set noet sw=4 ts=4:
+
+import sys
+mswindows = sys.platform == "win32"
+
 import os
 import subprocess
 from dbsuite.compat import *
@@ -48,9 +53,9 @@ def get_instance(name=None):
 			result[var] = value
 		return result
 
-def set_instance(instance)
+def set_instance(instance):
 	"""Restore an instance from an earlier get_instance() call"""
-	for key, value in t.iteritems():
+	for key, value in instance.iteritems():
 		if value is not None:
 			os.environ[key] = value
 		elif key in os.environ:
