@@ -16,6 +16,7 @@ from string import Template
 from time import sleep
 from dbsuite.tokenizer import Token
 from dbsuite.parser import TokenTypes as TT
+from dbsuite.instance import get_instance, set_instance
 from dbsuite.compat import *
 
 # Constants for the SQLScript.state property
@@ -257,34 +258,42 @@ class SQLJob(object):
 
 	def test_connection(self, connection):
 		"""Utility routine for testing database logins prior to script execution."""
-		args = [
-			'-o', # enable output
-			'+p', # disable input prompt
-			'-s', # stop on error
-			'-t'  # use ; as statement terminator
-		]
-		cmdline = 'db2 %s' % ' '.join(args)
-		if mswindows:
-			cmdline = 'db2cmd -i -w -c %s' % cmdline
-		p = subprocess.Popen(
-			[cmdline],
-			shell=True,
-			stdin=subprocess.PIPE,
-			stdout=subprocess.PIPE,
-			stderr=subprocess.STDOUT,
-			close_fds=not mswindows
-		)
-		if connection.username is not None:
-			sql = "CONNECT TO '%s' USER '%s' USING '%s';\n" % (connection.database, connection.username, connection.password)
-		else:
-			sql = "CONNECT TO '%s';\n" % connection.database
-		sql += 'CONNECT RESET;\n'
+		saved_instance = None
+		if connection.instance:
+			saved_instance = get_instance()
+			set_instance(get_instance(connection.instance))
 		try:
-			output = p.communicate(sql)[0]
-		except Exception, e:
-			raise ScriptRuntimeError(str(e))
-		if p.returncode >= 4:
-			raise ScriptRuntimeError(clean_output(output))
+			args = [
+				'-o', # enable output
+				'+p', # disable input prompt
+				'-s', # stop on error
+				'-t'  # use ; as statement terminator
+			]
+			cmdline = 'db2 %s' % ' '.join(args)
+			if mswindows:
+				cmdline = 'db2cmd -i -w -c %s' % cmdline
+			p = subprocess.Popen(
+				[cmdline],
+				shell=True,
+				stdin=subprocess.PIPE,
+				stdout=subprocess.PIPE,
+				stderr=subprocess.STDOUT,
+				close_fds=not mswindows
+			)
+			if connection.username is not None:
+				sql = "CONNECT TO '%s' USER '%s' USING '%s';\n" % (connection.database, connection.username, connection.password)
+			else:
+				sql = "CONNECT TO '%s';\n" % connection.database
+			sql += 'CONNECT RESET;\n'
+			try:
+				output = p.communicate(sql)[0]
+			except Exception, e:
+				raise ScriptRuntimeError(str(e))
+			if p.returncode >= 4:
+				raise ScriptRuntimeError(clean_output(output))
+		finally:
+			if saved_instance:
+				set_instance(saved_instance)
 
 	def test_connections(self, scripts=None):
 		"""Tests the provided connection details against all databases accessed by all scripts"""
@@ -872,37 +881,7 @@ class SQLScript(object):
 			# Strip the statement of all junk tokens. Afterward it should have the
 			# structure ['INSTANCE', instance-name, ';']
 			statement = [t for t in statement if t.type not in (TT.WHITESPACE, TT.COMMENT)]
-			if mswindows:
-				# XXX No idea how to do this on Windows yet
-				raise NotImplementedError
-			else:
-				# Run a shell to source the new instance's DB2 profile
-				cmdline = ' '.join([
-					'. ~%s/sqllib/db2profile' % statement[1].value,
-					'&& echo DB2INSTANCE=$DB2INSTANCE',
-					'&& echo PATH=$PATH',
-					'&& echo CLASSPATH=$CLASSPATH',
-					'&& echo LIBPATH=$LIBPATH',
-					'&& echo SHLIB_PATH=$SHLIB_PATH',
-					'&& echo LD_LIBRARY_PATH=$LD_LIBRARY_PATH',
-					'&& echo LD_LIBRARY_PATH_32=$LD_LIBRARY_PATH_32',
-					'&& echo LD_LIBRARY_PATH_64=$LD_LIBRARY_PATH_64'
-				])
-				p = subprocess.Popen(
-					cmdline,
-					shell=True,
-					stdin=None,
-					stdout=subprocess.PIPE,
-					stderr=subprocess.STDOUT,
-					close_fds=True
-				)
-				output = p.communicate()[0]
-				for line in output.splitlines():
-					var, value = line.split('=', 1)
-					if value:
-						os.environ[var] = value
-					elif var in os.environ:
-						del os.environ[var]
+			set_instance(get_instance(statement[1].value))
 		except Exception, e:
 			logging.error('Statement at line %d of script %s produced the following error:' % (statement[0].line, self.filename))
 			logging.error(str(e))

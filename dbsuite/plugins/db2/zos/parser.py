@@ -6823,7 +6823,7 @@ class DB2ZOSParser(BaseParser):
 		self._parse_finish()
 		return self._output
 
-Connection = namedtuple('Connection', ('database', 'username', 'password'))
+Connection = namedtuple('Connection', ('instance', 'database', 'username', 'password'))
 
 class DB2ZOSScriptParser(DB2ZOSParser):
 	"""Parser which handles the DB2 UDB CLP dialect.
@@ -6840,6 +6840,7 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 		self.produces = []
 		self.consumes = []
 		self.current_user = None
+		self.current_instance = None
 		self.current_connection = None
 
 	def _match_clp_string(self, password=False):
@@ -7278,7 +7279,7 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 				else:
 					self._expect('MODE')
 			(username, password) = self._parse_login(optional=True, allowchange=True)
-			self.current_connection = Connection(database, username, password)
+			self.current_connection = Connection(self.current_instance, database, username, password)
 			self.connections.append(self.current_connection)
 
 	def _parse_create_database_command(self):
@@ -7995,7 +7996,8 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 	def _parse_instance_command(self):
 		"""Parses the custom (non-CLP) INSTANCE command"""
 		# INSTANCE already matched
-		self._expect_clp_string()
+		self.current_instance = self._expect_clp_string()
+		self.current_connection = None
 
 	def _parse_list_active_databases_command(self):
 		"""Parses a LIST ACTIVE DATABASES command"""
