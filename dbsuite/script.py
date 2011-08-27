@@ -354,14 +354,14 @@ class SQLJob(object):
 		if not filemodesok:
 			raise Error('One or more file permission tests failed, aborting execution')
 
-	def execute(self, scripts=None):
+	def execute(self, scripts=None, debug=False):
 		if scripts is None:
 			scripts = self.scripts
 		# Execute the scripts. Break out of the loop if any scripts fail, or once
 		# there are no scripts which have not succeeded
 		while True:
 			for script in [s for s in scripts if s.state == EXECUTABLE]:
-				script.execute()
+				script.execute(debug)
 			if [s for s in scripts if s.state == FAILED]:
 				break
 			if not [s for s in scripts if s.state != SUCCEEDED]:
@@ -554,7 +554,7 @@ class SQLScript(object):
 				return True
 		return False
 
-	def execute(self):
+	def execute(self, debug=False):
 		"""Executes the script in a subprocess tracked by a background thread.
 
 		When this method is called, a new subprocess is created to run the
@@ -577,7 +577,7 @@ class SQLScript(object):
 		self.finished = None
 		self.returncode = None
 		self.output = []
-		t = threading.Thread(target=self._exec_thread, args=())
+		t = threading.Thread(target=self._exec_thread, args=(debug))
 		t.start()
 
 	@property
@@ -596,15 +596,18 @@ class SQLScript(object):
 		else:
 			return FAILED
 
-	def _exec_thread(self):
+	def _exec_thread(self, debug=False):
 		"""Target method for the background thread tracking the subprocess.
 
 		This method is used by the execute method as the body of the thread
 		that starts, communicates and tracks the subprocess executing the
 		script. See the execute method for more details.
 		"""
+		cmdline = [sys.argv[0], '--exec-internal'] # execute ourselves in script mode
+		if debug:
+			cmdline.append('-D')
 		p = subprocess.Popen(
-			[sys.argv[0], '--exec-internal'], # execute ourselves in script mode
+			cmdline,
 			shell=False,
 			stdin=subprocess.PIPE,
 			stdout=subprocess.PIPE,
@@ -674,6 +677,7 @@ class SQLScript(object):
 		position = 0
 		while position < len(statements):
 			statement = statements[position]
+			position += 1
 			# Log the statement that will run. Hide any passwords or statement
 			# terminators, and compress all whitespace, just as the DB2 CLP
 			# usually does
@@ -689,7 +693,6 @@ class SQLScript(object):
 				rc, state = self._exec_instance_statement(statement)
 			else:
 				rc, state = self._exec_statement(statement)
-			position += 1
 			# Check the dictionary of ON states for a match
 			on_state = None
 			if state and (state in self._on_states):

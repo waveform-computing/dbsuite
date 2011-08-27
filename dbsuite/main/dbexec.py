@@ -75,6 +75,11 @@ class ExecSqlUtility(dbsuite.main.Utility):
 			while log.handlers:
 				log.removeHandler(log.handlers[-1])
 			log.addHandler(ListHandler())
+			if options.debug:
+				console = logging.StreamHandler(sys.stderr)
+				console.setFormatter(logging.Formatter('%(message)s'))
+				console.setLevel(logging.DEBUG)
+				log.addHandler(console)
 			try:
 				# Then reconstruct the pickled SQLScript that's been passed on stdin
 				# and run its exec_internal method
@@ -110,7 +115,7 @@ class ExecSqlUtility(dbsuite.main.Utility):
 			if options.test == 0:
 				job.test_connections()
 				job.test_permissions()
-				job.execute()
+				job.execute(debug=options.debug)
 			else:
 				if options.test > 2:
 					job.test_connections()
