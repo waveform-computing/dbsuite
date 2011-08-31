@@ -577,7 +577,7 @@ class SQLScript(object):
 		self.finished = None
 		self.returncode = None
 		self.output = []
-		t = threading.Thread(target=self._exec_thread, args=(debug))
+		t = threading.Thread(target=self._exec_thread, args=(debug,))
 		t.start()
 
 	@property
