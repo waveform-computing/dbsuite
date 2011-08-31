@@ -605,7 +605,9 @@ class SQLScript(object):
 		"""
 		cmdline = [sys.argv[0], '--exec-internal'] # execute ourselves in script mode
 		if debug:
-			cmdline.append('-D')
+			# Can't use the "normal" -D debug flag here as pdb's output screws
+			# up the pickle output
+			cmdline.append('--debug-internal')
 		p = subprocess.Popen(
 			cmdline,
 			shell=False,
@@ -624,15 +626,12 @@ class SQLScript(object):
 				# An exception is fatal, no retries allowed
 				self.retrylimit = 0
 			else:
-				# The subprocess will send back a pickled array of LogRecord
-				# objects on its stdout which we now unpickle
-				self.output = pickle.loads(output)
+				self.returncode = p.returncode
 				# Use the global output lock to prevent overlapping output in
 				# case of simultaneous script completions
 				output_lock.acquire()
 				try:
 					# Check the return code
-					self.returncode = p.returncode
 					if self.returncode >= 4:
 						self.retrylimit -= 1
 						if self.retrylimit > 0:
@@ -642,10 +641,18 @@ class SQLScript(object):
 					else:
 						logging.info('Script %s completed successfully with return code %d' % (self.filename, self.returncode))
 					logging.info('Script %s output' % self.filename)
-					# Pass the LogRecords sent by the subprocess thru to the
-					# root logger
-					for rec in self.output:
-						logging.getLogger().handle(rec)
+					# The subprocess will send back a pickled array of
+					# LogRecord objects on its stdout which we now unpickle
+					try:
+						self.output = pickle.loads(output)
+					except pickle.UnpicklingError:
+						logging.error('Failed to retrieve output of script %s' % self.filename)
+						self.output = []
+					else:
+						# Pass the LogRecords sent by the subprocess thru to the
+						# root logger
+						for rec in self.output:
+							logging.getLogger().handle(rec)
 				finally:
 					output_lock.release()
 		finally:

@@ -47,7 +47,8 @@ class ExecSqlUtility(dbsuite.main.Utility):
 			retry=1,
 			stoponerror=False,
 			terminator=';',
-			execinternal=False
+			execinternal=False,
+			debuginternal=False
 		)
 		self.parser.add_option('-t', '--terminator', dest='terminator',
 			help="""specify the statement terminator (default=';')""")
@@ -65,6 +66,8 @@ class ExecSqlUtility(dbsuite.main.Utility):
 			help="""if a script encounters an error stop it immediately""")
 		self.parser.add_option("--exec-internal", dest="execinternal", action="store_true",
 			help=optparse.SUPPRESS_HELP)
+		self.parser.add_option("--debug-internal", dest="debuginternal", action="store_true",
+			help=optparse.SUPPRESS_HELP)
 
 	def main(self, options, args):
 		super(ExecSqlUtility, self).main(options, args)
@@ -75,7 +78,7 @@ class ExecSqlUtility(dbsuite.main.Utility):
 			while log.handlers:
 				log.removeHandler(log.handlers[-1])
 			log.addHandler(ListHandler())
-			if options.debug:
+			if options.debuginternal:
 				console = logging.StreamHandler(sys.stderr)
 				console.setFormatter(logging.Formatter('%(message)s'))
 				console.setLevel(logging.DEBUG)
