@@ -2054,16 +2054,25 @@ class DB2ZOSParser(BaseParser):
 		"""Parses a column-alteration in an ALTER TABLE statement"""
 		self._expect(TT.IDENTIFIER)
 		if self._match('DROP'):
-			self._expect_one_of([
-				'IDENTITY',
-				'DEFAULT',
-				'EXPRESSION'
-			])
+			if self._match('NOT'):
+				self._expect('NULL')
+			elif self._match('COLUMN'):
+				self._expect('SECURITY')
+			else:
+				self._expect_one_of([
+					'NOT',
+					'COLUMN',
+					'IDENTITY',
+					'DEFAULT',
+					'EXPRESSION'
+				])
 		elif self._match('COMPRESS'):
 			if self._match('SYSTEM'):
 				self._expect('DEFAULT')
 			else:
 				self._expect('OFF')
+		elif self._match('SECURED'):
+			self._expect_sequence(['WITH', TT.IDENTIFIER])
 		else:
 			# Ambiguity: SET can introduce several different alterations
 			self._save_state()
@@ -2093,6 +2102,8 @@ class DB2ZOSParser(BaseParser):
 						self._expect(')')
 					else:
 						self._expected_one_of(['IDENTITY', '('])
+				elif self._match('NOT'):
+					self._expect('NULL')
 				else:
 					raise ParseBacktrack()
 			except ParseBacktrack:
@@ -3269,6 +3280,9 @@ class DB2ZOSParser(BaseParser):
 						self._parse_column_alteration()
 					else:
 						self._forget_state()
+			elif self._match('RENAME'):
+				self._match('COLUMN')
+				self._expect_sequence([TT.IDENTIFIER, 'TO', TT.IDENTIFIER])
 			elif self._match('DROP'):
 				if self._match('PRIMARY'):
 					self._expect('KEY')
