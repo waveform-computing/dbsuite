@@ -1,5 +1,6 @@
 # vim: set noet sw=4 ts=4:
 
+import os
 import sys
 import logging
 import dbsuite.script
@@ -95,9 +96,9 @@ class ExecSqlUtility(dbsuite.main.Utility):
 				return returncode
 		else:
 			# This is a normal dbexec run
-			config = {}
+			config = os.environ.copy()
 			if options.config:
-				config = self.process_config(options.config)
+				config.update(self.process_config(options.config))
 			done_stdin = False
 			sql_files = []
 			for sql_file in args:
