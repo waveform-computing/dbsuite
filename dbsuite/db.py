@@ -771,21 +771,29 @@ class Database(DatabaseObject):
 				self.tablespaces.get(parts[0],
 				None))
 		elif len(parts) == 2:
-			schema = self.schemas[parts[0]]
-			return schema.relations.get(parts[1],
-				schema.indexes.get(parts[1],
-				schema.routines.get(parts[1],
-				None)))
-		elif len(parts) == 3:
-			relation = self.schemas[parts[0]].relations[parts[1]]
-			if isinstance(relation, Alias):
-				relation = relation.final_relation
-			if isinstance(relation, Table):
-				return relation.fields.get(parts[2],
-					relation.constraints.get(parts[2],
-					None))
+			try:
+				schema = self.schemas[parts[0]]
+			except KeyError:
+				return None
 			else:
-				return relation.fields.get(parts[2], None)
+				return schema.relations.get(parts[1],
+					schema.indexes.get(parts[1],
+					schema.routines.get(parts[1],
+					None)))
+		elif len(parts) == 3:
+			try:
+				relation = self.schemas[parts[0]].relations[parts[1]]
+			except KeyError:
+				return None
+			else:
+				if isinstance(relation, Alias):
+					relation = relation.final_relation
+				if isinstance(relation, Table):
+					return relation.fields.get(parts[2],
+						relation.constraints.get(parts[2],
+						None))
+				else:
+					return relation.fields.get(parts[2], None)
 		else:
 			return None
 
