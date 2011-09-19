@@ -315,6 +315,9 @@ class BaseTokenizer(object):
 	sql_comments   If True (the default), SQL style comments (--..EOL) will be
 	               recognized.
 	c_comments     If True, C style comments (/*..*/) will be recognized.
+	c_comments_nested If True, C stytle comments (/*..*/) are allowed to be
+	               nested - this is in accordance with SQL 2003 but is not
+	               widely implemented.
 	cpp_comments   If True, C++ style comments (//..EOL) will be recognized.
 	multiline_str  If True (the default), string literals will be permitted to
 	               span lines.
@@ -329,6 +332,7 @@ class BaseTokenizer(object):
 		self.space_chars = ' \t\r\n'
 		self.sql_comments = True
 		self.c_comments = False
+		self.c_comments_nested = False
 		self.cpp_comments = False
 		self.multiline_str = True
 		self.raise_errors = True
@@ -871,14 +875,22 @@ class BaseTokenizer(object):
 			self._next()
 			self._mark()
 			try:
+				nest_count = 0
 				while True:
 					if self._char == '\0':
 						raise ValueError('Unterminated comment starting on line %d' % self._token_line)
-					elif (self._char == '*') and (self._peek() == '/'):
-						content = self._marked_chars
+					elif (self._char == '/') and (self._peek() == '*') and self.c_comments_nested:
 						self._next(2)
-						self._add_token(TT.COMMENT, content)
-						break
+						nest_count += 1
+					elif (self._char == '*') and (self._peek() == '/'):
+						if self.c_comments_nested and nest_count > 0:
+							self._next(2)
+							nest_count -= 1
+						else:
+							content = self._marked_chars
+							self._next(2)
+							self._add_token(TT.COMMENT, content)
+							break
 					else:
 						self._next()
 			except ValueError, e:

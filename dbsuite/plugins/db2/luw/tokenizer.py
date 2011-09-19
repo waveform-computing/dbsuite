@@ -77,6 +77,10 @@ class DB2LUWTokenizer(DB2ZOSTokenizer):
 		self.ident_chars = set(db2luw_identchars)
 		# Support for C-style /*..*/ comments add in DB2 v8 FP9
 		self.c_comments = True
+		# DB2 supports nested /*..*/ comments in accordance with SQL 2003
+		# (although almost everyone else seems to have ignored this - probably
+		# sensibly)
+		self.c_comments_nested = True
 
 	def _handle_ident(self):
 		super(DB2LUWTokenizer, self)._handle_ident()
