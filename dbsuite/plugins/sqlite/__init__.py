@@ -108,46 +108,6 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 		"""
 		for row in super(InputPlugin, self).get_datatypes():
 			yield row
-		cursor = self.connection.cursor()
-		cursor.execute("""
-			SELECT
-				nst.nspname                         AS typeschema,
-				typ.typname                         AS typename,
-				own.rolname                         AS owner,
-				CASE typ.typtype
-					WHEN 'b' THEN true
-					ELSE false
-				END                                 AS system,
-				CAST(NULL AS TIMESTAMP)             AS created,
-				obj_description(typ.oid, 'pg_type') AS description,
-				false                               AS variable_size,
-				false                               AS variable_scale,
-				CASE typ.typtype
-					WHEN 'd' THEN nsb.nspname
-				END                                 AS sourceschema,
-				CASE typ.typtype
-					WHEN 'd' THEN bas.typname
-				END                                 AS sourcename,
-				CAST(NULL AS INTEGER)               AS size,
-				CAST(NULL AS INTEGER)               AS scale
-			FROM
-				pg_catalog.pg_type typ
-				INNER JOIN pg_catalog.pg_namespace nst
-					ON typ.typnamespace = nst.oid
-				INNER JOIN pg_catalog.pg_authid own
-					ON typ.typowner = own.oid
-				LEFT OUTER JOIN pg_catalog.pg_type bas
-					ON typ.typbasetype = bas.oid
-				LEFT OUTER JOIN pg_catalog.pg_namespace nsb
-					ON bas.typnamespace = nsb.oid
-			WHERE
-				typ.typtype IN ('b', 'd', 'e')
-				AND typ.typelem = 0
-				AND typ.typisdefined
-				AND NOT pg_is_other_temp_schema(nst.oid)
-		""")
-		for row in self.fetch_some(cursor):
-			yield Datatype(*row)
 
 	def get_tables(self):
 		"""Retrieves the details of tables stored in the database.
@@ -174,40 +134,20 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				nsp.nspname                                 AS tabschema,
-				cls.relname                                 AS tabname,
-				own.rolname                                 AS owner,
-				CASE
-					WHEN nsp.nspname LIKE 'pg_%' THEN true
-					WHEN nsp.nspname = 'information_schema' THEN true
-					ELSE false
-				END                                         AS system,
-				CAST(NULL AS TIMESTAMP)                     AS created,
-				obj_description(cls.oid, 'pg_class')        AS description,
-				CASE cls.reltablespace
-					WHEN 0 THEN dbs.spcname
-					ELSE tbs.spcname
-				END                                         AS tbspace,
-				CAST(NULL AS TIMESTAMP)                     AS laststats,
-				CAST(cls.reltuples AS BIGINT)               AS cardinality,
-				pg_relation_size(cls.oid)                   AS size
+				''    AS tabschema,
+				name  AS tabname,
+				NULL  AS owner,
+				0     AS system,
+				NULL  AS created,
+				NULL  AS description,
+				''    AS tbspace,
+				NULL  AS last_stats,
+				NULL  AS cardinality,
+				NULL  AS size
 			FROM
-				pg_catalog.pg_class cls
-				INNER JOIN pg_catalog.pg_namespace nsp
-					ON cls.relnamespace = nsp.oid
-				INNER JOIN pg_catalog.pg_authid own
-					ON cls.relowner = own.oid
-				LEFT OUTER JOIN pg_catalog.pg_tablespace tbs
-					ON cls.reltablespace = tbs.oid
-					AND cls.reltablespace <> 0
-				INNER JOIN pg_catalog.pg_database db
-					ON db.datname = current_database()
-				INNER JOIN pg_catalog.pg_tablespace dbs
-					ON db.dattablespace = dbs.oid
+				sqlite_master
 			WHERE
-				NOT cls.relistemp
-				AND cls.relkind = 'r'
-				AND NOT pg_is_other_temp_schema(nsp.oid)
+				type = 'table'
 		""")
 		for row in self.fetch_some(cursor):
 			yield Table(*row)
@@ -235,66 +175,21 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				nsp.nspname                          AS viewschema,
-				cls.relname                          AS viewname,
-				own.rolname                          AS owner,
-				CASE
-					WHEN nsp.nspname LIKE 'pg_%' THEN true
-					WHEN nsp.nspname = 'information_schema' THEN true
-					ELSE false
-				END                                  AS system,
-				CAST(NULL AS TIMESTAMP)              AS created,
-				obj_description(cls.oid, 'pg_class') AS description,
-				CASE
-					WHEN rul.ev_class IS NULL THEN true
-					ELSE false
-				END                                  AS readonly,
-				pg_get_viewdef(cls.oid, true)        AS sql
+				''    AS viewschema,
+				name  AS viewname,
+				NULL  AS owner,
+				0     AS system,
+				NULL  AS created,
+				NULL  AS description,
+				1     AS readonly,
+				sql   AS sql
 			FROM
-				pg_catalog.pg_class cls
-				INNER JOIN pg_catalog.pg_namespace nsp
-					ON cls.relnamespace = nsp.oid
-				INNER JOIN pg_catalog.pg_authid own
-					ON cls.relowner = own.oid
-				LEFT OUTER JOIN (
-					SELECT DISTINCT
-						ev_class
-					FROM
-						pg_catalog.pg_rewrite rul
-					WHERE
-						ev_type <> '1'
-						AND ev_enabled <> 'D'
-				) AS rul
-					ON cls.oid = rul.ev_class
+				sqlite_master
 			WHERE
-				NOT relistemp
-				AND relkind = 'v'
-				AND NOT pg_is_other_temp_schema(nsp.oid)
+				type = 'view'
 		""")
 		for row in self.fetch_some(cursor):
 			yield View(*row)
-
-	def get_aliases(self):
-		"""Retrieves the details of aliases stored in the database.
-
-		Override this function to return a list of Alias tuples containing
-		details of the aliases (also known as synonyms in some systems) defined
-		in the database (including system aliases). Alias tuples contain the
-		following named fields:
-
-		schema        -- The schema of the alias
-		name          -- The name of the alias
-		owner*        -- The name of the user who owns the alias
-		system        -- True if the alias is system maintained (bool)
-		created*      -- When the alias was created (datetime)
-		description*  -- Descriptive text
-		base_schema   -- The schema of the target relation
-		base_table    -- The name of the target relation
-
-		* Optional (can be None)
-		"""
-		for row in  super(InputPlugin, self).get_aliases():
-			yield row
 
 	def get_view_dependencies(self):
 		"""Retrieves the details of view dependencies.
@@ -311,39 +206,8 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 		"""
 		for row in super(InputPlugin, self).get_view_dependencies():
 			yield row
-		cursor = self.connection.cursor()
-		cursor.execute("""
-			SELECT DISTINCT
-				nv.nspname   AS viewschema,
-				v.relname    AS viewname,
-				nt.nspname   AS depschema,
-				t.relname    AS depname
-			FROM
-				pg_class v
-				INNER JOIN pg_namespace nv
-					ON v.relnamespace = nv.oid
-				INNER JOIN pg_class t
-					ON t.oid = dt.refobjid
-				INNER JOIN pg_namespace nt
-					ON nt.oid = t.relnamespace
-				INNER JOIN pg_depend dv
-					ON dv.refobjid = v.oid
-					AND dv.deptype = 'i'
-					AND dv.classid = 'pg_catalog.pg_rewrite'::regclass::oid
-					AND dv.refclassid = 'pg_catalog.pg_class'::regclass::oid
-				INNER JOIN pg_depend dt
-					ON dt.objid = dv.objid
-					AND dt.refobjid <> dv.refobjid
-					AND dt.classid = 'pg_catalog.pg_rewrite'::regclass::oid
-					AND dt.refclassid = 'pg_catalog.pg_class'::regclass::oid
-			WHERE
-				v.relkind = 'v'
-				AND t.relkind IN ('r', 'v')
-				AND NOT pg_is_other_temp_schema(nv.oid)
-				AND NOT pg_is_other_temp_schema(nt.oid)
-		""")
-		for row in self.fetch_some(cursor):
-			yield RelationDep(*row)
+		# XXX Use the parser to deconstruct the view SQL and determine the
+		# dependencies
 
 	def get_indexes(self):
 		"""Retrieves the details of indexes stored in the database.
@@ -373,39 +237,26 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				nsp.nspname                                  AS indschema,
-				cls.relname                                  AS indname,
-				own.rolname                                  AS owner,
+				''       AS indschema,
+				name     AS indname,
+				NULL     AS owner,
+				0        AS system,
+				NULL     AS created,
+				NULL     AS description,
+				''       AS tabschema,
+				tbl_name AS tabname,
+				NULL     AS laststats,
+				NULL     AS cardinality,
+				NULL     AS size,
 				CASE
-					WHEN nsp.nspname LIKE 'pg_%' THEN true
-					WHEN nsp.nspname = 'information_schema' THEN true
-					ELSE false
-				END                                          AS system,
-				CAST(NULL AS TIMESTAMP)                      AS created,
-				obj_description(cls.oid, 'pg_class')         AS description,
-				tns.nspname                                  AS tabschema,
-				tcl.relname                                  AS tabname,
-				CAST(NULL AS TIMESTAMP)                      AS laststats,
-				CAST(cls.reltuples AS BIGINT)                AS cardinality,
-				pg_relation_size(cls.oid)                    AS size,
-				ind.indisunique                              AS unique
+					WHEN sql IS NULL THEN 1
+					WHEN sql LIKE '% unique %' THEN 1
+					ELSE 0
+				END      AS unique
 			FROM
-				pg_catalog.pg_class cls
-				INNER JOIN pg_catalog.pg_namespace nsp
-					ON cls.relnamespace = nsp.oid
-				INNER JOIN pg_catalog.pg_authid own
-					ON cls.relowner = own.oid
-				INNER JOIN pg_catalog.pg_index ind
-					ON cls.oid = ind.indexrelid
-				INNER JOIN pg_catalog.pg_class tcl
-					ON ind.indrelid = tcl.oid
-				INNER JOIN pg_catalog.pg_namespace tns
-					ON tcl.relnamespace = tns.oid
+				sqlite_master
 			WHERE
-				cls.relkind = 'i'
-				AND ind.indisvalid
-				AND ind.indisready
-				AND NOT pg_is_other_temp_schema(tns.oid)
+				type = 'index'
 		""")
 		for row in self.fetch_some(cursor):
 			yield Index(*row)

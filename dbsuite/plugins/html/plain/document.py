@@ -59,8 +59,8 @@ class PlainElementFactory(HTMLElementFactory):
 		except:
 			pass
 		else:
-			for tr in thead.findall('tr'):
-				if 'id' in table.attrib:
+			if 'id' in table.attrib:
+				for tr in thead.findall('tr'):
 					for index, th in enumerate(tr.findall('th')):
 						classes = th.attrib.get('class', '').split()
 						if 'nosort' in classes:
