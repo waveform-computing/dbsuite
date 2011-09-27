@@ -8,8 +8,12 @@ functions for relational databases (primarily DB2, but in the process of being
 expanded to other databases). The applications are modular including an
 extensible plugin framework for supporting new sources and output formats."""
 
-import ez_setup
-ez_setup.use_setuptools() # install setuptools if it isn't already installed
+try:
+	from setuptools import setup, find_packages
+except ImportError:
+	from ez_setup import use_setuptools
+	use_setuptools()
+	from setuptools import setup, find_packages
 
 classifiers = [
 	'Development Status :: 5 - Production/Stable',
@@ -47,7 +51,6 @@ def get_console_scripts():
 		print re.match(r'^([^= ]*) ?=.*$', s).group(1)
 
 def main():
-	from setuptools import setup, find_packages
 	from dbsuite.main import __version__
 	setup(
 		name                 = 'dbsuite',
@@ -57,7 +60,8 @@ def main():
 		author               = 'Dave Hughes',
 		author_email         = 'dave@waveform.org.uk',
 		url                  = 'http://www.waveform.org.uk/trac/db2makedoc/',
-		packages             = find_packages(),
+		packages             = find_packages(exclude=['ez_setup']),
+		install_requires     = ['Pillow', 'ibm-db'],
 		include_package_data = True,
 		platforms            = 'ALL',
 		zip_safe             = False,
