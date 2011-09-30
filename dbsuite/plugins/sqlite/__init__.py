@@ -283,37 +283,11 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 		for row in super(InputPlugin, self).get_index_cols():
 			yield row
 		cursor = self.connection.cursor()
-		cursor.execute("""
-			SELECT
-				nsp.nspname         AS indschema,
-				cls.relname         AS indname,
-				att.attname         AS colname,
-				CASE ind.indoption[att.attnum - 1]
-					WHEN 3 THEN 'D'
-					ELSE 'A'
-				END                 AS colorder
-			FROM
-				pg_catalog.pg_class cls
-				INNER JOIN pg_catalog.pg_namespace nsp
-					ON cls.relnamespace = nsp.oid
-				INNER JOIN pg_catalog.pg_attribute att
-					ON cls.oid = att.attrelid
-				INNER JOIN pg_catalog.pg_index ind
-					ON cls.oid = ind.indexrelid
-				INNER JOIN pg_catalog.pg_class tcl
-					ON ind.indrelid = tcl.oid
-			WHERE
-				cls.relkind = 'i'
-				AND ind.indisvalid
-				AND ind.indisready
-				AND NOT pg_is_other_temp_schema(tcl.relnamespace)
-			ORDER BY
-				nsp.nspname,
-				cls.relname,
-				att.attnum
-		""")
-		for row in self.fetch_some(cursor):
-			yield IndexCol(*row)
+		for index in self.indexes:
+			cursor.execute("PRAGMA index_info(?)", index.name)
+			cols = sorted(cursor.fetchall(), itemgetter(0))
+			for col in cols:
+				yield IndexCol(index.schema.name, index.name, col[2], 'A')
 
 	def get_relation_cols(self):
 		"""Retrieves the list of columns belonging to relations.
@@ -356,74 +330,30 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 		"""
 		for row in super(InputPlugin, self).get_relation_cols():
 			yield row
+		type_re = re.compile('(?P=<type>[^(]*)(?:\((?P=<size>[0-9]*)(?:,(?P=<scale>[0-9]*))?\))?')
 		cursor = self.connection.cursor()
-		cursor.execute("""
-			SELECT
-				nsp.nspname                          AS tabschema,
-				cls.relname                          AS tabname,
-				att.attname                          AS colname,
-				tns.nspname                          AS typeschema,
-				typ.typname                          AS typename,
-				CASE att.atttypid
-					WHEN 1042 THEN att.atttypmod - 4 /* char */
-					WHEN 1043 THEN att.atttypmod - 4 /* varchar */
-					WHEN 1560 THEN att.atttypmod     /* bit */
-					WHEN 1562 THEN att.atttypmod     /* varbit */
-					WHEN 21   THEN 2                 /* int2 */
-					WHEN 23   THEN 4                 /* int4 */
-					WHEN 20   THEN 8                 /* int8 */
-					WHEN 1700 THEN ((NULLIF(att.atttypmod, -1) - 4) >> 16) & 65535 /* numeric */
-					WHEN 700  THEN 4                 /* float4 */
-					WHEN 701  THEN 8                 /* float8 */
-				END                                  AS size,
-				CASE att.atttypid
-					WHEN 1700 THEN (NULLIF(att.atttypmod, -1) - 4) & 65535
-				END                                  AS scale,
-				CASE att.atttypid
-					WHEN 1042 THEN pg_encoding_to_char(db.encoding)
-					WHEN 1043 THEN pg_encoding_to_char(db.encoding)
-				END                                  AS codepage,
-				false                                AS identity,
-				not att.attnotnull                   AS nullable,
-				CASE
-					WHEN stt.n_distinct > 0 THEN stt.n_distinct
-					WHEN stt.n_distinct < 0 THEN -stt.n_distinct * cls.reltuples
-				END                                  AS cardinality,
-				stt.null_frac * cls.reltuples        AS nullcard,
-				'N'                                  AS generated,
-				pg_get_expr(def.adbin, cls.oid)      AS default,
-				col_description(cls.oid, att.attnum) AS description
-			FROM
-				pg_catalog.pg_attribute att
-				INNER JOIN pg_catalog.pg_class cls
-					ON att.attrelid = cls.oid
-				INNER JOIN pg_catalog.pg_namespace nsp
-					ON nsp.oid = cls.relnamespace
-				INNER JOIN pg_catalog.pg_type typ
-					ON att.atttypid = typ.oid
-				INNER JOIN pg_catalog.pg_namespace tns
-					ON typ.typnamespace = tns.oid
-				LEFT OUTER JOIN pg_catalog.pg_attrdef def
-					ON att.attrelid = def.adrelid
-					AND att.attnum = def.adnum
-				INNER JOIN pg_catalog.pg_stats stt
-					ON nsp.nspname = stt.schemaname
-					AND cls.relname = stt.tablename
-					AND att.attname = stt.attname
-				INNER JOIN pg_catalog.pg_database db
-					ON db.datname = current_database()
-			WHERE
-				NOT att.attisdropped
-				AND att.attnum > 0
-				AND cls.relkind IN ('r', 'v')
-				AND NOT pg_is_other_temp_schema(nsp.oid)
-			ORDER BY
-				nsp.nspname,
-				cls.relname,
-				att.attnum
-		""")
-		for row in self.fetch_some(cursor):
-			yield RelationCol(*row)
+		for relation in self.relations:
+			cursor.execute("PRAGMA table_info(?)", relation.name)
+			cols = sorted(cursor.fetchall(), itemgetter(0))
+			for col in cols:
+				type_match = type_re.match(col[2])
+				yield RelationCol(
+					relation.schema.name,
+					relation.name,
+					col[1],
+					'',
+					type_match.group('type')
+					int(type_match.group('size')) if type_match.group('size') else None,
+					int(type_match.group('scale')) if type_match.group('scale') else None,
+					None,
+					False,
+					not col[3],
+					None,
+					None,
+					'N',
+					col[4],
+					None
+				)
 
 	def get_unique_keys(self):
 		"""Retrieves the details of unique keys stored in the database.
