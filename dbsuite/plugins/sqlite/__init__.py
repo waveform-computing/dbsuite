@@ -34,10 +34,10 @@ def connect(database=None):
 
 
 class InputPlugin(dbsuite.plugins.InputPlugin):
-	"""Input plugin for PostgreSQL.
+	"""Input plugin for SQLite.
 
 	This input plugin supports extracting documentation information from
-	PostgreSQL databases.
+	SQLite databases.
 	"""
 
 	def __init__(self):
@@ -342,7 +342,7 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 					relation.name,
 					col[1],
 					'',
-					type_match.group('type')
+					type_match.group('type'),
 					int(type_match.group('size')) if type_match.group('size') else None,
 					int(type_match.group('scale')) if type_match.group('scale') else None,
 					None,
