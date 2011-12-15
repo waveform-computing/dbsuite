@@ -2680,6 +2680,7 @@ class DB2ZOSParser(BaseParser):
 						'EXECUTE',
 						'OBJMAINT',
 						'SECMAINT',
+						'SYSADMIN',
 						'VALIDATE'
 					]).value == 'EXECUTE':
 						if self._match_one_of(['WITH', 'WITHOUT']):
@@ -10054,10 +10055,13 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 					self._parse_update_contactgroup_command()
 				elif self._match_one_of(['DATABASE', 'DB']):
 					if self._match('MANAGER'):
+						self._expect_one_of(['CONFIGURATION', 'CONFIG', 'CFG'])
 						self._parse_update_dbm_cfg_command()
 					else:
+						self._expect_one_of(['CONFIGURATION', 'CONFIG', 'CFG'])
 						self._parse_update_db_cfg_command()
 				elif self._match('DBM'):
+					self._expect_one_of(['CONFIGURATION', 'CONFIG', 'CFG'])
 					self._parse_update_dbm_cfg_command()
 				elif (
 						self._match_sequence(['HEALTH', 'NOTIFICATION', 'CONTACT', 'LIST'])
