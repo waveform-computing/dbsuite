@@ -2246,7 +2246,9 @@ class DB2ZOSParser(BaseParser):
 				self._expect_one_of(['ALL', 'READ', 'WRITE'])
 				self._expect('ACCESS')
 		elif grant:
-			self._match_sequence(['WITH', 'GRANT', 'OPTION'])
+			if self._match('WITH'):
+				self._expect_one_of(['GRANT', 'ADMIN'])
+				self._expect('OPTION')
 		else:
 			self._match_sequence(['BY', 'ALL'])
 			self._match('RESTRICT')
