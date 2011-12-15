@@ -3743,7 +3743,18 @@ class DB2ZOSParser(BaseParser):
 		self._parse_subschema_name()
 		if self._match('(', prespace=False):
 			if not self._match(')'):
-				self._parse_expression_list()
+				while True:
+					# Try and parse an optional parameter name
+					self._save_state()
+					try:
+						self._expect(TT.IDENTIFIER)
+						self._expect('=>')
+					except ParseError:
+						self._restore_state()
+					# Parse the parameter value
+					self._parse_expression()
+					if not self._match(','):
+						break
 				self._expect(')')
 
 	def _parse_case_statement(self):
@@ -6616,6 +6627,8 @@ class DB2ZOSParser(BaseParser):
 			self._parse_audit_statement()
 		elif self._match('BEGIN'):
 			self._parse_compiled_compound_statement()
+		elif self._match('CALL'):
+			self._parse_call_statement()
 		elif self._match_sequence(['COMMENT', 'ON']):
 			self._parse_comment_statement()
 		elif self._match('COMMIT'):

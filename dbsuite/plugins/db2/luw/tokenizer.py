@@ -102,6 +102,15 @@ class DB2LUWTokenizer(DB2ZOSTokenizer):
 		else:
 			super(DB2LUWTokenizer, self)._handle_period()
 
+	def _handle_equal(self):
+		"""Parses equality characters ("=") in the source."""
+		# Override the base method to handle DB2 LUW's parameter name operator (=>)
+		if self._peek() == '>':
+			self._add_token(TT.OPERATOR, '=>')
+			self._next(2)
+		else:
+			super(DB2LUWTokenizer, self)._handle_equal()
+
 	def _handle_open_bracket(self):
 		self._next()
 		self._add_token(TT.OPERATOR, '[')

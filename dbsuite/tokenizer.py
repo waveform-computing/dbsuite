@@ -541,19 +541,19 @@ class BaseTokenizer(object):
 		"""
 		while count > 0:
 			count -= 1
-			if self._source[self._index] == '\r':
-				if self._source[self._index + 1] == '\n':
-					self._index += 2
+			if self._index < len(self._source):
+				if self._source[self._index] == '\r':
+					self._index += 1
+					if self._index < len(self._source) and self._source[self._index] == '\n':
+						self._index += 1
+					self._line += 1
+					self._line_start = self._index
+				elif self._source[self._index] == '\n':
+					self._index += 1
+					self._line += 1
+					self._line_start = self._index
 				else:
 					self._index += 1
-				self._line += 1
-				self._line_start = self._index
-			elif self._source[self._index] == '\n':
-				self._index += 1
-				self._line += 1
-				self._line_start = self._index
-			else:
-				self._index += 1
 
 	@property
 	def _char(self):
@@ -815,7 +815,8 @@ class BaseTokenizer(object):
 			self._mark()
 			while not self._char in '\0\n': self._next()
 			content = self._marked_chars
-			self._next()
+			if self._char != '\0':
+				self._next()
 			self._add_token(TT.COMMENT, content)
 		else:
 			self._add_token(TT.OPERATOR, '-')
