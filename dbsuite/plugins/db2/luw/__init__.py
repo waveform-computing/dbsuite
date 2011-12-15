@@ -302,7 +302,7 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 					ON T.TBSPACEID = TS.TBSPACEID
 			WHERE
 				T.TYPE IN ('T', 'N')
-				AND T.STATUS <> 'X'
+				AND T.STATUS = 'N'
 			WITH UR""" % self.query_subst)
 		for (
 				schema,
@@ -367,7 +367,7 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 					AND T.TABNAME = V.VIEWNAME
 					AND T.TYPE = 'V'
 			WHERE
-				V.VALID <> 'X'
+				V.VALID = 'Y'
 			WITH UR""" % self.query_subst)
 		for (
 				schema,
@@ -429,7 +429,7 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 					AND T.TABNAME = TABLE_NAME(A.TABNAME, A.TABSCHEMA)
 			WHERE
 				A.TYPE = 'A'
-				AND T.STATUS <> 'X'
+				AND T.STATUS = 'N'
 			WITH UR""" % self.query_subst)
 		for (
 				schema,
@@ -482,7 +482,7 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 			WHERE
 				T.DTYPE = 'V'
 				AND T.BTYPE IN ('A', 'N', 'T', 'V')
-				AND V.VALID <> 'X'
+				AND V.VALID = 'Y'
 			WITH UR""" % self.query_subst)
 		for (
 				schema,
@@ -552,7 +552,7 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 				LEFT OUTER JOIN %(schema)s.TABLESPACES TS
 					ON I.TBSPACEID = TS.TBSPACEID
 			WHERE
-				T.STATUS <> 'X'
+				T.STATUS = 'N'
 			WITH UR""" % self.query_subst)
 		for (
 				schema,
@@ -622,7 +622,7 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 					ON I.TABSCHEMA = T.TABSCHEMA
 					AND I.TABNAME = T.TABNAME
 			WHERE
-				T.STATUS <> 'X'
+				T.STATUS = 'N'
 			ORDER BY
 				IC.INDSCHEMA,
 				IC.INDNAME,
@@ -719,7 +719,7 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 			WHERE
 				C.HIDDEN <> 'S'
 				AND T.TYPE IN ('A', 'N', 'T', 'V')
-				AND T.STATUS <> 'X'
+				AND T.STATUS = 'N'
 			ORDER BY
 				C.TABSCHEMA,
 				C.TABNAME,
@@ -1161,7 +1161,7 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 				%(schema)s.ROUTINES
 			WHERE
 				ROUTINETYPE = 'F'
-				AND VALID <> 'X'
+				AND VALID = 'Y'
 			WITH UR""" % self.query_subst)
 		for (
 				schema,
@@ -1244,7 +1244,7 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 				%(schema)s.ROUTINES
 			WHERE
 				ROUTINETYPE = 'P'
-				AND VALID <> 'X'
+				AND VALID = 'Y'
 			WITH UR""" % self.query_subst)
 		for (
 				schema,
@@ -1340,7 +1340,7 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 					AND P.SPECIFICNAME = R.SPECIFICNAME
 			WHERE
 				R.ROUTINETYPE IN ('F', 'P')
-				AND R.VALID <> 'X'
+				AND R.VALID = 'Y'
 			ORDER BY
 				P.ROUTINESCHEMA,
 				P.SPECIFICNAME,
@@ -1421,7 +1421,7 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 			FROM
 				%(schema)s.TRIGGERS
 			WHERE
-				VALID <> 'X'
+				VALID = 'Y'
 			WITH UR""" % self.query_subst)
 		for (
 				schema,
@@ -1481,7 +1481,7 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 					AND TD.TRIGNAME = T.TRIGNAME
 			WHERE
 				TD.BTYPE IN ('A', 'N', 'T', 'V')
-				AND T.VALID <> 'X'
+				AND T.VALID = 'Y'
 				AND NOT (TD.BSCHEMA = T.TABSCHEMA AND TD.BNAME = T.TABNAME)
 			WITH UR""" % self.query_subst)
 		for (
