@@ -785,21 +785,25 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(TABSCHEMA)        AS TABSCHEMA,
-				RTRIM(TABNAME)          AS TABNAME,
-				RTRIM(CONSTNAME)        AS KEYNAME,
-				RTRIM(%(owner)s)        AS OWNER,
+				RTRIM(C.TABSCHEMA)      AS TABSCHEMA,
+				RTRIM(C.TABNAME)        AS TABNAME,
+				RTRIM(C.CONSTNAME)      AS KEYNAME,
+				RTRIM(C.%(owner)s)      AS OWNER,
 				CHAR('N')               AS SYSTEM,
 				CAST(NULL AS TIMESTAMP) AS CREATED,
-				REMARKS                 AS DESCRIPTION,
-				CASE TYPE
+				C.REMARKS               AS DESCRIPTION,
+				CASE C.TYPE
 					WHEN 'P' THEN 'Y'
 					ELSE 'N'
 				END                     AS PRIMARY
 			FROM
-				%(schema)s.TABCONST
+				%(schema)s.TABCONST C
+				INNER JOIN %(schema)s.TABLES T
+					ON C.TABSCHEMA = T.TABSCHEMA
+					AND C.TABNAME = T.TABNAME
 			WHERE
-				TYPE IN ('U', 'P')
+				C.TYPE IN ('U', 'P')
+				AND T.STATUS = 'N'
 			WITH UR""" % self.query_subst)
 		for (
 				schema,
@@ -839,12 +843,17 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(TABSCHEMA) AS TABSCHEMA,
-				RTRIM(TABNAME)   AS TABNAME,
-				RTRIM(CONSTNAME) AS KEYNAME,
-				RTRIM(COLNAME)   AS COLNAME
+				RTRIM(K.TABSCHEMA) AS TABSCHEMA,
+				RTRIM(K.TABNAME)   AS TABNAME,
+				RTRIM(K.CONSTNAME) AS KEYNAME,
+				RTRIM(K.COLNAME)   AS COLNAME
 			FROM
-				%(schema)s.KEYCOLUSE
+				%(schema)s.KEYCOLUSE K
+				INNER JOIN %(schema)s.TABLES T
+					ON K.TABSCHEMA = T.TABSCHEMA
+					AND K.TABNAME = T.TABNAME
+			WHERE
+				T.STATUS = 'N'
 			ORDER BY
 				TABSCHEMA,
 				TABNAME,
@@ -899,25 +908,34 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(T.TABSCHEMA)    AS TABSCHEMA,
-				RTRIM(T.TABNAME)      AS TABNAME,
-				RTRIM(T.CONSTNAME)    AS KEYNAME,
-				RTRIM(T.%(owner)s)    AS OWNER,
+				RTRIM(C.TABSCHEMA)    AS TABSCHEMA,
+				RTRIM(C.TABNAME)      AS TABNAME,
+				RTRIM(C.CONSTNAME)    AS KEYNAME,
+				RTRIM(C.%(owner)s)    AS OWNER,
 				CHAR('N')             AS SYSTEM,
 				CHAR(R.CREATE_TIME)   AS CREATED,
-				T.REMARKS             AS DESCRIPTION,
+				C.REMARKS             AS DESCRIPTION,
 				RTRIM(R.REFTABSCHEMA) AS REFTABSCHEMA,
 				RTRIM(R.REFTABNAME)   AS REFTABNAME,
 				RTRIM(R.REFKEYNAME)   AS REFKEYNAME,
 				R.DELETERULE          AS DELETERULE,
 				R.UPDATERULE          AS UPDATERULE
 			FROM
-				%(schema)s.TABCONST T
+				%(schema)s.TABCONST C
+				INNER JOIN %(schema)s.TABLES TC
+					ON C.TABSCHEMA = TC.TABSCHEMA
+					AND C.TABNAME = TC.TABNAME
 				INNER JOIN %(schema)s.REFERENCES R
-					ON T.TABSCHEMA = R.TABSCHEMA
-					AND T.TABNAME = R.TABNAME
-					AND T.CONSTNAME = R.CONSTNAME
-					AND T.TYPE = 'F'
+					ON C.TABSCHEMA = R.TABSCHEMA
+					AND C.TABNAME = R.TABNAME
+					AND C.CONSTNAME = R.CONSTNAME
+				INNER JOIN %(schema)s.TABLES TR
+					ON R.REFTABSCHEMA = TR.TABSCHEMA
+					AND R.REFTABNAME = TR.TABNAME
+			WHERE
+				C.TYPE = 'F'
+				AND TC.STATUS = 'N'
+				AND TR.STATUS = 'N'
 			WITH UR""" % self.query_subst)
 		for (
 				schema,
@@ -974,6 +992,12 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 				RTRIM(KP.COLNAME)  AS REFCOLNAME
 			FROM
 				%(schema)s.REFERENCES R
+				INNER JOIN %(schema)s.TABLES TC
+					ON R.TABSCHEMA = TC.TABSCHEMA
+					AND R.TABNAME = TC.TABNAME
+				INNER JOIN %(schema)s.TABLES TR
+					ON R.REFTABSCHEMA = TR.TABSCHEMA
+					AND R.REFTABNAME = TR.TABNAME
 				INNER JOIN %(schema)s.KEYCOLUSE KF
 					ON R.TABSCHEMA = KF.TABSCHEMA
 					AND R.TABNAME = KF.TABNAME
@@ -984,6 +1008,8 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 					AND R.REFKEYNAME = KP.CONSTNAME
 			WHERE
 				KF.COLSEQ = KP.COLSEQ
+				AND TC.STATUS = 'N'
+				AND TR.STATUS = 'N'
 			ORDER BY
 				R.TABSCHEMA,
 				R.TABNAME,
@@ -1028,24 +1054,29 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(T.TABSCHEMA)    AS TABSCHEMA,
-				RTRIM(T.TABNAME)      AS TABNAME,
-				RTRIM(T.CONSTNAME)    AS CHECKNAME,
-				RTRIM(T.%(owner)s)    AS OWNER,
+				RTRIM(TC.TABSCHEMA)   AS TABSCHEMA,
+				RTRIM(TC.TABNAME)     AS TABNAME,
+				RTRIM(TC.CONSTNAME)   AS CHECKNAME,
+				RTRIM(TC.%(owner)s)   AS OWNER,
 				CASE
 					WHEN C.TYPE IN ('A', 'S') THEN 'Y'
 					ELSE 'N'
 				END                   AS SYSTEM,
 				CHAR(C.CREATE_TIME)   AS CREATED,
-				T.REMARKS             AS DESCRIPTION,
+				TC.REMARKS            AS DESCRIPTION,
 				C.TEXT                AS SQL
 			FROM
-				%(schema)s.TABCONST T
+				%(schema)s.TABCONST TC
+				INNER JOIN %(schema)s.TABLES T
+					ON TC.TABSCHEMA = T.TABSCHEMA
+					AND TC.TABNAME = T.TABNAME
 				INNER JOIN %(schema)s.CHECKS C
-					ON T.TABSCHEMA = C.TABSCHEMA
-					AND T.TABNAME = C.TABNAME
-					AND T.CONSTNAME = C.CONSTNAME
-					AND T.TYPE = 'K'
+					ON TC.TABSCHEMA = C.TABSCHEMA
+					AND TC.TABNAME = C.TABNAME
+					AND TC.CONSTNAME = C.CONSTNAME
+			WHERE
+				TC.TYPE = 'K'
+				AND T.STATUS = 'N'
 			WITH UR""" % self.query_subst)
 		for (
 				schema,
@@ -1085,12 +1116,17 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
 		cursor = self.connection.cursor()
 		cursor.execute("""
 			SELECT
-				RTRIM(TABSCHEMA) AS TABSCHEMA,
-				RTRIM(TABNAME)   AS TABNAME,
-				RTRIM(CONSTNAME) AS CHECKNAME,
-				RTRIM(COLNAME)   AS COLNAME
+				RTRIM(C.TABSCHEMA) AS TABSCHEMA,
+				RTRIM(C.TABNAME)   AS TABNAME,
+				RTRIM(C.CONSTNAME) AS CHECKNAME,
+				RTRIM(C.COLNAME)   AS COLNAME
 			FROM
-				%(schema)s.COLCHECKS
+				%(schema)s.COLCHECKS C
+				INNER JOIN %(schema)s.TABLES T
+					ON C.TABSCHEMA = T.TABSCHEMA
+					AND C.TABNAME = T.TABNAME
+			WHERE
+				T.STATUS = 'N'
 			WITH UR""" % self.query_subst)
 		for (
 				schema,
