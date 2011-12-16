@@ -1,8 +1,11 @@
+# vim: set noet sw=4 ts=4:
+
 import sys
 import logging
 import dbsuite.commentor
 import dbsuite.plugins
 import dbsuite.main
+import dbsuite.tokenizer
 from dbsuite.compat import *
 
 class GrepDocUtility(dbsuite.main.Utility):
@@ -31,6 +34,7 @@ class GrepDocUtility(dbsuite.main.Utility):
 		# XXX Add method to select input plugin
 		plugin = dbsuite.plugins.load_plugin('db2.luw')()
 		extractor = dbsuite.commentor.SQLCommentExtractor(plugin)
+		rc = 0
 		for sql_file in args:
 			if sql_file == '-':
 				if not done_stdin:
@@ -41,10 +45,16 @@ class GrepDocUtility(dbsuite.main.Utility):
 			else:
 				sql_file = open(sql_file, 'rU')
 			sql = sql_file.read()
-			sql = extractor.parse(sql, terminator=options.terminator)
-			sys.stdout.write(sql)
+			try:
+				sql = extractor.parse(sql, terminator=options.terminator)
+			except dbsuite.tokenizer.Error, e:
+				logging.error('In file %s:' % sql_file.name)
+				logging.error(str(e))
+				rc = 3
+			else:
+				sys.stdout.write(sql)
 			sys.stdout.flush()
-		return 0
+		return rc
 
 main = GrepDocUtility()
 
