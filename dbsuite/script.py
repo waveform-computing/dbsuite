@@ -289,7 +289,7 @@ class SQLJob(object):
 				output = p.communicate(sql)[0]
 			except Exception, e:
 				raise ScriptRuntimeError(str(e))
-			if p.returncode >= 4:
+			if not (0 <= p.returncode < 4):
 				raise ScriptRuntimeError(clean_output(output))
 		finally:
 			if saved_instance:
@@ -584,7 +584,7 @@ class SQLScript(object):
 	def state(self):
 		if self.started and not self.finished:
 			return EXECUTING
-		elif self.returncode is not None and self.returncode < 4:
+		elif self.returncode is not None and (0 <= self.returncode < 4):
 			return SUCCEEDED
 		elif self.retrylimit > 0:
 			if len([d for (f, d) in self.depends if d.state != SUCCEEDED]) == 0:
@@ -626,13 +626,17 @@ class SQLScript(object):
 				# An exception is fatal, no retries allowed
 				self.retrylimit = 0
 			else:
-				self.returncode = p.returncode
+				# On Linux/UNIX, the returncode is modulus 256
+				if mswindows:
+					self.returncode = p.returncode
+				else:
+					self.returncode = p.returncode % 256
 				# Use the global output lock to prevent overlapping output in
 				# case of simultaneous script completions
 				output_lock.acquire()
 				try:
 					# Check the return code
-					if self.returncode >= 4:
+					if not (0 <= self.returncode < 4):
 						self.retrylimit -= 1
 						if self.retrylimit > 0:
 							logging.warning('Script %s failed with return code %d (retries left: %d)' % (self.filename, self.returncode, self.retrylimit))
@@ -704,7 +708,7 @@ class SQLScript(object):
 			on_state = None
 			if state and (state in self._on_states):
 				on_state = self._on_states[state]
-			elif rc >= 4 and (ErrorState in self._on_states):
+			elif not (0 <= rc < 4) and (ErrorState in self._on_states):
 				on_state = self._on_states[ErrorState]
 			# If we found a match, act on the ON state immediately as it may
 			# alter the rc
@@ -737,11 +741,11 @@ class SQLScript(object):
 				# state action
 				if on_state.action in ('CONTINUE', 'FAIL'):
 					returncode |= rc
-				if on_state.action in ('STOP', 'FAIL') and rc >= 4:
+				if on_state.action in ('STOP', 'FAIL') and not (0 <= rc < 4):
 					break
 			else:
 				returncode |= rc
-			if self.stoponerror and returncode >= 4:
+			if self.stoponerror and not (0 <= returncode < 4):
 				break
 		return returncode
 
@@ -792,7 +796,7 @@ class SQLScript(object):
 			# the CLP's return code
 			if p.returncode == 0:
 				log = logging.info
-			elif p.returncode < 4:
+			elif (0 < p.returncode < 4):
 				log = logging.warn
 			else:
 				log = logging.error
@@ -908,5 +912,5 @@ class SQLScript(object):
 			statement[-1],
 		]
 		rc, state = self._exec_statement(term)
-		if rc >= 4:
+		if not (0 <= rc < 4):
 			raise Exception('Implicit TERMINATE statement failed')
