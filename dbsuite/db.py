@@ -853,6 +853,21 @@ class Database(DatabaseObject):
 	def _get_database(self):
 		return self
 
+	def _get_size(self):
+		return sum(
+			table.size
+			for schema in self.schema_list
+			for table in schema.table_list
+			if table.size is not None
+		) + sum(
+			index.size
+			for schema in self.schema_list
+			for index in schema.index_list
+			if index.size is not None
+		)
+
+	size = property(lambda self: self._get_size(), doc=_get_size.__doc__)
+
 
 class Tablespace(DatabaseObject):
 	"""Class representing a tablespace"""
@@ -893,6 +908,19 @@ class Tablespace(DatabaseObject):
 
 	def _get_parent_list(self):
 		return self.database.tablespace_list
+
+	def _get_size(self):
+		return sum(
+			table.size
+			for table in self.table_list
+			if table.size is not None
+		) + sum(
+			index.size
+			for index in self.index_list
+			if index.size is not None
+		)
+
+	size = property(lambda self: self._get_size(), doc=_get_size.__doc__)
 
 
 class Schema(DatabaseObject):
@@ -986,6 +1014,19 @@ class Schema(DatabaseObject):
 
 	def _get_parent_list(self):
 		return self.database.schema_list
+
+	def _get_size(self):
+		return sum(
+			table.size
+			for table in self.table_list
+			if table.size is not None
+		) + sum(
+			index.size
+			for index in self.index_list
+			if index.size is not None
+		)
+
+	size = property(lambda self: self._get_size(), doc=_get_size.__doc__)
 
 
 class Table(Relation):
