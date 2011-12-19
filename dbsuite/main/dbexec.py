@@ -3,6 +3,7 @@
 import os
 import sys
 import logging
+import re
 import dbsuite.script
 import dbsuite.tokenizer
 import dbsuite.plugins
@@ -20,13 +21,10 @@ class MyConfigParser(ConfigParser.SafeConfigParser):
 	def optionxform(self, optionstr):
 		return optionstr.upper()
 
-class ListHandler(logging.Handler):
-	"""An extremely basic logging handler which simply remembers all LogRecords"""
-	def __init__(self):
-		logging.Handler.__init__(self)
-		self.records = []
+class PickleHandler(logging.Handler):
+	"""A basic logging handler which dumps LogRecords as pickles on stdout"""
 	def emit(self, record):
-		self.records.append(record)
+		pickle.dump(record, sys.stdout, protocol=pickle.HIGHEST_PROTOCOL)
 
 class ExecSqlUtility(dbsuite.main.Utility):
 	"""%prog [options] files...
@@ -49,7 +47,8 @@ class ExecSqlUtility(dbsuite.main.Utility):
 			stoponerror=False,
 			terminator=';',
 			execinternal=False,
-			debuginternal=False
+			debuginternal=False,
+			logscripts='',
 		)
 		self.parser.add_option('-t', '--terminator', dest='terminator',
 			help="""specify the statement terminator (default=';')""")
@@ -65,6 +64,8 @@ class ExecSqlUtility(dbsuite.main.Utility):
 			help="""specify the maximum number of retries after script failure (default: %default)""")
 		self.parser.add_option("-s", "--stop-on-error", dest="stoponerror", action="store_true",
 			help="""if a script encounters an error stop it immediately""")
+		self.parser.add_option('-L', '--log-scripts', dest='logscripts',
+			help="""if specified scripts will each have their own log file named by the substitution expression (/regexpr/subst)""")
 		self.parser.add_option("--exec-internal", dest="execinternal", action="store_true",
 			help=optparse.SUPPRESS_HELP)
 		self.parser.add_option("--debug-internal", dest="debuginternal", action="store_true",
@@ -74,31 +75,38 @@ class ExecSqlUtility(dbsuite.main.Utility):
 		super(ExecSqlUtility, self).main(options, args)
 		if options.execinternal:
 			# We've been called by a parent dbexec instance to execute an SQL
-			# script. Firstly, set up logging to just capture LogRecord objects
+			# script. Here, we tweak the logging configuration set by the
+			# superclass: get rid of the console output (unless we're
+			# debugging), and add a custom handler to pickle LogRecords and
+			# pass them to the parent instance via stdout
 			log = logging.getLogger()
-			while log.handlers:
-				log.removeHandler(log.handlers[-1])
-			log.addHandler(ListHandler())
-			if options.debuginternal:
-				console = logging.StreamHandler(sys.stderr)
-				console.setFormatter(logging.Formatter('%(message)s'))
-				console.setLevel(logging.DEBUG)
-				log.addHandler(console)
-			try:
-				# Then reconstruct the pickled SQLScript that's been passed on stdin
-				# and run its exec_internal method
-				script = pickle.load(sys.stdin)
-				returncode = script._exec_internal()
-			finally:
-				# Finally, pickle the LogRecord objects and dump them to stdout
-				# before exiting with the appropriate returncode
-				pickle.dump(log.handlers[0].records, sys.stdout)
-				return returncode
+			for handler in log.handlers:
+				if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
+					if options.debuginternal:
+						handler.setLevel(logging.DEBUG)
+					else:
+						log.removeHandler(handler)
+					break
+			if not options.logfile:
+				log.addHandler(PickleHandler())
+			# Reconstruct the pickled SQLScript that's been passed on stdin and
+			# run its exec_internal method
+			script = pickle.load(sys.stdin)
+			return script._exec_internal()
 		else:
 			# This is a normal dbexec run
 			config = os.environ.copy()
 			if options.config:
 				config.update(self.process_config(options.config))
+			if options.logscripts:
+				# The following confusing expression splits /expr/subst/ up,
+				# allowing for a different split character as in ,expr,subst,
+				# (as in sed, vim, etc.) and accounting for backslash escaped
+				# split characters
+				logexpr, logsubst = re.split(r'(?<!\\)%s' % options.logscripts[:1], options.logscripts[1:])[:2]
+				logexpr = re.compile(logexpr)
+			else:
+				logexpr = logsubst = None
 			done_stdin = False
 			sql_files = []
 			for sql_file in args:
@@ -115,7 +123,7 @@ class ExecSqlUtility(dbsuite.main.Utility):
 			job = dbsuite.script.SQLJob(plugin, sql_files, vars=config,
 				terminator=options.terminator, retrylimit=options.retry,
 				autocommit=options.autocommit, stoponerror=options.stoponerror,
-				deletefiles=options.deletefiles)
+				deletefiles=options.deletefiles, logexpr=logexpr, logsubst=logsubst)
 			if options.test == 0:
 				job.test_connections()
 				job.test_permissions()

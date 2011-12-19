@@ -14,7 +14,7 @@ import dbsuite.plugins
 import glob
 from dbsuite.compat import *
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 # Use the user's default locale instead of C
 locale.setlocale(locale.LC_ALL, '')

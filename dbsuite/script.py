@@ -11,6 +11,10 @@ try:
 	import cPickle as pickle
 except ImportError:
 	import pickle
+try:
+	from cStringIO import StringIO
+except ImportError:
+	from StringIO import StringIO
 from datetime import datetime
 from string import Template
 from time import sleep
@@ -128,9 +132,11 @@ class SQLJob(object):
 
 	def __init__(self, plugin, sql_files, vars={}, terminator=';',
 			retrylimit=1, autocommit=False, stoponerror=False,
-			deletefiles=False):
+			deletefiles=False, logexpr=None, logsubst=None):
 		self.scripts = [
-			SQLScript(plugin, sql_file, vars, terminator, retrylimit, autocommit, stoponerror, deletefiles)
+			SQLScript(plugin, sql_file, vars, terminator,
+				retrylimit, autocommit, stoponerror, deletefiles,
+				logexpr, logsubst)
 			for sql_file in sql_files
 		]
 		for script in self.scripts:
@@ -236,10 +242,12 @@ class SQLJob(object):
 		data.insert(0, ('Script', 'Started', 'Duration', 'Status'))
 		started = min(script.started for script in scripts if script.started)
 		finished = max(script.finished for script in scripts if script.finished)
+		duration = (finished - started).seconds
+		duration = '%.2d:%.2d:%.2d' % (duration / 3600, (duration / 60) % 60, duration % 60)
 		data.append((
 			'Total',
 			started.strftime('%H:%M:%S'),
-			'%ds' % (finished - started).seconds,
+			duration,
 			'',
 		))
 		# Calculate the maximum length of each field
@@ -404,7 +412,8 @@ class SQLScript(object):
 	"""
 
 	def __init__(self, plugin, sql_file, vars={}, terminator=';', retrylimit=1,
-			autocommit=False, stoponerror=False, deletefiles=False):
+			autocommit=False, stoponerror=False, deletefiles=False,
+			logexpr=None, logsubst=None):
 		"""Initializes an instance of the class.
 
 		Parameters:
@@ -416,9 +425,10 @@ class SQLScript(object):
 		autocommit -- Whether to activate CLP's auto-COMMIT behaviour
 		stoponerror -- Whether to terminate script immediately upon error
 		deletefiles -- Whether or not to delete all files produced by the script upon successful completion
+		logexpr -- The regular expression to search for when constructing a script's log filename
+		logsubst -- The substitution expression to use when constructing a script's log filename
 		"""
 		super(SQLScript, self).__init__()
-		self.output = []
 		self.started = None
 		self.finished = None
 		self.returncode = None
@@ -434,7 +444,11 @@ class SQLScript(object):
 			if hasattr(sql_file, 'name'):
 				self.filename = sql_file.name
 			else:
-				self.filename = 'stdin'
+				self.filename = '<stdin>'
+		if logexpr:
+			self.logfilename = logexpr.sub(logsubst, self.filename)
+		else:
+			self.logfilename = None
 		self.sql = sql_file.read()
 		self.sql = Template(self.sql).safe_substitute(vars)
 		tokenizer = plugin.tokenizer()
@@ -576,7 +590,6 @@ class SQLScript(object):
 		self.started = datetime.now()
 		self.finished = None
 		self.returncode = None
-		self.output = []
 		t = threading.Thread(target=self._exec_thread, args=(debug,))
 		t.start()
 
@@ -603,7 +616,15 @@ class SQLScript(object):
 		that starts, communicates and tracks the subprocess executing the
 		script. See the execute method for more details.
 		"""
-		cmdline = [sys.argv[0], '--exec-internal'] # execute ourselves in script mode
+		cmdline = [
+			sys.argv[0],       # execute ourselves
+			'--exec-internal', # in script mode
+		]
+		if self.logfilename:
+			cmdline.extend([
+				'--log-file',     # write this script's output
+				self.logfilename, # to its own file
+			])
 		if debug:
 			# Can't use the "normal" -D debug flag here as pdb's output screws
 			# up the pickle output
@@ -618,9 +639,9 @@ class SQLScript(object):
 		)
 		try:
 			# Pickle ourselves and send the result to the subprocess
-			s = pickle.dumps(self)
+			s = pickle.dumps(self, protocol=pickle.HIGHEST_PROTOCOL)
 			try:
-				output = p.communicate(s)[0]
+				output = StringIO(p.communicate(s)[0])
 			except Exception, e:
 				logging.error('Script %s failed: %s' % (self.filename, str(e)))
 				# An exception is fatal, no retries allowed
@@ -644,19 +665,22 @@ class SQLScript(object):
 							logging.error('Script %s failed with return code %d (no retries remaining)' % (self.filename, self.returncode))
 					else:
 						logging.info('Script %s completed successfully with return code %d' % (self.filename, self.returncode))
-					logging.info('Script %s output' % self.filename)
-					# The subprocess will send back a pickled array of
-					# LogRecord objects on its stdout which we now unpickle
-					try:
-						self.output = pickle.loads(output)
-					except pickle.UnpicklingError:
-						logging.error('Failed to retrieve output of script %s' % self.filename)
-						self.output = []
+					if self.logfilename:
+						logging.info('See %s for full output' % self.logfilename)
 					else:
-						# Pass the LogRecords sent by the subprocess thru to the
-						# root logger
-						for rec in self.output:
-							logging.getLogger().handle(rec)
+						# If we don't have our own logfile, then the subprocess
+						# will send back a pickled array of LogRecord objects on
+						# its stdout which we now unpickle
+						logging.info('Script %s output' % self.filename)
+						try:
+							# Pass the LogRecords sent by the subprocess thru
+							# to the root logger
+							while True:
+								logging.getLogger().handle(pickle.load(output))
+						except pickle.UnpicklingError:
+							logging.error('Failed to retrieve output of script %s' % self.filename)
+						except EOFError:
+							pass
 				finally:
 					output_lock.release()
 		finally:
