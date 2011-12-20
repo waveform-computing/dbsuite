@@ -447,6 +447,8 @@ class SQLScript(object):
 				self.filename = '<stdin>'
 		if logexpr:
 			self.logfilename = logexpr.sub(logsubst, self.filename)
+			if self.logfilename == self.filename:
+				raise IOError('Log filename for script %s is the same as the script' % self.filename)
 		else:
 			self.logfilename = None
 		self.sql = sql_file.read()
