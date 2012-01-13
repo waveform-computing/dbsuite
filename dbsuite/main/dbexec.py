@@ -134,9 +134,7 @@ class ExecSqlUtility(dbsuite.main.Utility):
 				if options.test > 1:
 					job.test_permissions()
 				logging.info('')
-				logging.info('Dependency tree:')
 				job.print_dependencies()
-				logging.info('Data transfers:')
 				job.print_transfers()
 				for script in job.depth_traversal():
 					logging.info('')

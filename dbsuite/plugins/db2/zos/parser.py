@@ -8351,7 +8351,7 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 		self._parse_login(optional=True, allowchange=False)
 
 	def _parse_on_command(self):
-		"""Parses the custom (non-CLP) ON SQLCODE|SQLSTATE command"""
+		"""Parses the custom (non-CLP) ON SQLCODE|SQLSTATE|ERROR|REGEX command"""
 		# ON already matched
 		if self._match('SQLCODE'):
 			if self._match((TT.OPERATOR, '-')):
@@ -8362,8 +8362,10 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 			self._expect(TT.STRING)
 		elif self._match('ERROR'):
 			pass
+		elif self._match('REGEX'):
+			self._expect(TT.STRING)
 		else:
-			self._expected_one_of(['SQLCODE', 'SQLSTATE', 'ERROR'])
+			self._expected_one_of(['SQLCODE', 'SQLSTATE', 'ERROR', 'REGEX'])
 		wait = False
 		if self._match('WAIT'):
 			wait = True

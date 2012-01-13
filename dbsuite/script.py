@@ -3,6 +3,7 @@
 import sys
 mswindows = sys.platform == "win32"
 
+import re
 import os.path
 import logging
 import threading
@@ -155,6 +156,7 @@ class SQLJob(object):
 
 	def print_dependencies(self, scripts=None, prefix=""):
 		"""Output nodes in an ASCII formatted tree diagram by dependency"""
+		logging.info('Dependency tree:')
 		if scripts is None:
 			# Determine the "top-level" scripts, i.e. those scripts which have
 			# no dependents (they may still output files, but no other script
@@ -182,6 +184,7 @@ class SQLJob(object):
 
 	def print_transfers(self, scripts=None):
 		"""Output nodes in a definition list of database transfers performed"""
+		logging.info('Data transfers:')
 		if scripts is None:
 			scripts = self.scripts
 		files = {}
@@ -510,7 +513,7 @@ class SQLScript(object):
 			if len(producers) == 0 and os.path.exists(depfile):
 				logging.warning('Missing dependency: File %s exists, but has no producer' % depfile)
 		# Check the reverse dependency list for files which are produced but
-		# never consumed and log a warning
+		# never consumed and log a warning (i.e. wasted processing)
 		for (depfile, consumers) in self.rdepends:
 			if len(consumers) == 0:
 				logging.warning('File %s is produced, but never consumed' % depfile)
@@ -706,7 +709,7 @@ class SQLScript(object):
 				statements.append(statement)
 				statement = []
 		if statement:
-			statement.append(Token(TT.STATEMENT, ';', self.terminator, statement[-1].line, statement[-1].column + 1))
+			statement.append(Token(TT.STATEMENT, ';', self.terminator, statement[-1].line, statement[-1].column + len(statement[-1].source)))
 			statements.append(statement)
 		# Execute each statement in turn. The returncode of each execution is
 		# combined (by bitwise-or) into our final returncode
@@ -725,27 +728,21 @@ class SQLScript(object):
 				token.source for token in statement
 			))
 			if statement[0].value == 'ON':
-				rc, state = self._exec_on_statement(statement)
+				rc, on_state = self._exec_on_statement(statement)
 			elif statement[0].value == 'INSTANCE':
-				rc, state = self._exec_instance_statement(statement)
+				rc, on_state = self._exec_instance_statement(statement)
 			else:
-				rc, state = self._exec_statement(statement)
-			# Check the dictionary of ON states for a match
-			on_state = None
-			if state and (state in self._on_states):
-				on_state = self._on_states[state]
-			elif not (0 <= rc < 4) and (ErrorState in self._on_states):
-				on_state = self._on_states[ErrorState]
-			# If we found a match, act on the ON state immediately as it may
-			# alter the rc
+				rc, on_state = self._exec_statement(statement)
+			# If we triggered an ON statement, act on the state immediately as
+			# it may alter the rc
 			if on_state:
-				logging.info('ON statement matched at line %d' % on_state.line)
+				logging.info('Output matched ON statement at line %d' % on_state.line)
 				if on_state.retry_mode:
 					if on_state.retry_count == 0:
 						logging.warn('All retries exhausted')
 					else:
 						if on_state.delay:
-							logging.warn('Pausing for %d seconds' % on_state.delay)
+							logging.info('Pausing for %d seconds' % on_state.delay)
 							sleep(on_state.delay)
 						if on_state.retry_count > 0:
 							suffix = '(%d retries remaining)' % on_state.retry_count
@@ -766,13 +763,14 @@ class SQLScript(object):
 				# If not retrying or all retries are exhausted, perform the ON
 				# state action
 				if on_state.action in ('CONTINUE', 'FAIL'):
-					returncode |= rc
+					rc |= 4
+				returncode |= rc
 				if on_state.action in ('STOP', 'FAIL') and not (0 <= rc < 4):
 					break
 			else:
 				returncode |= rc
-			if self.stoponerror and not (0 <= returncode < 4):
-				break
+				if self.stoponerror and not (0 <= rc < 4):
+					break
 		return returncode
 
 	def _exec_statement(self, statement):
@@ -806,9 +804,10 @@ class SQLScript(object):
 			output = p.communicate(sql)[0]
 		except Exception, e:
 			logging.error('Failed to execute at line %d of script %s: %s' % (statement[0].line, self.filename, str(e)))
-			return (8, None)
+			return (8, self._on_states.get(ErrorState))
 		else:
 			output = clean_output(output).splitlines()
+			on_state = None
 			# If we're watching for SQLCODEs or SQLSTATEs, strip off the last
 			# line of output as it contains the state
 			if self._on_mode:
@@ -816,8 +815,23 @@ class SQLScript(object):
 				output = output[:-1]
 				if self._on_mode == 'SQLCODE':
 					state = int(state)
-			else:
-				state = None
+				# Check the dictionary of ON states for a match
+				on_state = None
+				if state:
+					on_state = self._on_states.get(state)
+				elif not (0 <= p.returncode < 4):
+					on_state = self._on_states.get(ErrorState)
+			# Check whether the output matches any regexes set by ON statements
+			for (condition, action) in self._on_states.iteritems():
+				if hasattr(condition, 'search'):
+					matched = False
+					for line in output:
+						if condition.search(line):
+							matched = True
+							break
+					if matched:
+						on_state = action
+						break
 			# Log the output of the statement with a level appropriate to
 			# the CLP's return code
 			if p.returncode == 0:
@@ -829,7 +843,7 @@ class SQLScript(object):
 				log('Statement at line %d of script %s produced the following error:' % (statement[0].line, self.filename))
 			for line in output:
 				log(line)
-			return (p.returncode, state)
+			return (p.returncode, on_state)
 
 	def _exec_on_statement(self, statement):
 		# Strip the statement of all junk tokens
@@ -839,7 +853,7 @@ class SQLScript(object):
 			# Parse the error condition clause
 			mode = statement[i].value
 			if mode == 'SQLCODE':
-				if self._on_mode and self._on_mode != mode:
+				if self._on_mode and self._on_mode == 'SQLSTATE':
 					raise Exception('Cannot use ON SQLCODE after ON SQLSTATE')
 				i += 1
 				if statement[i].type == TT.OPERATOR:
@@ -859,11 +873,17 @@ class SQLScript(object):
 					# Make all SQLCODEs negative
 					state = -state
 				i += 1
+				self._on_mode = mode
 			elif mode == 'SQLSTATE':
-				if self._on_mode and self._on_mode != mode:
+				if self._on_mode and self._on_mode == 'SQLCODE':
 					raise Exception('Cannot use ON SQLSTATE after ON SQLCODE')
 				i += 1
 				state = statement[i].value.upper()
+				i += 1
+				self._on_mode = mode
+			elif mode == 'REGEX':
+				i += 1
+				state = re.compile(statement[i].value)
 				i += 1
 			else:
 				i += 1
@@ -906,12 +926,11 @@ class SQLScript(object):
 				pass
 			else:
 				self._on_states[state] = OnState(statement[0].line, delay, retry_mode, retry_count, action)
-			self._on_mode = mode
 			logging.info('ON statement processed successfully')
 		except Exception, e:
 			logging.error('Statement at line %d of script %s produced the following error:' % (statement[0].line, self.filename))
 			logging.error(str(e))
-			return (8, None)
+			return (8, self._on_states.get(ErrorState))
 		else:
 			return (0, None)
 
@@ -925,7 +944,7 @@ class SQLScript(object):
 		except Exception, e:
 			logging.error('Statement at line %d of script %s produced the following error:' % (statement[0].line, self.filename))
 			logging.error(str(e))
-			return (8, None)
+			return (8, self._on_states.get(ErrorState))
 		else:
 			logging.info('Switched to instance: %s' % statement[1].value)
 			return (0, None)
