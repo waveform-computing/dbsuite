@@ -8378,7 +8378,7 @@ class DB2ZOSScriptParser(DB2ZOSParser):
 			self._expect_one_of(['STATEMENT', 'SCRIPT'])
 			if self._match(TT.NUMBER):
 				self._expect_one_of(['TIME', 'TIMES'])
-			self._match('AND')
+			self._match('THEN')
 		if wait and not retry:
 			self._expected('RETRY')
 		self._expect_one_of(['FAIL', 'STOP', 'CONTINUE', 'IGNORE'])
