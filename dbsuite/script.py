@@ -741,6 +741,11 @@ class SQLScript(object):
 					if on_state.retry_count == 0:
 						logging.warn('All retries exhausted')
 					else:
+						if on_state.retry_mode == 'SCRIPT':
+							# If we're retrying the script it's likely there's
+							# going to be a long delay. Terminate the backend
+							# process now to avoid communication timeout errors
+							self._exec_terminate_statement(statement)
 						if on_state.delay:
 							logging.info('Pausing for %d seconds' % on_state.delay)
 							sleep(on_state.delay)
@@ -752,7 +757,6 @@ class SQLScript(object):
 						if on_state.retry_mode == 'SCRIPT':
 							logging.warn('Retrying script %s' % suffix)
 							position = 0
-							self._exec_terminate_statement(statement)
 						else:
 							logging.warn('Retrying statement %s' % suffix)
 							position -= 1
@@ -957,5 +961,8 @@ class SQLScript(object):
 			statement[-1],
 		]
 		rc, state = self._exec_statement(term)
-		if not (0 <= rc < 4):
-			raise Exception('Implicit TERMINATE statement failed')
+		# We used to check for failure here but now ignore it. If TERMINATE
+		# fails it usually means the backend process is dead anyway. Reinstate
+		# these lines if this policy turns out to cause problems
+		##if not (0 <= rc < 4):
+		##	raise Exception('Implicit TERMINATE statement failed')
