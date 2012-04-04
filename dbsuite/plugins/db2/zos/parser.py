@@ -6196,6 +6196,18 @@ class DB2ZOSParser(BaseParser):
 			])
 		self._expect_sequence(['PERSERVE', 'PRIVILEGES'])
 
+	def _parse_truncate_statement(self):
+		"""Parses a TRUNCATE statement"""
+		# TRUNCATE already matched
+		self._match('TABLE')
+		self._parse_table_name()
+		if self._match_one_of(['DROP', 'REUSE']):
+			self._expect('STORAGE')
+		if self._match('IGNORE') or self._match_sequence(['RESTRICT', 'WHEN']):
+			self._expect_sequence(['DELETE', 'TRIGGERS'])
+		self._match_sequence(['CONTINUE', 'IDENTITY'])
+		self._expect('IMMEDIATE')
+
 	def _parse_update_statement(self):
 		"""Parses an UPDATE statement"""
 		# UPDATE already matched
@@ -6380,6 +6392,8 @@ class DB2ZOSParser(BaseParser):
 			self._parse_savepoint_statement()
 		elif self._match_sequence(['TRANSFER', 'OWNERSHIP']):
 			self._parse_transfer_ownership_statement()
+		elif self._match('TRUNCATE'):
+			self._parse_truncate_statement()
 		elif self._match('UPDATE'):
 			self._parse_update_statement()
 		else:
@@ -6809,6 +6823,8 @@ class DB2ZOSParser(BaseParser):
 			self._parse_set_statement()
 		elif self._match_sequence(['TRANSFER', 'OWNERSHIP']):
 			self._parse_transfer_ownership_statement()
+		elif self._match('TRUNCATE'):
+			self._parse_truncate_statement()
 		elif self._match('UPDATE'):
 			self._parse_update_statement()
 		else:
