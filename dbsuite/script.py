@@ -156,7 +156,8 @@ class SQLJob(object):
 
 	def print_dependencies(self, scripts=None, prefix=""):
 		"""Output nodes in an ASCII formatted tree diagram by dependency"""
-		logging.info('Dependency tree:')
+		if not prefix:
+			logging.info('Dependency tree:')
 		if scripts is None:
 			# Determine the "top-level" scripts, i.e. those scripts which have
 			# no dependents (they may still output files, but no other script
