@@ -18,7 +18,7 @@ SOURCE:=$(shell \
 	$(PYTHON) $(PYFLAGS) setup.py egg_info >/dev/null 2>&1 && \
 	cat $(NAME).egg-info/SOURCES.txt)
 DOCS:=README.txt TODO.txt
-WIKI:="http://www.waveform.org.uk/trac/db2makedoc/wiki"
+WIKI:="http://www.waveform.org.uk/trac/dbsuite/wiki"
 
 # Calculate the name of all distribution archives / installers
 DIST_EGG=dist/$(BASE)-$(PYVER).egg
