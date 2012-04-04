@@ -136,7 +136,7 @@ class ExecSqlUtility(dbsuite.main.Utility):
 				logging.info('')
 				job.print_dependencies()
 				job.print_transfers()
-				for script in job.depth_traversal():
+				for script in job.traversal():
 					logging.info('')
 					logging.info(script.filename)
 					# Write SQL to stdout so it can be redirected if necessary

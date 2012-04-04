@@ -143,13 +143,15 @@ class SQLJob(object):
 		for script in self.scripts:
 			script.resolve_dependencies(self.scripts)
 
-	def depth_traversal(self, scripts=None):
-		"""Return a depth-first traversal of scripts according to execution dependencies"""
+	def traversal(self, scripts=None):
+		"""Return a traversal of scripts compatible with the result of parallel execution"""
 		if scripts is None:
 			scripts = self.scripts
 		result = []
 		for script in scripts:
-			result.extend(self.depth_traversal(producer for (depfile, producer) in script.depends))
+			for dep in self.traversal(producer for (depfile, producer) in script.depends):
+				if not dep in result:
+					result.append(dep)
 			if script not in result:
 				result.append(script)
 		return result
