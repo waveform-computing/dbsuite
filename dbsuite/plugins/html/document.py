@@ -9,6 +9,7 @@ website containing HTML documents amongst other things).
 
 import os
 import re
+import traceback
 import datetime
 import logging
 import urlparse
@@ -919,7 +920,15 @@ class WebSite(object):
 		self.start_progress(len(docs))
 		while docs:
 			self.write_progress(len(docs))
-			docs.pop().write()
+			doc = docs.pop()
+			try:
+				doc.write()
+			except Exception, e:
+				# XXX Temporary hack to trace down errors
+				logging.error('While writing %s:' % doc.filename)
+				for line in traceback.format_exception(*sys.exc_info()):
+					for s in line.rstrip().split('\n'):
+						logging.error(s)
 		self.finish_progress()
 
 	def write_multi(self, docs):
@@ -960,7 +969,15 @@ class WebSite(object):
 		when no more documents remain in the stack.
 		"""
 		while self._documents_set:
-			self._documents_set.pop().write()
+			doc = self._documents_set.pop()
+			try:
+				doc.write()
+			except Exception, e:
+				# XXX Temporary hack to trace down errors
+				logging.error('While writing %s:' % doc.filename)
+				for line in traceback.format_exception(*sys.exc_info()):
+					for s in line.rstrip().split('\n'):
+						logging.error(s)
 
 
 class WebSiteDocument(object):
