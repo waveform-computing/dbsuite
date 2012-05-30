@@ -799,15 +799,15 @@ class SQLScript(object):
 			cmdline.append('-es')          # output the SQLSTATE after execution
 		if mswindows:
 			cmdline = ['db2cmd', '-i', '-w', '-c'] + cmdline
-		p = subprocess.Popen(
-			cmdline,
-			shell=False,
-			stdin=subprocess.PIPE,
-			stdout=subprocess.PIPE,
-			stderr=subprocess.STDOUT,
-			close_fds=not mswindows
-		)
 		try:
+			p = subprocess.Popen(
+				cmdline,
+				shell=False,
+				stdin=subprocess.PIPE,
+				stdout=subprocess.PIPE,
+				stderr=subprocess.STDOUT,
+				close_fds=not mswindows
+			)
 			output = p.communicate(sql)[0]
 		except Exception, e:
 			logging.error('Failed to execute at line %d of script %s: %s' % (statement[0].line, self.filename, str(e)))
