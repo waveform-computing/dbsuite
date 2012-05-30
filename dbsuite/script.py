@@ -919,7 +919,7 @@ class SQLScript(object):
 					i += 2
 				else:
 					retry_count = -1
-				if statement[i].value == 'AND':
+				if statement[i].value == 'THEN':
 					i += 1
 			else:
 				retry_mode = None
