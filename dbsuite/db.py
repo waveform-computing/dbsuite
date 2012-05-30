@@ -145,7 +145,10 @@ class RelationsDict(DictProxy):
 
 	def _convert(self, item):
 		(schema, relation) = item
-		return self._database.schemas[schema].relations[relation]
+		try:
+			return self._database.schemas[schema].relations[relation]
+		except KeyError:
+			return None
 
 
 class RelationsList(ListProxy):
@@ -156,7 +159,10 @@ class RelationsList(ListProxy):
 
 	def _convert(self, item):
 		(schema, relation) = item
-		return self._database.schemas[schema].relations[relation]
+		try:
+			return self._database.schemas[schema].relations[relation]
+		except KeyError:
+			return None
 
 
 class IndexesDict(DictProxy):
@@ -167,7 +173,10 @@ class IndexesDict(DictProxy):
 
 	def _convert(self, item):
 		(schema, index) = item
-		return self._database.schemas[schema].indexes[index]
+		try:
+			return self._database.schemas[schema].indexes[index]
+		except KeyError:
+			return None
 
 
 class IndexesList(ListProxy):
@@ -178,7 +187,10 @@ class IndexesList(ListProxy):
 
 	def _convert(self, item):
 		(schema, index) = item
-		return self._database.schemas[schema].indexes[index]
+		try:
+			return self._database.schemas[schema].indexes[index]
+		except KeyError:
+			return None
 
 
 class ConstraintsDict(DictProxy):
@@ -189,7 +201,10 @@ class ConstraintsDict(DictProxy):
 
 	def _convert(self, item):
 		(schema, table, constraint) = item
-		return self._database.schemas[schema].tables[table].constraints[constraint]
+		try:
+			return self._database.schemas[schema].tables[table].constraints[constraint]
+		except KeyError:
+			return None
 
 
 class ConstraintsList(ListProxy):
@@ -200,7 +215,10 @@ class ConstraintsList(ListProxy):
 
 	def _convert(self, item):
 		(schema, table, constraint) = item
-		return self._database.schemas[schema].tables[table].constraints[constraint]
+		try:
+			return self._database.schemas[schema].tables[table].constraints[constraint]
+		except KeyError:
+			return None
 
 
 class TriggersDict(DictProxy):
@@ -211,7 +229,10 @@ class TriggersDict(DictProxy):
 
 	def _convert(self, item):
 		(schema, trigger) = item
-		return self._database.schemas[schema].triggers[trigger]
+		try:
+			return self._database.schemas[schema].triggers[trigger]
+		except KeyError:
+			return None
 
 
 class TriggersList(ListProxy):
@@ -222,7 +243,10 @@ class TriggersList(ListProxy):
 
 	def _convert(self, item):
 		(schema, trigger) = item
-		return self._database.schemas[schema].triggers[trigger]
+		try:
+			return self._database.schemas[schema].triggers[trigger]
+		except KeyError:
+			return None
 
 
 class IndexFieldsDict(DictProxy):
@@ -235,7 +259,10 @@ class IndexFieldsDict(DictProxy):
 		self._order = dict((f.name, f.order) for f in fields)
 
 	def _convert(self, item):
-		return (self._database.schemas[self._schema].tables[self._table].fields[item], self._order[item])
+		try:
+			return (self._database.schemas[self._schema].tables[self._table].fields[item], self._order[item])
+		except KeyError:
+			return (None, self._order[item])
 
 
 class IndexFieldsList(ListProxy):
@@ -248,7 +275,10 @@ class IndexFieldsList(ListProxy):
 
 	def _convert(self, item):
 		(name, order) = item
-		return (self._database.schemas[self._schema].tables[self._table].fields[name], order)
+		try:
+			return (self._database.schemas[self._schema].tables[self._table].fields[name], order)
+		except KeyError:
+			return (None, order)
 
 
 class ConstraintFieldsList(ListProxy):
@@ -258,7 +288,10 @@ class ConstraintFieldsList(ListProxy):
 		self._table = table
 
 	def _convert(self, item):
-		return self._table.fields[item]
+		try:
+			return self._table.fields[item]
+		except KeyError:
+			return None
 
 
 class ForeignKeyFieldsList(ListProxy):
@@ -273,7 +306,10 @@ class ForeignKeyFieldsList(ListProxy):
 	def _convert(self, item):
 		(field, parent) = item
 		parent_table = self._database.schemas[self._ref_schema].tables[self._ref_table]
-		return (self._table.fields[field], parent_table.fields[parent])
+		try:
+			return (self._table.fields[field], parent_table.fields[parent])
+		except KeyError:
+			return (None, None)
 
 
 # ABSTRACT BASE CLASSES #######################################################
