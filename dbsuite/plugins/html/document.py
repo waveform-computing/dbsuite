@@ -7,6 +7,7 @@ output plugins capable of producing HTML documents (or, more precisely, a
 website containing HTML documents amongst other things).
 """
 
+import sys
 import os
 import re
 import traceback
