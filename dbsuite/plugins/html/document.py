@@ -15,6 +15,7 @@ import datetime
 import logging
 import urlparse
 import threading
+import pygraphviz as pgv
 
 from operator import attrgetter
 from pkg_resources import resource_stream, resource_string
@@ -306,7 +307,7 @@ class HTMLSQLHighlighter(SQLHighlighter):
 		return self.site.tag.li(self.format_token(token) for token in line)
 
 
-class ObjectGraph(Graph):
+class ObjectGraph(object):
 	"""A version of the Graph class which represents database objects.
 
 	This is the base class for graphs used in generated web sites. The
@@ -319,8 +320,9 @@ class ObjectGraph(Graph):
 	introduced which can be used to add database objects to the graph easily.
 	"""
 
-	def __init__(self, site, id, directed=True, strict=False):
-		super(ObjectGraph, self).__init__(id, directed, strict)
+	def __init__(self, site, name='G'):
+		super(ObjectGraph, self).__init__()
+		self.graph = pgv.AGraph(name=name)
 		self.dbobjects = {}
 		self.site = site
 
@@ -336,12 +338,11 @@ class ObjectGraph(Graph):
 		item = self.dbobjects.get(dbobject)
 		if item is None:
 			if isinstance(dbobject, Schema):
-				item = Cluster(self, dbobject.identifier)
-				item.label = dbobject.name
+				item = self.graph.add_subgraph(name=dbobject.identifier, label=dbobject.name)
 			elif isinstance(dbobject, (Relation, Trigger)):
 				cluster = self.add(dbobject.schema)
-				item = Node(cluster, dbobject.identifier)
-				item.label = dbobject.name
+				cluster.add_node(name=dbobject.identifier, label=dbobject.name)
+				item = cluster.get_node(name=dbobject.identifier)
 			item.selected = selected
 			item.dbobject = dbobject
 			self.dbobjects[dbobject] = item
@@ -353,8 +354,11 @@ class ObjectGraph(Graph):
 		# and to apply a thicker border to the selected object
 		if hasattr(item, 'dbobject'):
 			doc = self.site.object_document(item.dbobject)
-			if isinstance(item, (Node, Edge, Cluster)) and doc:
-				item.URL = doc.url
+			if doc:
+				if isinstance(item, (pgv.agraph.Node, pgv.agraph.Edge)):
+					item.attr['URL'] = doc.url
+				elif isinstance(item, pgv.AGraph):
+					item.graph_attr['URL'] = doc.url
 
 	def _get_dot(self):
 		self.touch(self.style)

@@ -14,6 +14,8 @@ import sys
 mswindows = sys.platform.startswith('win')
 import os
 import re
+import pygraphviz as pgv
+import networkx as nx
 from subprocess import Popen, PIPE, STDOUT
 try:
 	from cStringIO import StringIO
