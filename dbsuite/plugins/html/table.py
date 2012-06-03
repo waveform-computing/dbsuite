@@ -268,46 +268,45 @@ class TableGraph(GraphObjectDocument):
 	def generate(self):
 		graph = super(TableGraph, self).generate()
 		table = self.dbobject
-		table_node = graph.add(table, selected=True)
+		table_node = graph.add_node(table, selected=True)
 		for dependent in table.dependent_list:
-			dep_node = graph.add(dependent)
-			dep_edge = dep_node.connect_to(table_node)
-			if isinstance(dependent, View):
-				dep_edge.label = '<uses>'
-			elif isinstance(dependent, Alias):
-				dep_edge.label = '<for>'
-			dep_edge.arrowhead = 'onormal'
+			dep_node = graph.add_node(dependent)
+			dep_edge = graph.add_edge(table_node, dep_node,
+				arrowhead='onormal',
+				label='<uses>' if isinstance(dependent, View) else
+				'<for>' if isinstance(dependent, Alias) else
+				'')
 		for key in table.foreign_key_list:
-			key_node = graph.add(key.ref_table)
-			key_edge = table_node.connect_to(key_node)
-			key_edge.dbobject = key
-			key_edge.label = key.name
-			key_edge.arrowhead = 'normal'
+			key_node = graph.add_node(key.ref_table)
+			key_edge = graph.add_edge(table_node, key_node,
+				dbobject=key, arrowhead='normal', label=key.name)
 		for key in table.unique_key_list:
 			for dependent in key.dependent_list:
-				dep_node = graph.add(dependent.relation)
-				dep_edge = dep_node.connect_to(table_node)
-				dep_edge.dbobject = dependent
-				dep_edge.label = dependent.name
-				dep_edge.arrowhead = 'normal'
+				dep_node = graph.add_node(dependent.relation)
+				dep_edge = graph.add_edge(dep_node, table_node,
+					dbobject=dependent, label=dependent.name,
+					arrowhead='normal')
 		for trigger in table.trigger_list:
-			trig_node = graph.add(trigger)
-			trig_edge = table_node.connect_to(trig_node)
-			trig_edge.label = ('<%s %s>' % (times[trigger.trigger_time], events[trigger.trigger_event])).lower()
-			trig_edge.arrowhead = 'vee'
+			trig_node = graph.add_node(trigger)
+			trig_edge = graph.add_edge(table_node, trig_node,
+				label=('<%s %s>' % (
+					times[trigger.trigger_time],
+					events[trigger.trigger_event]
+				)).lower(),
+				arrowhead='vee')
 			for dependency in trigger.dependency_list:
-				dep_node = graph.add(dependency)
-				dep_edge = trig_node.connect_to(dep_node)
-				dep_edge.label = '<uses>'
-				dep_edge.arrowhead = 'onormal'
+				dep_node = graph.add_node(dependency)
+				dep_edge = graph.add_edge(trig_node, dep_node,
+					label='<uses>', arrowhead='onormal')
 		for trigger in table.trigger_dependent_list:
-			trig_node = graph.add(trigger)
-			rel_node = graph.add(trigger.relation)
-			trig_edge = rel_node.connect_to(trig_node)
-			trig_edge.label = ('<%s %s>' % (times[trigger.trigger_time], events[trigger.trigger_event])).lower()
-			trig_edge.arrowhead = 'vee'
-			dep_edge = trig_node.connect_to(table_node)
-			dep_edge.label = '<uses>'
-			dep_edge.arrowhead = 'onormal'
+			trig_node = graph.add_node(trigger)
+			rel_node = graph.add_node(trigger.relation)
+			trig_edge = graph.add_edge(rel_node, trig_node,
+				label=('<%s %s>' % (
+					times[trigger.trigger_time],
+					events[trigger.trigger_event]
+				)).lower(),
+				arrowhead='vee')
+			dep_edge = graph.add_edge(trig_node, table_node,
+				label='<uses>', arrowhead='onormal')
 		return graph
-

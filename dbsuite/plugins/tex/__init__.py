@@ -9,7 +9,6 @@ import logging
 import dbsuite.db
 import dbsuite.plugins
 from dbsuite.plugins.tex.document import TeXDocumentation
-from dbsuite.graph import DEFAULT_CONVERTER
 from string import Template
 
 class OutputPlugin(dbsuite.plugins.OutputPlugin):
@@ -116,15 +115,14 @@ class OutputPlugin(dbsuite.plugins.OutputPlugin):
 		self.options['path'] = os.path.dirname(self.options['filename'])
 		# If diagrams are requested, check we can find GraphViz in the PATH
 		if self.options['diagrams']:
-			gvexe = DEFAULT_CONVERTER
-			if mswindows:
-				gvexe = os.extsep.join([gvexe, 'exe'])
-			found = reduce(lambda x,y: x or y, [
-				os.path.exists(os.path.join(path, gvexe))
-				for path in os.environ.get('PATH', os.defpath).split(os.pathsep)
-			], False)
-			if not found:
-				raise dbsuite.plugins.PluginConfigurationError('Diagrams requested, but the GraphViz utility (%s) was not found in the PATH' % gvexe)
+			try:
+				import pygraphviz
+			except ImportError:
+				raise dbsuite.plugins.PluginConfigurationError('Diagrams have been requested, but the Python pygraphviz was not found')
+			try:
+				import networkx
+			except ImportError:
+				raise dbsuite.plugins.PluginConfigurationError('Diagrams have been requested, but the Python networkx was not found')
 
 	def substitute(self):
 		"""Returns the list of options which can accept $-prefixed substitutions."""

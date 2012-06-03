@@ -2,16 +2,17 @@
 
 from dbsuite.plugins.html.document import HTMLObjectDocument
 
-trigtime = {
+times = {
 	'A': 'After',
 	'B': 'Before',
 	'I': 'Instead of',
 }
-trigevent = {
+events = {
 	'I': 'Insert',
 	'U': 'Update',
 	'D': 'Delete',
 }
+
 granularity = {
 	'R': 'Row',
 	'S': 'Statement',
@@ -49,9 +50,9 @@ class TriggerDocument(HTMLObjectDocument):
 						),
 						tag.tr(
 							tag.td(self.site.url_document('triggertiming.html').link()),
-							tag.td(trigtime[self.dbobject.trigger_time]),
+							tag.td(times[self.dbobject.trigger_time]),
 							tag.td(self.site.url_document('triggerevent.html').link()),
-							tag.td(trigevent[self.dbobject.trigger_event])
+							tag.td(events[self.dbobject.trigger_event])
 						),
 						tag.tr(
 							tag.td(self.site.url_document('granularity.html').link()),
@@ -66,6 +67,13 @@ class TriggerDocument(HTMLObjectDocument):
 				id='attributes'
 			),
 			tag.div(
+				tag.h3('Diagram'),
+				tag.p_diagram(self.dbobject),
+				self.site.img_of(self.dbobject),
+				class_='section',
+				id='diagram'
+			) if self.site.object_graph(self.dbobject) else '',
+			tag.div(
 				tag.h3('SQL Definition'),
 				tag.p_sql_definition(self.dbobject),
 				self.format_sql(self.dbobject.create_sql, number_lines=True, id='sql-def'),
@@ -75,3 +83,20 @@ class TriggerDocument(HTMLObjectDocument):
 		))
 		return body
 
+class TriggerGraph(GraphObjectDocument):
+	def generate(self):
+		graph = super(TriggerGraph, self).generate()
+		trigger = self.dbobject
+		trig_node = graph.add_node(trigger, selected=True)
+		rel_node = graph.add_node(trigger.relation)
+		rel_edge = graph.add_edge(rel_node, trig_node,
+			label=('<%s %s>' % (
+				times[trigger.trigger_time],
+				events[trigger.trigger_event]
+			)).lower(),
+			arrowhead='vee')
+		for dependency in trigger.dependency_list:
+			dep_node = graph.add_node(dependency)
+			dep_edge = graph.add_edge(trig_node, dep_node,
+				label='<uses>', arrowhead='onormal')
+		return graph

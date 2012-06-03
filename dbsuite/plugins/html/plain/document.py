@@ -9,7 +9,6 @@ certain methods to provide formatting specific to the plain style.
 import os
 import logging
 from pkg_resources import resource_string, resource_stream
-from dbsuite.graph import Graph, Node, Edge, Cluster
 from dbsuite.etree import ProcessingInstruction, iselement
 from dbsuite.db import (
 	Database, Schema, Relation, Table, View, Alias, UniqueKey,
@@ -30,7 +29,7 @@ from dbsuite.plugins.html.uniquekey import UniqueKeyDocument
 from dbsuite.plugins.html.foreignkey import ForeignKeyDocument
 from dbsuite.plugins.html.check import CheckDocument
 from dbsuite.plugins.html.index import IndexDocument
-from dbsuite.plugins.html.trigger import TriggerDocument
+from dbsuite.plugins.html.trigger import TriggerDocument, TriggerGraph
 from dbsuite.plugins.html.function import FunctionDocument
 from dbsuite.plugins.html.procedure import ProcedureDocument
 from dbsuite.plugins.html.tablespace import TablespaceDocument
@@ -104,46 +103,49 @@ class PlainElementFactory(HTMLElementFactory):
 
 
 class PlainGraph(ObjectGraph):
-	def style(self, item):
-		super(PlainGraph, self).style(item)
-		# Set the graph to use the same default font as the stylesheet
-		# XXX Any way to set a fallback here like in CSS?
-		if isinstance(item, (Node, Edge)):
-			item.fontname = 'Trebuchet MS'
-			item.fontsize = 8.0
-		elif isinstance(item, Cluster):
-			item.fontname = 'Trebuchet MS'
-			item.fontsize = 10.0
-		# Set shapes and color schemes on objects that represent database
-		# objects
-		if hasattr(item, 'dbobject'):
-			item.fontcolor = '#000000'
-			if isinstance(item.dbobject, Schema):
-				item.style = 'filled'
-				item.fillcolor = '#eeeeee'
-			elif isinstance(item.dbobject, Relation):
-				item.style = 'filled'
-				if isinstance(item.dbobject, Table):
-					item.shape = 'rectangle'
-					item.fillcolor = '#aaaaff'
-				elif isinstance(item.dbobject, View):
-					item.shape = 'octagon'
-					item.fillcolor = '#99ff99'
-				elif isinstance(item.dbobject, Alias):
-					if isinstance(item.dbobject.final_relation, Table):
-						item.shape = 'rectangle'
+	fontname = 'Trebuchet MS'
+
+	def style_subgraph(self, subgraph):
+		subgraph.graph_attr['fontname'] = self.fontname
+		subgraph.graph_attr['fontsize'] = 10.0
+		subgraph.graph_attr['fontcolor'] = '#000000'
+		if hasattr(subgraph, 'dbobject'):
+			subgraph.graph_attr['style'] = 'filled'
+			subgraph.graph_attr['fillcolor'] = '#eeeeee'
+		if hasattr(subgraph, 'selected'):
+			subgraph.attr['color'] = [subgraph.attr['fillcolor'], '#000000'][subgraph.selected]
+
+	def style_node(self, node):
+		node.attr['fontname'] = self.fontname
+		node.attr['fontsize'] = 8.0
+		node.attr['fontcolor'] = '#000000'
+		if hasattr(node, 'dbobject'):
+			if isinstance(node.dbobject, Relation):
+				node.attr['style'] = 'filled'
+				if isinstance(node.dbobject, Table):
+					node.attr['shape'] = 'rectangle'
+					node.attr['fillcolor'] = '#aaaaff'
+				elif isinstance(node.dbobject, View):
+					node.attr['shape'] = 'octagon'
+					node.attr['fillcolor'] = '#99ff99'
+				elif isinstance(node.dbobject, Alias):
+					if isinstance(node.dbobject.final_relation, Table):
+						node.attr['shape'] = 'rectangle'
 					else:
-						item.shape = 'octagon'
-					item.fillcolor = '#ffbb99'
-			elif isinstance(item.dbobject, Trigger):
-				item.shape = 'hexagon'
-				item.style = 'filled'
-				item.fillcolor = '#ff9999'
-		# Outline the selected object more clearly
-		if isinstance(item, (Cluster, Node)) and hasattr(item, 'selected'):
-			item.color = [item.fillcolor, '#000000'][item.selected]
-		elif isinstance(item, Edge):
-			item.color = '#999999'
+						node.attr['shape'] = 'octagon'
+					node.attr['fillcolor'] = '#ffbb99'
+			elif isinstance(node.dbobject, Trigger):
+				node.attr['shape'] = 'hexagon'
+				node.attr['style'] = 'filled'
+				node.attr['fillcolor'] = '#ff9999'
+		if hasattr(node, 'selected'):
+			node.attr['color'] = [node.attr['fillcolor'], '#000000'][node.selected]
+
+	def style_edge(self, edge):
+		edge.attr['fontname'] = self.fontname
+		edge.attr['fontsize'] = 8.0
+		edge.attr['fontcolor'] = '#000000'
+		edge.attr['color'] = '#999999'
 
 
 class PlainSite(WebSite):

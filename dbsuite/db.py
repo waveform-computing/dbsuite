@@ -1204,6 +1204,14 @@ class View(Relation):
 			input.relation_triggers.get((schema.name, self.name), []),
 			key=attrgetter('schema', 'name')
 		)
+		self.trigger_dependents = TriggersDict(
+			self.database,
+			input.trigger_dependents.get((schema.name, self.name), [])
+		)
+		self.trigger_dependent_list = TriggersList(
+			self.database,
+			input.trigger_dependents.get((schema.name, self.name), [])
+		)
 
 	def _get_dependents(self):
 		return self._dependents
@@ -1247,6 +1255,14 @@ class Alias(Relation):
 		self._dependent_list = RelationsList(
 			self.database,
 			input.relation_dependents.get((schema.name, self.name), [])
+		)
+		self.trigger_dependents = TriggersDict(
+			self.database,
+			input.trigger_dependents.get((schema.name, self.name), [])
+		)
+		self.trigger_dependent_list = TriggersList(
+			self.database,
+			input.trigger_dependents.get((schema.name, self.name), [])
 		)
 
 	def _get_fields(self):

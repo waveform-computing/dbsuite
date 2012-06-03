@@ -22,7 +22,6 @@ from pkg_resources import resource_stream, resource_string
 from dbsuite.main import __version__
 from dbsuite.highlighters import CommentHighlighter, SQLHighlighter
 from dbsuite.plugins.html.entities import HTML_ENTITIES
-from dbsuite.graph import Graph, Node, Edge, Cluster
 from dbsuite.tokenizer import TokenTypes as TT
 from dbsuite.db import (
 	DatabaseObject, Relation, Routine, Constraint, Database, Tablespace,
@@ -310,8 +309,7 @@ class HTMLSQLHighlighter(SQLHighlighter):
 class ObjectGraph(object):
 	"""A version of the Graph class which represents database objects.
 
-	This is the base class for graphs used in generated web sites. The
-	_get_dot() getter method is overridden to call the introduced style()
+	This is the base class for graphs used in generated web sites.
 	method on all objects within the graph. Dervied plugins may override
 	style() to refine or change the style, in which case they must also update
 	the graph_class attribute of the site object. The overridden _get_dot()
@@ -322,46 +320,98 @@ class ObjectGraph(object):
 
 	def __init__(self, site, name='G'):
 		super(ObjectGraph, self).__init__()
-		self.graph = pgv.AGraph(name=name)
+		self.graph = pgv.AGraph(name=name, rankdir='LR')
 		self.dbobjects = {}
 		self.site = site
 
-	def add(self, dbobject, selected=False):
-		"""Utility method to add a database object to the graph.
+	def add_subgraph(self, dbobject, selected=False, **attr):
+		"""Add a cluster subgraph representing a database object to the graph.
 
-		This utility method adds the specified database object to the graph as
-		a node (or a cluster) and attaches custom attributes to the node to tie
-		it to the database object it represents. Descendents should override
-		this method if they wish to customize the attributes or add support for
+		This method adds the specified database object to the graph as a
+		cluster subgraph and attaches custom attributes to the subgraph to
+		tie it to the database object it represents. Descendents should override
+		this method if they wish to customize the attributes.
+		"""
+		subgraph = self.dbobjects.get(dbobject)
+		if subgraph is None:
+			subgraph = self.graph.add_subgraph(
+				name='cluster_%s' % dbobject.identifier,
+				label=dbobject.name, **attr)
+			subgraph.selected = selected
+			subgraph.dbobject = dbobject
+			self.dbobjects[dbobject] = subgraph
+		return subgraph
+
+	def add_node(self, dbobject, selected=False, **attr):
+		"""Add a node representing a database object to the graph.
+
+		This method adds the specified database object to the graph as a node
+		(or a cluster) and attaches custom attributes to the node to tie it to
+		the database object it represents. Descendents should override this
+		method if they wish to customize the attributes or add support for
 		additional database object types.
 		"""
-		item = self.dbobjects.get(dbobject)
-		if item is None:
-			if isinstance(dbobject, Schema):
-				item = self.graph.add_subgraph(name=dbobject.identifier, label=dbobject.name)
-			elif isinstance(dbobject, (Relation, Trigger)):
-				cluster = self.add(dbobject.schema)
-				cluster.add_node(name=dbobject.identifier, label=dbobject.name)
-				item = cluster.get_node(name=dbobject.identifier)
-			item.selected = selected
-			item.dbobject = dbobject
-			self.dbobjects[dbobject] = item
-		return item
+		node = self.dbobjects.get(dbobject)
+		if node is None:
+			subgraph = self.add_subgraph(dbobject.schema)
+			subgraph.add_node(name=dbobject.identifier,
+				label=dbobject.name, **attr)
+			node = cluster.get_node(name=dbobject.identifier)
+			node.selected = selected
+			node.dbobject = dbobject
+			self.dbobjects[dbobject] = node
+		return node
 
-	def style(self, item):
-		"""Applies common styles to graph objects."""
+	def add_edge(self, from_object, to_object, key=None, dbobject=None, **attr):
+		"""Add an edge between two objects on the graph.
+
+		This method adds a directed edge between from_object and to_object on
+		the graph. If from_object or to_object are not present on the graph
+		they will be added. If the optional key parameter is specified it can
+		be used to distinguish the new edge from other parallel edges.
+		Descendents should override this method if they wish to customize the
+		attributes.
+		"""
+		if dbobject and not key:
+			key = dbobject.identifier
+		edge = None
+		from_item = self.add(from_object)
+		to_item = self.add(to_object)
+		self.graph.add_edge(from_item, to_item, key, **attr)
+		edge = self.graph.get_edge(from_item, to_item, key)
+		edge.dbobject = dbobject
+		return edge
+
+	def style_subgraph(self, subgraph):
+		"""Applies common styles to subgraphs."""
 		# Overridden to add URLs to graph items representing database objects,
 		# and to apply a thicker border to the selected object
-		if hasattr(item, 'dbobject'):
-			doc = self.site.object_document(item.dbobject)
+		if hasattr(subgraph, 'dbobject'):
+			doc = self.site.object_document(subgraph.dbobject)
 			if doc:
-				if isinstance(item, (pgv.agraph.Node, pgv.agraph.Edge)):
-					item.attr['URL'] = doc.url
-				elif isinstance(item, pgv.AGraph):
-					item.graph_attr['URL'] = doc.url
+				subgraph.graph_attr['URL'] = doc.url
+
+	def style_node(self, node):
+		"""Applies common styles to graph nodes."""
+		if hasattr(node, 'dbobject'):
+			doc = self.site.object_document(node.dbobject)
+			if doc:
+				node.attr['URL'] = doc.url
+
+	def style_edge(self, edge):
+		"""Applies common styles to graph edges."""
+		if hasattr(edge, 'dbobject'):
+			doc = self.site.object_document(edge.dbobject)
+			if doc:
+				edge.attr['URL'] = doc.url
 
 	def _get_dot(self):
-		self.touch(self.style)
+		for subgraph in self.graph.subgraphs_iter():
+			self.style_subgraph(subgraph)
+		for node in self.graph.nodes_iter():
+			self.style_node(node)
+		for edge in self.graph.edges_iter():
+			self.style_edge(edge)
 		return super(ObjectGraph, self)._get_dot()
 
 
@@ -1587,12 +1637,12 @@ class HTMLObjectDocument(HTMLDocument):
 
 
 class GraphDocument(WebSiteDocument):
-	"""Represents a graph in GraphViz dot language.
+	"""Represents a document containing a GraphViz generated graph.
 
-	This is the base class for dot graphs. It provides a doc attribute which is
-	a Graph object from the dot.graph module included with the application.
-	This (and the associated Node, Edge, Cluster and Subgraph classes) provide
-	rudimentary editing facilities for constructor dot graphs.
+	This is the base class for image documents generated by GraphViz. It
+	provides a doc attribute which is an ObjectGraph object from this module.
+	This, along with pygraphviz provides rudimentary editing facilities for
+	constructing dot graphs.
 	"""
 
 	def __init__(self, site, url, alt=''):
@@ -1611,8 +1661,6 @@ class GraphDocument(WebSiteDocument):
 
 	def generate(self):
 		graph = self.site.graph_class(self.site, 'G')
-		graph.rankdir = 'LR'
-		graph.dpi = 96
 		return graph
 
 	def serialize(self, content):

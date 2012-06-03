@@ -156,42 +156,50 @@ class SchemaGraph(GraphObjectDocument):
 	def generate(self):
 		graph = super(SchemaGraph, self).generate()
 		schema = self.dbobject
-		graph.add(schema, selected=True)
+		graph.add_subgraph(schema, selected=True)
 		for relation in schema.relation_list:
-			rel_node = graph.add(relation)
+			rel_node = graph.add_node(relation)
 			for dependent in relation.dependent_list:
-				dep_node = graph.add(dependent)
-				dep_edge = dep_node.connect_to(rel_node)
-				dep_edge.arrowhead = 'onormal'
+				dep_node = graph.add_node(dependent)
+				dep_edge = graph.add_edge(dep_node, rel_node,
+					arrowhead='onormal')
 			if isinstance(relation, Table):
 				for key in relation.foreign_key_list:
-					key_node = graph.add(key.ref_table)
-					key_edge = rel_node.connect_to(key_node)
-					key_edge.arrowhead = 'normal'
+					key_node = graph.add_node(key.ref_table)
+					key_edge = graph.add_edge(rel_node, key_node,
+						arrowhead='normal')
 				for trigger in relation.trigger_list:
-					trig_node = graph.add(trigger)
-					trig_edge = rel_node.connect_to(trig_node)
-					trig_edge.arrowhead = 'vee'
+					trig_node = graph.add_node(trigger)
+					trig_edge = graph.add_edge(rel_node, trig_node,
+						arrowhead='vee')
 					for dependency in trigger.dependency_list:
-						dep_node = graph.add(dependency)
-						dep_edge = trig_node.connect_to(dep_node)
-						dep_edge.arrowhead = 'onormal'
+						dep_node = graph.add_node(dependency)
+						dep_edge = graph.add_edge(trig_node, dep_node,
+							arrowhead='onormal')
 			elif isinstance(relation, View):
 				for dependency in relation.dependency_list:
-					dep_node = graph.add(dependency)
-					dep_edge = rel_node.connect_to(dep_node)
-					dep_edge.arrowhead = 'onormal'
+					dep_node = graph.add_node(dependency)
+					dep_edge = graph.add_edge(rel_node, dep_node,
+						arrowhead='onormal')
+				for trigger in relation.trigger_list:
+					trig_node = graph.add_node(trigger)
+					trig_edge = graph.add_edge(rel_node, trig_node,
+						arrowhead='vee')
+					for dependency in trigger.dependency_list:
+						dep_node = graph.add_node(dependency)
+						dep_edge = graph.add_edge(trig_node, dep_node,
+							arrowhead='onormal')
 			elif isinstance(relation, Alias):
-				ref_node = graph.add(relation.relation)
-				ref_edge = rel_node.connect_to(ref_node)
-				ref_edge.arrowhead = 'onormal'
+				ref_node = graph.add_node(relation.relation)
+				ref_edge = graph.add_edge(rel_node, ref_node,
+					arrowhead='onormal')
 		for trigger in schema.trigger_list:
-			rel_node = graph.add(trigger.relation)
-			trig_node = graph.add(trigger)
-			trig_edge = rel_node.connect_to(trig_node)
-			trig_edge.arrowhead = 'vee'
+			rel_node = graph.add_node(trigger.relation)
+			trig_node = graph.add_node(trigger)
+			trig_edge = graph.add_edge(rel_node, trig_node,
+				arrowhead='vee')
 			for dependency in trigger.dependency_list:
-				dep_node = graph.add(dependency)
-				dep_edge = trig_node.connect_to(dep_node)
-				dep_edge.arrowhead = 'onormal'
+				dep_node = graph.add_node(dependency)
+				dep_edge = graph.add_edge(trig_node, dep_node,
+					arrowhead='onormal')
 		return graph

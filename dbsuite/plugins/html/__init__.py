@@ -15,7 +15,6 @@ import logging
 import dbsuite.db
 import dbsuite.plugins
 from dbsuite.plugins.html.document import WebSite
-from dbsuite.graph import DEFAULT_CONVERTER
 from string import Template
 
 class HTMLOutputPlugin(dbsuite.plugins.OutputPlugin):
@@ -118,24 +117,23 @@ class HTMLOutputPlugin(dbsuite.plugins.OutputPlugin):
 			codecs.lookup(self.options['encoding'])
 		except:
 			raise dbsuite.plugins.PluginConfigurationError('Unknown character encoding "%s"' % self.options['encoding'])
-		# If search is True, check that the Xapian bindings are
-		# available
+		# If search is True, check that the Xapian bindings are available
 		if self.options['search']:
 			try:
 				import xapian
 			except ImportError:
 				raise dbsuite.plugins.PluginConfigurationError('Search is enabled, but the Python Xapian bindings were not found')
-		# If diagrams are requested, check we can find GraphViz in the PATH
+		# If diagrams are requested, check pygraphviz and networkx are
+		# available
 		if self.options['diagrams']:
-			gvexe = DEFAULT_CONVERTER
-			if mswindows:
-				gvexe = os.extsep.join([gvexe, 'exe'])
-			found = reduce(lambda x,y: x or y, [
-				os.path.exists(os.path.join(path, gvexe))
-				for path in os.environ.get('PATH', os.defpath).split(os.pathsep)
-			], False)
-			if not found:
-				raise dbsuite.plugins.PluginConfigurationError('Diagrams requested, but the GraphViz utility (%s) was not found in the PATH' % gvexe)
+			try:
+				import pygraphviz
+			except ImportError:
+				raise dbsuite.plugins.PluginConfigurationError('Diagrams have been requested, but the Python pygraphviz was not found')
+			try:
+				import networkx
+			except ImportError:
+				raise dbsuite.plugins.PluginConfigurationError('Diagrams have been requested, but the Python networkx was not found')
 
 	def substitute(self):
 		"""Returns the list of options which can accept $-prefixed substitutions."""

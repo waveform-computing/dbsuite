@@ -123,15 +123,24 @@ class AliasGraph(GraphObjectDocument):
 	def generate(self):
 		graph = super(AliasGraph, self).generate()
 		alias = self.dbobject
-		alias_node = graph.add(alias, selected=True)
-		target_node = graph.add(alias.relation)
-		target_edge = alias_node.connect_to(target_node)
-		target_edge.label = '<for>'
-		target_edge.arrowhead = 'onormal'
+		alias_node = graph.add_node(alias, selected=True)
+		target_node = graph.add_node(alias.relation)
+		target_edge = graph.add_edge(alias_node, target_node,
+			label='<for>', arrowhead='onormal')
 		for dependent in alias.dependent_list:
-			dep_node = graph.add(dependent)
-			dep_edge = dep_node.connect_to(alias_node)
-			dep_edge.label = '<uses>'
-			dep_edge.arrowhead = 'onormal'
+			dep_node = graph.add_node(dependent)
+			dep_edge = graph.add_edge(dep_node, alias_node,
+				label='<uses>', arrowhead='onormal')
+		for trigger in view.trigger_dependent_list:
+			trig_node = graph.add_node(trigger)
+			rel_node = graph.add_node(trigger.relation)
+			trig_edge = graph.add_edge(rel_node, trig_node,
+				label=('<%s %s>' % (
+					times[trigger.trigger_time],
+					events[trigger.trigger_event]
+				)).lower(),
+				arrowhead='vee')
+			dep_edge = graph.add_edge(trig_node, alias_node,
+				label='<uses>', arrowhead='onormal')
 		return graph
 

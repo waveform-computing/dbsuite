@@ -18,7 +18,6 @@ from dbsuite.main import __version__
 from dbsuite.astex import tex, xml, TeXFactory
 from dbsuite.highlighters import CommentHighlighter, SQLHighlighter
 from dbsuite.hyphenator import hyphenate_word
-from dbsuite.graph import Graph, Node, Edge, Cluster
 from dbsuite.tokenizer import TokenTypes as TT
 from dbsuite.db import (
 	DatabaseObject, Relation, Routine, Constraint, Database, Tablespace,
@@ -266,74 +265,118 @@ class TeXObjectGraph(Graph):
 	easily.
 	"""
 
-	def __init__(self, id, directed=True, strict=False):
+	def __init__(self, name='G'):
 		super(TeXObjectGraph, self).__init__(id, directed, strict)
+		self.graph = pgv.AGraph(name=name, rankdir='LR', margin='0.0,0.0',
+			# XXX Maximum size is based on A4 with 1in margins
+			size='%f,%f' % ((210 / 25.4) - 2, (297 / 25.4) - 2))
 		self.dbobjects = {}
-		self.rankdir = 'LR'
-		self.margin='0.0,0.0'
-		# XXX Maximum size is based on A4 with 1in margins
-		self.size='%f,%f' % ((210 / 25.4) - 2, (297 / 25.4) - 2)
 
-	def add(self, dbobject, selected=False):
-		"""Utility method to add a database object to the graph.
+	def add_subgraph(self, dbobject, selected=False, **attr):
+		"""Add a cluster subgraph representing a database object to the graph.
 
-		This utility method adds the specified database object to the graph as
-		a node (or a cluster) and attaches custom attributes to the node to tie
-		it to the database object it represents. Descendents should override
-		this method if they wish to customize the attributes or add support for
+		This method adds the specified database object to the graph as a
+		cluster subgraph and attaches custom attributes to the subgraph to
+		tie it to the database object it represents. Descendents should override
+		this method if they wish to customize the attributes.
+		"""
+		subgraph = self.dbobjects.get(dbobject)
+		if subgraph is None:
+			subgraph = self.graph.add_subgraph(
+				name='cluster_%s' % dbobject.identifier,
+				label=dbobject.name, **attr)
+			subgraph.selected = selected
+			subgraph.dbobject = dbobject
+			self.dbobjects[dbobject] = subgraph
+		return subgraph
+
+	def add_node(self, dbobject, selected=False, **attr):
+		"""Add a node representing a database object to the graph.
+
+		This method adds the specified database object to the graph as a node
+		(or a cluster) and attaches custom attributes to the node to tie it to
+		the database object it represents. Descendents should override this
+		method if they wish to customize the attributes or add support for
 		additional database object types.
 		"""
-		item = self.dbobjects.get(dbobject)
-		if item is None:
-			if isinstance(dbobject, Schema):
-				item = Cluster(self, dbobject.identifier)
-				item.label = dbobject.name
-			elif isinstance(dbobject, (Relation, Trigger)):
-				cluster = self.add(dbobject.schema)
-				item = Node(cluster, dbobject.identifier)
-				item.label = dbobject.name
-			item.selected = selected
-			item.dbobject = dbobject
-			self.dbobjects[dbobject] = item
-		return item
+		node = self.dbobjects.get(dbobject)
+		if node is None:
+			subgraph = self.add_subgraph(dbobject.schema)
+			subgraph.add_node(name=dbobject.identifier,
+				label=dbobject.name, **attr)
+			node = cluster.get_node(name=dbobject.identifier)
+			node.selected = selected
+			node.dbobject = dbobject
+			self.dbobjects[dbobject] = node
+		return node
 
-	def style(self, item):
-		# Add URLs to graph items representing certain database objects
-		if hasattr(item, 'dbobject'):
-			if isinstance(item, (Node, Edge, Cluster)) and isinstance(item.dbobject, (Relation, Trigger, Routine)):
-				item.URL = 'sec:%s' % item.dbobject.identifier
-		# Set the graph to use the same default font as the stylesheet
-		# XXX Any way to set a fallback here like in CSS?
-		if isinstance(item, (Node, Edge, Cluster)):
-			item.fontname = 'Times New Roman'
-			item.fontsize = 8.0
-		# Set shapes and color schemes on objects that represent database
-		# objects
-		if hasattr(item, 'dbobject'):
-			item.fontcolor = '#000000'
-			if isinstance(item.dbobject, Schema):
-				pass
-			elif isinstance(item.dbobject, Relation):
-				if isinstance(item.dbobject, Table):
-					item.shape = 'rectangle'
-				elif isinstance(item.dbobject, View):
-					item.shape = 'octagon'
-				elif isinstance(item.dbobject, Alias):
-					if isinstance(item.dbobject.final_relation, Table):
-						item.shape = 'rectangle'
+	def add_edge(self, from_object, to_object, key=None, dbobject=None, **attr):
+		"""Add an edge between two objects on the graph.
+
+		This method adds a directed edge between from_object and to_object on
+		the graph. If from_object or to_object are not present on the graph
+		they will be added. If the optional key parameter is specified it can
+		be used to distinguish the new edge from other parallel edges.
+		Descendents should override this method if they wish to customize the
+		attributes.
+		"""
+		if dbobject and not key:
+			key = dbobject.identifier
+		edge = None
+		from_item = self.add(from_object)
+		to_item = self.add(to_object)
+		self.graph.add_edge(from_item, to_item, key, **attr)
+		edge = self.graph.get_edge(from_item, to_item, key)
+		edge.dbobject = dbobject
+		return edge
+
+	def style_subgraph(self, subgraph):
+		"""Applies common styles to subgraphs."""
+		subgraph.graph_attr['color'] = '#000000'
+		subgraph.graph_attr['fontname'] = 'Times New Roman'
+		subgraph.graph_attr['fontsize'] = 10.0
+		subgraph.graph_attr['fontcolor'] = '#000000'
+		if hasattr(subgraph, 'dbobject'):
+			# XXX Check this works...
+			if isinstance(subgraph.dbobject, Schema):
+				subgraph.graph_attr['URL'] = 'sec:%s' % subgraph.dbobject.identifier
+
+	def style_node(self, node):
+		"""Applies common styles to graph nodes."""
+		node.attr['color'] = '#000000'
+		node.attr['fontname'] = 'Times New Roman'
+		node.attr['fontsize'] = 8.0
+		node.attr['fontcolor'] = '#000000'
+		if hasattr(node, 'dbobject'):
+			if isinstance(node.dbobject, (Relation, Trigger, Routine)):
+				node.attr['URL'] = 'sec:%s' % node.dbobject.identifier
+			if isinstance(node.dbobject, Relation):
+				if isinstance(node.dbobject, Table):
+					node.attr['shape'] = 'rectangle'
+				elif isinstance(node.dbobject, View):
+					node.attr['shape'] = 'octagon'
+				elif isinstance(node.dbobject, Alias):
+					if isinstance(node.dbobject.final_relation, Table):
+						node.attr['shape'] = 'rectangle'
 					else:
-						item.shape = 'octagon'
-			elif isinstance(item.dbobject, Trigger):
-				item.shape = 'hexagon'
-		# Outline the selected object more clearly
-		if isinstance(item, (Cluster, Node)):
-			item.color = '#000000'
-		elif isinstance(item, Edge):
-			item.color = '#999999'
+						node.attr['shape'] = 'octagon'
+			elif isinstance(node.dbobject, Trigger):
+				node.attr['shape'] = 'hexagon'
+
+	def style_edge(self, edge):
+		"""Applies common styles to graph edges."""
+		edge.attr['color'] = '#999999'
+		edge.attr['fontname'] = 'Times New Roman'
+		edge.attr['fontsize'] = 8.0
+		edge.attr['fontcolor'] = '#000000'
 
 	def _get_dot(self):
-		for item in self:
-			self.style(item)
+		for subgraph in self.subgraphs_iter():
+			self.style_subgraph(subgraph)
+		for node in self.nodes_iter():
+			self.style_node(node)
+		for edge in self.edges_iter():
+			self.style_edge(edge)
 		return super(TeXObjectGraph, self)._get_dot()
 
 
