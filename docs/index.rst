@@ -19,7 +19,7 @@ Contents
    dbmakedoc
    dbconvdoc
    dbgrepdoc
-   dbtidsql
+   dbtidysql
    license
 
 Further information on the tools can be found at the `dbsuite wiki
@@ -31,5 +31,6 @@ Indices and tables
 
 * :ref:`genindex`
 * :ref:`search`
+
 .. * :ref:`modindex`
 

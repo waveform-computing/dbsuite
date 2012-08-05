@@ -1,10 +1,9 @@
 =========
-dbgrepdoc
+dbtidysql
 =========
 
-dbgrepdoc is a utility for extracting all statements related to documentation
-from an SQL script; that is to say it extracts CONNECT, SET SCHEMA, and COMMENT
-statements.
+dbtidysql is a utility for re-indenting and formatting SQL to improve its
+readability.
 
 
 Synopsis
@@ -12,17 +11,16 @@ Synopsis
 
 ::
 
-  $ dbgrepdoc [options] files...
+  $ dbtidysql [options] files...
 
 
 Description
 ===========
 
-Extract all documentation related statements from *files*, writing them to
-stdout. If no file is specified or ``-`` is given, then the utility will read
-SQL from stdin.
+Parse each file given, reformatting it for readability. All output is written
+to stdout for redirection.
 
-.. program:: dbgrepdoc
+.. program:: dbtidysql
 
 .. option:: --version
 
@@ -50,7 +48,7 @@ SQL from stdin.
 
 .. option:: -D, --debug
 
-    Run dbgrepdoc under PDB, the Python debugger. Generally only useful for
+    Run dbtidysql under PDB, the Python debugger. Generally only useful for
     developers. Also note that in this mode, debug entries will be output to
     stderr as well, which results in a lot of output
 

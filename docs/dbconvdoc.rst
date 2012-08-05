@@ -1,10 +1,9 @@
 =========
-dbgrepdoc
+dbconvdoc
 =========
 
-dbgrepdoc is a utility for extracting all statements related to documentation
-from an SQL script; that is to say it extracts CONNECT, SET SCHEMA, and COMMENT
-statements.
+dbconvdoc is a simple utility for extracting comments for the SYSCAT and
+SYSSTAT schemas from the IBM DB2 documentation pages available on the Internet.
 
 
 Synopsis
@@ -12,17 +11,16 @@ Synopsis
 
 ::
 
-  $ dbgrepdoc [options] files...
+  $ dbconvdoc [options] source converter
 
 
 Description
 ===========
 
-Extract all documentation related statements from *files*, writing them to
-stdout. If no file is specified or ``-`` is given, then the utility will read
-SQL from stdin.
+Extract the documentation from *source* and use *converter* to generate the
+output. All output is written to stdout for redirection.
 
-.. program:: dbgrepdoc
+.. program:: dbconvdoc
 
 .. option:: --version
 
@@ -50,11 +48,23 @@ SQL from stdin.
 
 .. option:: -D, --debug
 
-    Run dbgrepdoc under PDB, the Python debugger. Generally only useful for
+    Run dbconvdoc under PDB, the Python debugger. Generally only useful for
     developers. Also note that in this mode, debug entries will be output to
     stderr as well, which results in a lot of output
 
-.. option:: -t, --terminator TERMINATOR
+.. option:: --list-sources
 
-    Specify the statement terminator used within the SQL file. If not given,
-    this defaults to semi-colon (;).
+    list all available sources
+
+.. option:: --help-source=SOURCE
+
+    display more information about the named source
+
+.. option:: --list-converters
+
+    list all available converters
+
+.. option:: --help-converter=CONV
+
+    display more information about the named converter
+
