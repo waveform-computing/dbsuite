@@ -78,7 +78,7 @@ class ExecSqlUtility(dbsuite.main.Utility):
         )
         self.parser.add_option(
             '-t', '--terminator', dest='terminator',
-            help='specify the statement terminator (default=';')')
+            help='specify the statement terminator (default=";")')
         self.parser.add_option(
             '-a', '--auto-commit', dest='autocommit', action='store_true',
             help='automatically COMMIT after each SQL statement in a script')

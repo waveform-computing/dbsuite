@@ -46,7 +46,7 @@ class TidySqlUtility(dbsuite.main.Utility):
         self.parser.set_defaults(terminator=';')
         self.parser.add_option(
             '-t', '--terminator', dest='terminator',
-            help='specify the statement terminator (default=';')')
+            help='specify the statement terminator (default=";")')
 
     def main(self, options, args):
         super(TidySqlUtility, self).main(options, args)
