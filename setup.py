@@ -1,19 +1,42 @@
 #!/usr/bin/env python
 # vim: set et sw=4 sts=4:
 
-"""Flexible documentation tools for relational databases.
+# Copyright 2012 Dave Hughes.
+#
+# This file is part of dbsuite.
+#
+# dbsuite is free software: you can redistribute it and/or modify it under the
+# terms of the GNU General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your option) any later
+# version.
+#
+# dbsuite is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+# A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along with
+# dbsuite.  If not, see <http://www.gnu.org/licenses/>.
 
-dbsuite is a set of command line applications for documentation related
-functions for relational databases (primarily DB2, but in the process of being
-expanded to other databases). The applications are modular including an
-extensible plugin framework for supporting new sources and output formats."""
+from __future__ import (
+    unicode_literals,
+    print_function,
+    absolute_import,
+    division,
+    )
 
+from setuptools import setup, find_packages
+from utils import description, get_version, require_python
+
+# Workaround <http://bugs.python.org/issue10945>
+import codecs
 try:
-    from setuptools import setup, find_packages
-except ImportError:
-    from ez_setup import use_setuptools
-    use_setuptools()
-    from setuptools import setup, find_packages
+    codecs.lookup('mbcs')
+except LookupError:
+    ascii = codecs.lookup('ascii')
+    func = lambda name, enc=ascii: {True: enc}.get(name=='mbcs')
+    codecs.register(func)
+
+require_python(0x020600f0)
 
 classifiers = [
     'Development Status :: 5 - Production/Stable',
@@ -21,10 +44,12 @@ classifiers = [
     'Environment :: Web Environment',
     'Intended Audience :: System Administrators',
     'Intended Audience :: Developers',
+    'License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)',
     'Operating System :: Microsoft :: Windows',
     'Operating System :: POSIX',
     'Operating System :: Unix',
     'Programming Language :: Python :: 2.6',
+    'Programming Language :: Python :: 2.7',
     'Programming Language :: SQL',
     'Programming Language :: JavaScript',
     'Programming Language :: PHP',
@@ -45,22 +70,17 @@ entry_points = {
     ]
 }
 
-def get_console_scripts():
-    import re
-    for s in entry_points['console_scripts']:
-        print re.match(r'^([^= ]*) ?=.*$', s).group(1)
 
 def main():
-    from dbsuite.main import __version__
     setup(
         name                 = 'dbsuite',
-        version              = __version__,
+        version              = get_version('dbsuite/__init__.py'),
         description          = 'A suite of tools for maintenance of information warehouses',
-        long_description     = __doc__,
+        long_description     = description('README.txt'),
         author               = 'Dave Hughes',
         author_email         = 'dave@waveform.org.uk',
         url                  = 'http://www.waveform.org.uk/trac/dbsuite/',
-        packages             = find_packages(exclude=['ez_setup']),
+        packages             = find_packages(exclude=['distribute_setup', 'utils']),
         install_requires     = ['Pillow', 'ibm-db', 'pygraphviz'],
         include_package_data = True,
         platforms            = 'ALL',

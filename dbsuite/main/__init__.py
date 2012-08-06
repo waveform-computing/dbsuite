@@ -1,8 +1,29 @@
 # vim: set et sw=4 sts=4:
 
-import sys
-mswindows = sys.platform == "win32"
+# Copyright 2012 Dave Hughes.
+#
+# This file is part of dbsuite.
+#
+# dbsuite is free software: you can redistribute it and/or modify it under the
+# terms of the GNU General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your option) any later
+# version.
+#
+# dbsuite is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+# A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along with
+# dbsuite.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import (
+    unicode_literals,
+    print_function,
+    absolute_import,
+    division,
+    )
+
+import sys
 import os
 import optparse
 import ConfigParser
@@ -10,11 +31,11 @@ import logging
 import locale
 import textwrap
 import traceback
-import dbsuite.plugins
 import glob
-from dbsuite.compat import *
 
-__version__ = "1.3.0"
+import dbsuite.plugins
+from dbsuite.compat import *
+from dbsuite import __version__
 
 # Use the user's default locale instead of C
 locale.setlocale(locale.LC_ALL, '')
@@ -112,7 +133,7 @@ class Utility(object):
                             # Only strip the line break (whitespace is significant)
                             resp_arg = resp_arg.rstrip('\n')
                             # Only perform globbing on response file values for UNIX
-                            if mswindows:
+                            if sys.platform.startswith('win'):
                                 result.append(resp_arg)
                             else:
                                 result.extend(self.glob_arg(resp_arg))
@@ -121,7 +142,7 @@ class Utility(object):
             else:
                 result.append(arg)
         # Perform globbing on everything for Windows
-        if mswindows:
+        if sys.platform.startswith('win'):
             result = reduce(lambda a, b: a + b, [self.glob_arg(f) for f in result], [])
         return result
 

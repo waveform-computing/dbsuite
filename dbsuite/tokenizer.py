@@ -1,6 +1,22 @@
 # vim: set et sw=4 sts=4:
 
-"""Implements a highly configurable SQL tokenizer.
+# Copyright 2012 Dave Hughes.
+#
+# This file is part of dbsuite.
+#
+# dbsuite is free software: you can redistribute it and/or modify it under the
+# terms of the GNU General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your option) any later
+# version.
+#
+# dbsuite is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+# A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along with
+# dbsuite.  If not, see <http://www.gnu.org/licenses/>.
+
+"""Implements an SQL tokenizer.
 
 This unit implements a configurable SQL tokenizer base class (BaseTokenizer)
 and several classes descended from this which implement parsing specific
@@ -14,6 +30,13 @@ SQL92Tokenizer   -- ANSI SQL-92
 SQL99Tokenizer   -- ANSI SQL-99
 SQL2003Tokenizer -- ANSI SQL-2003
 """
+
+from __future__ import (
+    unicode_literals,
+    print_function,
+    absolute_import,
+    division,
+    )
 
 from decimal import Decimal
 from dbsuite.compat import *
@@ -724,7 +747,8 @@ class BaseTokenizer(object):
 
     def _handle_colon(self):
         """Parses a colon character (":") in the source."""
-        # XXX Need to handle a colon followed by white-space as an OPERATOR here (for compound labels)
+        # XXX Need to handle a colon followed by white-space as an OPERATOR
+        # here (for compound labels)
         self._next()
         if self._char in ['"', "'"]:
             try:

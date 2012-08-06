@@ -1,5 +1,21 @@
 # vim: set et sw=4 sts=4:
 
+# Copyright 2012 Dave Hughes.
+#
+# This file is part of dbsuite.
+#
+# dbsuite is free software: you can redistribute it and/or modify it under the
+# terms of the GNU General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your option) any later
+# version.
+#
+# dbsuite is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+# A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along with
+# dbsuite.  If not, see <http://www.gnu.org/licenses/>.
+
 """Defines the base classes for input and output plugins.
 
 This module defines the base classes for input and output plugins. Input
@@ -10,6 +26,13 @@ from the hierarchy of database objects provided to them by the main
 application.
 """
 
+from __future__ import (
+    unicode_literals,
+    print_function,
+    absolute_import,
+    division,
+    )
+
 import os
 import sys
 import logging
@@ -17,13 +40,14 @@ import datetime
 import imp
 import re
 import fnmatch
-import dbsuite.db
 from itertools import chain, groupby, ifilter
-from dbsuite.compat import *
+
+import dbsuite.db
 from dbsuite.tuples import (
     ConstraintRef, IndexRef, RelationDep, RelationRef, RoutineRef, TableRef,
     TablespaceRef, TriggerDep, TriggerRef
 )
+from dbsuite.compat import *
 
 
 __all__ = [

@@ -1,8 +1,29 @@
 # vim: set et sw=4 sts=4:
 
-import sys
-mswindows = sys.platform == "win32"
+# Copyright 2012 Dave Hughes.
+#
+# This file is part of dbsuite.
+#
+# dbsuite is free software: you can redistribute it and/or modify it under the
+# terms of the GNU General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your option) any later
+# version.
+#
+# dbsuite is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+# A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along with
+# dbsuite.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import (
+    unicode_literals,
+    print_function,
+    absolute_import,
+    division,
+    )
+
+import sys
 import re
 import os.path
 import logging
@@ -19,10 +40,14 @@ except ImportError:
 from datetime import datetime
 from string import Template
 from time import sleep
+
 from dbsuite.tokenizer import Token
 from dbsuite.parser import TokenTypes as TT
 from dbsuite.instance import get_instance, set_instance
 from dbsuite.compat import *
+
+
+IS_WINDOWS = sys.platform.startswith('win')
 
 # Constants for the SQLScript.state property
 (
@@ -33,8 +58,10 @@ from dbsuite.compat import *
     FAILED,     # script, or a dependent script has failed and cannot be retried
 ) = range(5)
 
-# Declare a simple class to store the attributes associated with an ON statement
+
 class OnState(object):
+    "Stores the attributes of an ON statement"
+
     def __init__(self, line, delay, retry_mode, retry_count, action):
         super(OnState, self).__init__()
         self.line = line
@@ -43,19 +70,23 @@ class OnState(object):
         self.retry_count = retry_count
         self.action = action
 
-# Create a singleton class to represent arbitrary error states for the ON statement
+
 class ErrorState(object):
+    "Singleton class representing an arbitrary error state for the ON statement"
     pass
 ErrorState = ErrorState()
 
+
 # Global lock used to ensure output doesn't overlap
 output_lock = threading.RLock()
+
 
 class Error(Exception):
     """Base class for SQLScript exceptions"""
 
     def __init__(self, msg=''):
         Exception.__init__(self, msg)
+
         self.message = msg
 
     def __repr__(self):
@@ -63,11 +94,13 @@ class Error(Exception):
 
     __str__ = __repr__
 
+
 class ScriptRuntimeError(Error):
     """Raised when a script fails at runtime"""
 
     def __init__(self, msg):
         Error.__init__(self, msg)
+
 
 class DependencyError(Error):
     """Base class for dependency errors"""
@@ -81,12 +114,14 @@ class DependencyError(Error):
         self.errors.append((depfile, msg))
         self.message += '\n%s' % (msg)
 
+
 class UnresolvedDependencyError(DependencyError):
     """Raised when a script has an unresolved dependency"""
 
     def __init__(self, script):
         DependencyError.__init__(self, script,
             'Script has dependencies that cannot be resolved: %s' % script.filename)
+
 
 class CircularDependencyError(DependencyError):
     """Raised when a script has an unresolvable circular dependency"""
@@ -103,7 +138,7 @@ def clean_output(s):
     form-feeds, and doubled-CRs in line feeds (\r\r\n). This routine exists to
     apply any platform-specific cleaning that needs to be performed.
     """
-    if mswindows:
+    if IS_WINDOWS:
         s = s.replace('\f', '')
         s = s.replace('\r\r\n', '\n')
         s = s.replace('\r\n', '\n')
@@ -284,7 +319,7 @@ class SQLJob(object):
                 '-t'  # use ; as statement terminator
             ]
             cmdline = 'db2 %s' % ' '.join(args)
-            if mswindows:
+            if IS_WINDOWS:
                 cmdline = 'db2cmd -i -w -c %s' % cmdline
             p = subprocess.Popen(
                 [cmdline],
@@ -292,7 +327,7 @@ class SQLJob(object):
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                close_fds=not mswindows
+                close_fds=not IS_WINDOWS
             )
             if connection.username is not None:
                 sql = "CONNECT TO '%s' USER '%s' USING '%s';\n" % (connection.database, connection.username, connection.password)
@@ -355,7 +390,7 @@ class SQLJob(object):
                     'w+': 'create/read/write',
                 }[filemodes[f]]
                 mode = filemodes[f]
-                if mswindows:
+                if IS_WINDOWS:
                     mode += 'b'
                 open(f, mode).close()
                 if 'w' in filemodes[f]:
@@ -643,7 +678,7 @@ class SQLScript(object):
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=sys.stderr,
-            close_fds=not mswindows
+            close_fds=not IS_WINDOWS
         )
         try:
             # Pickle ourselves and send the result to the subprocess
@@ -656,7 +691,7 @@ class SQLScript(object):
                 self.retrylimit = 0
             else:
                 # On Linux/UNIX, the returncode is modulus 256
-                if mswindows:
+                if IS_WINDOWS:
                     self.returncode = p.returncode
                 else:
                     self.returncode = p.returncode % 256
@@ -797,7 +832,7 @@ class SQLScript(object):
             cmdline.append('-ec')          # output the SQLCODE after execution
         elif self._on_mode == 'SQLSTATE':
             cmdline.append('-es')          # output the SQLSTATE after execution
-        if mswindows:
+        if IS_WINDOWS:
             cmdline = ['db2cmd', '-i', '-w', '-c'] + cmdline
         try:
             p = subprocess.Popen(
@@ -806,7 +841,7 @@ class SQLScript(object):
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                close_fds=not mswindows
+                close_fds=not IS_WINDOWS
             )
             output = p.communicate(sql)[0]
         except Exception, e:

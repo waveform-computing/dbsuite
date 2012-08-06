@@ -1,11 +1,34 @@
 # vim: set et sw=4 sts=4:
 
+# Copyright 2012 Dave Hughes.
+#
+# This file is part of dbsuite.
+#
+# dbsuite is free software: you can redistribute it and/or modify it under the
+# terms of the GNU General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your option) any later
+# version.
+#
+# dbsuite is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+# A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along with
+# dbsuite.  If not, see <http://www.gnu.org/licenses/>.
+
 """Provides a set of base classes for HTML based output plugins.
 
 This package defines a set of utility classes which make it easier to construct
 output plugins capable of producing HTML documents (or, more precisely, a
 website containing HTML documents amongst other things).
 """
+
+from __future__ import (
+    unicode_literals,
+    print_function,
+    absolute_import,
+    division,
+    )
 
 import sys
 import os
@@ -16,9 +39,9 @@ import logging
 import urlparse
 import threading
 import pygraphviz as pgv
-
 from operator import attrgetter
 from pkg_resources import resource_stream, resource_string
+
 from dbsuite.main import __version__
 from dbsuite.highlighters import CommentHighlighter, SQLHighlighter
 from dbsuite.plugins.html.entities import HTML_ENTITIES
@@ -48,6 +71,7 @@ except ImportError:
         from StringIO import StringIO
     except ImportError:
         raise ImportError('unable to find a StringIO implementation')
+
 
 # Constants for HTML versions
 (

@@ -1,3 +1,19 @@
+# Copyright 2012 Dave Hughes.
+#
+# This file is part of dbsuite.
+#
+# dbsuite is free software: you can redistribute it and/or modify it under the
+# terms of the GNU General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your option) any later
+# version.
+#
+# dbsuite is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+# A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along with
+# dbsuite.  If not, see <http://www.gnu.org/licenses/>.
+
 """
 Hyphenation, using Frank Liang's algorithm.
 
@@ -16,11 +32,18 @@ Ned Batchelder, July 2007.
 This Python code is in the public domain.
 """
 
+from __future__ import (
+    unicode_literals,
+    print_function,
+    absolute_import,
+    division,
+    )
+
 import re
 
 __version__ = '1.0.20070709'
 
-class Hyphenator:
+class Hyphenator(object):
     def __init__(self, patterns, exceptions=''):
         self.tree = {}
         for pattern in patterns.split():
@@ -434,6 +457,7 @@ yper5 yp3i y3po y4poc yp2ta y5pu yra5m yr5ia y3ro yr4r ys4c y3s2e ys3ica ys3io
 3ysis y4so yss4 ys1t ys3ta ysur4 y3thin yt3ic y1w za1 z5a2b zar2 4zb 2ze ze4n
 ze4p z1er ze3ro zet4 2z1i z4il z4is 5zl 4zm 1zo zo4m zo5ol zte4 4z1z2 z4zy
 """
+
 # Extra patterns, from ushyphmax.tex, dated 2005-05-30.
 # Copyright (C) 1990, 2004, 2005 Gerard D.C. Kuiken.
 # Copying and distribution of this file, with or without modification,
