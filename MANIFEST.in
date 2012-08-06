@@ -1,3 +1,2 @@
-include MANIFEST.in
-include *.txt
-recursive-include contrib *.py *.sql
+prune docs
+exclude Makefile
