@@ -30,7 +30,6 @@ import logging
 import dbsuite.db
 import dbsuite.plugins
 import dbsuite.main
-from dbsuite.compat import *
 
 
 class MakeDocUtility(dbsuite.main.Utility):
@@ -46,14 +45,18 @@ class MakeDocUtility(dbsuite.main.Utility):
     def __init__(self):
         super(MakeDocUtility, self).__init__()
         self.parser.set_defaults(test=False, config=None, plugin=None)
-        self.parser.add_option('', '--list-plugins', dest='plugin', action='store_const', const='*',
-            help="""list the available input and output plugins""")
-        self.parser.add_option('', '--help-plugin', dest='plugin',
-            help="""display information about the the specified plugin""")
-        self.parser.add_option('-n', '--dry-run', dest='test', action='store_true',
-            help="""test a configuration without actually executing anything""")
+        self.parser.add_option(
+            '', '--list-plugins', dest='plugin', action='store_const', const='*',
+            help='list the available input and output plugins')
+        self.parser.add_option(
+            '', '--help-plugin', dest='plugin',
+            help='display information about the the specified plugin')
+        self.parser.add_option(
+            '-n', '--dry-run', dest='test', action='store_true',
+            help='test a configuration without actually executing anything')
         # retained for backward compatibility
-        self.parser.add_option('', '--help-plugins', dest='plugin', action='store_const', const='*',
+        self.parser.add_option(
+            '', '--help-plugins', dest='plugin', action='store_const', const='*',
             help=optparse.SUPPRESS_HELP)
 
     def main(self, options, args):

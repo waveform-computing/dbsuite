@@ -29,7 +29,7 @@ import logging
 import dbsuite.highlighters
 import dbsuite.plugins
 import dbsuite.main
-from dbsuite.compat import *
+
 
 class TidySqlUtility(dbsuite.main.Utility):
     """%prog [options] files...
@@ -44,8 +44,9 @@ class TidySqlUtility(dbsuite.main.Utility):
     def __init__(self):
         super(TidySqlUtility, self).__init__()
         self.parser.set_defaults(terminator=';')
-        self.parser.add_option('-t', '--terminator', dest='terminator',
-            help="""specify the statement terminator (default=';')""")
+        self.parser.add_option(
+            '-t', '--terminator', dest='terminator',
+            help='specify the statement terminator (default=';')')
 
     def main(self, options, args):
         super(TidySqlUtility, self).main(options, args)

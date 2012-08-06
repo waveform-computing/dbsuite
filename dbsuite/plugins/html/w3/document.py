@@ -80,7 +80,7 @@ class W3ElementFactory(HTMLElementFactory):
     def hr(self, *content, **attrs):
         # Horizontal rules are implemented as a div with class 'hrule-dots'
         if not content:
-            content = (u'\u00A0',) # &nbsp;
+            content = ('\u00A0',) # &nbsp;
         result = self._element('div', *content, **attrs)
         self._add_class(result, 'hrule-dots')
         return result
@@ -350,7 +350,7 @@ class W3Popup(W3Document):
                             tag.a('Print', href='javascript:window.print();', class_='popup-print-link'),
                             class_='content'
                         ),
-                        tag.div(u'\u00A0', style='clear:both;'),
+                        tag.div('\u00A0', style='clear:both;'),
                         id='popup-footer'
                     ),
                     tag.p(tag.a('Terms of use', href='http://w3.ibm.com/w3/info_terms_of_use.html'), class_='terms'),
@@ -573,7 +573,7 @@ class W3Article(W3Document):
             # Non-top-level items longer than 12 characters are truncated
             # and suffixed with a horizontal ellipsis (\u2026)
             if len(content) > 12 and doc.parent:
-                content = content[:11] + u'\u2026'
+                content = content[:11] + '\u2026'
             return self.tag.a(
                 content,
                 href=doc.url,
@@ -584,7 +584,7 @@ class W3Article(W3Document):
         def more(above):
             """Sub-routine which generates a "More Items" link."""
             return self.tag.a(
-                'More items ' + [u'\u2193', u'\u2191'][above],
+                'More items ' + ['\u2193', '\u2191'][above],
                 class_='more-items',
                 href='#',
                 title='More items'
@@ -688,7 +688,7 @@ class W3SiteNav(XMLDocument):
             # Non-top-level items longer than 12 characters are truncated
             # and suffixed with a horizontal ellipsis (\u2026)
             if len(content) > 12 and doc.parent:
-                content = content[:11] + u'\u2026'
+                content = content[:11] + '\u2026'
             return self.tag.doc(href=doc.url, title=doc.title, label=content)
 
         # Generate links for all documents
@@ -860,7 +860,7 @@ class W3Style(StyleDocument):
         # If local search is not enabled, ensure the local search check box is not shown
         result = super(W3Style, self).generate()
         if not self.site.search:
-            result += u'\ntd.local-search { display: none; }'
+            result += '\ntd.local-search { display: none; }'
         return result
 
 # Declare styled document and graph classes

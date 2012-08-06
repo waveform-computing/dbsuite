@@ -30,7 +30,7 @@ import dbsuite.commentor
 import dbsuite.plugins
 import dbsuite.main
 import dbsuite.tokenizer
-from dbsuite.compat import *
+
 
 class GrepDocUtility(dbsuite.main.Utility):
     """%prog [options] source...
@@ -49,8 +49,9 @@ class GrepDocUtility(dbsuite.main.Utility):
     def __init__(self):
         super(GrepDocUtility, self).__init__()
         self.parser.set_defaults(terminator=';')
-        self.parser.add_option('-t', '--terminator', dest='terminator',
-            help="""specify the statement terminator (default=';')""")
+        self.parser.add_option(
+            '-t', '--terminator', dest='terminator',
+            help='specify the statement terminator (default=";")')
 
     def main(self, options, args):
         super(GrepDocUtility, self).main(options, args)

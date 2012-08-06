@@ -62,9 +62,9 @@ def convert_name(elem):
     Specifically we extract only text which exists as a direct child of elem,
     not text owned by any child elements.
     """
-    result = elem.text or u''
+    result = elem.text or ''
     for child in elem:
-        result += child.tail or u''
+        result += child.tail or ''
     return result
 
 def convert_desc(elem):
@@ -83,23 +83,23 @@ def convert_desc(elem):
     The routine ignores anything within a <span id="changed"> element as these
     were (erroneously) used in the v8 InfoCenter for change marks.
     """
-    if elem.tag == u'ul':
-        result = u', '.join([
-            re.sub(ur'\.$', u'', convert_desc(li))
-            for li in elem.findall(u'li')
-        ]) + u'. '
-    elif elem.tag == u'ol':
-        result = u', '.join([
-            u'%d. %s' % (ix, re.sub(ur'\.$', u'', convert_desc(li)))
-            for (ix, li) in enumerate(elem.findall(u'li'))
-        ]) + u'. '
-    elif elem.tag == u'span' and elem.attrib.get(u'id') == u'changed':
-        result = u''
+    if elem.tag == 'ul':
+        result = ', '.join([
+            re.sub(ur'\.$', '', convert_desc(li))
+            for li in elem.findall('li')
+        ]) + '. '
+    elif elem.tag == 'ol':
+        result = ', '.join([
+            '%d. %s' % (ix, re.sub(ur'\.$', '', convert_desc(li)))
+            for (ix, li) in enumerate(elem.findall('li'))
+        ]) + '. '
+    elif elem.tag == 'span' and elem.attrib.get('id') == 'changed':
+        result = ''
     else:
-        result = elem.text or u''
+        result = elem.text or ''
         for e in elem:
-            result += convert_desc(e) + (e.tail or u'')
-        result = re.sub(ur'\s+', u' ', result)
+            result += convert_desc(e) + (e.tail or '')
+        result = re.sub(ur'\s+', ' ', result)
     return result.strip()
 
 
@@ -116,40 +116,40 @@ class InfoCenterSource(object):
         super(InfoCenterSource, self).__init__()
         self.version = version
         self.url = {
-            u'81': u'http://publib.boulder.ibm.com/infocenter/db2luw/v8/topic/com.ibm.db2.udb.doc/admin/r0011297.htm',
-            u'82': u'http://publib.boulder.ibm.com/infocenter/db2luw/v8/topic/com.ibm.db2.udb.doc/admin/r0011297.htm',
-            u'91': u'http://publib.boulder.ibm.com/infocenter/db2luw/v9/topic/com.ibm.db2.udb.admin.doc/doc/r0011297.htm',
-            u'95': u'http://publib.boulder.ibm.com/infocenter/db2luw/v9r5/topic/com.ibm.db2.luw.sql.ref.doc/doc/r0011297.html',
-            u'97': u'http://publib.boulder.ibm.com/infocenter/db2luw/v9r7/topic/com.ibm.db2.luw.sql.ref.doc/doc/r0011297.html',
+            '81': 'http://publib.boulder.ibm.com/infocenter/db2luw/v8/topic/com.ibm.db2.udb.doc/admin/r0011297.htm',
+            '82': 'http://publib.boulder.ibm.com/infocenter/db2luw/v8/topic/com.ibm.db2.udb.doc/admin/r0011297.htm',
+            '91': 'http://publib.boulder.ibm.com/infocenter/db2luw/v9/topic/com.ibm.db2.udb.admin.doc/doc/r0011297.htm',
+            '95': 'http://publib.boulder.ibm.com/infocenter/db2luw/v9r5/topic/com.ibm.db2.luw.sql.ref.doc/doc/r0011297.html',
+            '97': 'http://publib.boulder.ibm.com/infocenter/db2luw/v9r7/topic/com.ibm.db2.luw.sql.ref.doc/doc/r0011297.html',
         }[self.version]
         self.urls = {}
 
     def __iter__(self):
         for (schema, obj, url) in self._get_object_urls():
-            logging.info(u'Retrieving descriptions for object %s.%s' % (schema, obj))
+            logging.info('Retrieving descriptions for object %s.%s' % (schema, obj))
             f = self._get_xml(url)
             # The only reliable way to find the object description is to look
             # for a <div class="section"> element (for 9.5) and, if that fails
             # look for the first <p>aragraph (for 9 and 8).
             divs = [
-                d for d in f.findall(u'.//div')
-                if d.attrib.get(u'class') == u'section'
+                d for d in f.findall('.//div')
+                if d.attrib.get('class') == 'section'
             ]
             if len(divs) == 1:
                 obj_desc = divs[0]
             else:
-                obj_desc = f.find(u'.//p')
+                obj_desc = f.find('.//p')
             if iselement(obj_desc):
                 obj_desc = convert_desc(obj_desc)
             else:
-                logging.error(u'Failed to find description for object %s.%s' % (schema, obj))
-                obj_desc = u''
-            table = f.find(u'.//table')
+                logging.error('Failed to find description for object %s.%s' % (schema, obj))
+                obj_desc = ''
+            table = f.find('.//table')
             part_count = 0
             part = 0
             columns = {}
-            for row in table.find(u'tbody'):
-                cells = row.findall(u'td')
+            for row in table.find('tbody'):
+                cells = row.findall('td')
                 # Test for 4 or 5 data cells exactly. Anything else is either a
                 # header or footnotes row and should be ignored (the SYSCAT
                 # documentation uses 4 columns, SYSSTAT uses 5).
@@ -162,7 +162,7 @@ class InfoCenterSource(object):
                     # cell
                     if part == part_count:
                         col_desc = cells[-1]
-                        part_count = int(col_desc.attrib.get(u'rowspan', u'1'))
+                        part_count = int(col_desc.attrib.get('rowspan', '1'))
                         part = 1
                     else:
                         part += 1
@@ -174,90 +174,90 @@ class InfoCenterSource(object):
                     # documentation lists SYSCAT.INDEXES.COLLECTSTATISTICS but
                     # the column in the actual view in the database is called
                     # SYSCAT.INDEXES.COLLECTSTATISTCS
-                    if (self.version in (u'95', u'97') and schema == u'SYSCAT' and
-                        obj == u'INDEXES' and column == u'COLLECTSTATISTICS'):
-                        column = u'COLLECTSTATISTCS'
+                    if (self.version in ('95', '97') and schema == 'SYSCAT' and
+                        obj == 'INDEXES' and column == 'COLLECTSTATISTICS'):
+                        column = 'COLLECTSTATISTCS'
                     # Workaround: DB2 9.5 catalog spelling error: the
                     # documentation lists SYSCAT.THRESHOLDS.QUEUEING, but the
                     # column in the database is SYSCAT.THRESHOLDS.QUEUING
-                    if (self.version == u'95' and schema == u'SYSCAT' and
-                        obj == u'THRESHOLDS' and column == u'QUEUEING'):
-                        column = u'QUEUING'
+                    if (self.version == '95' and schema == 'SYSCAT' and
+                        obj == 'THRESHOLDS' and column == 'QUEUEING'):
+                        column = 'QUEUING'
                     # Workaround: DB2 9.5 catalog error: the documentation
                     # lists SYSCAT.SECURITYPOLICIES.USERAUTHS but the column
                     # doesn't exist in the database
-                    if (self.version == u'95' and schema == u'SYSCAT' and
-                        obj == u'SECURITYPOLICIES' and column == u'USERAUTHS'):
+                    if (self.version == '95' and schema == 'SYSCAT' and
+                        obj == 'SECURITYPOLICIES' and column == 'USERAUTHS'):
                         continue
-                    logging.debug(u'Retrieving description for column %s' % column)
+                    logging.debug('Retrieving description for column %s' % column)
                     # For _really_ long descriptions, the docs sometimes use
                     # separate consecutive "COLUMN_NAME (cont'd)" entries, so
                     # we need to append to an existing description instead of
                     # creating a new one
-                    if column[-8:] == u"(cont'd)":
+                    if column[-8:] == "(cont'd)":
                         column = column[:-8]
                         columns[column] += convert_desc(col_desc)
                     elif part_count > 1:
-                        columns[column] = u'(%d/%d) %s' % (part, part_count, convert_desc(col_desc))
+                        columns[column] = '(%d/%d) %s' % (part, part_count, convert_desc(col_desc))
                     else:
                         columns[column] = convert_desc(col_desc)
             yield (schema, obj, obj_desc, columns)
 
     def _get_object_urls(self):
-        logging.info(u'Retrieving table of all catalog views')
+        logging.info('Retrieving table of all catalog views')
         d = {}
         f = self._get_xml(self.url)
-        for anchor in f.findall(u'.//a'):
-            if (u'href' in anchor.attrib) and anchor.text and anchor.text.endswith(u' catalog view'):
-                url = urljoin(self.url, anchor.attrib[u'href'])
-                obj = re.sub(u' catalog view$', '', anchor.text)
+        for anchor in f.findall('.//a'):
+            if ('href' in anchor.attrib) and anchor.text and anchor.text.endswith(' catalog view'):
+                url = urljoin(self.url, anchor.attrib['href'])
+                obj = re.sub(' catalog view$', '', anchor.text)
                 schema, obj = obj.split('.')
                 d[(schema, obj)] = url
         for ((schema, obj), url) in sorted(d.iteritems()):
             yield (schema, obj, url)
 
     def _get_xml(self, url):
-        logging.debug(u'Retrieving URL %s' % url)
+        logging.debug('Retrieving URL %s' % url)
         f = urlopen(url)
         html = f.read().decode(f.info().getparam('charset') or 'UTF-8')
         # Workaround: ElementTree doesn't know about non-XML entities like
         # &nbsp; which occurs frequently in HTML, so we use a dirty hack here
         # to change them into numeric entities.
-        html = html.replace(u'&nbsp;', u'&#160;')
+        html = html.replace('&nbsp;', '&#160;')
         # Workaround: Some of the InfoCenter HTML is buggy and causes
         # ElementTree's Expat-based parser to barf. Specifically, rel="search"
         # is erroneously repeated in the v9 catalog index, and v9.5 omits the
         # mandatory xml namespace from its root html element. We work around
         # these with a couple of extremely dirty hacks :-)
-        html = html.replace(u'rel="search" ', u'')
-        html = html.replace(u'xmlns="http://www.w3.org/1999/xhtml"', u'')
+        html = html.replace('rel="search" ', '')
+        html = html.replace('xmlns="http://www.w3.org/1999/xhtml"', '')
         return fromstring(html.encode('UTF-8'))
 
 
 class InfoCenterSource81(InfoCenterSource):
     """Retrieves object descriptions from the DB2 v8.1 for LUW InfoCenter."""
     def __init__(self):
-        super(InfoCenterSource81, self).__init__(version=u'81')
+        super(InfoCenterSource81, self).__init__(version='81')
 
 class InfoCenterSource82(InfoCenterSource):
     """Retrieves object descriptions from the DB2 v8.2 for LUW InfoCenter."""
     def __init__(self):
-        super(InfoCenterSource82, self).__init__(version=u'82')
+        super(InfoCenterSource82, self).__init__(version='82')
 
 class InfoCenterSource91(InfoCenterSource):
     """Retrieves object descriptions from the DB2 v9.1 for LUW InfoCenter."""
     def __init__(self):
-        super(InfoCenterSource91, self).__init__(version=u'91')
+        super(InfoCenterSource91, self).__init__(version='91')
 
 class InfoCenterSource95(InfoCenterSource):
     """Retrieves object descriptions from the DB2 v9.5 for LUW InfoCenter."""
     def __init__(self):
-        super(InfoCenterSource95, self).__init__(version=u'95')
+        super(InfoCenterSource95, self).__init__(version='95')
 
 class InfoCenterSource97(InfoCenterSource):
     """Retrieves object descriptions from the DB2 v9.7 for LUW InfoCenter."""
     def __init__(self):
-        super(InfoCenterSource97, self).__init__(version=u'97')
+        super(InfoCenterSource97, self).__init__(version='97')
 
 
 class XMLSource(object):
@@ -276,27 +276,27 @@ class XMLSource(object):
     def __iter__(self):
         if isinstance(self.xml, basestring):
             root = fromstring(xml)
-        elif hasattr(self.xml, u'read'):
+        elif hasattr(self.xml, 'read'):
             # Assume self.xml is a file-like object
             root = fromstring(self.xml.read())
-        if root.tag != u'database':
-            raise Exception(u'Expected root element to be "database", but found "%s"' % root.tag)
-        for schema in root.findall(u'schema'):
-            if not u'name' in schema.attrib:
-                raise Exception(u'Mandatory "name" attribute missing')
-            for relation in schema.findall(u'relation'):
-                if not u'name' in relation.attrib:
-                    raise Exception(u'Mandatory "name" attribute missing from relation in schema %s' % schema.attrib[u'name'])
-                description = relation.find(u'description')
+        if root.tag != 'database':
+            raise Exception('Expected root element to be "database", but found "%s"' % root.tag)
+        for schema in root.findall('schema'):
+            if not 'name' in schema.attrib:
+                raise Exception('Mandatory "name" attribute missing')
+            for relation in schema.findall('relation'):
+                if not 'name' in relation.attrib:
+                    raise Exception('Mandatory "name" attribute missing from relation in schema %s' % schema.attrib['name'])
+                description = relation.find('description')
                 if iselement(description):
-                    description = description.text or u''
+                    description = description.text or ''
                 else:
-                    description = u''
+                    description = ''
                 columns = dict(
-                    (column.attrib[u'name'], column.text or u'')
-                    for column in relation.findall(u'column')
+                    (column.attrib['name'], column.text or '')
+                    for column in relation.findall('column')
                 )
-                yield (schema.attrib[u'name'], relation.attrib[u'name'], description, columns)
+                yield (schema.attrib['name'], relation.attrib['name'], description, columns)
 
 
 class CommentConverter(object):
@@ -316,17 +316,17 @@ class CommentConverter(object):
 
     def __iter__(self):
         for (schema, obj, desc, columns) in self.retriever:
-            logging.info(u'Generating SQL for object %s.%s' % (schema, obj))
+            logging.info('Generating SQL for object %s.%s' % (schema, obj))
             if len(desc) > self.maxlen:
-                logging.warning(u'Description for object %s.%s has been truncated' % (schema, obj))
-                desc = desc[:self.maxlen - 3] + u'...'
-            yield u'COMMENT ON TABLE %s.%s IS %s%s\n' % (
+                logging.warning('Description for object %s.%s has been truncated' % (schema, obj))
+                desc = desc[:self.maxlen - 3] + '...'
+            yield 'COMMENT ON TABLE %s.%s IS %s%s\n' % (
                 format_ident(schema),
                 format_ident(obj),
                 quote_str(desc),
                 self.terminator,
             )
-            yield u'COMMENT ON %s.%s (\n' % (
+            yield 'COMMENT ON %s.%s (\n' % (
                 format_ident(schema),
                 format_ident(obj),
             )
@@ -336,19 +336,19 @@ class CommentConverter(object):
                 for column in columns.iterkeys()
             )
             for (column, desc) in sorted(columns.iteritems()):
-                logging.debug(u'Generating SQL for column %s' % column)
+                logging.debug('Generating SQL for column %s' % column)
                 if len(desc) > self.maxlen:
-                    logging.warning(u'Description for column %s.%s.%s has been truncated' % (schema, obj, column))
-                    desc = desc[:self.maxlen - 3] + u'...'
-                yield u'%s\t%-*s IS %s\n' % (
+                    logging.warning('Description for column %s.%s.%s has been truncated' % (schema, obj, column))
+                    desc = desc[:self.maxlen - 3] + '...'
+                yield '%s\t%-*s IS %s\n' % (
                     prefix,
                     maxlen,
                     format_ident(column),
                     quote_str(desc)
                 )
-                prefix = u','
-            yield u')%s\n' % self.terminator
-            yield u'\n'
+                prefix = ','
+            yield ')%s\n' % self.terminator
+            yield '\n'
 
 
 class InsertConverter(object):
@@ -365,7 +365,7 @@ class InsertConverter(object):
     comments exist (in the DOCCAT views) for the source objects.
     """
 
-    def __init__(self, retriever, terminator=u';', schema=u'DOCDATA'):
+    def __init__(self, retriever, terminator=';', schema='DOCDATA'):
         super(InsertConverter, self).__init__()
         self.retriever = retriever
         self.terminator = terminator
@@ -373,16 +373,16 @@ class InsertConverter(object):
 
     def __iter__(self):
         for (schema, obj, desc, columns) in self.retriever:
-            logging.info(u'Generating SQL for object %s.%s' % (schema, obj))
-            yield u'INSERT INTO %s.TABLES (TABSCHEMA, TABNAME, REMARKS)\n' % format_ident(self.schema)
-            yield u'\tVALUES (%s, %s, CLOB(%s))%s\n' % (
+            logging.info('Generating SQL for object %s.%s' % (schema, obj))
+            yield 'INSERT INTO %s.TABLES (TABSCHEMA, TABNAME, REMARKS)\n' % format_ident(self.schema)
+            yield '\tVALUES (%s, %s, CLOB(%s))%s\n' % (
                 quote_str(schema),
                 quote_str(obj),
                 quote_str(desc),
                 self.terminator,
             )
-            yield u'INSERT INTO %s.COLUMNS (TABSCHEMA, TABNAME, COLNAME, REMARKS)\n' % format_ident(self.schema)
-            yield u'\tSELECT %s, %s, COLNAME, REMARKS FROM (VALUES\n' % (
+            yield 'INSERT INTO %s.COLUMNS (TABSCHEMA, TABNAME, COLNAME, REMARKS)\n' % format_ident(self.schema)
+            yield '\tSELECT %s, %s, COLNAME, REMARKS FROM (VALUES\n' % (
                 quote_str(schema),
                 quote_str(obj),
             )
@@ -392,16 +392,16 @@ class InsertConverter(object):
                 for column in columns.iterkeys()
             )
             for (column, desc) in sorted(columns.iteritems()):
-                logging.debug(u'Generating SQL for column %s' % column)
-                yield u'%s\t\t(%-*s CLOB(%s))\n' % (
+                logging.debug('Generating SQL for column %s' % column)
+                yield '%s\t\t(%-*s CLOB(%s))\n' % (
                     prefix,
                     maxlen,
-                    quote_str(column) + u',',
+                    quote_str(column) + ',',
                     quote_str(desc)
                 )
-                prefix = u','
-            yield u'\t) AS T(COLNAME, REMARKS)%s\n' % self.terminator
-            yield u'\n'
+                prefix = ','
+            yield '\t) AS T(COLNAME, REMARKS)%s\n' % self.terminator
+            yield '\n'
 
 
 class UpdateConverter(object):
@@ -421,7 +421,7 @@ class UpdateConverter(object):
     than the "insert" or "merge" converters.
     """
 
-    def __init__(self, retriever, terminator=u';', schema=u'DOCCAT'):
+    def __init__(self, retriever, terminator=';', schema='DOCCAT'):
         super(UpdateConverter, self).__init__()
         self.retriever = retriever
         self.terminator = terminator
@@ -429,31 +429,31 @@ class UpdateConverter(object):
 
     def __iter__(self):
         for (schema, obj, desc, columns) in self.retriever:
-            logging.info(u'Generating SQL for object %s.%s' % (schema, obj))
-            yield u'UPDATE %s.TABLES\n' % format_ident(self.schema)
-            yield u'SET\n'
-            yield u'\tREMARKS = CLOB(%s)\n' % quote_str(desc)
-            yield u'WHERE\n'
-            yield u'\tTABSCHEMA = %s\n' % quote_str(schema)
-            yield u'\tAND TABNAME = %s%s\n' % (quote_str(obj), self.terminator)
-            yield u'UPDATE %s.COLUMNS\n' % format_ident(self.schema)
-            yield u'SET\n'
-            yield u'\tREMARKS = CASE COLNAME\n'
+            logging.info('Generating SQL for object %s.%s' % (schema, obj))
+            yield 'UPDATE %s.TABLES\n' % format_ident(self.schema)
+            yield 'SET\n'
+            yield '\tREMARKS = CLOB(%s)\n' % quote_str(desc)
+            yield 'WHERE\n'
+            yield '\tTABSCHEMA = %s\n' % quote_str(schema)
+            yield '\tAND TABNAME = %s%s\n' % (quote_str(obj), self.terminator)
+            yield 'UPDATE %s.COLUMNS\n' % format_ident(self.schema)
+            yield 'SET\n'
+            yield '\tREMARKS = CASE COLNAME\n'
             maxlen = max(
                 len(quote_str(column)) + 1
                 for column in columns.iterkeys()
             )
             for (column, desc) in sorted(columns.iteritems()):
                 logging.debug('Generating SQL for column %s' % column)
-                yield u'\t\tWHEN %-*s THEN CLOB(%s)\n' % (
+                yield '\t\tWHEN %-*s THEN CLOB(%s)\n' % (
                     maxlen,
                     quote_str(column),
                     quote_str(desc)
                 )
-            yield u'\tEND\n'
-            yield u'WHERE\n'
-            yield u'\tTABSCHEMA = %s\n' % quote_str(schema)
-            yield u'\tAND TABNAME = %s%s\n' % (quote_str(obj), self.terminator)
+            yield '\tEND\n'
+            yield 'WHERE\n'
+            yield '\tTABSCHEMA = %s\n' % quote_str(schema)
+            yield '\tAND TABNAME = %s%s\n' % (quote_str(obj), self.terminator)
             yield '\n'
 
 
@@ -473,7 +473,7 @@ class MergeConverter(object):
     complex and won't be quite as quick as output of the "insert" converter.
     """
 
-    def __init__(self, retriever, terminator=u';', schema=u'DOCDATA'):
+    def __init__(self, retriever, terminator=';', schema='DOCDATA'):
         super(MergeConverter, self).__init__()
         self.retriever = retriever
         self.terminator = terminator
@@ -481,20 +481,20 @@ class MergeConverter(object):
 
     def __iter__(self):
         for (schema, obj, desc, columns) in self.retriever:
-            logging.info(u'Generating SQL for object %s.%s' % (schema, obj))
-            yield u'MERGE INTO %s.TABLES AS T\n' % format_ident(self.schema)
-            yield u'USING TABLE(VALUES\n'
-            yield u'\t(%s, %s, CLOB(%s))\n' % (quote_str(schema), quote_str(obj), quote_str(desc))
-            yield u') AS S(TABSCHEMA, TABNAME, REMARKS)\n'
-            yield u'ON T.TABSCHEMA = S.TABSCHEMA\n'
-            yield u'AND T.TABNAME = S.TABNAME\n'
-            yield u'WHEN MATCHED THEN\n'
-            yield u'\tUPDATE REMARKS = S.REMARKS\n'
-            yield u'WHEN NOT MATCHED THEN\n'
-            yield u'\tINSERT (TABSCHEMA, TABNAME, REMARKS)\n'
-            yield u'\tVALUES (S.TABSCHEMA, S.TABNAME, S.REMARKS)%s\n' % self.terminator
-            yield u'MERGE INTO %s.COLUMNS AS T\n' % format_ident(self.schema)
-            yield u'USING TABLE(VALUES\n'
+            logging.info('Generating SQL for object %s.%s' % (schema, obj))
+            yield 'MERGE INTO %s.TABLES AS T\n' % format_ident(self.schema)
+            yield 'USING TABLE(VALUES\n'
+            yield '\t(%s, %s, CLOB(%s))\n' % (quote_str(schema), quote_str(obj), quote_str(desc))
+            yield ') AS S(TABSCHEMA, TABNAME, REMARKS)\n'
+            yield 'ON T.TABSCHEMA = S.TABSCHEMA\n'
+            yield 'AND T.TABNAME = S.TABNAME\n'
+            yield 'WHEN MATCHED THEN\n'
+            yield '\tUPDATE REMARKS = S.REMARKS\n'
+            yield 'WHEN NOT MATCHED THEN\n'
+            yield '\tINSERT (TABSCHEMA, TABNAME, REMARKS)\n'
+            yield '\tVALUES (S.TABSCHEMA, S.TABNAME, S.REMARKS)%s\n' % self.terminator
+            yield 'MERGE INTO %s.COLUMNS AS T\n' % format_ident(self.schema)
+            yield 'USING TABLE(VALUES\n'
             prefix = ''
             maxlen = max(
                 len(quote_str(column)) + 1
@@ -502,7 +502,7 @@ class MergeConverter(object):
             )
             for (column, desc) in sorted(columns.iteritems()):
                 logging.debug('Generating SQL for column %s' % column)
-                yield u'%s\t(%s, %s, %-*s CLOB(%s))\n' % (
+                yield '%s\t(%s, %s, %-*s CLOB(%s))\n' % (
                     prefix,
                     quote_str(schema),
                     quote_str(obj),
@@ -511,15 +511,15 @@ class MergeConverter(object):
                     quote_str(desc)
                 )
                 prefix = ','
-            yield u') AS S(TABSCHEMA, TABNAME, COLNAME, REMARKS)\n'
-            yield u'ON T.TABSCHEMA = S.TABSCHEMA\n'
-            yield u'AND T.TABNAME = S.TABNAME\n'
-            yield u'AND T.COLNAME = S.COLNAME\n'
-            yield u'WHEN MATCHED THEN\n'
-            yield u'\tUPDATE REMARKS = S.REMARKS\n'
-            yield u'WHEN NOT MATCHED THEN\n'
-            yield u'\tINSERT (TABSCHEMA, TABNAME, COLNAME, REMARKS)\n'
-            yield u'\tVALUES (S.TABSCHEMA, S.TABNAME, S.COLNAME, S.REMARKS)%s\n' % self.terminator
+            yield ') AS S(TABSCHEMA, TABNAME, COLNAME, REMARKS)\n'
+            yield 'ON T.TABSCHEMA = S.TABSCHEMA\n'
+            yield 'AND T.TABNAME = S.TABNAME\n'
+            yield 'AND T.COLNAME = S.COLNAME\n'
+            yield 'WHEN MATCHED THEN\n'
+            yield '\tUPDATE REMARKS = S.REMARKS\n'
+            yield 'WHEN NOT MATCHED THEN\n'
+            yield '\tINSERT (TABSCHEMA, TABNAME, COLNAME, REMARKS)\n'
+            yield '\tVALUES (S.TABSCHEMA, S.TABNAME, S.COLNAME, S.REMARKS)%s\n' % self.terminator
             yield '\n'
 
 
@@ -536,27 +536,27 @@ class XMLConverter(object):
         self.retriever = retriever
 
     def __iter__(self):
-        root = Element(u'database')
-        root.attrib[u'name'] = u''
+        root = Element('database')
+        root.attrib['name'] = ''
         schemas = {}
         objects = {}
         for (schema, obj, desc, columns) in self.retriever:
             try:
                 schema_elem = schemas[schema]
             except KeyError:
-                schema_elem = SubElement(root, u'schema')
-                schema_elem.attrib[u'name'] = schema
+                schema_elem = SubElement(root, 'schema')
+                schema_elem.attrib['name'] = schema
                 schemas[schema] = schema_elem
             try:
                 obj_elem = objects[(schema, obj)]
             except KeyError:
-                obj_elem = SubElement(schema_elem, u'relation')
-                obj_elem.attrib[u'name'] = obj
+                obj_elem = SubElement(schema_elem, 'relation')
+                obj_elem.attrib['name'] = obj
                 objects[(schema, obj)] = obj_elem
-            SubElement(obj_elem, u'description').text = desc
+            SubElement(obj_elem, 'description').text = desc
             for (column, desc) in sorted(columns.iteritems()):
-                col_elem = SubElement(obj_elem, u'column')
-                col_elem.attrib[u'name'] = column
+                col_elem = SubElement(obj_elem, 'column')
+                col_elem.attrib['name'] = column
                 col_elem.text = desc
         indent(root)
         yield '<?xml version="1.0" encoding="UTF-8" ?>\n'

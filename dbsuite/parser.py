@@ -40,7 +40,6 @@ from decimal import Decimal
 from itertools import tee, izip
 
 from dbsuite.tokenizer import TokenTypes, Token, Error, TokenError, sql92_namechars, sql92_identchars
-from dbsuite.compat import *
 
 __all__ = [
     'dump',

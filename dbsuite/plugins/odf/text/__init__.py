@@ -253,7 +253,7 @@ class OutputPlugin(dbsuite.plugins.OutputPlugin):
                 for (info, mimetype) in self.manifest
             )
         )
-        doc = u'<?xml version="1.0" encoding="%s"?>%s' % (self.encoding, tostring(doc))
+        doc = '<?xml version="1.0" encoding="%s"?>%s' % (self.encoding, tostring(doc))
         return doc.encode(self.encoding)
 
     def generate_meta(self):

@@ -39,7 +39,7 @@ from __future__ import (
     )
 
 from decimal import Decimal
-from dbsuite.compat import *
+from collections import namedtuple
 
 __all__ = [
     'sql92_identchars',
@@ -59,7 +59,7 @@ __all__ = [
     'SQL92Tokenizer',
     'SQL99Tokenizer',
     'SQL2003Tokenizer',
-]
+    ]
 
 # Set of characters valid in unquoted identifiers in ANSI SQL-92. This is the
 # list of characters used by the tokenizer to recognize an identifier in input
@@ -114,7 +114,7 @@ sql92_keywords = [
     'UNIQUE', 'UNKNOWN', 'UNTIL', 'UPDATE', 'UPPER', 'USAGE', 'USER', 'USING',
     'VALUE', 'VALUES', 'VARCHAR', 'VARYING', 'VIEW', 'WHEN', 'WHENEVER',
     'WHERE', 'WHILE', 'WITH', 'WORK', 'WRITE', 'YEAR', 'ZONE',
-]
+    ]
 
 # Set of characters valid in unquoted identifiers and names in ANSI SQL-99 (see
 # above)
@@ -172,7 +172,7 @@ sql99_keywords = [
     'USING', 'VALUE', 'VALUES', 'VARCHAR', 'VARYING', 'VIEW', 'WHEN',
     'WHENEVER', 'WHERE', 'WHILE', 'WINDOW', 'WITH', 'WITHIN', 'WITHOUT',
     'WORK', 'WRITE', 'YEAR', 'ZONE',
-]
+    ]
 
 # Set of characters valid in unquoted identifiers and names in ANSI SQL-2003
 # (see above)
@@ -221,11 +221,12 @@ sql2003_keywords = [
     'UNTIL', 'UPDATE', 'USER', 'USING', 'VALUE', 'VALUES', 'VARCHAR',
     'VARYING', 'WHEN', 'WHENEVER', 'WHERE', 'WHILE', 'WINDOW', 'WITH',
     'WITHIN', 'WITHOUT', 'YEAR',
-]
+    ]
+
 
 class Error(Exception):
     """Base class for errors in this module."""
-    pass
+
 
 class TokenError(Error):
     """Raised when a token-related error is encountered."""
@@ -266,8 +267,8 @@ class TokenError(Error):
             'line   : %d' % self.line,
             'column : %d' % self.column,
             'context:',
-            context
-        ])
+            context,
+            ])
 
 
 class TokenTypes(object):
@@ -294,18 +295,18 @@ TT = TokenTypes
 
 # Define the set of tokens required by the tokenizers below
 for (type, name) in (
-    ('ERROR',      None),            # Invalid/unknown token
-    ('WHITESPACE', '<space>'),       # Whitespace
-    ('COMMENT',    '<comment>'),     # A comment
-    ('KEYWORD',    '<keyword>'),     # A reserved keyword (SELECT/UPDATE/INSERT/etc.)
-    ('IDENTIFIER', '<name>'),        # A quoted or unquoted identifier
-    ('NUMBER',     '<number>'),      # A numeric literal
-    ('STRING',     '<string>'),      # A string literal
-    ('OPERATOR',   '<operator>'),    # An operator
-    ('LABEL',      '<label>'),       # A procedural label
-    ('PARAMETER',  '<parameter>'),   # A colon-prefixed or simple qmark parameter
-    ('TERMINATOR', '<terminator>'),  # A statement terminator
-):
+        ('ERROR',      None),            # Invalid/unknown token
+        ('WHITESPACE', '<space>'),       # Whitespace
+        ('COMMENT',    '<comment>'),     # A comment
+        ('KEYWORD',    '<keyword>'),     # A reserved keyword (SELECT/UPDATE/INSERT/etc.)
+        ('IDENTIFIER', '<name>'),        # A quoted or unquoted identifier
+        ('NUMBER',     '<number>'),      # A numeric literal
+        ('STRING',     '<string>'),      # A string literal
+        ('OPERATOR',   '<operator>'),    # An operator
+        ('LABEL',      '<label>'),       # A procedural label
+        ('PARAMETER',  '<parameter>'),   # A colon-prefixed or simple qmark parameter
+        ('TERMINATOR', '<terminator>'),  # A statement terminator
+    ):
     TT.add(type, name)
 
 # Declare the Token namedtuple class
@@ -314,8 +315,8 @@ Token = namedtuple('Token', (
     'value',
     'source',
     'line',
-    'column'
-))
+    'column',
+    ))
 
 
 class BaseTokenizer(object):
@@ -496,7 +497,7 @@ class BaseTokenizer(object):
             '"': self._handle_quote,
             '|': self._handle_bar,
             ';': self._handle_semicolon,
-        })
+            })
 
     def _add_token(self, type, value):
         """Adds the current token to the output list.
@@ -513,8 +514,8 @@ class BaseTokenizer(object):
             value,
             self._source[self._token_start:self._index],
             self._token_line,
-            self._token_column
-        )
+            self._token_column,
+            )
         if type == TT.ERROR and self.raise_errors:
             raise TokenError(self._source, token, value)
         self._tokens.append(token)
@@ -531,13 +532,12 @@ class BaseTokenizer(object):
             self._token_start,
             self._token_line,
             self._token_column,
-            len(self._tokens)
-        ))
+            len(self._tokens),
+            ))
 
     def _restore_state(self):
         """Restores the state of the tokenizer from the head of the save stack."""
-        (
-            self._index,
+        (   self._index,
             self._line,
             self._line_start,
             self._token_start,
@@ -633,7 +633,9 @@ class BaseTokenizer(object):
         of code like comments, strings, etc).
         """
         assert self._marked_index >= 0
-        return self._source[self._marked_index:self._index].replace('\r\n', '\n').replace('\r', '\n')
+        return self._source[self._marked_index:self._index].\
+            replace('\r\n', '\n').\
+            replace('\r', '\n')
 
     @property
     def line(self):

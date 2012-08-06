@@ -27,7 +27,6 @@ import re
 import os
 import datetime
 
-from dbsuite.compat import *
 
 tex_special = re.compile(ur'([#$%^&_{}~/\\\u00A0]|\.\.\.)')
 def escape_tex(s):
@@ -46,7 +45,7 @@ def escape_tex(s):
             '/':       format_cmd('slash'),
             '\\':      format_cmd('textbackslash'),
             '...':     format_cmd('ldots'),
-            u'\u00A0': '~',
+            '\u00A0':  '~',
         }[m]
     return tex_special.sub(subfn, s)
 
@@ -75,12 +74,14 @@ def tex(e, **args):
 
 # Abstract classes
 
+
 class TeXNode(object):
     __slots__ = ()
     def __tex__(self):
         return ''
     def __xml__(self):
         return ''
+
 
 class TeXParam(TeXNode):
     __slots__ = ('index',)
@@ -90,6 +91,7 @@ class TeXParam(TeXNode):
         return '#%d' % self.index
     def __xml__(self):
         return escape_xml('#%d' % self.index)
+
 
 class TeXEmptyElement(TeXNode):
     __slots__ = ('tail',)
@@ -101,6 +103,7 @@ class TeXEmptyElement(TeXNode):
     def __xml__(self):
         return super(TeXEmptyElement, self).__xml__() + escape_xml(self.tail)
 
+
 class TeXHyphen(TeXEmptyElement):
     __slots__ = ()
     tag = 'hyp'
@@ -109,6 +112,7 @@ class TeXHyphen(TeXEmptyElement):
         return r'\-' + super(TeXHyphen, self).__tex__()
     def __xml__(self):
         return '-' + super(TeXHyphen, self).__xml__()
+
 
 class TeXBreak(TeXEmptyElement):
     __slots__ = ()
@@ -119,6 +123,7 @@ class TeXBreak(TeXEmptyElement):
     def __xml__(self):
         return '<br/>' + super(TeXBreak, self).__xml__()
 
+
 class TeXContent(TeXNode):
     __slots__ = ('text',)
     def __init__(self, text=''):
@@ -127,6 +132,7 @@ class TeXContent(TeXNode):
         return escape_tex(self.text)
     def __xml__(self):
         return escape_xml(self.text)
+
 
 class TeXElement(TeXContent):
     __slots__= ('name', 'tail', 'children')
@@ -184,6 +190,7 @@ class TeXElement(TeXContent):
                 attrs,
             )
 
+
 class TeXEnvironment(TeXElement):
     __slots__ = ()
     def __init__(self, name=None):
@@ -196,6 +203,7 @@ class TeXEnvironment(TeXElement):
 
 # Concrete classes
 
+
 class TeXParagraph(TeXElement):
     __slots__ = ()
     tag = 'p'
@@ -203,12 +211,14 @@ class TeXParagraph(TeXElement):
     def __tex__(self):
         return '%s\n\n%s' % (self._content_tex(), escape_tex(self.tail))
 
+
 class TeXQuote(TeXElement):
     __slots__ = ()
     tag = 'q'
     tex_cmd = 'quote'
     def __tex__(self):
         return "``%s''%s" % (self._content_tex(), escape_tex(self.tail))
+
 
 class TeXAnchor(TeXElement):
     __slots__ = ('id', 'href')
@@ -230,6 +240,7 @@ class TeXAnchor(TeXElement):
                 result.append(format_cmd('hyperref', self._content_tex(), options='[%s]' % self.href))
         return '\n'.join(result)
 
+
 class TeXAutoRef(TeXElement):
     __slots__ = ('href',)
     tag = 'auto'
@@ -239,6 +250,7 @@ class TeXAutoRef(TeXElement):
         self.href = href
     def __tex__(self):
         return format_cmd('autoref', self.href)
+
 
 class TeXPageRef(TeXElement):
     __slots__ = ('href',)
@@ -250,52 +262,63 @@ class TeXPageRef(TeXElement):
     def __tex__(self):
         return format_cmd('pageref', self.href)
 
+
 class TeXBlockQuote(TeXEnvironment):
     __slots__ = ()
     tag = 'blockquote'
     tex_env = 'quote'
+
 
 class TeXStrong(TeXElement):
     __slots__ = ()
     tag = 'strong'
     tex_cmd = 'textbf'
 
+
 class TeXB(TeXStrong):
     __slots__ = ()
     tag = 'b'
+
 
 class TeXEmphasis(TeXElement):
     __slots__ = ()
     tag = 'em'
     tex_cmd = 'emph'
 
+
 class TeXI(TeXEmphasis):
     __slots__ = ()
     tag = 'i'
+
 
 class TeXUnderline(TeXElement):
     __slots__ = ()
     tag = 'u'
     tex_cmd = 'uline'
 
+
 class TeXStrikeOut(TeXElement):
     __slots__ = ()
     tag = 'strike'
     tex_cmd = 'sout'
 
+
 class TeXS(TeXStrikeOut):
     __slots__ = ()
     tag = 's'
+
 
 class TeXSuperScript(TeXElement):
     __slots__ = ()
     tag = 'sup'
     tex_cmd = 'textsuperscript'
 
+
 class TeXSubScript(TeXElement):
     __slots__ = ()
     tag = 'sub'
     tex_cmd = 'textsubscript'
+
 
 class TeXHRule(TeXElement):
     __slots__ = ()
@@ -304,20 +327,24 @@ class TeXHRule(TeXElement):
     def __tex__(self):
         return r'{\vskip 8pt\hrule height.2pt\vskip 8pt}'
 
+
 class TeXSmall(TeXElement):
     __slots__ = ()
     tag = 'small'
     tex_cmd = 'small'
+
 
 class TeXBig(TeXElement):
     __slots__ = ()
     tag = 'big'
     tex_cmd = 'large'
 
+
 class TeXTeleType(TeXElement):
     __slots__ = ()
     tag = 'tt'
     tex_cmd = 'texttt'
+
 
 class TeXPreformatted(TeXEnvironment):
     __slots__ = ()
@@ -325,6 +352,7 @@ class TeXPreformatted(TeXEnvironment):
     tex_env = 'verbatim'
     def _content_tex(self):
         return self.text
+
 
 class TeXFont(TeXElement):
     __slots__ = ('size', 'color', 'face')
@@ -360,6 +388,7 @@ class TeXFont(TeXElement):
             }[self.face.lower()], result)
         return result + escape_tex(self.tail)
 
+
 class TeXListItem(TeXElement):
     __slots__ = ()
     tag = 'li'
@@ -367,15 +396,18 @@ class TeXListItem(TeXElement):
     def __tex__(self):
         return '\n%s%s%s' % (format_cmd(self.name), self._content_tex(), escape_tex(self.tail))
 
+
 class TeXUnorderedList(TeXEnvironment):
     __slots__ = ()
     tag = 'ul'
     tex_env = 'itemize'
 
+
 class TeXOrderedList(TeXEnvironment):
     __slots__ = ()
     tag = 'ol'
     tex_env = 'enumerate'
+
 
 class TeXDefinitionItem(TeXElement):
     __slots__ = ('term',)
@@ -391,10 +423,12 @@ class TeXDefinitionItem(TeXElement):
             escape_tex(self.tail)
         )
 
+
 class TeXDefinitionList(TeXEnvironment):
     __slots__ = ()
     tag = 'dl'
     tex_env = 'description'
+
 
 class TeXImage(TeXElement):
     __slots__ = ('src', 'width', 'height', 'scale')
@@ -420,6 +454,7 @@ class TeXImage(TeXElement):
             os.path.basename(os.path.splitext(self.src)[0]), # Note: removing filename path and extension, and not escaping src
             options='[%s]' % ','.join(options))
 
+
 class TeXTableOfObjects(TeXElement):
     __slots__ = ('title', 'tocinclude', 'style')
     def __init__(self, title=None, tocinclude=False):
@@ -433,6 +468,7 @@ class TeXTableOfObjects(TeXElement):
             result.append(format_cmd('addcontentsline', format_cmd(self.title_var), '{toc}{%s}' % self.style))
         return '\n'.join(result)
 
+
 class TeXTableOfContents(TeXTableOfObjects):
     __slots__ = ('level',)
     tag = 'toc'
@@ -442,30 +478,36 @@ class TeXTableOfContents(TeXTableOfObjects):
         super(TeXTableOfContents, self).__init__(title, tocinclude)
         self.level = level
 
+
 class TeXTableOfFigures(TeXTableOfObjects):
     tag = 'tof'
     tex_cmd = 'listoffigures'
     title_var = 'listfigurename'
+
 
 class TeXTableOfTables(TeXTableOfObjects):
     tag = 'tot'
     tex_cmd = 'listoftables'
     title_var = 'listtablename'
 
+
 class TeXTableOfListings(TeXTableOfObjects):
     tag = 'tol'
     tex_cmd = 'lstlistoflistings'
     title_var = 'lstlistlistingname'
+
 
 class TeXIndexKey(TeXElement):
     __slots__ = ()
     tag = 'key'
     tex_cmd = 'index'
 
+
 class TeXIndex(TeXElement):
     __slots__ = ()
     tag = 'index'
     tex_cmd = 'printindex'
+
 
 class TeXListing(TeXEnvironment):
     __slots__ = ('language', 'id')
@@ -496,6 +538,7 @@ class TeXListing(TeXEnvironment):
         if len(caption) == 1:
             result += caption[0].tail
         return result
+
 
 class TeXTable(TeXEnvironment):
     __slots__ = ('align', 'id', 'longtable')
@@ -593,6 +636,7 @@ class TeXTable(TeXEnvironment):
         result += escape_tex(self.tail)
         return result
 
+
 class TeXCaption(TeXElement):
     __slots__ = ('align',)
     tag = 'caption'
@@ -609,6 +653,7 @@ class TeXCaption(TeXElement):
         except KeyError:
             raise ValueError('invalid caption alignment "%s"' % align)
 
+
 class TeXTableBody(TeXEnvironment):
     __slots__ = ()
     tag = 'tbody'
@@ -624,6 +669,7 @@ class TeXTableBody(TeXEnvironment):
         )
     def __tex__(self):
         return '\n'.join(self._rows())
+
 
 class TeXTableHeader(TeXTableBody):
     __slots__ = ()
@@ -643,6 +689,7 @@ class TeXTableHeader(TeXTableBody):
             result.append(format_cmd('endhead'))
         return '\n'.join(result)
 
+
 class TeXTableFooter(TeXTableBody):
     __slots__ = ()
     tag = 'tfoot'
@@ -661,6 +708,7 @@ class TeXTableFooter(TeXTableBody):
         if longtable:
             result.append(format_cmd('endlastfoot'))
         return '\n'.join(result)
+
 
 class TeXTableColumn(TeXElement):
     __slots__ = ('align', 'nowrap', 'width')
@@ -699,6 +747,7 @@ class TeXTableColumn(TeXElement):
         else:
             return 'p{%s}' % self.width
 
+
 class TeXTableRow(TeXElement):
     __slots__ = ()
     tag = 'tr'
@@ -711,6 +760,7 @@ class TeXTableRow(TeXElement):
             if isinstance(cell, TeXTableCell)
         )
 
+
 class TeXTableCell(TeXElement):
     __slots__ = ()
     tag = 'td'
@@ -718,6 +768,7 @@ class TeXTableCell(TeXElement):
     def __tex__(self):
         # rstrip the content to avoid an extraneous paragraph break
         return self._content_tex().rstrip() + escape_tex(self.tail)
+
 
 class TeXTableHeaderCell(TeXTableCell):
     __slots__ = ()
@@ -727,25 +778,30 @@ class TeXTableHeaderCell(TeXTableCell):
         # rstrip the content to avoid an extraneous paragraph break
         return format_cmd('textbf', self._content_tex().rstrip()) + escape_tex(self.tail)
 
+
 class TeXTitle(TeXElement):
     __slots__ = ()
     tag = 'title'
     tex_cmd = 'title'
+
 
 class TeXAuthor(TeXElement):
     __slots__ = ()
     tag = 'author'
     tex_cmd = 'author'
 
+
 class TeXDate(TeXElement):
     __slots__ = ()
     tag = 'date'
     tex_cmd = 'date'
 
+
 class TeXMakeTitle(TeXElement):
     __slots__ = ()
     tag = 'maketitle'
     tex_cmd = 'maketitle'
+
 
 class TeXTopMatter(TeXElement):
     __slots__ = ('title', 'author_name', 'author_email', 'date')
@@ -775,6 +831,7 @@ class TeXTopMatter(TeXElement):
         result.append(TeXMakeTitle())
         return '\n'.join(tex(elem) for elem in result)
 
+
 class TeXSection(TeXEnvironment):
     __slots__ = ('title', 'toc_title', 'toc_include', 'id')
     tag = 'section'
@@ -803,19 +860,23 @@ class TeXSection(TeXEnvironment):
         result.append(escape_tex(self.tail))
         return '\n'.join(result)
 
+
 class TeXSubSection(TeXSection):
     __slots__ = ()
     tag = 'subsection'
     tex_env = 'subsection'
+
 
 class TeXSubSubSection(TeXSection):
     __slots__ = ()
     tag = 'subsubsection'
     tex_env = 'subsubsection'
 
+
 class TeXCustomCommand(TeXElement):
     __slots__ = ()
     # See TeXFactory._new_command()
+
 
 class TeXCustomEnvironment(TeXEnvironment):
     __slots__ = ()
@@ -1046,6 +1107,7 @@ tag_map = dict(
     and hasattr(c, 'tag')
 )
 
+
 class TeXFactory(object):
     def __init__(self):
         self._custom_colors = {}
@@ -1151,6 +1213,7 @@ class TeXFactory(object):
             color = attrs['color']
             self._custom_colors['color%06x' % color] = color
         return elem
+
 
 if __name__ == '__main__':
     tag = TeXFactory()

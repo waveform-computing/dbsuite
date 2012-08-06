@@ -320,7 +320,7 @@ class HTMLSQLHighlighter(SQLHighlighter):
             css_class = self.css_classes.get(token.type, None)
         # XXX Disgusting hack because IE's too thick to handle pre-formatted
         # whitespace in anything except <pre>
-        s = re.sub(' {2,}', lambda m: u'\u00A0' * len(m.group()), token.source)
+        s = re.sub(' {2,}', lambda m: '\u00A0' * len(m.group()), token.source)
         if css_class is not None:
             return self.site.tag.span(s, class_=css_class)
         else:
@@ -1081,7 +1081,7 @@ class WebSiteDocument(object):
         the document, returning it in a format suitable for passing to the
         serialize method.
         """
-        return u''
+        return ''
 
     def serialize(self, content):
         """Converts content into a byte string for writing to disk.
@@ -1237,19 +1237,19 @@ class XMLDocument(WebSiteDocument):
         if iselement(content):
             # Construct the XML PI, and add the optional DOCTYPE (if we've got
             # public and system IDs)
-            result = [u'<?xml version="1.0" encoding="%s"?>' % self.site.encoding]
+            result = ['<?xml version="1.0" encoding="%s"?>' % self.site.encoding]
             if self.public_id and self.system_id:
-                result.append(u'<!DOCTYPE %s PUBLIC "%s" "%s">' % (content.tag, self.public_id, self.system_id))
+                result.append('<!DOCTYPE %s PUBLIC "%s" "%s">' % (content.tag, self.public_id, self.system_id))
             content = unicode(tostring(content))
             if self.entities:
                 # Dirty manual hack to convert non-XML entities (to support
                 # things like HTML)
                 def subfunc(match):
                     if ord(match.group()) in self.entities:
-                        return u'&%s;' % self.entities[ord(match.group())]
+                        return '&%s;' % self.entities[ord(match.group())]
                     else:
                         return match.group()
-                entities_re = re.compile(u'[%s-%s]' % (
+                entities_re = re.compile('[%s-%s]' % (
                     unichr(min(self.entities.iterkeys())),
                     unichr(max(self.entities.iterkeys()))
                 ))
@@ -1257,7 +1257,7 @@ class XMLDocument(WebSiteDocument):
             # Glue everything together as a unicode string and leave it to the
             # parent to handle the transcoding...
             result.append(content)
-            content = u'\n'.join(result)
+            content = '\n'.join(result)
         return super(XMLDocument, self).serialize(content)
 
 

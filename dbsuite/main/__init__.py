@@ -34,11 +34,12 @@ import traceback
 import glob
 
 import dbsuite.plugins
-from dbsuite.compat import *
 from dbsuite import __version__
+
 
 # Use the user's default locale instead of C
 locale.setlocale(locale.LC_ALL, '')
+
 
 class HelpFormatter(optparse.IndentedHelpFormatter):
     # Customize the width of help output
@@ -46,11 +47,13 @@ class HelpFormatter(optparse.IndentedHelpFormatter):
         width = min(130, terminal_size()[0] - 2)
         optparse.IndentedHelpFormatter.__init__(self, max_help_position=width/3, width=width)
 
+
 class OptionParser(optparse.OptionParser):
     # Customize error handling to raise an exception (default simply prints an
     # error and terminates execution)
     def error(self, msg):
         raise optparse.OptParseError(msg)
+
 
 class Utility(object):
     # Get the default output encoding from the default locale
@@ -85,14 +88,18 @@ class Utility(object):
             logfile='',
             loglevel=logging.WARNING
         )
-        self.parser.add_option('-q', '--quiet', dest='loglevel', action='store_const', const=logging.ERROR,
-            help="""produce less console output""")
-        self.parser.add_option('-v', '--verbose', dest='loglevel', action='store_const', const=logging.INFO,
-            help="""produce more console output""")
-        self.parser.add_option('-l', '--log-file', dest='logfile',
-            help="""log messages to the specified file""")
-        self.parser.add_option('-D', '--debug', dest='debug', action='store_true',
-            help="""enables debug mode (runs under PDB)""")
+        self.parser.add_option(
+            '-q', '--quiet', dest='loglevel', action='store_const',
+            const=logging.ERROR, help='produce less console output')
+        self.parser.add_option(
+            '-v', '--verbose', dest='loglevel', action='store_const',
+            const=logging.INFO, help='produce more console output')
+        self.parser.add_option(
+            '-l', '--log-file', dest='logfile',
+            help='log messages to the specified file')
+        self.parser.add_option(
+            '-D', '--debug', dest='debug', action='store_true',
+            help='enables debug mode (runs under PDB)')
 
     def __call__(self, args=None):
         if args is None:

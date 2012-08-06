@@ -44,7 +44,6 @@ from time import sleep
 from dbsuite.tokenizer import Token
 from dbsuite.parser import TokenTypes as TT
 from dbsuite.instance import get_instance, set_instance
-from dbsuite.compat import *
 
 
 IS_WINDOWS = sys.platform.startswith('win')

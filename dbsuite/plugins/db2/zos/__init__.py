@@ -30,7 +30,6 @@ import re
 from itertools import groupby
 
 import dbsuite.plugins
-from dbsuite.compat import *
 from dbsuite.plugins.db2 import (
     connect, make_datetime, make_bool, make_int, make_str
 )

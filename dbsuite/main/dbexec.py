@@ -38,17 +38,19 @@ import dbsuite.script
 import dbsuite.tokenizer
 import dbsuite.plugins
 import dbsuite.main
-from dbsuite.compat import *
+
 
 class MyConfigParser(ConfigParser.SafeConfigParser):
     """Tweaked version of SaveConfigParser that uses uppercase for keys"""
     def optionxform(self, optionstr):
         return optionstr.upper()
 
+
 class PickleHandler(logging.Handler):
     """A basic logging handler which dumps LogRecords as pickles on stdout"""
     def emit(self, record):
         pickle.dump(record, sys.stdout, protocol=pickle.HIGHEST_PROTOCOL)
+
 
 class ExecSqlUtility(dbsuite.main.Utility):
     """%prog [options] files...
@@ -74,25 +76,38 @@ class ExecSqlUtility(dbsuite.main.Utility):
             debuginternal=False,
             logscripts='',
         )
-        self.parser.add_option('-t', '--terminator', dest='terminator',
-            help="""specify the statement terminator (default=';')""")
-        self.parser.add_option("-a", "--auto-commit", dest="autocommit", action="store_true",
-            help="""automatically COMMIT after each SQL statement in a script""")
-        self.parser.add_option("-c", "--config", dest="config",
-            help="""specify the configuration file""")
-        self.parser.add_option("-d", "--delete-files", dest="deletefiles", action="store_true",
-            help="""delete files produced by the scripts after execution""")
-        self.parser.add_option("-n", "--dry-run", dest="test", action="count",
-            help="""test but don't run the scripts, can be specified multiple times: 1x=parse, 2x=test file perms, 3x=test db logins""")
-        self.parser.add_option("-r", "--retry", dest="retry", type="int",
-            help="""specify the maximum number of retries after script failure (default: %default)""")
-        self.parser.add_option("-s", "--stop-on-error", dest="stoponerror", action="store_true",
-            help="""if a script encounters an error stop it immediately""")
-        self.parser.add_option('-L', '--log-scripts', dest='logscripts',
-            help="""if specified scripts will each have their own log file named by the substitution expression (/regexpr/subst)""")
-        self.parser.add_option("--exec-internal", dest="execinternal", action="store_true",
+        self.parser.add_option(
+            '-t', '--terminator', dest='terminator',
+            help='specify the statement terminator (default=';')')
+        self.parser.add_option(
+            '-a', '--auto-commit', dest='autocommit', action='store_true',
+            help='automatically COMMIT after each SQL statement in a script')
+        self.parser.add_option(
+            '-c', '--config', dest='config',
+            help='specify the configuration file')
+        self.parser.add_option(
+            '-d', '--delete-files', dest='deletefiles', action='store_true',
+            help='delete files produced by the scripts after execution')
+        self.parser.add_option(
+            '-n', '--dry-run', dest='test', action='count',
+            help="test but don't run the scripts, can be specified multiple "
+            "times: 1x=parse, 2x=test file perms, 3x=test db logins")
+        self.parser.add_option(
+            '-r', '--retry', dest='retry', type='int',
+            help='specify the maximum number of retries after script failure '
+            '(default: %default)')
+        self.parser.add_option(
+            '-s', '--stop-on-error', dest='stoponerror', action='store_true',
+            help='if a script encounters an error stop it immediately')
+        self.parser.add_option(
+            '-L', '--log-scripts', dest='logscripts',
+            help='if specified scripts will each have their own log file '
+            'named by the substitution expression (/regexpr/subst)')
+        self.parser.add_option(
+            '--exec-internal', dest='execinternal', action='store_true',
             help=optparse.SUPPRESS_HELP)
-        self.parser.add_option("--debug-internal", dest="debuginternal", action="store_true",
+        self.parser.add_option(
+            '--debug-internal', dest='debuginternal', action='store_true',
             help=optparse.SUPPRESS_HELP)
 
     def main(self, options, args):

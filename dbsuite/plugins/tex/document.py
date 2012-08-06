@@ -237,7 +237,7 @@ class TeXSQLHighlighter(SQLHighlighter):
         # it doesn't get compressed (character U+00A0 is non-breaking space
         # which the TeXFactory class will escape into "~" which is the TeX
         # non-breaking space)
-        s = re.sub(' {2,}', lambda m: u' ' + (u'\u00A0' * (len(m.group()) - 1)), token.source)
+        s = re.sub(' {2,}', lambda m: ' ' + ('\u00A0' * (len(m.group()) - 1)), token.source)
         # The TeXListItem class inserts its own line breaks. If we include the
         # original line breaks, we wind up with full paragraphs in each item
         # which causes problems. Hence, we strip line breaks here
@@ -518,7 +518,7 @@ class TeXDocumentation(object):
             twoside=options['two_side'],
             font_packages=options['font_packages'],
             font_size=options['font_size'],
-            creator='db2makedoc %s' % __version__
+            creator='dbsuite %s' % __version__
         )
 
     def generate_db(self, db):

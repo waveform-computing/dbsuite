@@ -70,7 +70,7 @@ class OutputPlugin(dbsuite.plugins.OutputPlugin):
     def configure(self, config):
         super(OutputPlugin, self).configure(config)
         # Ensure we can find the specified encoding
-        u''.encode(self.options['encoding'])
+        ''.encode(self.options['encoding'])
         # Ensure the filename was specified
         if not self.options['filename']:
             raise dbsuite.plugins.PluginConfigurationError('The filename option must be specified')
@@ -105,7 +105,7 @@ class OutputPlugin(dbsuite.plugins.OutputPlugin):
         if self.options['indent']:
             indent(root)
         s = unicode(tostring(root))
-        s = u'<?xml version="1.0" encoding="%s"?>\n%s' % (self.options['encoding'], s)
+        s = '<?xml version="1.0" encoding="%s"?>\n%s' % (self.options['encoding'], s)
         # Check there aren't any silly characters (control characters / binary)
         # lurking in the unicode version. Most codecs will blindly pass these
         # through but they're invalid in XML

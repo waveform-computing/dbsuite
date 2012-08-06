@@ -46,21 +46,23 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
     """Input plugin for IBM DB2 for Linux/UNIX/Windows.
 
     This input plugin supports extracting documentation information from IBM
-    DB2 for Linux/UNIX/Windows version 8 or above. If the DOCCAT schema (see
+    DB2 for Linux/UNIX/Windows version 8.2 or above. If the DOCCAT schema (see
     the doccat_create.sql script in the contrib/db2/luw directory) is present,
     it will be used to source documentation data instead of SYSCAT.
     """
 
     def __init__(self):
         super(InputPlugin, self).__init__()
-        self.add_option('database', default='',
-            doc="""The locally cataloged name of the database to connect to""")
-        self.add_option('username', default=None,
-            doc="""The username to connect with (if ommitted, an implicit
-            connection will be made as the current user)""")
-        self.add_option('password', default=None,
-            doc="""The password associated with the user given by the username
-            option (mandatory if username is supplied)""")
+        self.add_option(
+            'database', default='', doc='The locally cataloged name of the '
+            'database to connect to')
+        self.add_option(
+            'username', default=None, doc='The username to connect with (if '
+            'omitted, an implicit connection will be made as the current user)')
+        self.add_option(
+            'password', default=None, doc='The password associated with the '
+            'user given by the username option (mandatory if username is '
+            'supplied)')
 
     def tokenizer(self):
         return DB2LUWTokenizer()
@@ -76,9 +78,56 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
         super(InputPlugin, self).configure(config)
         # Check for missing stuff
         if not self.options['database']:
-            raise dbsuite.plugins.PluginConfigurationError('The database option must be specified')
+            raise dbsuite.plugins.PluginConfigurationError(
+                'The database option must be specified')
         if self.options['username'] is not None and self.options['password'] is None:
-            raise dbsuite.plugins.PluginConfigurationError('If the username option is specified, the password option must also be specified')
+            raise dbsuite.plugins.PluginConfigurationError(
+                'If the username option is specified, the password option must also be specified')
+
+    def get_version(self):
+        # Test which version of the system catalog is installed. The following
+        # progression is used to determine version:
+        #
+        # Base level (70)
+        # SYSCAT.ROUTINES introduced in v8.2 (82)
+        # SYSCAT.TABLES.OWNER introduced in v9.1 (91)
+        # SYSCAT.VARIABLES introduced in v9.5 (95)
+        # SYSCAT.MODULES introduced in v9.7 (97)
+        cursor = self.connection.cursor()
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM SYSCAT.TABLES
+            WHERE TABSCHEMA = 'SYSCAT'
+            AND TABNAME = 'MODULES'
+            WITH UR""")
+        if bool(cursor.fetchall()[0][0]):
+            return 97
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM SYSCAT.TABLES
+            WHERE TABSCHEMA = 'SYSCAT'
+            AND TABNAME = 'VARIABLES'
+            WITH UR""")
+        if bool(cursor.fetchall()[0][0]):
+            return 95
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM SYSCAT.COLUMNS
+            WHERE TABSCHEMA = 'SYSCAT'
+            AND TABNAME = 'TABLES'
+            AND COLNAME = 'OWNER'
+            WITH UR""")
+        if bool(cursor.fetchall()[0][0]):
+            return 91
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM SYSCAT.TABLES
+            WHERE TABSCHEMA = 'SYSCAT'
+            AND TABNAME = 'ROUTINES'
+            WITH UR""")
+        if bool(cursor.fetchall()[0][0]):
+            return 82
+        return 70
 
     def open(self):
         """Opens the database connection for data retrieval."""
@@ -101,62 +150,20 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
             'DOCCAT extension schema not found, using SYSCAT',
             'DOCCAT extension schema found, using DOCCAT instead of SYSCAT'
         ][doccat])
-        # Test which version of the system catalog is installed. The following
-        # progression is used to determine version:
-        #
-        # Base level (70)
-        # SYSCAT.ROUTINES introduced in v8 (80)
-        # SYSCAT.TABLES.OWNER introduced in v9 (90)
-        # SYSCAT.VARIABLES introduced in v9.5 (95)
-        # SYSCAT.INDEXES.COMPRESSION introduced in v9.7 (97)
-        cursor = self.connection.cursor()
-        schemaver = 70
-        cursor.execute("""
-            SELECT COUNT(*)
-            FROM SYSCAT.TABLES
-            WHERE TABSCHEMA = 'SYSCAT'
-            AND TABNAME = 'ROUTINES'
-            WITH UR""")
-        if bool(cursor.fetchall()[0][0]):
-            schemaver = 80
-            cursor.execute("""
-                SELECT COUNT(*)
-                FROM SYSCAT.COLUMNS
-                WHERE TABSCHEMA = 'SYSCAT'
-                AND TABNAME = 'TABLES'
-                AND COLNAME = 'OWNER'
-                WITH UR""")
-            if bool(cursor.fetchall()[0][0]):
-                schemaver = 90
-                cursor.execute("""
-                    SELECT COUNT(*)
-                    FROM SYSCAT.TABLES
-                    WHERE TABSCHEMA = 'SYSCAT'
-                    AND TABNAME = 'VARIABLES'
-                    WITH UR""")
-                if bool(cursor.fetchall()[0][0]):
-                    schemaver = 95
-                    cursor.execute("""
-                        SELECT COUNT(*)
-                        FROM SYSCAT.TABLES
-                        WHERE TABSCHEMA = 'SYSCAT'
-                        AND TABNAME = 'MODULES'
-                        WITH UR""")
-                    if bool(cursor.fetchall()[0][0]):
-                        schemaver = 97
+        version = self.get_version()
         logging.info({
             70: 'Detected v7 (or below) catalog layout',
-            80: 'Detected v8.2 catalog layout',
-            90: 'Detected v9.1 catalog layout',
+            82: 'Detected v8.2 catalog layout',
+            91: 'Detected v9.1 catalog layout',
             95: 'Detected v9.5 catalog layout',
             97: 'Detected v9.7 (or above) catalog layout',
-        }[schemaver])
-        if schemaver < 80:
+        }[version])
+        if version < 82:
             raise dbsuite.plugins.PluginError('DB2 server must be v8.2 or above')
         # Set up a generic query substitution dictionary
         self.query_subst = {
             'schema': ['SYSCAT', 'DOCCAT'][doccat],
-            'owner': ['DEFINER', 'OWNER'][schemaver >= 90],
+            'owner': ['DEFINER', 'OWNER'][version >= 91],
         }
 
     def close(self):

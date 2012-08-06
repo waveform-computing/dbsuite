@@ -27,7 +27,6 @@ import sys
 import os
 import subprocess
 
-from dbsuite.compat import *
 
 def get_instance(name=None):
     """Constructs an instance from an instance name or returns the current instance"""

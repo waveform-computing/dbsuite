@@ -161,5 +161,5 @@ class DB2ZOSTokenizer(BaseTokenizer):
         self._jump['N'] = self._handle_unistring
         self._jump['g'] = self._handle_unistring
         self._jump['G'] = self._handle_unistring
-        self._jump[u'\xac'] = self._handle_not # Hook character (legacy "not" representation)
+        self._jump['\xac'] = self._handle_not # Hook character (legacy "not" representation)
 

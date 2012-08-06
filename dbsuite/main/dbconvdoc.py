@@ -28,7 +28,7 @@ import logging
 
 import dbsuite.converter
 import dbsuite.main
-from dbsuite.compat import *
+
 
 class ConvDocUtility(dbsuite.main.Utility):
     """%prog [options] source converter
@@ -45,14 +45,18 @@ class ConvDocUtility(dbsuite.main.Utility):
     def __init__(self):
         super(ConvDocUtility, self).__init__()
         self.parser.set_defaults(source=None, conv=None)
-        self.parser.add_option('--list-sources', dest=u'source', action=u'store_const', const=u'*',
-            help=u"""list all available sources""")
-        self.parser.add_option('--help-source', dest=u'source',
-            help=u"""display help about the named source""")
-        self.parser.add_option('--list-converters', dest=u'conv', action=u'store_const', const=u'*',
-            help=u"""list all available converters""")
-        self.parser.add_option('--help-converter', dest=u'conv',
-            help=u"""display help about the named converter""")
+        self.parser.add_option(
+            '--list-sources', dest='source', action='store_const', const='*',
+            help='list all available sources')
+        self.parser.add_option(
+            '--help-source', dest='source',
+            help='display help about the named source')
+        self.parser.add_option(
+            '--list-converters', dest='conv', action='store_const', const='*',
+            help='list all available converters')
+        self.parser.add_option(
+            '--help-converter', dest='conv',
+            help='display help about the named converter')
         self.sources = {
             'luw81': dbsuite.converter.InfoCenterSource81,
             'luw82': dbsuite.converter.InfoCenterSource82,

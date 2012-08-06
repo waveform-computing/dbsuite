@@ -26,7 +26,7 @@ from __future__ import (
 from dbsuite.plugins.db2.zos.tokenizer import db2zos_namechars, db2zos_identchars
 from dbsuite.parser import BaseParser, ParseError, ParseBacktrack, quote_str
 from dbsuite.tokenizer import TokenTypes as TT, Token
-from dbsuite.compat import *
+
 
 # Standard size suffixes and multipliers
 SUFFIX_KMG = {
@@ -42,6 +42,7 @@ DECIMAL_DEFAULT_SIZE = 5
 DECIMAL_DEFAULT_SCALE = 0
 DECFLOAT_DEFAULT_SIZE = 34
 TIMESTAMP_DEFAULT_SIZE = 6
+
 
 class DB2ZOSParser(BaseParser):
     """Reformatter which breaks up and re-indents DB2 for LUW's SQL dialect.
@@ -6891,6 +6892,7 @@ class DB2ZOSParser(BaseParser):
                 self._parse_datatype()
         self._parse_finish()
         return self._output
+
 
 Connection = namedtuple('Connection', ('instance', 'database', 'username', 'password'))
 

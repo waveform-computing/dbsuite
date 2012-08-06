@@ -47,7 +47,6 @@ from dbsuite.tuples import (
     ConstraintRef, IndexRef, RelationDep, RelationRef, RoutineRef, TableRef,
     TablespaceRef, TriggerDep, TriggerRef
 )
-from dbsuite.compat import *
 
 
 __all__ = [
@@ -1097,11 +1096,9 @@ class InputPlugin(Plugin):
 
     @cachedproperty
     def relations(self):
-        result = (
-            namedslice(Relation, relation)
-            for relation in chain(self.tables, self.views, self.aliases)
-        )
-        return sorted(result, key=attrgetter('schema', 'name'))
+        return sorted(
+            chain(self.tables, self.views, self.aliases),
+            key=attrgetter('schema', 'name'))
 
     @cachedproperty
     def relation_dependencies(self):

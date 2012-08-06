@@ -130,7 +130,7 @@ def flatten(elem, include_tail=False):
     Which is probably not what is wanted. See the flatten_html function below
     for dealing with this.
     """
-    text = elem.text or u''
+    text = elem.text or ''
     for e in elem:
         text += flatten(e, True)
     if include_tail and elem.tail:
@@ -175,15 +175,15 @@ html4_display = dict(
 # for particular display types. Any display type not mentioned in the
 # dictionaries default to ''.
 flatten_prefixes = {
-    'list-item': u' * ',
+    'list-item': ' * ',
 }
 flatten_suffixes = {
-    'block':         u'\n',
-    'table':         u'\n',
-    'table-caption': u'\n',
-    'table-row':     u'\n',
-    'table-cell':    u' ',
-    'list-item':     u'\n',
+    'block':         '\n',
+    'table':         '\n',
+    'table-caption': '\n',
+    'table-row':     '\n',
+    'table-cell':    ' ',
+    'list-item':     '\n',
 }
 
 def flatten_html(elem, elem_display=html4_display, xmlns='', include_tail=False):
@@ -210,17 +210,17 @@ def flatten_html(elem, elem_display=html4_display, xmlns='', include_tail=False)
     display = elem_display.get(tag, 'inline')
     # Don't render elements with certain display types (or their children)
     if display in ['none', 'table-column-group', 'table-column']:
-        return u''
+        return ''
     else:
-        text = u''
+        text = ''
         # Make a vague effort to avoid too many extraneous newlines
         if elem.text:
-            text += flatten_prefixes.get(display, u'')
+            text += flatten_prefixes.get(display, '')
             text += elem.text
         for e in elem:
             text += flatten_html(e, elem_display, xmlns, True)
         if include_tail:
-            text += flatten_suffixes.get(display, u'')
+            text += flatten_suffixes.get(display, '')
             if elem.tail:
                 text += elem.tail
         return text

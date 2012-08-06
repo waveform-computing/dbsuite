@@ -41,7 +41,6 @@ from itertools import chain, groupby
 from collections import Mapping, Sequence
 
 from dbsuite.parser import format_size, format_ident
-from dbsuite.compat import *
 
 
 __all__ = [

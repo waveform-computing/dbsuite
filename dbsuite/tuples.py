@@ -31,7 +31,7 @@ from __future__ import (
     division,
     )
 
-from dbsuite.compat import *
+from collections import namedtuple
 
 
 __all__ = [
