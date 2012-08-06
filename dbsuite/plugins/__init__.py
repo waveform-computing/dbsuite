@@ -61,6 +61,21 @@ __all__ = [
 ]
 
 
+class cachedproperty(property):
+    """Convert a method into a cached property"""
+
+    def __init__(self, method):
+        private = '_' + method.__name__
+        def fget(s):
+            try:
+                return getattr(s, private)
+            except AttributeError:
+                value = method(s)
+                setattr(s, private, value)
+                return value
+        super(cachedproperty, self).__init__(fget)
+
+
 class PluginError(Exception):
     """Base exception class for plugin related errors."""
     pass

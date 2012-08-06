@@ -34,6 +34,7 @@ import traceback
 import glob
 
 import dbsuite.plugins
+from dbsuite.termsize import terminal_size
 from dbsuite import __version__
 
 
