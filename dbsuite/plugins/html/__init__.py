@@ -56,82 +56,99 @@ class HTMLOutputPlugin(dbsuite.plugins.OutputPlugin):
     def __init__(self):
         super(HTMLOutputPlugin, self).__init__()
         self.site_class = WebSite
-        self.add_option('path', default='.', convert=self.convert_path,
-            doc="""The folder into which all files (HTML, CSS, SVG, etc.) will
-            be written. Use $db or ${db} to include the name of the database in
-            the path. The $dblower, $dbupper, and $dbtitle substitutions are
-            also available, for forced lowercase, UPPERCASE, and Titlecase
-            versions of the name respectively. You may also refer to
-            environment variables with $-prefixed substitutions. To include a
-            literal $, use $$.""")
-        self.add_option('top', default='index',
-            doc="""The base name (without path or extension) of the top-level
-            file in the output (i.e. the file documenting the database itself).
-            The default "index" results in the top-level file being named
-            "index.html". Change this if you wish to have a separate index.html
-            file which is not touched by dbsuite. Accepts $-prefixed
-            substitutions (see path)""")
-        self.add_option('encoding', default='UTF-8',
-            doc="""The character encoding to use for all text-based files
-            (HTML, JavaScript, CSS, SVG, etc.)""")
-        self.add_option('home_title', default='Home',
-            doc="""The title of the homepage link included in all documents.
-            Accepts $-prefixed substitutions (see path)""")
-        self.add_option('home_url', default='/',
-            doc="""The URL of the homepage link included in all documents.
-            This can point anywhere; it does not have to be a link to one of
-            the documents output by the plugin. Accepts $-prefixed
-            substitutions (see path)""")
-        self.add_option('icon_url', default='/favicon.ico',
-            doc="""The location of the icon (aka "favicon") for the generated
-            pages. Defaults to the standard /favicon.ico location. Accepts
-            $-prefixed substitutions (see path)""")
-        self.add_option('icon_type', default='image/x-icon',
-            doc="""The MIME type of the icon referenced by the icon_url option.
-            Defaults to the Microsoft icon format (image/x-icon).""")
-        self.add_option('author_name', default='',
-            doc="""The name of the author of the generated documents""")
-        self.add_option('author_email', default='',
-            doc="""The e-mail address of the author of the generated documents""")
-        self.add_option('copyright', default='',
-            doc="""The copyright message to embed in the generated documents""")
-        self.add_option('site_title', default='$db Documentation',
-            doc="""The title of the site as a whole. Defaults to "$db
-            Documentation" where dbname is the name of the database for which
-            documentation is being generated. Accepts $-prefixed substitutions
-            (see path)""")
-        self.add_option('tbspace_list', default='true', convert=self.convert_bool,
-            doc="""If True, include a list of all tablespaces in the top level
-            document. For some database architectures (e.g. DB2 for z/OS) this
-            list tends to be inordinately long and relatively useless""")
-        self.add_option('search', default='false', convert=self.convert_bool,
-            doc="""If True, a full-text-search database will be generated and
-            a small PHP script will be included with the output for searching
-            purposes""")
-        self.add_option('diagrams', default='', convert=self.convert_dbclasses,
-            doc="""A comma separated list of the object types for which
-            diagrams should be generated, e.g. "schemas, relations". Currently
-            only diagrams of schemas and relations (tables, views, and aliases)
-            are supported. Note that schema diagrams may require an extremely
-            large amount of RAM (1Gb+) to process""")
-        self.add_option('indexes', default='',
+        self.add_option(
+            'path', default='.', convert=self.convert_path,
+            doc='The folder into which all files (HTML, CSS, SVG, etc.) will '
+            'be written. Use $db or ${db} to include the name of the database '
+            'in the path. The $dblower, $dbupper, and $dbtitle substitutions '
+            'are also available, for forced lowercase, UPPERCASE, and '
+            'Titlecase versions of the name respectively. You may also refer '
+            'to environment variables with $-prefixed substitutions. To '
+            'include a literal $, use $$.')
+        self.add_option(
+            'top', default='index',
+            doc='The base name (without path or extension) of the top-level '
+            'file in the output (i.e. the file documenting the database itself). '
+            'The default "index" results in the top-level file being named '
+            '"index.html". Change this if you wish to have a separate index.html '
+            'file which is not touched by dbsuite. Accepts $-prefixed '
+            'substitutions (see path)')
+        self.add_option(
+            'encoding', default='UTF-8',
+            doc='The character encoding to use for all text-based files '
+            '(HTML, JavaScript, CSS, SVG, etc.)')
+        self.add_option(
+            'home_title', default='Home',
+            doc='The title of the homepage link included in all documents. '
+            'Accepts $-prefixed substitutions (see path')
+        self.add_option(
+            'home_url', default='/',
+            doc='The URL of the homepage link included in all documents. '
+            'This can point anywhere; it does not have to be a link to one of '
+            'the documents output by the plugin. Accepts $-prefixed '
+            'substitutions (see path)')
+        self.add_option(
+            'icon_url', default='/favicon.ico',
+            doc='The location of the icon (aka "favicon") for the generated '
+            'pages. Defaults to the standard /favicon.ico location. Accepts '
+            '$-prefixed substitutions (see path)')
+        self.add_option(
+            'icon_type', default='image/x-icon',
+            doc='The MIME type of the icon referenced by the icon_url option. '
+            'Defaults to the Microsoft icon format (image/x-icon).')
+        self.add_option(
+            'author_name', default='',
+            doc='The name of the author of the generated documents')
+        self.add_option(
+            'author_email', default='',
+            doc='The e-mail address of the author of the generated documents')
+        self.add_option(
+            'copyright', default='',
+            doc='The copyright message to embed in the generated documents')
+        self.add_option(
+            'site_title', default='$db Documentation',
+            doc='The title of the site as a whole. Defaults to "$db '
+            'Documentation" where dbname is the name of the database for which '
+            'documentation is being generated. Accepts $-prefixed substitutions '
+            '(see path)')
+        self.add_option(
+            'tbspace_list', default='true', convert=self.convert_bool,
+            doc='If True, include a list of all tablespaces in the top level '
+            'document. For some database architectures (e.g. DB2 for z/OS) this '
+            'list tends to be inordinately long and relatively useless')
+        self.add_option(
+            'search', default='false', convert=self.convert_bool,
+            doc='If True, a full-text-search database will be generated and '
+            'a small PHP script will be included with the output for searching '
+            'purposes')
+        self.add_option(
+            'diagrams', default='', convert=self.convert_dbclasses,
+            doc='A comma separated list of the object types for which '
+            'diagrams should be generated, e.g. "schemas, relations". Currently '
+            'only diagrams of schemas and relations (tables, views, and aliases) '
+            'are supported. Note that schema diagrams may require an extremely '
+            'large amount of RAM (1Gb+) to process')
+        self.add_option(
+            'indexes', default='',
             convert=lambda value: self.convert_dbclasses(value, abstract=True),
-            doc="""A comma separated list of the object types for which
-            alphabetical index lists should be generated, e.g. "schemas,
-            tables, fields, all". The value "all" generates an index of all
-            objects in the database, regardless of type.""")
-        self.add_option('lang', default='en-US',
+            doc='A comma separated list of the object types for which '
+            'alphabetical index lists should be generated, e.g. "schemas, '
+            'tables, fields, all". The value "all" generates an index of all '
+            'objects in the database, regardless of type.')
+        self.add_option(
+            'lang', default='en-US',
             convert=lambda value: self.convert_list(value, separator='-', minvalues=2, maxvalues=2),
-            doc="""The ISO639 language code indicating the language that the
-            site uses. Note that this is used both for the XML language, and
-            for the language-specific stemming algorithm (if search is
-            true)""")
-        self.add_option('threads', default='1',
+            doc='The ISO639 language code indicating the language that the '
+            'site uses. Note that this is used both for the XML language, and '
+            'for the language-specific stemming algorithm (if search is '
+            'true)')
+        self.add_option(
+            'threads', default='1',
             convert=lambda value: self.convert_int(value, minvalue=1),
-            doc="""The number of threads to utilize when writing the output.
-            Defaults to 1. If you have more than 1 processor or core, setting
-            this to 2 or more may yield better performance (although values
-            above 4 usually make no difference)""")
+            doc='The number of threads to utilize when writing the output. '
+            'Defaults to 1. If you have more than 1 processor or core, setting '
+            'this to 2 or more may yield better performance (although values '
+            'above 4 usually make no difference)')
 
     def configure(self, config):
         super(HTMLOutputPlugin, self).configure(config)
@@ -140,24 +157,24 @@ class HTMLOutputPlugin(dbsuite.plugins.OutputPlugin):
         try:
             codecs.lookup(self.options['encoding'])
         except:
-            raise dbsuite.plugins.PluginConfigurationError('Unknown character encoding "%s"' % self.options['encoding'])
+            raise dbsuite.plugins.PluginConfigurationError(
+                'Unknown character encoding "%s"' % self.options['encoding'])
         # If search is True, check that the Xapian bindings are available
         if self.options['search']:
             try:
                 import xapian
             except ImportError:
-                raise dbsuite.plugins.PluginConfigurationError('Search is enabled, but the Python Xapian bindings were not found')
-        # If diagrams are requested, check pygraphviz and networkx are
-        # available
+                raise dbsuite.plugins.PluginConfigurationError(
+                    'Search is enabled, but the Python Xapian bindings were '
+                    'not found')
+        # If diagrams are requested, check pygraphviz is available
         if self.options['diagrams']:
             try:
                 import pygraphviz
             except ImportError:
-                raise dbsuite.plugins.PluginConfigurationError('Diagrams have been requested, but the Python pygraphviz was not found')
-            try:
-                import networkx
-            except ImportError:
-                raise dbsuite.plugins.PluginConfigurationError('Diagrams have been requested, but the Python networkx was not found')
+                raise dbsuite.plugins.PluginConfigurationError(
+                    'Diagrams have been requested, but the Python pygraphviz '
+                    'library was not found')
 
     def substitute(self):
         """Returns the list of options which can accept $-prefixed substitutions."""

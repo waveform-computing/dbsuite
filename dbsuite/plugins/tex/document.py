@@ -191,7 +191,7 @@ class TeXSQLHighlighter(SQLHighlighter):
                     r'\ttfamily\begin{list}{',
                     r'\footnotesize{\textcolor{linenum}{\arabic{SQLlinenum}}}',
                     r'}{',
-                    r'\usecounter{SQLlinenum}',
+                    '\\usecounter{SQLlinenum}',
                     r'\setlength{\leftmargin}{0mm}',
                     r'\setlength{\itemsep}{0mm}',
                     r'\setlength{\parsep}{0mm}',
@@ -282,7 +282,7 @@ class TeXPrettierFactory(TeXFactory):
             return super(TeXPrettierFactory, self)._format(content)
 
 
-class TeXObjectGraph(Graph):
+class TeXObjectGraph(object):
     """A version of the Graph class which represents database objects.
 
     This is the base class for graphs used in generated documents.  An add()

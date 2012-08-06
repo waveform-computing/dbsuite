@@ -26,6 +26,7 @@ from __future__ import (
 import optparse
 import ConfigParser
 import logging
+from operator import itemgetter
 
 import dbsuite.db
 import dbsuite.plugins

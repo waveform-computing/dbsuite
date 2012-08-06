@@ -1240,6 +1240,6 @@ if __name__ == '__main__':
         id='tab:fetch_first_ordered_result',
         longtable=True
     )
-    print tex(table)
+    print(tex(table))
     table.longtable = False
-    print tex(table)
+    print(tex(table))

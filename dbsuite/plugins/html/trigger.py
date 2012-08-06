@@ -23,7 +23,7 @@ from __future__ import (
     division,
     )
 
-from dbsuite.plugins.html.document import HTMLObjectDocument
+from dbsuite.plugins.html.document import HTMLObjectDocument, GraphObjectDocument
 
 
 times = {
@@ -108,6 +108,7 @@ class TriggerDocument(HTMLObjectDocument):
             ) if self.dbobject.create_sql else ''
         ))
         return body
+
 
 class TriggerGraph(GraphObjectDocument):
     def generate(self):

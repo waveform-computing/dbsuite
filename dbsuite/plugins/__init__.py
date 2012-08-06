@@ -40,6 +40,7 @@ import datetime
 import imp
 import re
 import fnmatch
+from operator import attrgetter
 from itertools import chain, groupby, ifilter
 
 import dbsuite.db

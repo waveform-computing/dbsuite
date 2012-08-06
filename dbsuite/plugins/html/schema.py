@@ -178,54 +178,45 @@ class SchemaDocument(HTMLObjectDocument):
         ))
         return body
 
+
 class SchemaGraph(GraphObjectDocument):
     def generate(self):
         graph = super(SchemaGraph, self).generate()
         schema = self.dbobject
         graph.add_subgraph(schema, selected=True)
         for relation in schema.relation_list:
-            rel_node = graph.add_node(relation)
+            graph.add_node(relation)
             for dependent in relation.dependent_list:
-                dep_node = graph.add_node(dependent)
-                dep_edge = graph.add_edge(dep_node, rel_node,
-                    arrowhead='onormal')
+                graph.add_node(dependent)
+                graph.add_edge(dependent, relation, arrowhead='onormal')
             if isinstance(relation, Table):
                 for key in relation.foreign_key_list:
-                    key_node = graph.add_node(key.ref_table)
-                    key_edge = graph.add_edge(rel_node, key_node,
-                        arrowhead='normal')
+                    graph.add_node(key.ref_table)
+                    graph.add_edge(relation, key.ref_table, arrowhead='normal')
                 for trigger in relation.trigger_list:
-                    trig_node = graph.add_node(trigger)
-                    trig_edge = graph.add_edge(rel_node, trig_node,
-                        arrowhead='vee')
+                    graph.add_node(trigger)
+                    graph.add_edge(relation, trigger, arrowhead='vee')
                     for dependency in trigger.dependency_list:
-                        dep_node = graph.add_node(dependency)
-                        dep_edge = graph.add_edge(trig_node, dep_node,
-                            arrowhead='onormal')
+                        graph.add_node(dependency)
+                        graph.add_edge(trigger, dependency, arrowhead='onormal')
             elif isinstance(relation, View):
                 for dependency in relation.dependency_list:
-                    dep_node = graph.add_node(dependency)
-                    dep_edge = graph.add_edge(rel_node, dep_node,
-                        arrowhead='onormal')
+                    graph.add_node(dependency)
+                    graph.add_edge(relation, dependency, arrowhead='onormal')
                 for trigger in relation.trigger_list:
-                    trig_node = graph.add_node(trigger)
-                    trig_edge = graph.add_edge(rel_node, trig_node,
-                        arrowhead='vee')
+                    graph.add_node(trigger)
+                    graph.add_edge(relation, trigger, arrowhead='vee')
                     for dependency in trigger.dependency_list:
-                        dep_node = graph.add_node(dependency)
-                        dep_edge = graph.add_edge(trig_node, dep_node,
-                            arrowhead='onormal')
+                        graph.add_node(dependency)
+                        graph.add_edge(trigger, dependency, arrowhead='onormal')
             elif isinstance(relation, Alias):
-                ref_node = graph.add_node(relation.relation)
-                ref_edge = graph.add_edge(rel_node, ref_node,
-                    arrowhead='onormal')
+                graph.add_node(relation.relation)
+                graph.add_edge(relation, relation.relation, arrowhead='onormal')
         for trigger in schema.trigger_list:
-            rel_node = graph.add_node(trigger.relation)
-            trig_node = graph.add_node(trigger)
-            trig_edge = graph.add_edge(rel_node, trig_node,
-                arrowhead='vee')
+            graph.add_node(trigger.relation)
+            graph.add_node(trigger)
+            graph.add_edge(trigger.relation, trigger, arrowhead='vee')
             for dependency in trigger.dependency_list:
-                dep_node = graph.add_node(dependency)
-                dep_edge = graph.add_edge(trig_node, dep_node,
-                    arrowhead='onormal')
+                graph.add_node(dependency)
+                graph.add_edge(trigger, dependency, arrowhead='onormal')
         return graph

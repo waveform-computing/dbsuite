@@ -378,9 +378,8 @@ class ObjectGraph(object):
         node = self.dbobjects.get(dbobject)
         if node is None:
             subgraph = self.add_subgraph(dbobject.schema)
-            subgraph.add_node(name=dbobject.identifier,
-                label=dbobject.name, **attr)
-            node = cluster.get_node(name=dbobject.identifier)
+            subgraph.add_node(dbobject.identifier, label=dbobject.name, **attr)
+            node = subgraph.get_node(dbobject.identifier)
             node.selected = selected
             node.dbobject = dbobject
             self.dbobjects[dbobject] = node
@@ -399,10 +398,10 @@ class ObjectGraph(object):
         if dbobject and not key:
             key = dbobject.identifier
         edge = None
-        from_item = self.add(from_object)
-        to_item = self.add(to_object)
-        self.graph.add_edge(from_item, to_item, key, **attr)
-        edge = self.graph.get_edge(from_item, to_item, key)
+        from_node = self.add_node(from_object)
+        to_node = self.add_node(to_object)
+        self.graph.add_edge(from_node, to_node, key, **attr)
+        edge = self.graph.get_edge(from_node, to_node, key)
         edge.dbobject = dbobject
         return edge
 

@@ -23,6 +23,8 @@ from __future__ import (
     division,
     )
 
+from collections import namedtuple
+
 from dbsuite.plugins.db2.zos.tokenizer import db2zos_namechars, db2zos_identchars
 from dbsuite.parser import BaseParser, ParseError, ParseBacktrack, quote_str
 from dbsuite.tokenizer import TokenTypes as TT, Token

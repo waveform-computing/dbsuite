@@ -37,6 +37,7 @@ from __future__ import (
 
 import re
 import logging
+from operator import attrgetter
 from itertools import chain, groupby
 from collections import Mapping, Sequence
 
