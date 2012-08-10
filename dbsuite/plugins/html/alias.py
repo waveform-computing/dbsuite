@@ -155,7 +155,7 @@ class AliasGraph(GraphObjectDocument):
             graph.add_node(dependent)
             graph.add_edge(
                 dependent, alias, label='<uses>', arrowhead='onormal')
-        for trigger in view.trigger_dependent_list:
+        for trigger in alias.trigger_dependent_list:
             graph.add_node(trigger)
             graph.add_node(trigger.relation)
             graph.add_edge(

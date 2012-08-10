@@ -331,7 +331,7 @@ class HTMLSQLHighlighter(SQLHighlighter):
 
 
 class ObjectGraph(object):
-    """A version of the Graph class which represents database objects.
+    """Represents database objects within a pygraphviz AGraph.
 
     This is the base class for graphs used in generated web sites.
     method on all objects within the graph. Dervied plugins may override
@@ -346,6 +346,8 @@ class ObjectGraph(object):
         super(ObjectGraph, self).__init__()
         self.graph = pgv.AGraph(name=name, rankdir='LR')
         self.dbobjects = {}
+        self.graphobjects = {}
+        self.selected = set()
         self.site = site
 
     def add_subgraph(self, dbobject, selected=False, **attr):
@@ -361,8 +363,9 @@ class ObjectGraph(object):
             subgraph = self.graph.add_subgraph(
                 name='cluster_%s' % dbobject.identifier,
                 label=dbobject.name, **attr)
-            subgraph.selected = selected
-            subgraph.dbobject = dbobject
+            if selected:
+                self.selected.add(subgraph)
+            self.graphobjects[subgraph] = dbobject
             self.dbobjects[dbobject] = subgraph
         return subgraph
 
@@ -378,10 +381,12 @@ class ObjectGraph(object):
         node = self.dbobjects.get(dbobject)
         if node is None:
             subgraph = self.add_subgraph(dbobject.schema)
-            subgraph.add_node(dbobject.identifier, label=dbobject.name, **attr)
+            subgraph.add_node(
+                dbobject.identifier, label=dbobject.name, **attr)
             node = subgraph.get_node(dbobject.identifier)
-            node.selected = selected
-            node.dbobject = dbobject
+            if selected:
+                self.selected.add(node)
+            self.graphobjects[node] = dbobject
             self.dbobjects[dbobject] = node
         return node
 
@@ -401,41 +406,74 @@ class ObjectGraph(object):
         from_node = self.add_node(from_object)
         to_node = self.add_node(to_object)
         self.graph.add_edge(from_node, to_node, key, **attr)
-        edge = self.graph.get_edge(from_node, to_node, key)
-        edge.dbobject = dbobject
+        edge = self.graph.get_edge(from_node, to_node, key=key)
+        self.graphobjects[edge] = dbobject
         return edge
 
     def style_subgraph(self, subgraph):
         """Applies common styles to subgraphs."""
         # Overridden to add URLs to graph items representing database objects,
         # and to apply a thicker border to the selected object
-        if hasattr(subgraph, 'dbobject'):
-            doc = self.site.object_document(subgraph.dbobject)
+        dbobject = self.graphobjects.get(subgraph)
+        if dbobject:
+            doc = self.site.object_document(dbobject)
             if doc:
                 subgraph.graph_attr['URL'] = doc.url
 
     def style_node(self, node):
         """Applies common styles to graph nodes."""
-        if hasattr(node, 'dbobject'):
-            doc = self.site.object_document(node.dbobject)
+        dbobject = self.graphobjects.get(node)
+        if dbobject:
+            doc = self.site.object_document(dbobject)
             if doc:
                 node.attr['URL'] = doc.url
 
     def style_edge(self, edge):
         """Applies common styles to graph edges."""
-        if hasattr(edge, 'dbobject'):
-            doc = self.site.object_document(edge.dbobject)
+        dbobject = self.graphobjects.get(edge)
+        if dbobject:
+            doc = self.site.object_document(dbobject)
             if doc:
                 edge.attr['URL'] = doc.url
 
-    def _get_dot(self):
-        for subgraph in self.graph.subgraphs_iter():
-            self.style_subgraph(subgraph)
-        for node in self.graph.nodes_iter():
-            self.style_node(node)
-        for edge in self.graph.edges_iter():
-            self.style_edge(edge)
-        return super(ObjectGraph, self)._get_dot()
+    def layout(self):
+        """Generates a layout for the graph after applying styles"""
+        # Ensure that we don't redo layouts if called multiple times (such as
+        # when drawing a graph with a client side image map)
+        if not hasattr(self.graph, 'has_layout') or not self.graph.has_layout:
+            for subgraph in self.graph.subgraphs_iter():
+                self.style_subgraph(subgraph)
+            for node in self.graph.nodes_iter():
+                self.style_node(node)
+            for edge in self.graph.edges_iter():
+                self.style_edge(edge)
+            self.graph.layout(prog='dot')
+            assert self.graph.has_layout
+
+    def to_map(self, output):
+        """Draws an XML client side image map"""
+        self.layout()
+        self.graph.draw(output, format='cmapx')
+
+    def to_png(self, output):
+        """Draws the graph to a PNG file"""
+        self.layout()
+        self.graph.draw(output, format='png')
+
+    def to_svg(self, output):
+        """Draws the graph to an SVG file"""
+        self.layout()
+        self.graph.draw(output, format='svg')
+
+    def to_ps(self, output):
+        """Draws the graph to a PostScript file"""
+        self.layout()
+        self.graph.draw(output, format='ps2')
+
+    def to_pdf(self, output):
+        """Draws the graph to a PDF file"""
+        self.layout()
+        self.graph.draw(output, format='pdf')
 
 
 class WebSite(object):
@@ -1687,17 +1725,14 @@ class GraphDocument(WebSiteDocument):
         return graph
 
     def serialize(self, content):
-        if isinstance(content, Graph):
+        if isinstance(content, ObjectGraph):
             # The following lookup tables are used to decide on the method used
             # to write output based on the extension of the image filename
             ext = os.path.splitext(self.filename)[1].lower()
             try:
                 method = {
                     '.png': content.to_png,
-                    '.gif': content.to_gif,
                     '.svg': content.to_svg,
-                    '.ps':  content.to_ps,
-                    '.eps': content.to_ps,
                 }[ext]
             except KeyError:
                 raise Exception('Unknown image extension "%s"' % ext)

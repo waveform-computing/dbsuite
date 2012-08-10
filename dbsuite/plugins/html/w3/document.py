@@ -155,43 +155,52 @@ class W3Graph(ObjectGraph):
     fontname = 'Verdana'
 
     def style_subgraph(self, subgraph):
+        super(W3Graph, self).style_subgraph(subgraph)
         subgraph.graph_attr['fontname'] = self.fontname
         subgraph.graph_attr['fontsize'] = 10.0
         subgraph.graph_attr['fontcolor'] = '#000000'
-        if hasattr(subgraph, 'dbobject'):
+        dbobject = self.graphobjects.get(subgraph)
+        if dbobject:
             subgraph.graph_attr['style'] = 'filled'
             subgraph.graph_attr['fillcolor'] = '#dddddd'
-        if hasattr(subgraph, 'selected'):
-            subgraph.attr['color'] = [subgraph.attr['fillcolor'], '#000000'][subgraph.selected]
+            subgraph.attr['color'] = [
+                subgraph.attr['fillcolor'],
+                '#000000'
+            ][subgraph in self.selected]
 
     def style_node(self, node):
+        super(W3Graph, self).style_node(node)
         node.attr['fontname'] = self.fontname
         node.attr['fontsize'] = 8.0
         node.attr['fontcolor'] = '#000000'
-        if hasattr(node, 'dbobject'):
-            if isinstance(node.dbobject, Relation):
+        dbobject = self.graphobjects.get(node)
+        if dbobject:
+            if isinstance(dbobject, Relation):
                 node.attr['style'] = 'filled'
-                if isinstance(node.dbobject, Table):
+                if isinstance(dbobject, Table):
                     node.attr['shape'] = 'rectangle'
                     node.attr['fillcolor'] = '#6699cc'
-                elif isinstance(node.dbobject, View):
+                elif isinstance(dbobject, View):
                     node.attr['shape'] = 'octagon'
                     node.attr['fillcolor'] = '#99cc33'
-                elif isinstance(node.dbobject, Alias):
-                    if isinstance(node.dbobject.final_relation, Table):
+                elif isinstance(dbobject, Alias):
+                    if isinstance(dbobject.final_relation, Table):
                         node.attr['shape'] = 'rectangle'
                     else:
                         node.attr['shape'] = 'octagon'
                     node.attr['fillcolor'] = '#ff9900'
-            elif isinstance(node.dbobject, Trigger):
+            elif isinstance(dbobject, Trigger):
                 node.attr['shape'] = 'hexagon'
                 node.attr['style'] = 'filled'
                 node.attr['fillcolor'] = '#cc3333'
                 node.attr['fontcolor'] = '#ffffff'
-        if hasattr(node, 'selected'):
-            node.attr['color'] = [node.attr['fillcolor'], '#000000'][node.selected]
+            node.attr['color'] = [
+                node.attr['fillcolor'],
+                '#000000'
+            ][node in self.selected]
 
     def style_edge(self, edge):
+        super(W3Graph, self).style_edge(edge)
         edge.attr['fontname'] = self.fontname
         edge.attr['fontsize'] = 8.0
         edge.attr['fontcolor'] = '#000000'
