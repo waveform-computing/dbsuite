@@ -24,14 +24,7 @@ from __future__ import (
     )
 
 import datetime
-
-try:
-    import xml.etree.ElementTree as etree
-except ImportError:
-    try:
-        import elementtree.ElementTree as etree
-    except ImportError:
-        raise ImportError('Unable to find an ElementTree implementation')
+import xml.etree.ElementTree as etree
 
 
 __all__ = ['fromstring', 'tostring', 'parse', 'iselement', 'Element',
@@ -84,13 +77,9 @@ class XMLTreeBuilder_CDATA(old_XMLTreeBuilder):
             old_XMLTreeBuilder._data(self, text)
 etree.XMLTreeBuilder = XMLTreeBuilder_CDATA
 
-try:
-    from xml.etree.ElementTree import *
-    from xml.etree.ElementTree import _namespace_map
-    from xml.parsers import expat
-except ImportError:
-    from elementtree.ElementTree import *
-    from elementtree.ElementTree import _namespace_map
+from xml.etree.ElementTree import *
+from xml.etree.ElementTree import _namespace_map
+from xml.parsers import expat
 
 
 def indent(elem, level=0, indent_str='\t'):
