@@ -4896,7 +4896,6 @@ class DB2ZOSParser(BaseParser):
         self._newline()
         self._expect_sequence(['FOR', 'EACH'])
         self._expect_one_of(['ROW', 'STATEMENT'])
-        # XXX MODE DB2SQL appears to be deprecated syntax
         if self._match('MODE'):
             self._newline(-1)
             self._expect('DB2SQL')
@@ -4918,6 +4917,9 @@ class DB2ZOSParser(BaseParser):
         else:
             self._parse_compiled_statement()
             if not label: self._outdent()
+            # XXX This shouldn't be here, but DB2 for z/OS appears to have a
+            # parser bug which allows this
+            self._match('END')
 
     def _parse_create_trusted_context_statement(self):
         """Parses a CREATE TRUSTED CONTEXT statement"""
