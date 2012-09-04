@@ -28,6 +28,7 @@ from __future__ import (
 import logging
 import re
 from itertools import groupby
+from operator import itemgetter
 
 import dbsuite.plugins
 from dbsuite.plugins.db2 import (
