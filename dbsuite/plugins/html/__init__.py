@@ -156,7 +156,7 @@ class HTMLOutputPlugin(dbsuite.plugins.OutputPlugin):
         # method will raise a LookupError if it can't find the encoding)
         try:
             codecs.lookup(self.options['encoding'])
-        except:
+        except LookupError:
             raise dbsuite.plugins.PluginConfigurationError(
                 'Unknown character encoding "%s"' % self.options['encoding'])
         # If search is True, check that the Xapian bindings are available

@@ -79,7 +79,7 @@ class PlainElementFactory(HTMLElementFactory):
         sorters = {}
         try:
             thead = self._find(table, 'thead')
-        except:
+        except LookupError:
             pass
         else:
             if 'id' in table.attrib:
@@ -94,7 +94,7 @@ class PlainElementFactory(HTMLElementFactory):
         # likely to be pure layout tables)
         try:
             tbody = self._find(table, 'tbody')
-        except:
+        except LookupError:
             pass
         else:
             # Apply even and odd classes to rows
