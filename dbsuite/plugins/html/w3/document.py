@@ -93,7 +93,7 @@ class W3ElementFactory(HTMLElementFactory):
         sorters = {}
         try:
             thead = self._find(table, 'thead')
-        except:
+        except LookupError:
             pass
         else:
             for tr in thead.findall('tr'):
@@ -107,14 +107,14 @@ class W3ElementFactory(HTMLElementFactory):
                             sorters[index] = '"digitComma"'
         try:
             tfoot = self._find(table, 'tfoot')
-        except:
+        except LookupError:
             pass
         else:
             for tr in tfoot.findall('tr'):
                 self._add_class(tr, 'blue-dark')
         try:
             tbody = self._find(table, 'tbody')
-        except:
+        except LookupError:
             pass
         else:
             # If there's a tbody element, apply 'even' and 'odd' CSS classes to
