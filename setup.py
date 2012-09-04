@@ -81,7 +81,7 @@ def main():
         author_email         = 'dave@waveform.org.uk',
         url                  = 'http://www.waveform.org.uk/trac/dbsuite/',
         packages             = find_packages(exclude=['distribute_setup', 'utils']),
-        install_requires     = ['Pillow', 'ibm-db', 'pygraphviz'],
+        install_requires     = ['PIL', 'ibm-db', 'pygraphviz'],
         include_package_data = True,
         platforms            = 'ALL',
         zip_safe             = False,

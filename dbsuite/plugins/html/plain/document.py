@@ -60,7 +60,7 @@ from dbsuite.plugins.html.tablespace import TablespaceDocument
 
 # Import the imaging library
 try:
-    from PIL import Image
+    import Image
 except ImportError:
     # Ignore any import errors - the main plugin takes care of warning the
     # user if PIL is required but not present

@@ -89,7 +89,7 @@ class OutputPlugin(dbsuite.plugins.html.HTMLOutputPlugin):
         # If diagrams are requested, check we can import PIL
         if self.options['diagrams']:
             try:
-                import PIL
+                import Image
             except ImportError:
                 raise dbsuite.plugins.PluginConfigurationError('Diagrams requested, but the Python Imaging Library (PIL) was not found')
         supported_diagrams = set([Schema, Table, View, Alias, Trigger])
