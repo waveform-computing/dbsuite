@@ -174,7 +174,7 @@ class SchemaDocument(HTMLObjectDocument):
                 self.site.img_of(self.dbobject),
                 class_='section',
                 id='diagram'
-            ) if len(self.dbobject.relation_list) > 0 else ''
+            ) if self.site.object_graph(self.dbobject) else ''
         ))
         return body
 

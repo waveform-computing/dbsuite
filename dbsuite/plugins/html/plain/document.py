@@ -213,6 +213,7 @@ class PlainSite(WebSite):
             Table:   PlainTableGraph,
             View:    PlainViewGraph,
             Alias:   PlainAliasGraph,
+            Trigger: PlainTriggerGraph,
         }
         # The plugin's configure method has already check all items in
         # self.diagrams are supported
@@ -607,4 +608,7 @@ class PlainViewGraph(ViewGraph, PlainGraphDocument):
     pass
 
 class PlainAliasGraph(AliasGraph, PlainGraphDocument):
+    pass
+
+class PlainTriggerGraph(TriggerGraph, PlainGraphDocument):
     pass

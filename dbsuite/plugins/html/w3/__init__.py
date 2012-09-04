@@ -27,7 +27,7 @@ from __future__ import (
 
 import dbsuite.plugins
 import dbsuite.plugins.html
-from dbsuite.db import Schema, Table, View, Alias
+from dbsuite.db import Schema, Table, View, Alias, Trigger
 from dbsuite.plugins.html.w3.document import W3Site
 
 
@@ -92,7 +92,7 @@ class OutputPlugin(dbsuite.plugins.html.HTMLOutputPlugin):
                 import PIL
             except ImportError:
                 raise dbsuite.plugins.PluginConfigurationError('Diagrams requested, but the Python Imaging Library (PIL) was not found')
-        supported_diagrams = set([Schema, Table, View, Alias])
+        supported_diagrams = set([Schema, Table, View, Alias, Trigger])
         if self.options['diagrams'] - supported_diagrams:
             raise dbsuite.plugins.PluginConfigurationError('No diagram support for %s objects (supported objects are %s)' % (
                 ', '.join(c.config_names[0] for c in self.options['diagrams'] - supported_diagrams),

@@ -114,16 +114,17 @@ class TriggerGraph(GraphObjectDocument):
     def generate(self):
         graph = super(TriggerGraph, self).generate()
         trigger = self.dbobject
-        trig_node = graph.add_node(trigger, selected=True)
-        rel_node = graph.add_node(trigger.relation)
-        rel_edge = graph.add_edge(rel_node, trig_node,
+        relation = trigger.relation
+        graph.add_node(trigger, selected=True)
+        graph.add_node(relation)
+        graph.add_edge(relation, trigger,
             label=('<%s %s>' % (
                 times[trigger.trigger_time],
                 events[trigger.trigger_event]
             )).lower(),
             arrowhead='vee')
         for dependency in trigger.dependency_list:
-            dep_node = graph.add_node(dependency)
-            dep_edge = graph.add_edge(trig_node, dep_node,
+            graph.add_node(dependency)
+            graph.add_edge(trigger, dependency,
                 label='<uses>', arrowhead='onormal')
         return graph

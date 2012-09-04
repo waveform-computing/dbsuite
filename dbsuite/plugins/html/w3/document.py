@@ -57,7 +57,7 @@ from dbsuite.plugins.html.uniquekey import UniqueKeyDocument
 from dbsuite.plugins.html.foreignkey import ForeignKeyDocument
 from dbsuite.plugins.html.check import CheckDocument
 from dbsuite.plugins.html.index import IndexDocument
-from dbsuite.plugins.html.trigger import TriggerDocument
+from dbsuite.plugins.html.trigger import TriggerDocument, TriggerGraph
 from dbsuite.plugins.html.function import FunctionDocument
 from dbsuite.plugins.html.procedure import ProcedureDocument
 from dbsuite.plugins.html.tablespace import TablespaceDocument
@@ -245,6 +245,7 @@ class W3Site(WebSite):
             Table:   W3TableGraph,
             View:    W3ViewGraph,
             Alias:   W3AliasGraph,
+            Trigger: W3TriggerGraph,
         }
         # The plugin's configure method has already check all items in
         # self.diagrams are supported
@@ -923,4 +924,7 @@ class W3ViewGraph(ViewGraph, W3GraphDocument):
     pass
 
 class W3AliasGraph(AliasGraph, W3GraphDocument):
+    pass
+
+class W3TriggerGraph(TriggerGraph, W3GraphDocument):
     pass

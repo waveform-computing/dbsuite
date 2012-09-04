@@ -38,9 +38,10 @@ import datetime
 import logging
 import urlparse
 import threading
-import pygraphviz as pgv
 from operator import attrgetter
 from pkg_resources import resource_stream, resource_string
+
+import pygraphviz as pgv
 
 from dbsuite.main import __version__
 from dbsuite.highlighters import CommentHighlighter, SQLHighlighter
@@ -344,7 +345,8 @@ class ObjectGraph(object):
 
     def __init__(self, site, name='G'):
         super(ObjectGraph, self).__init__()
-        self.graph = pgv.AGraph(name=name, rankdir='LR')
+        self.graph = pgv.AGraph(
+            name=name, strict=False, directed=True, rankdir='LR')
         self.dbobjects = {}
         self.graphobjects = {}
         self.selected = set()
