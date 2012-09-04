@@ -109,7 +109,7 @@ class DB2ZOSTokenizer(BaseTokenizer):
                 s = self._extract_string(False)
                 if len(s) % 2 != 0:
                     raise ValueError('Hex-string must have an even length')
-                s = ''.join(chr(int(s[i:i + 2], 16)) for i in xrange(0, len(s), 2))
+                s = ''.join(unichr(int(s[i:i + 2], 16)) for i in xrange(0, len(s), 2))
             except ValueError, e:
                 self._add_token(TT.ERROR, str(e))
             else:
