@@ -348,7 +348,7 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
                 CHAR('N')                          AS SYSTEM,
                 CHAR(CREATEDTS)                    AS CREATED,
                 REMARKS                            AS DESCRIPTION,
-                RTRIM(TSNAME)                      AS TBSPACE,
+                RTRIM(RTRIM(DBNAME) || '.' || TSNAME) AS TBSPACE,
                 CHAR(STATSTIME)                    AS LASTSTATS,
                 NULLIF(DECIMAL(CARDF), -1)         AS CARDINALITY,
                 NULLIF(DECIMAL(SPACEF), -1) * 1024 AS SIZE
@@ -475,32 +475,37 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
         cursor = self.connection.cursor()
         cursor.execute("""
             SELECT
-                RTRIM(CREATOR)   AS ALIASSCHEMA,
-                RTRIM(NAME)      AS ALIASNAME,
-                RTRIM(CREATEDBY) AS OWNER,
-                CHAR('N')        AS SYSTEM,
-                CHAR(CREATEDTS)  AS CREATED,
-                REMARKS          AS DESCRIPTION,
-                RTRIM(TBCREATOR) AS BASESCHEMA,
-                RTRIM(TBNAME)    AS BASETABLE
+                RTRIM(T1.CREATOR)   AS ALIASSCHEMA,
+                RTRIM(T1.NAME)      AS ALIASNAME,
+                RTRIM(T1.CREATEDBY) AS OWNER,
+                CHAR('N')           AS SYSTEM,
+                CHAR(T1.CREATEDTS)  AS CREATED,
+                T1.REMARKS          AS DESCRIPTION,
+                RTRIM(T1.TBCREATOR) AS BASESCHEMA,
+                RTRIM(T1.TBNAME)    AS BASETABLE
             FROM
-                SYSIBM.SYSTABLES
-            WHERE
-                TYPE = 'A'
+                SYSIBM.SYSTABLES T1
+                INNER JOIN SYSIBM.SYSTABLES T2
+                    ON T1.TYPE = 'A'
+                    AND T1.TBCREATOR = T2.CREATOR
+                    AND T1.TBNAME = T2.NAME
 
             UNION ALL
 
             SELECT
-                RTRIM(CREATOR)   AS ALIASSCHEMA,
-                RTRIM(NAME)      AS ALIASNAME,
-                RTRIM(CREATEDBY) AS OWNER,
-                CHAR('N')        AS SYSTEM,
-                CHAR(CREATEDTS)  AS CREATED,
+                RTRIM(S.CREATOR)   AS ALIASSCHEMA,
+                RTRIM(S.NAME)      AS ALIASNAME,
+                RTRIM(S.CREATEDBY) AS OWNER,
+                CHAR('N')          AS SYSTEM,
+                CHAR(S.CREATEDTS)  AS CREATED,
                 CAST(NULL AS VARCHAR(762)) AS DESCRIPTION,
-                RTRIM(TBCREATOR) AS BASESCHEMA,
-                RTRIM(TBNAME)    AS BASETABLE
+                RTRIM(S.TBCREATOR) AS BASESCHEMA,
+                RTRIM(S.TBNAME)    AS BASETABLE
             FROM
-                SYSIBM.SYSSYNONYMS
+                SYSIBM.SYSSYNONYMS S
+                INNER JOIN SYSIBM.SYSTABLES T
+                    ON S.TBCREATOR = T.CREATOR
+                    AND S.TBNAME = T.NAME
             WITH UR
         """)
         for (
@@ -601,7 +606,7 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
                 I.REMARKS                            AS DESCRIPTION,
                 RTRIM(I.TBCREATOR)                   AS TABSCHEMA,
                 RTRIM(I.TBNAME)                      AS TABNAME,
-                RTRIM(T.TSNAME)                      AS TBSPACE,
+                RTRIM(RTRIM(I.DBNAME) || '.' || I.INDEXSPACE) AS TBSPACE,
                 CHAR(I.STATSTIME)                    AS LASTSTATS,
                 NULLIF(DECIMAL(I.FULLKEYCARDF), -1)  AS CARD,
                 NULLIF(DECIMAL(I.SPACEF), -1) * 1024 AS SIZE,
@@ -1805,11 +1810,11 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
         cursor = self.connection.cursor()
         cursor.execute("""
             SELECT
-                RTRIM(NAME)                AS TBSPACE,
-                RTRIM(CREATOR)             AS OWNER,
-                CASE
-                    WHEN NAME LIKE 'SYS%' THEN 'Y'
-                    ELSE 'N'
+                RTRIM(RTRIM(DBNAME) || '.' || NAME) AS TBSPACE,
+                RTRIM(CREATEDBY)           AS OWNER,
+                CASE IBMREQD
+                    WHEN 'N' THEN 'N'
+                    ELSE 'Y'
                 END                        AS SYSTEM,
                 CHAR(CREATEDTS)            AS CREATED,
                 CAST(NULL AS VARCHAR(762)) AS DESCRIPTION,
@@ -1846,6 +1851,29 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
                 ' locks'                   AS TYPE
             FROM
                 SYSIBM.SYSTABLESPACE
+
+            UNION ALL
+
+            SELECT
+                RTRIM(RTRIM(DBNAME) || '.' || INDEXSPACE) AS TBSPACE,
+                RTRIM(CREATEDBY)           AS OWNER,
+                CASE IBMREQD
+                    WHEN 'N' THEN 'N'
+                    ELSE 'Y'
+                END                        AS SYSTEM,
+                CHAR(CREATEDTS)            AS CREATED,
+                CAST(NULL AS VARCHAR(762)) AS DESCRIPTION,
+                'Indexspace for '
+                || '@' || RTRIM(RTRIM(CREATOR) || '.' || NAME) || ', a '
+                || CASE INDEXTYPE
+                    WHEN '' THEN 'type 1'
+                    WHEN '2' THEN 'type 2'
+                    WHEN 'D' THEN 'data-partitioned secondary'
+                    WHEN 'P' THEN 'partitioning'
+                END || ' index'            AS TYPE
+            FROM
+                SYSIBM.SYSINDEXES
+
             WITH UR
         """)
         for (
