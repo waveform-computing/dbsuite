@@ -29,7 +29,6 @@ from __future__ import (
     division,
     )
 
-import pdb
 import os
 import re
 import datetime
@@ -37,7 +36,7 @@ import logging
 from operator import attrgetter
 from itertools import chain
 
-from dbsuite.main import __version__
+from dbsuite import __version__
 from dbsuite.astex import tex, xml, TeXFactory
 from dbsuite.highlighters import CommentHighlighter, SQLHighlighter
 from dbsuite.hyphenator import hyphenate_word
