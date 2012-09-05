@@ -69,30 +69,40 @@ else:
 
         def get_handle_size(handle):
             "Subroutine for querying terminal size from std handle"
-            try:
-                buf = fcntl.ioctl(handle, termios.TIOCGWINSZ, '12345678')
-                row, col = struct.unpack(str('hhhh'), buf)[0:2]
-                return (col, row)
-            except IOError:
-                return None
+            buf = fcntl.ioctl(handle, termios.TIOCGWINSZ, '12345678')
+            row, col = struct.unpack(str('hhhh'), buf)[0:2]
+            return (col, row)
 
-        stdin, stdout, stderr = 0, 1, 2
-        # Try stderr first as it's the least likely to be redirected
-        result = (
-            get_handle_size(stderr) or
-            get_handle_size(stdout) or
-            get_handle_size(stdin)
-        )
-        if not result:
+        # Try current terminal ID, if it's available
+        try:
             fd = os.open(os.ctermid(), os.O_RDONLY)
+        except OSError:
+            pass
+        else:
             try:
-                result = get_handle_size(fd)
+                return get_handle_size(fd)
+            except IOError:
+                pass
             finally:
                 os.close(fd)
-        if not result:
-            try:
-                result = (os.environ['COLUMNS'], os.environ['LINES'])
-            except KeyError:
-                # Default
-                result = (80, 24)
-        return result
+        # Try stderr first as it's the least likely to be redirected
+        stdin, stdout, stderr = 0, 1, 2
+        try:
+            return get_handle_size(stderr)
+        except IOError:
+            pass
+        try:
+            return get_handle_size(stdout)
+        except IOError:
+            pass
+        try:
+            return get_handle_size(stdin)
+        except IOError:
+            pass
+        # Use environment variables if nothing else worked
+        try:
+            return (os.environ['COLUMNS'], os.environ['LINES'])
+        except KeyError:
+            pass
+        # Or a sensible default if even they're missing
+        return (80, 24)
