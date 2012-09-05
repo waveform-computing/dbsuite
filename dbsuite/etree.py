@@ -316,7 +316,7 @@ class ElementFactory(object):
             _name = '{%s}%s' % (self._namespace, _name)
             attrs = dict(
                 ('{%s}%s' % (self._namespace, key), value)
-                for (key, value) in attr.iteritems()
+                for (key, value) in attrs.iteritems()
             )
         def conv(key, value):
             # This little utility routine is used to clean up attributes:
