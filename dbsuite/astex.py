@@ -1165,7 +1165,7 @@ class TeXFactory(object):
         # Generate the class for the command and attach a new generator method
         # for it to this class. Note that the class will literally output
         # elements of the new command, not its definition
-        elem_class = type('TeX%s' % name, (TeXCustomCommand,), {
+        elem_class = type(str('TeX%s' % name), (TeXCustomCommand,), {
             'tag':     name,
             'tex_cmd': name,
         })
@@ -1179,7 +1179,7 @@ class TeXFactory(object):
         # function) so we just accept raw LaTeX to include in the preamble as
         # the environemnt's prefix and suffix
         self._custom_environments[name] = (prefix, suffix, preamble)
-        env_class = type('TeX%s' % name, (TeXCustomEnvironment,), {
+        env_class = type(str('TeX%s' % name), (TeXCustomEnvironment,), {
             'tag':     name,
             'tex_env': name,
         })
