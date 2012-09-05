@@ -257,23 +257,21 @@ class ElementFactory(object):
 
     def _find(self, root, tagname, id=None):
         """Returns the first element with the specified tagname and id"""
-        if id is None:
-            result = root.find('.//%s' % tagname)
-            if result is None:
-                raise LookupError('Cannot find any %s elements' % tagname)
+        # XXX We should use ElementTree's find('.//%s') method for this, but
+        # prior to Python 2.7 it's horribly broken (in very subtle and
+        # incredibly difficult to debug ways ... grrrr!)
+        for elem in root:
+            if elem.tag == tagname and (id is None or elem.attrib.get('id', '') == id):
+                return elem
             else:
-                return result
+                try:
+                    return self._find(elem, tagname, id)
+                except LookupError:
+                    pass
+        if id:
+            raise LookupError('Cannot find a %s element with id %s' % (tagname, id))
         else:
-            result = [
-                elem for elem in root.findall('.//%s' % tagname)
-                if elem.attrib.get('id', '') == id
-            ]
-            if len(result) == 0:
-                raise LookupError('Cannot find a %s element with id %s' % (tagname, id))
-            elif len(result) > 1:
-                raise LookupError('Found multiple %s elements with id %s' % (tagname, id))
-            else:
-                return result[0]
+            raise LookupError('Cannot find any %s elements' % tagname)
 
     def _format(self, content):
         """Reformats content into a human-readable string"""
