@@ -23,7 +23,7 @@ from __future__ import (
     division,
     )
 
-from dbsuite.etree import ElementFactory, tostring, fromstring, iselement
+from dbsuite.etree import ElementFactory, iselement
 
 def test_element():
     tag = ElementFactory()
