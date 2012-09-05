@@ -1059,9 +1059,9 @@ class TeXDocument(TeXEnvironment):
             for name, color in self.colors.iteritems():
                 yield '%s{rgb}{%.2f,%.2f,%.2f}' % (
                     format_cmd('definecolor', name),
-                    float((color & 0xFF0000) >> 16) / 0xFF,
-                    float((color & 0x00FF00) >>  8) / 0xFF,
-                    float((color & 0x0000FF) >>  0) / 0xFF,
+                    float((color & 0xFF0000) >> 16) // 0xFF,
+                    float((color & 0x00FF00) >>  8) // 0xFF,
+                    float((color & 0x0000FF) >>  0) // 0xFF,
                 )
         # Generate the index auxilliary file
         if self.uses_index:
@@ -1242,4 +1242,5 @@ if __name__ == '__main__':
     )
     print(tex(table))
     table.longtable = False
+    print('')
     print(tex(table))
