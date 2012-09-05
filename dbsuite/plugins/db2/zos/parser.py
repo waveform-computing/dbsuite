@@ -4915,11 +4915,12 @@ class DB2ZOSParser(BaseParser):
             if not label: self._outdent(-1)
             self._parse_compiled_compound_statement(label=label)
         else:
+            self._newline()
             self._parse_compiled_statement()
             if not label: self._outdent()
             # XXX This shouldn't be here, but DB2 for z/OS appears to have a
             # parser bug which allows this
-            self._match('END')
+            self._match_sequence([(TT.TERMINATOR, ';'), (TT.KEYWORD, 'END')])
 
     def _parse_create_trusted_context_statement(self):
         """Parses a CREATE TRUSTED CONTEXT statement"""
