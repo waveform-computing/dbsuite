@@ -301,7 +301,7 @@ class TableGraph(GraphObjectDocument):
         for dependent in table.dependent_list:
             graph.add_node(dependent)
             graph.add_edge(
-                table, dependent, arrowhead='onormal',
+                dependent, table, arrowhead='onormal',
                 label='<uses>' if isinstance(dependent, View) else
                 '<for>' if isinstance(dependent, Alias) else
                 '')
