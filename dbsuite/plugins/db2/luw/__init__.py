@@ -88,12 +88,21 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
         # Test which version of the system catalog is installed. The following
         # progression is used to determine version:
         #
-        # Base level (70)
+        # Unknown level (0)
         # SYSCAT.ROUTINES introduced in v8.2 (82)
         # SYSCAT.TABLES.OWNER introduced in v9.1 (91)
         # SYSCAT.VARIABLES introduced in v9.5 (95)
         # SYSCAT.MODULES introduced in v9.7 (97)
+        # SYSCAT.PERIODS introduced in v10.1 (101)
         cursor = self.connection.cursor()
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM SYSCAT.TABLES
+            WHERE TABSCHEMA = 'SYSCAT'
+            AND TABNAME = 'PERIODS'
+            WITH UR""")
+        if bool(cursor.fetchall()[0][0]):
+            return 101
         cursor.execute("""
             SELECT COUNT(*)
             FROM SYSCAT.TABLES
@@ -127,7 +136,7 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
             WITH UR""")
         if bool(cursor.fetchall()[0][0]):
             return 82
-        return 70
+        return 0
 
     def open(self):
         """Opens the database connection for data retrieval."""
@@ -152,13 +161,13 @@ class InputPlugin(dbsuite.plugins.InputPlugin):
         ][doccat])
         version = self.get_version()
         logging.info({
-            70: 'Detected v7 (or below) catalog layout',
-            82: 'Detected v8.2 catalog layout',
-            91: 'Detected v9.1 catalog layout',
-            95: 'Detected v9.5 catalog layout',
-            97: 'Detected v9.7 (or above) catalog layout',
-        }[version])
-        if version < 82:
+            82:  'Detected v8.2 catalog layout',
+            91:  'Detected v9.1 catalog layout',
+            95:  'Detected v9.5 catalog layout',
+            97:  'Detected v9.7 catalog layout',
+            101: 'Detected v10.1 (or later) catalog layout',
+        }.get(version, 'Unknown or ancient catalog layout'))
+        if not version:
             raise dbsuite.plugins.PluginError('DB2 server must be v8.2 or above')
         # Set up a generic query substitution dictionary
         self.query_subst = {
