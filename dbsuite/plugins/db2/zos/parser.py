@@ -1443,6 +1443,7 @@ class DB2ZOSParser(BaseParser):
             elif not self._peek_one_of([
                     'DO',
                     'EXCEPT',
+                    'MINUS',
                     'FETCH',
                     'GROUP',
                     'HAVING',
@@ -1661,7 +1662,7 @@ class DB2ZOSParser(BaseParser):
         """Parses set operators (low precedence) in a full-select expression"""
         self._parse_relation(allowdefault, allowinto)
         while True:
-            if self._match_one_of(['UNION', 'INTERSECT', 'EXCEPT']):
+            if self._match_one_of(['UNION', 'INTERSECT', 'EXCEPT', 'MINUS']):
                 self._newline(-1)
                 self._newline(-1, allowempty=True)
                 self._match('ALL')

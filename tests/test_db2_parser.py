@@ -36,6 +36,16 @@ def check(sql):
 def check_fails(sql):
     assert_raises(ParseError, check, sql)
 
+def test_set_operators():
+    check('SELECT 1 FROM FOO UNION SELECT 2 FROM BAR;')
+    check('SELECT 1 FROM FOO UNION ALL SELECT 2 FROM BAR;')
+    check('SELECT A, B FROM BAZ EXCEPT SELECT B, C FROM BAR;')
+    check('SELECT A, B FROM BAZ EXCEPT ALL SELECT B, C FROM BAR;')
+    check('SELECT A, B FROM BAZ MINUS SELECT B, C FROM BAR;')
+    check('SELECT A, B FROM BAZ MINUS ALL SELECT B, C FROM BAR ORDER BY 1 ASC;')
+    check('SELECT ID FROM BAZ INTERSECT SELECT ID FROM BAR FETCH FIRST 1 ROWS ONLY;')
+    check('SELECT ID FROM BAZ INTERSECT ALL SELECT ID FROM BAR WITH UR;')
+
 def test_create_index():
     check("CREATE INDEX FOO_PK ON FOO(ID);")
     check("CREATE UNIQUE INDEX FOO_PK ON FOO(ID1, ID2 DESC);")
