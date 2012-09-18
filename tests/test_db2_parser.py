@@ -26,11 +26,11 @@ from __future__ import (
 from nose.tools import assert_raises
 from dbsuite.parser import ParseError
 from dbsuite.plugins.db2.luw.tokenizer import DB2LUWTokenizer
-from dbsuite.plugins.db2.luw.parser import DB2LUWParser
+from dbsuite.plugins.db2.luw.parser import DB2LUWScriptParser
 
 def check(sql):
     tokenizer = DB2LUWTokenizer()
-    parser = DB2LUWParser()
+    parser = DB2LUWScriptParser()
     parser.parse(tokenizer.parse(sql))
 
 def check_fails(sql):
@@ -57,3 +57,7 @@ def test_create_index():
     check_fails("CREATE INDEX FOO2 ON FOO(ID) PARTITIONED NOT PARTITIONED;")
     check_fails("CREATE INDEX BAR ON BAZ(ID1, ID2) PAGE SPLIT BLAH;")
     check_fails("CREATE INDEX TOO ON FOO(BAR) ALLOW REVERSE SCANS PARTITIONED DISALLOW REVERSE SCANS;")
+
+def test_set_write():
+    check("SET WRITE SUSPEND FOR DB;")
+    check("SET WRITE RESUME FOR DATABASE;")

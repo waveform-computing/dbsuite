@@ -10069,6 +10069,8 @@ class DB2ZOSScriptParser(DB2ZOSParser):
                     self._parse_set_util_impact_priority_command()
                 elif self._match('WORKLOAD'):
                     self._parse_set_workload_command()
+                elif self._match('WRITE'):
+                    self._parse_set_write_command()
                 else:
                     raise ParseBacktrack()
             elif self._match('START'):
