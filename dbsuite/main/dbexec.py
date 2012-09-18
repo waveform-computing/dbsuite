@@ -69,7 +69,6 @@ class ExecSqlUtility(dbsuite.main.Utility):
             config='',
             deletefiles=False,
             test=0,
-            retry=1,
             stoponerror=False,
             terminator=';',
             execinternal=False,
@@ -92,10 +91,6 @@ class ExecSqlUtility(dbsuite.main.Utility):
             '-n', '--dry-run', dest='test', action='count',
             help="test but don't run the scripts, can be specified multiple "
             "times: 1x=parse, 2x=test file perms, 3x=test db logins")
-        self.parser.add_option(
-            '-r', '--retry', dest='retry', type='int',
-            help='specify the maximum number of retries after script failure '
-            '(default: %default)')
         self.parser.add_option(
             '-s', '--stop-on-error', dest='stoponerror', action='store_true',
             help='if a script encounters an error stop it immediately')
@@ -159,10 +154,13 @@ class ExecSqlUtility(dbsuite.main.Utility):
                     sql_file = open(sql_file, 'rU')
                 sql_files.append(sql_file)
             plugin = dbsuite.plugins.load_plugin('db2.luw')()
-            job = dbsuite.script.SQLJob(plugin, sql_files, vars=config,
-                terminator=options.terminator, retrylimit=options.retry,
-                autocommit=options.autocommit, stoponerror=options.stoponerror,
-                deletefiles=options.deletefiles, logexpr=logexpr, logsubst=logsubst)
+            job = dbsuite.script.SQLJob(
+                plugin, sql_files, vars=config,
+                terminator=options.terminator,
+                autocommit=options.autocommit,
+                stoponerror=options.stoponerror,
+                deletefiles=options.deletefiles,
+                logexpr=logexpr, logsubst=logsubst)
             if options.test == 0:
                 job.test_connections()
                 job.test_permissions()

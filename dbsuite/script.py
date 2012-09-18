@@ -165,13 +165,13 @@ class SQLJob(object):
     executing the scripts themselves.
     """
 
-    def __init__(self, plugin, sql_files, vars={}, terminator=';',
-            retrylimit=1, autocommit=False, stoponerror=False,
-            deletefiles=False, logexpr=None, logsubst=None):
+    def __init__(
+            self, plugin, sql_files, vars={}, terminator=';', autocommit=False,
+            stoponerror=False, deletefiles=False, logexpr=None, logsubst=None):
         self.scripts = [
-            SQLScript(plugin, sql_file, vars, terminator,
-                retrylimit, autocommit, stoponerror, deletefiles,
-                logexpr, logsubst)
+            SQLScript(
+                plugin, sql_file, vars, terminator, autocommit, stoponerror,
+                deletefiles, logexpr, logsubst)
             for sql_file in sql_files
         ]
         for script in self.scripts:
@@ -451,7 +451,8 @@ class SQLScript(object):
     returncode of the DB2 CLP.
     """
 
-    def __init__(self, plugin, sql_file, vars={}, terminator=';', retrylimit=1,
+    def __init__(
+            self, plugin, sql_file, vars={}, terminator=';',
             autocommit=False, stoponerror=False, deletefiles=False,
             logexpr=None, logsubst=None):
         """Initializes an instance of the class.
@@ -461,7 +462,6 @@ class SQLScript(object):
         sql_file -- The name of the file (or file-like object) containing the SQL script
         vars -- A dictionary of values to substitute into the script
         terminator -- The statement terminator string/character
-        retrylimit -- The number of times to retry the script if it fails
         autocommit -- Whether to activate CLP's auto-COMMIT behaviour
         stoponerror -- Whether to terminate script immediately upon error
         deletefiles -- Whether or not to delete all files produced by the script upon successful completion
@@ -473,7 +473,6 @@ class SQLScript(object):
         self.finished = None
         self.returncode = None
         self.terminator = terminator
-        self.retrylimit = retrylimit
         self.autocommit = autocommit
         self.stoponerror = stoponerror
         self.deletefiles = deletefiles
@@ -637,17 +636,22 @@ class SQLScript(object):
 
     @property
     def state(self):
-        if self.started and not self.finished:
-            return EXECUTING
-        elif self.returncode is not None and (0 <= self.returncode < 4):
-            return SUCCEEDED
-        elif self.retrylimit > 0:
-            if len([d for (f, d) in self.depends if d.state != SUCCEEDED]) == 0:
-                return EXECUTABLE
-            elif len([d for (f, d) in self.depends if d.state == FAILED]) == 0:
-                return WAITING
+        if self.started:
+            if self.finished:
+                if self.returncode is not None and (0 <= self.returncode < 4):
+                    return SUCCEEDED
+                else:
+                    return FAILED
             else:
-                return FAILED
+                return EXECUTING
+        elif not any(d for (f, d) in self.depends if d.state != SUCCEEDED):
+            # If no dependencies have a state other than SUCCEEDED then all
+            # dependencies have succeeded, so we are executable
+            return EXECUTABLE
+        elif not any(d for (f, d) in self.depends if d.state == FAILED):
+            # If no dependencies have failed yet, then we must be waiting
+            # for dependencies to finish (assuming the test above failed)
+            return WAITING
         else:
             return FAILED
 
@@ -686,8 +690,6 @@ class SQLScript(object):
                 output = StringIO(p.communicate(s)[0])
             except Exception, e:
                 logging.error('Script %s failed: %s' % (self.filename, str(e)))
-                # An exception is fatal, no retries allowed
-                self.retrylimit = 0
             else:
                 # On Linux/UNIX, the returncode is modulus 256
                 if IS_WINDOWS:
@@ -696,17 +698,12 @@ class SQLScript(object):
                     self.returncode = p.returncode % 256
                 # Use the global output lock to prevent overlapping output in
                 # case of simultaneous script completions
-                output_lock.acquire()
-                try:
+                with output_lock:
                     # Check the return code
-                    if not (0 <= self.returncode < 4):
-                        self.retrylimit -= 1
-                        if self.retrylimit > 0:
-                            logging.warning('Script %s failed with return code %d (retries left: %d)' % (self.filename, self.returncode, self.retrylimit))
-                        else:
-                            logging.error('Script %s failed with return code %d (no retries remaining)' % (self.filename, self.returncode))
-                    else:
+                    if 0 <= self.returncode < 4:
                         logging.info('Script %s completed successfully with return code %d' % (self.filename, self.returncode))
+                    else:
+                        logging.error('Script %s failed with return code %d' % (self.filename, self.returncode))
                     if self.logfilename:
                         logging.info('See %s for full output' % self.logfilename)
                     else:
@@ -723,8 +720,6 @@ class SQLScript(object):
                             logging.error('Failed to retrieve output of script %s' % self.filename)
                         except EOFError:
                             pass
-                finally:
-                    output_lock.release()
         finally:
             # finished is set last to avoid a race condition. Furthermore, it
             # MUST be set or we will wind up with a process in "limbo" (hence
