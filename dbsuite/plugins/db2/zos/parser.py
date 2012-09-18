@@ -4261,16 +4261,21 @@ class DB2ZOSParser(BaseParser):
         self._expect('(')
         self._indent()
         while True:
-            self._expect(TT.IDENTIFIER)
-            self._match_one_of(['ASC', 'DESC'])
+            if self._match('BUSINESS_TIME'):
+                self._expect_sequence(['WITHOUT', 'OVERLAPS'])
+            else:
+                self._expect(TT.IDENTIFIER)
+                self._match_one_of(['ASC', 'DESC'])
             if not self._match(','):
                 break
             else:
                 self._newline()
         self._outdent()
         self._expect(')')
-        self._match_sequence(['IN', TT.IDENTIFIER])
         valid = set([
+            'IN',
+            'PARTITIONED',
+            'NOT',
             'SPECIFICATION',
             'INCLUDE',
             'CLUSTER',
@@ -4280,7 +4285,8 @@ class DB2ZOSParser(BaseParser):
             'ALLOW',
             'DISALLOW',
             'PAGE',
-            'COLLECT'
+            'COLLECT',
+            'COMPRESS',
         ])
         while valid:
             t = self._match_one_of(valid)
@@ -4290,7 +4296,14 @@ class DB2ZOSParser(BaseParser):
                 valid.remove(t)
             else:
                 break
-            if t == 'SPECIFICATION':
+            if t == 'IN':
+                self._expect(TT.IDENTIFIER)
+            elif t == 'NOT':
+                self._expect('PARTITIONED')
+                valid.discard('NOT')
+            elif t == 'PARTITIONED':
+                valid.discard('NOT')
+            elif t == 'SPECIFICATION':
                 self._expect('ONLY')
             elif t == 'INCLUDE':
                 self._expect('(')
@@ -4315,6 +4328,8 @@ class DB2ZOSParser(BaseParser):
                 self._match('SAMPLED')
                 self._match('DETAILED')
                 self._expect('STATISTICS')
+            elif t == 'COMPRESS':
+                self._expect_one_of(['NO', 'YES'])
 
     def _parse_create_module_statement(self):
         """Parses a CREATE MODULE statement"""

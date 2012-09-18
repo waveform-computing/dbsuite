@@ -1148,11 +1148,8 @@ class WebSiteDocument(object):
         consider overriding those methods instead.
         """
         logging.debug('Writing %s' % self.filename)
-        f = open(self.filename, 'wb')
-        try:
+        with open(self.filename, 'wb') as f:
             f.write(self.serialize(self.generate()))
-        finally:
-            f.close()
 
     def link(self, *args, **kwargs):
         """Returns the Element(s) required to link to the document.
