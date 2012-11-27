@@ -308,8 +308,11 @@ class SQLJob(object):
         """Utility routine for testing database logins prior to script execution."""
         saved_instance = None
         if connection.instance:
-            saved_instance = get_instance()
-            set_instance(get_instance(connection.instance))
+            try:
+                saved_instance = get_instance()
+                set_instance(get_instance(connection.instance))
+            except Exception, e:
+                raise ScriptRuntimeError(str(e))
         try:
             args = [
                 '-o', # enable output

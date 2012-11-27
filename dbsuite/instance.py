@@ -69,6 +69,9 @@ def get_instance(name=None):
             close_fds=True
         )
         output = p.communicate()[0]
+        if p.returncode != 0:
+            raise ValueError(
+                'Instance %s does not exist or cannot be sourced' % name)
         for line in output.splitlines():
             var, value = line.split('=', 1)
             result[var] = value

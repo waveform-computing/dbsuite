@@ -46,7 +46,7 @@ class HelpFormatter(optparse.IndentedHelpFormatter):
     # Customize the width of help output
     def __init__(self):
         width = min(130, terminal_size()[0] - 2)
-        optparse.IndentedHelpFormatter.__init__(self, max_help_position=width/3, width=width)
+        optparse.IndentedHelpFormatter.__init__(self, max_help_position=width // 3, width=width)
 
 
 class OptionParser(optparse.OptionParser):
@@ -103,6 +103,7 @@ class Utility(object):
             help='enables debug mode (runs under PDB)')
 
     def __call__(self, args=None):
+        import pdb; pdb.set_trace()
         if args is None:
             args = sys.argv[1:]
         (options, args) = self.parser.parse_args(self.expand_args(args))
