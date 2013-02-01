@@ -103,7 +103,6 @@ class Utility(object):
             help='enables debug mode (runs under PDB)')
 
     def __call__(self, args=None):
-        import pdb; pdb.set_trace()
         if args is None:
             args = sys.argv[1:]
         (options, args) = self.parser.parse_args(self.expand_args(args))
