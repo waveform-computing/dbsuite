@@ -128,6 +128,8 @@ class ExecSqlUtility(dbsuite.main.Utility):
             script = pickle.load(sys.stdin)
             return script._exec_internal()
         else:
+            if len(args) == 0:
+                self.parser.error('you must specify at least one script to execute')
             # This is a normal dbexec run
             config = os.environ.copy()
             if options.config:
@@ -149,7 +151,7 @@ class ExecSqlUtility(dbsuite.main.Utility):
                         done_stdin = True
                         sql_file = sys.stdin
                     else:
-                        raise IOError('Cannot read input from stdin multiple times')
+                        raise self.parser.error('cannot read input from stdin multiple times')
                 else:
                     sql_file = open(sql_file, 'rU')
                 sql_files.append(sql_file)
