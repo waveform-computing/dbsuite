@@ -1203,9 +1203,9 @@ class DB2ZOSParser(BaseParser):
                         self._parse_table_name()
                     else:
                         self._parse_expression()
-                        if self._match_one_of(['ASC', 'DESC']):
-                            if self._match('NULLS'):
-                                self._expect_one_of(['FIRST', 'LAST'])
+                        self._match_one_of(['ASC', 'DESC'])
+                        if self._match('NULLS'):
+                            self._expect_one_of(['FIRST', 'LAST'])
                     if not self._match(','):
                         break
             if self._match_one_of(['ROWS', 'RANGE']):
