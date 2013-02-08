@@ -1,2 +1,6 @@
+prune debian
 prune docs
+prune etc
 exclude Makefile
+include README.rst
+include LICENSE.txt

@@ -24,8 +24,11 @@ from __future__ import (
     division,
     )
 
+import os
 from setuptools import setup, find_packages
 from utils import description, get_version, require_python
+
+HERE = os.path.abspath(os.path.dirname(__file__))
 
 # Workaround <http://bugs.python.org/issue10945>
 import codecs
@@ -38,7 +41,18 @@ except LookupError:
 
 require_python(0x020600f0)
 
-classifiers = [
+REQUIRES = [
+    'PIL',
+    'pygraphviz',
+    ]
+
+EXTRA_REQUIRES = {
+    'db2': ['ibm-db'],
+    'pgsql': ['pg8000'],
+    'completion': ['optcomplete'],
+    }
+
+CLASSIFIERS = [
     'Development Status :: 5 - Production/Stable',
     'Environment :: Console',
     'Environment :: Web Environment',
@@ -58,37 +72,39 @@ classifiers = [
     'Topic :: Text Processing :: Markup :: XML',
     'Topic :: Text Processing :: Markup :: HTML',
     'Topic :: Text Processing :: Markup :: LaTeX',
-]
+    ]
 
-entry_points = {
+ENTRY_POINTS = {
     'console_scripts': [
         'dbmakedoc = dbsuite.main.dbmakedoc:main',
         'dbconvdoc = dbsuite.main.dbconvdoc:main',
         'dbgrepdoc = dbsuite.main.dbgrepdoc:main',
         'dbtidysql = dbsuite.main.dbtidysql:main',
         'dbexec = dbsuite.main.dbexec:main',
-    ]
-}
+        ]
+    }
 
 
 def main():
     setup(
         name                 = 'dbsuite',
-        version              = get_version('dbsuite/__init__.py'),
+        version              = get_version(os.path.join(HERE, 'dbsuite/__init__.py')),
         description          = 'A suite of tools for maintenance of information warehouses',
-        long_description     = description('README.txt'),
+        long_description     = description(os.path.join(HERE, 'README.rst')),
+        classifiers          = CLASSIFIERS,
         author               = 'Dave Hughes',
         author_email         = 'dave@waveform.org.uk',
         url                  = 'http://www.waveform.org.uk/trac/dbsuite/',
+        keywords             = 'database documentation',
         packages             = find_packages(exclude=['distribute_setup', 'utils']),
-        install_requires     = ['PIL', 'pygraphviz'],
-        extras_require       = {'db2': ['ibm-db'], 'pgsql': ['pg8000']},
         include_package_data = True,
         platforms            = 'ALL',
+        install_requires     = REQUIRES,
+        extras_require       = EXTRA_REQUIRES,
         zip_safe             = False,
-        entry_points         = entry_points,
-        classifiers          = classifiers
-    )
+        test_suite           = 'dbsuite',
+        entry_points         = ENTRY_POINTS,
+        )
 
 if __name__ == '__main__':
     main()
