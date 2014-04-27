@@ -4156,7 +4156,7 @@ class DB2ZOSParser(BaseParser):
                 elif t == 'MODIFIES':
                     self._expect_sequence(['SQL', 'DATA'])
                 elif t == 'NO':
-                    t = self._expect_one_of(['DBINFO', 'EXTERNAL', 'FINAL', 'SCRATCHPAD']).value
+                    t = self._expect_one_of(['DBINFO', 'EXTERNAL', 'FINAL', 'SCRATCHPAD', 'SQL']).value
                     if t == 'EXTERNAL':
                         self._expect('ACTION')
                     elif t == 'FINAL':
@@ -4222,12 +4222,15 @@ class DB2ZOSParser(BaseParser):
             self._expect_sequence(['LOCK', 'REQUEST'])
         # Parse the function body
         self._outdent()
-        if self._expect_one_of(['BEGIN', 'RETURN']).value == 'BEGIN':
+        if self._match('BEGIN'):
             self._parse_compiled_compound_statement()
-        else:
+        elif self._match('RETURN'):
             self._indent()
             self._parse_return_statement()
             self._outdent()
+        else:
+            # External function with no body
+            pass
 
     def _parse_create_function_mapping_statement(self):
         """Parses a CREATE FUNCTION MAPPING statement"""
@@ -4452,7 +4455,7 @@ class DB2ZOSParser(BaseParser):
                 if self._match('EXTERNAL'):
                     self._expect('ACTION')
                 else:
-                    self._expect('DBINFO')
+                    self._expect_one_of(['DBINFO', 'SQL'])
             elif t == 'NOT':
                 self._expect_one_of(['DETERMINISTIC', 'FENCED', 'THREADSAFE'])
             elif t == 'NULL':
@@ -5050,7 +5053,7 @@ class DB2ZOSParser(BaseParser):
         # CREATE VARIABLE already matched
         self._parse_variable_name()
         self._parse_datatype()
-        if self._match('DEFAULT'):
+        if self._match_one_of(['DEFAULT', 'CONSTANT']):
             self._parse_expression()
 
     def _parse_create_view_statement(self):

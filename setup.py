@@ -42,7 +42,7 @@ except LookupError:
 require_python(0x020600f0)
 
 REQUIRES = [
-    'PIL',
+    'pillow',
     'pygraphviz',
     ]
 
