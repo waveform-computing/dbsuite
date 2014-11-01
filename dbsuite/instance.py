@@ -34,6 +34,11 @@ def get_instance(name=None):
     if name is None:
         for key in (
             'DB2INSTANCE',
+            'IBM_DB_DIR',
+            'IBM_DB_LIB',
+            'IBM_DB_INCLUDE',
+            'DB2_HOME',
+            'DB2LIB',
             'PATH',
             'CLASSPATH',
             'LIBPATH',
@@ -52,6 +57,11 @@ def get_instance(name=None):
         cmdline = ' '.join([
             '. ~%s/sqllib/db2profile' % name,
             '&& echo DB2INSTANCE=$DB2INSTANCE',
+            '&& echo IBM_DB_DIR=$IBM_DB_DIR',
+            '&& echo IBM_DB_LIB=$IBM_DB_LIB',
+            '&& echo IBM_DB_INCLUDE=$IBM_DB_INCLUDE',
+            '&& echo DB2_HOME=$DB2_HOME',
+            '&& echo DB2LIB=$DB2LIB',
             '&& echo PATH=$PATH',
             '&& echo CLASSPATH=$CLASSPATH',
             '&& echo LIBPATH=$LIBPATH',

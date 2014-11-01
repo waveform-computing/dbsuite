@@ -25,7 +25,7 @@ from __future__ import (
 
 import sys
 import re
-import os.path
+import os
 import logging
 import threading
 import subprocess
@@ -308,6 +308,15 @@ class SQLJob(object):
         """Utility routine for testing database logins prior to script execution."""
         saved_instance = None
         if connection.instance:
+            # Attempt to terminate any existing instance backend
+            cmdline='db2 TERMINATE'
+            if IS_WINDOWS:
+                cmdline = 'db2cmd -i -w -c %s' % cmdline
+            try:
+                with open(os.devnull, 'w') as null:
+                    subprocess.call([cmdline], stdout=null, stderr=null, shell=True)
+            except OSError, e:
+                pass
             try:
                 saved_instance = get_instance()
                 set_instance(get_instance(connection.instance))
